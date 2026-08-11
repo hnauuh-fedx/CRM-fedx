@@ -1,0 +1,975 @@
+generator client {
+  provider = "prisma-client"
+  output   = "../src/generated/prisma"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+model addresses {
+  id             String      @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  lead_id        String?     @db.Uuid
+  type           String      @db.VarChar(100)
+  province       String?     @db.VarChar(150)
+  district       String?     @db.VarChar(150)
+  ward           String?     @db.VarChar(150)
+  hamlet         String?     @db.VarChar(150)
+  detail_address String?
+  created_at     DateTime?   @default(now()) @db.Timestamp(6)
+  leads          leads?      @relation(fields: [lead_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  relatives      relatives[]
+}
+
+model admission_documents {
+  id            String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  lead_id       String?   @db.Uuid
+  document_type String    @db.VarChar(150)
+  file_id       String?   @db.Uuid
+  status        String?   @default("pending") @db.VarChar(50)
+  uploaded_at   DateTime? @default(now()) @db.Timestamp(6)
+  files         files?    @relation(fields: [file_id], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  leads         leads?    @relation(fields: [lead_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+}
+
+model admission_profiles {
+  id                        String                @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  lead_id                   String?               @unique @db.Uuid
+  institution_program_id    String?               @db.Uuid
+  major_id                  String?               @db.Uuid
+  training_type             String?               @db.VarChar(150)
+  admission_code            String?               @db.VarChar(100)
+  class_code                String?               @db.VarChar(100)
+  subject_group_code        String?               @db.VarChar(100)
+  subject_group_name        String?               @db.VarChar(255)
+  score_1                   Decimal?              @db.Decimal(5, 2)
+  score_2                   Decimal?              @db.Decimal(5, 2)
+  score_3                   Decimal?              @db.Decimal(5, 2)
+  admission_score           Decimal?              @db.Decimal(5, 2)
+  admission_status_id       String?               @db.Uuid
+  fee_status                String?               @db.VarChar(100)
+  tuition_status            String?               @db.VarChar(100)
+  student_card_status       String?               @db.VarChar(100)
+  application_received_date DateTime?             @db.Date
+  telesale_received_date    DateTime?             @db.Date
+  enrollment_batch          String?               @db.VarChar(150)
+  training_code             String?               @db.VarChar(100)
+  registration_station      String?               @db.VarChar(150)
+  decision_number           String?               @db.VarChar(150)
+  decision_signed_date      DateTime?             @db.Date
+  monthly_revenue           Decimal?              @default(0) @db.Decimal(15, 2)
+  created_at                DateTime?             @default(now()) @db.Timestamp(6)
+  updated_at                DateTime?             @default(now()) @db.Timestamp(6)
+  admission_statuses        admission_statuses?   @relation(fields: [admission_status_id], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  institution_programs      institution_programs? @relation(fields: [institution_program_id], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  leads                     leads?                @relation(fields: [lead_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  majors                    majors?               @relation(fields: [major_id], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  students                  students?
+
+  @@index([lead_id], map: "idx_admission_profiles_lead_id")
+  @@index([institution_program_id, created_at, id], map: "idx_admission_profiles_program_created_page")
+  @@index([major_id], map: "idx_admission_profiles_major_id")
+  @@index([admission_status_id], map: "idx_admission_profiles_status_id")
+  @@index([created_at, id], map: "idx_admission_profiles_created_page")
+  @@index([application_received_date, id], map: "idx_admission_profiles_received_page")
+}
+
+model admission_statuses {
+  id                 String               @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  name               String               @db.VarChar(150)
+  code               String               @unique @db.VarChar(100)
+  color              String?              @db.VarChar(50)
+  created_at         DateTime?            @default(now()) @db.Timestamp(6)
+  admission_profiles admission_profiles[]
+}
+
+model audit_logs {
+  id          String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  user_id     String?   @db.Uuid
+  entity_type String    @db.VarChar(100)
+  entity_id   String?   @db.Uuid
+  action      String    @db.VarChar(100)
+  old_data    Json?
+  new_data    Json?
+  ip_address  String?   @db.VarChar(100)
+  created_at  DateTime? @default(now()) @db.Timestamp(6)
+  users       users?    @relation(fields: [user_id], references: [id], onDelete: NoAction, onUpdate: NoAction)
+
+  @@index([created_at], map: "idx_audit_logs_created_at")
+  @@index([action, created_at, id], map: "idx_audit_logs_action_created_page")
+  @@index([entity_type, created_at, id], map: "idx_audit_logs_type_created_page")
+  @@index([entity_type, entity_id], map: "idx_audit_logs_entity")
+  @@index([user_id], map: "idx_audit_logs_user_id")
+  @@index([user_id, created_at, id], map: "idx_audit_logs_user_created_page")
+}
+
+model automation_jobs {
+  id           String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  type         String    @db.VarChar(100)
+  payload      Json?
+  status       String?   @default("pending") @db.VarChar(50)
+  run_at       DateTime? @db.Timestamp(6)
+  completed_at DateTime? @db.Timestamp(6)
+  created_at   DateTime? @default(now()) @db.Timestamp(6)
+}
+
+model campaigns {
+  id                     String                @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  institution_program_id String?               @db.Uuid
+  name                   String                @db.VarChar(255)
+  type                   String?               @db.VarChar(100)
+  start_date             DateTime?             @db.Date
+  end_date               DateTime?             @db.Date
+  budget                 Decimal?              @default(0) @db.Decimal(15, 2)
+  status                 String?               @default("active") @db.VarChar(50)
+  created_by             String?               @db.Uuid
+  created_at             DateTime?             @default(now()) @db.Timestamp(6)
+  users                  users?                @relation(fields: [created_by], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  institution_programs   institution_programs? @relation(fields: [institution_program_id], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  marketing_forms        marketing_forms[]
+  utm_trackings          utm_trackings[]
+
+  @@index([created_at, id], map: "idx_campaigns_created_page")
+  @@index([institution_program_id, created_at, id], map: "idx_campaigns_program_created_page")
+  @@index([status, created_at, id], map: "idx_campaigns_status_created_page")
+  @@index([type, created_at, id], map: "idx_campaigns_type_created_page")
+}
+
+model custom_field_values {
+  id              String         @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  custom_field_id String?        @db.Uuid
+  entity_type     String         @db.VarChar(100)
+  entity_id       String         @db.Uuid
+  value           String?
+  value_text      String?
+  value_number    Decimal?       @db.Decimal(20, 6)
+  value_date      DateTime?      @db.Timestamp(6)
+  value_boolean   Boolean?
+  value_json      Json?
+  created_at      DateTime?      @default(now()) @db.Timestamp(6)
+  updated_at      DateTime?      @default(now()) @db.Timestamp(6)
+  custom_fields   custom_fields? @relation(fields: [custom_field_id], references: [id], onDelete: Restrict, onUpdate: NoAction)
+
+  @@index([entity_type, entity_id], map: "idx_custom_field_values_entity")
+  @@index([custom_field_id, value_text], map: "idx_custom_field_values_text_lookup")
+  @@index([custom_field_id, value_number], map: "idx_custom_field_values_number_lookup")
+  @@index([custom_field_id, value_date], map: "idx_custom_field_values_date_lookup")
+  @@index([custom_field_id, value_boolean], map: "idx_custom_field_values_boolean_lookup")
+  @@unique([custom_field_id, entity_type, entity_id], map: "uq_custom_field_values_field_entity")
+}
+
+model custom_fields {
+  id                  String                @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  module              String                @db.VarChar(100)
+  field_key           String                @db.VarChar(150)
+  field_label         String                @db.VarChar(255)
+  field_type          String                @db.VarChar(100)
+  is_required         Boolean?              @default(false)
+  description         String?
+  entity_type         String?               @db.VarChar(50)
+  scope_type          String?               @default("GLOBAL") @db.VarChar(20)
+  program_id          String?               @db.Uuid
+  is_active           Boolean?              @default(true)
+  archived_at         DateTime?             @db.Timestamp(6)
+  is_searchable       Boolean?              @default(false)
+  is_filterable       Boolean?              @default(false)
+  is_sensitive        Boolean?              @default(false)
+  display_order       Int?                  @default(0)
+  options             Json?
+  validation_rules    Json?
+  default_value       Json?
+  created_by_id       String?               @db.Uuid
+  updated_by_id       String?               @db.Uuid
+  created_at          DateTime?             @default(now()) @db.Timestamp(6)
+  updated_at          DateTime?             @default(now()) @db.Timestamp(6)
+  custom_field_values custom_field_values[]
+  institution_programs institution_programs? @relation(fields: [program_id], references: [id], onDelete: Restrict, onUpdate: NoAction)
+  created_by          users?                @relation("custom_fields_created_by", fields: [created_by_id], references: [id], onDelete: SetNull, onUpdate: NoAction)
+  updated_by          users?                @relation("custom_fields_updated_by", fields: [updated_by_id], references: [id], onDelete: SetNull, onUpdate: NoAction)
+
+  @@index([entity_type, scope_type, program_id, display_order, id], map: "idx_custom_fields_entity_scope_order")
+}
+
+model departments {
+  id               String             @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  name             String             @db.VarChar(150)
+  code             String?            @unique @db.VarChar(100)
+  manager_id       String?            @db.Uuid
+  created_at       DateTime?          @default(now()) @db.Timestamp(6)
+  users            users?             @relation(fields: [manager_id], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  lead_assignments lead_assignments[]
+  user_departments user_departments[]
+}
+
+model entity_tags {
+  id          String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  tag_id      String?   @db.Uuid
+  entity_type String    @db.VarChar(100)
+  entity_id   String    @db.Uuid
+  created_at  DateTime? @default(now()) @db.Timestamp(6)
+  tags        tags?     @relation(fields: [tag_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+
+  @@index([entity_type, entity_id], map: "idx_entity_tags_entity")
+}
+
+model faculties {
+  id              String            @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  name            String            @db.VarChar(255)
+  code            String?           @unique @db.VarChar(100)
+  created_at      DateTime?         @default(now()) @db.Timestamp(6)
+  majors          majors[]
+  student_classes student_classes[]
+  students        students[]
+}
+
+model file_relations {
+  id          String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  file_id     String?   @db.Uuid
+  entity_type String    @db.VarChar(100)
+  entity_id   String    @db.Uuid
+  created_at  DateTime? @default(now()) @db.Timestamp(6)
+  files       files?    @relation(fields: [file_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+
+  @@index([entity_type, entity_id], map: "idx_file_relations_entity")
+}
+
+model institutions {
+  id                   String                 @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  name                 String                 @db.VarChar(255)
+  code                 String                 @unique @db.VarChar(100)
+  status               String?                @default("active") @db.VarChar(50)
+  created_at           DateTime?              @default(now()) @db.Timestamp(6)
+  updated_at           DateTime?              @default(now()) @db.Timestamp(6)
+  institution_programs institution_programs[]
+}
+
+model program_types {
+  id                   String                 @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  name                 String                 @db.VarChar(150)
+  code                 String                 @unique @db.VarChar(100)
+  created_at           DateTime?              @default(now()) @db.Timestamp(6)
+  institution_programs institution_programs[]
+}
+
+model institution_programs {
+  id                 String               @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  institution_id     String               @db.Uuid
+  program_type_id    String               @db.Uuid
+  name               String               @db.VarChar(255)
+  code               String               @unique @db.VarChar(100)
+  status             String?              @default("active") @db.VarChar(50)
+  created_at         DateTime?            @default(now()) @db.Timestamp(6)
+  updated_at         DateTime?            @default(now()) @db.Timestamp(6)
+  institutions       institutions         @relation(fields: [institution_id], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  program_types      program_types        @relation(fields: [program_type_id], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  admission_profiles admission_profiles[]
+  automation_rules   automation_rules[]
+  campaigns          campaigns[]
+  custom_fields      custom_fields[]
+  kpi_targets        kpi_targets[]
+  lead_sources       lead_sources[]
+  leads              leads[]
+  report_configs     report_configs[]
+  students           students[]
+  majors             majors[]
+
+  @@unique([institution_id, program_type_id, name])
+  @@index([institution_id, status, name], map: "idx_institution_programs_institution_status")
+  @@index([program_type_id, status, name], map: "idx_institution_programs_type_status")
+}
+
+model files {
+  id                  String                @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  file_name           String                @db.VarChar(255)
+  file_url            String
+  mime_type           String?               @db.VarChar(100)
+  file_size           BigInt?
+  uploaded_by         String?               @db.Uuid
+  created_at          DateTime?             @default(now()) @db.Timestamp(6)
+  admission_documents admission_documents[]
+  file_relations      file_relations[]
+  users               users?                @relation(fields: [uploaded_by], references: [id], onDelete: NoAction, onUpdate: NoAction)
+}
+
+model lead_activities {
+  id         String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  lead_id    String?   @db.Uuid
+  user_id    String?   @db.Uuid
+  type       String    @db.VarChar(100)
+  content    String?
+  metadata   Json?
+  created_at DateTime? @default(now()) @db.Timestamp(6)
+  leads      leads?    @relation(fields: [lead_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  users      users?    @relation(fields: [user_id], references: [id], onDelete: NoAction, onUpdate: NoAction)
+
+  @@index([created_at], map: "idx_lead_activities_created_at")
+  @@index([lead_id], map: "idx_lead_activities_lead_id")
+  @@index([type, created_at, id], map: "idx_lead_activities_type_created_page")
+  @@index([user_id], map: "idx_lead_activities_user_id")
+  @@index([user_id, created_at, id], map: "idx_lead_activities_user_created_page")
+}
+
+model lead_assignments {
+  id                                        String       @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  lead_id                                   String?      @db.Uuid
+  assigned_to                               String?      @db.Uuid
+  assigned_by                               String?      @db.Uuid
+  department_id                             String?      @db.Uuid
+  is_main_owner                             Boolean?     @default(true)
+  assigned_at                               DateTime?    @default(now()) @db.Timestamp(6)
+  users_lead_assignments_assigned_byTousers users?       @relation("lead_assignments_assigned_byTousers", fields: [assigned_by], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  users_lead_assignments_assigned_toTousers users?       @relation("lead_assignments_assigned_toTousers", fields: [assigned_to], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  departments                               departments? @relation(fields: [department_id], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  leads                                     leads?       @relation(fields: [lead_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+
+  @@index([assigned_to], map: "idx_lead_assignments_assigned_to")
+  @@index([assigned_at, id], map: "idx_lead_assignments_assigned_page")
+  @@index([assigned_to, is_main_owner, lead_id], map: "idx_lead_assignments_assignee_scope")
+  @@index([assigned_to, assigned_at, id], map: "idx_lead_assignments_assignee_page")
+  @@index([department_id, is_main_owner, lead_id], map: "idx_lead_assignments_department_scope")
+  @@index([department_id, assigned_at, id], map: "idx_lead_assignments_department_page")
+  @@index([lead_id], map: "idx_lead_assignments_lead_id")
+}
+
+model lead_notes {
+  id         String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  lead_id    String?   @db.Uuid
+  user_id    String?   @db.Uuid
+  content    String
+  created_at DateTime? @default(now()) @db.Timestamp(6)
+  leads      leads?    @relation(fields: [lead_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  users      users?    @relation(fields: [user_id], references: [id], onDelete: NoAction, onUpdate: NoAction)
+}
+
+model lead_sources {
+  id                     String                @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  institution_program_id String?               @db.Uuid
+  name                   String                @db.VarChar(150)
+  type                   String?               @db.VarChar(100)
+  created_at             DateTime?             @default(now()) @db.Timestamp(6)
+  institution_programs   institution_programs? @relation(fields: [institution_program_id], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  leads                  leads[]
+  marketing_forms        marketing_forms[]
+
+  @@index([created_at, id], map: "idx_lead_sources_created_page")
+  @@index([institution_program_id, created_at, id], map: "idx_lead_sources_program_created_page")
+  @@index([type, created_at, id], map: "idx_lead_sources_type_created_page")
+}
+
+model lead_status_histories {
+  id                                                                   String           @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  lead_id                                                              String?          @db.Uuid
+  from_stage_id                                                        String?          @db.Uuid
+  to_stage_id                                                          String?          @db.Uuid
+  changed_by                                                           String?          @db.Uuid
+  changed_at                                                           DateTime?        @default(now()) @db.Timestamp(6)
+  users                                                                users?           @relation(fields: [changed_by], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  pipeline_stages_lead_status_histories_from_stage_idTopipeline_stages pipeline_stages? @relation("lead_status_histories_from_stage_idTopipeline_stages", fields: [from_stage_id], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  leads                                                                leads?           @relation(fields: [lead_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  pipeline_stages_lead_status_histories_to_stage_idTopipeline_stages   pipeline_stages? @relation("lead_status_histories_to_stage_idTopipeline_stages", fields: [to_stage_id], references: [id], onDelete: NoAction, onUpdate: NoAction)
+}
+
+model leads {
+  id                             String                  @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  lead_code                      String?                 @unique @db.VarChar(100)
+  full_name                      String                  @db.VarChar(255)
+  gender                         String?                 @db.VarChar(20)
+  date_of_birth                  DateTime?               @db.Date
+  phone                          String                  @db.VarChar(30)
+  email                          String?                 @db.VarChar(255)
+  cccd                           String?                 @db.VarChar(30)
+  source_id                      String?                 @db.Uuid
+  institution_program_id         String?                 @db.Uuid
+  major_id                       String?                 @db.Uuid
+  pipeline_stage_id              String?                 @db.Uuid
+  owner_id                       String?                 @db.Uuid
+  assigned_to                    String?                 @db.Uuid
+  status                         String?                 @default("new") @db.VarChar(50)
+  lead_score                     Int?                    @default(0)
+  temperature                    String?                 @db.VarChar(50)
+  note                           String?
+  created_at                     DateTime?               @default(now()) @db.Timestamp(6)
+  updated_at                     DateTime?               @default(now()) @db.Timestamp(6)
+  deleted_at                     DateTime?               @db.Timestamp(6)
+  addresses                      addresses[]
+  admission_documents            admission_documents[]
+  admission_profiles             admission_profiles?
+  lead_activities                lead_activities[]
+  lead_assignments               lead_assignments[]
+  lead_notes                     lead_notes[]
+  lead_status_histories          lead_status_histories[]
+  marketing_form_submissions     marketing_form_submissions[]
+  users_leads_assigned_toTousers users?                  @relation("leads_assigned_toTousers", fields: [assigned_to], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  users_leads_owner_idTousers    users?                  @relation("leads_owner_idTousers", fields: [owner_id], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  pipeline_stages                pipeline_stages?        @relation(fields: [pipeline_stage_id], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  lead_sources                   lead_sources?           @relation(fields: [source_id], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  institution_programs           institution_programs?   @relation(fields: [institution_program_id], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  majors                         majors?                 @relation(fields: [major_id], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  relatives                      relatives[]
+  reminders                      reminders[]
+  student_profiles               student_profiles?
+  students                       students?
+  utm_trackings                  utm_trackings[]
+
+  @@index([assigned_to], map: "idx_leads_assigned_to")
+  @@index([assigned_to, created_at, id], map: "idx_leads_assignee_created_page")
+  @@index([cccd], map: "idx_leads_cccd")
+  @@index([created_at], map: "idx_leads_created_at")
+  @@index([deleted_at, created_at, id], map: "idx_leads_active_created_page")
+  @@index([email], map: "idx_leads_email")
+  @@index([owner_id], map: "idx_leads_owner_id")
+  @@index([phone], map: "idx_leads_phone")
+  @@index([pipeline_stage_id], map: "idx_leads_pipeline_stage")
+  @@index([source_id], map: "idx_leads_source_id")
+  @@index([source_id, created_at, id], map: "idx_leads_source_created_page")
+  @@index([institution_program_id, created_at, id], map: "idx_leads_program_created_page")
+  @@index([major_id, created_at, id], map: "idx_leads_major_created_page")
+  @@index([status], map: "idx_leads_status")
+  @@index([status, created_at, id], map: "idx_leads_status_created_page")
+}
+
+model majors {
+  id                     String                @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  institution_program_id String?               @db.Uuid
+  name                   String                @db.VarChar(255)
+  code                   String?               @db.VarChar(100)
+  faculty_id             String?               @db.Uuid
+  created_at             DateTime?             @default(now()) @db.Timestamp(6)
+  admission_profiles     admission_profiles[]
+  leads                  leads[]
+  students               students[]
+  faculties              faculties?            @relation(fields: [faculty_id], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  institution_programs   institution_programs? @relation(fields: [institution_program_id], references: [id], onDelete: NoAction, onUpdate: NoAction)
+
+  @@unique([institution_program_id, code])
+  @@index([institution_program_id, created_at, id], map: "idx_majors_program_created_page")
+}
+
+model marketing_forms {
+  id                              String                          @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  name                            String                          @db.VarChar(255)
+  slug                            String?                         @unique @db.VarChar(160)
+  platform                        String?                         @db.VarChar(100)
+  form_code                       String?                         @db.VarChar(255)
+  campaign_id                     String?                         @db.Uuid
+  source_id                       String?                         @db.Uuid
+  form_type                       String?                         @default("lead_form") @db.VarChar(50)
+  title                           String?                         @db.VarChar(255)
+  subtitle                        String?                         @db.VarChar(500)
+  description                     String?
+  submit_button_label             String?                         @db.VarChar(150)
+  template_id                     String?                         @db.Uuid
+  primary_color                   String?                         @db.VarChar(32)
+  background_color                String?                         @db.VarChar(32)
+  public_key                      String?                         @unique @db.VarChar(64)
+  webhook_enabled                 Boolean?                        @default(false)
+  webhook_secret                  String?                         @db.VarChar(128)
+  display_settings                Json?
+  duplicate_settings              Json?
+  success_settings                Json?
+  access_settings                 Json?
+  close_settings                  Json?
+  advanced_settings               Json?
+  created_by                      String?                         @db.Uuid
+  status                          String?                         @default("active") @db.VarChar(50)
+  created_at                      DateTime?                       @default(now()) @db.Timestamp(6)
+  updated_at                      DateTime?                       @default(now()) @db.Timestamp(6)
+  users                           users?                          @relation(fields: [created_by], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  campaigns                       campaigns?                      @relation(fields: [campaign_id], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  lead_sources                    lead_sources?                   @relation(fields: [source_id], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  marketing_form_templates        marketing_form_templates?       @relation(fields: [template_id], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  marketing_form_fields           marketing_form_fields[]
+  marketing_form_submissions      marketing_form_submissions[]
+  marketing_form_field_mappings   marketing_form_field_mappings[]
+
+  @@index([campaign_id, created_at, id], map: "idx_marketing_forms_campaign_created_page")
+  @@index([created_at, id], map: "idx_marketing_forms_created_page")
+  @@index([created_by, created_at, id], map: "idx_marketing_forms_created_by_page")
+  @@index([form_type, created_at, id], map: "idx_marketing_forms_type_created_page")
+  @@index([platform, created_at, id], map: "idx_marketing_forms_platform_created_page")
+  @@index([source_id, created_at, id], map: "idx_marketing_forms_source_created_page")
+  @@index([status, created_at, id], map: "idx_marketing_forms_status_created_page")
+  @@index([template_id, created_at, id], map: "idx_marketing_forms_template_created_page")
+}
+
+model marketing_form_fields {
+  id                String          @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  marketing_form_id String          @db.Uuid
+  field_key         String          @db.VarChar(150)
+  label             String          @db.VarChar(255)
+  placeholder       String?         @db.VarChar(255)
+  field_type        String          @db.VarChar(50)
+  is_required       Boolean         @default(false)
+  options           Json?
+  validation_rules  Json?
+  lead_field        String?         @db.VarChar(100)
+  crm_mapping_field String?         @db.VarChar(100)
+  default_value     String?
+  sort_order        Int             @default(0)
+  is_active         Boolean         @default(true)
+  created_at        DateTime?       @default(now()) @db.Timestamp(6)
+  updated_at        DateTime?       @default(now()) @db.Timestamp(6)
+  marketing_forms   marketing_forms @relation(fields: [marketing_form_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  marketing_form_field_mappings marketing_form_field_mappings[]
+
+  @@unique([marketing_form_id, field_key])
+  @@index([marketing_form_id, sort_order, id], map: "idx_marketing_form_fields_form_order")
+  @@index([crm_mapping_field], map: "idx_marketing_form_fields_crm_mapping")
+}
+
+model marketing_form_field_mappings {
+  id                String          @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  marketing_form_id String          @db.Uuid
+  form_field_id     String?         @db.Uuid
+  source_field      String          @db.VarChar(150)
+  lead_field        String          @db.VarChar(100)
+  is_required       Boolean         @default(false)
+  target_table      String?         @db.VarChar(100)
+  target_column     String?         @db.VarChar(100)
+  transform_rule    Json?
+  created_at        DateTime?       @default(now()) @db.Timestamp(6)
+  marketing_forms   marketing_forms @relation(fields: [marketing_form_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  marketing_form_fields marketing_form_fields? @relation(fields: [form_field_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+
+  @@unique([marketing_form_id, source_field])
+  @@index([marketing_form_id, created_at, id], map: "idx_marketing_form_mapping_form_created_page")
+  @@index([form_field_id], map: "idx_marketing_form_mapping_field")
+}
+
+model marketing_form_templates {
+  id              String            @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  name            String            @db.VarChar(255)
+  preview_image   String?
+  config          Json?
+  is_default      Boolean           @default(false)
+  created_at      DateTime?         @default(now()) @db.Timestamp(6)
+  marketing_forms marketing_forms[]
+
+  @@index([is_default, created_at, id], map: "idx_marketing_form_templates_default_page")
+}
+
+model marketing_form_submissions {
+  id                 String           @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  marketing_form_id  String           @db.Uuid
+  lead_id            String?          @db.Uuid
+  raw_payload        Json
+  normalized_payload Json?
+  answers            Json?
+  source             String?          @db.VarChar(100)
+  utm_source         String?          @db.VarChar(255)
+  utm_medium         String?          @db.VarChar(255)
+  utm_campaign       String?          @db.VarChar(255)
+  ip_address         String?          @db.VarChar(100)
+  user_agent         String?
+  status             String           @default("received") @db.VarChar(50)
+  error_message      String?
+  created_at         DateTime?        @default(now()) @db.Timestamp(6)
+  marketing_forms    marketing_forms  @relation(fields: [marketing_form_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  leads              leads?           @relation(fields: [lead_id], references: [id], onDelete: SetNull, onUpdate: NoAction)
+
+  @@index([created_at, id], map: "idx_marketing_form_submissions_created_page")
+  @@index([lead_id, created_at, id], map: "idx_marketing_form_submissions_lead_page")
+  @@index([marketing_form_id, created_at, id], map: "idx_marketing_form_submissions_form_page")
+  @@index([marketing_form_id, status, created_at, id], map: "idx_marketing_form_submissions_form_status_page")
+}
+
+model notifications {
+  id         String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  user_id    String?   @db.Uuid
+  title      String    @db.VarChar(255)
+  content    String?
+  type       String?   @db.VarChar(100)
+  is_read    Boolean?  @default(false)
+  created_at DateTime? @default(now()) @db.Timestamp(6)
+  users      users?    @relation(fields: [user_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+
+  @@index([is_read], map: "idx_notifications_is_read")
+  @@index([user_id], map: "idx_notifications_user_id")
+}
+
+model permissions {
+  id               String             @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  name             String             @db.VarChar(150)
+  code             String             @unique @db.VarChar(150)
+  module           String?            @db.VarChar(100)
+  description      String?
+  is_active        Boolean?           @default(true)
+  created_at       DateTime?          @default(now()) @db.Timestamp(6)
+  role_permissions role_permissions[]
+}
+
+model access_scopes {
+  code               String               @id @db.VarChar(50)
+  name               String               @db.VarChar(150)
+  description        String?
+  is_active          Boolean?             @default(true)
+  created_at         DateTime?            @default(now()) @db.Timestamp(6)
+  updated_at         DateTime?            @default(now()) @db.Timestamp(6)
+  role_access_scopes role_access_scopes[]
+}
+
+model kpi_targets {
+  id                     String               @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  institution_program_id String               @db.Uuid
+  target_type            String               @db.VarChar(100)
+  period_start           DateTime             @db.Date
+  period_end             DateTime             @db.Date
+  target_value           Decimal              @db.Decimal(15, 2)
+  created_at             DateTime?            @default(now()) @db.Timestamp(6)
+  updated_at             DateTime?            @default(now()) @db.Timestamp(6)
+  institution_programs   institution_programs @relation(fields: [institution_program_id], references: [id], onDelete: NoAction, onUpdate: NoAction)
+
+  @@unique([institution_program_id, target_type, period_start, period_end])
+  @@index([institution_program_id, period_start, period_end], map: "idx_kpi_targets_program_period")
+}
+
+model pipeline_stages {
+  id                                                                         String                  @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  pipeline_id                                                                String?                 @db.Uuid
+  name                                                                       String                  @db.VarChar(150)
+  position                                                                   Int?                    @default(0)
+  color                                                                      String?                 @db.VarChar(50)
+  is_final                                                                   Boolean?                @default(false)
+  created_at                                                                 DateTime?               @default(now()) @db.Timestamp(6)
+  lead_status_histories_lead_status_histories_from_stage_idTopipeline_stages lead_status_histories[] @relation("lead_status_histories_from_stage_idTopipeline_stages")
+  lead_status_histories_lead_status_histories_to_stage_idTopipeline_stages   lead_status_histories[] @relation("lead_status_histories_to_stage_idTopipeline_stages")
+  leads                                                                      leads[]
+  pipelines                                                                  pipelines?              @relation(fields: [pipeline_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+
+  @@index([pipeline_id, position, id], map: "idx_pipeline_stages_pipeline_position")
+}
+
+model pipelines {
+  id              String            @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  name            String            @db.VarChar(150)
+  module          String?           @db.VarChar(100)
+  created_at      DateTime?         @default(now()) @db.Timestamp(6)
+  pipeline_stages pipeline_stages[]
+}
+
+model relatives {
+  id           String     @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  lead_id      String?    @db.Uuid
+  full_name    String     @db.VarChar(255)
+  relationship String?    @db.VarChar(100)
+  phone        String?    @db.VarChar(30)
+  job          String?    @db.VarChar(255)
+  address_id   String?    @db.Uuid
+  is_primary   Boolean?   @default(false)
+  created_at   DateTime?  @default(now()) @db.Timestamp(6)
+  addresses    addresses? @relation(fields: [address_id], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  leads        leads?     @relation(fields: [lead_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+}
+
+model reminders {
+  id                  String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  lead_id             String?   @db.Uuid
+  user_id             String?   @db.Uuid
+  title               String    @db.VarChar(255)
+  content             String?
+  remind_at           DateTime  @db.Timestamp(6)
+  status              String?   @default("pending") @db.VarChar(50)
+  due_notified_at     DateTime? @db.Timestamp(6)
+  overdue_notified_at DateTime? @db.Timestamp(6)
+  created_at          DateTime? @default(now()) @db.Timestamp(6)
+  leads               leads?    @relation(fields: [lead_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  users               users?    @relation(fields: [user_id], references: [id], onDelete: NoAction, onUpdate: NoAction)
+
+  @@index([lead_id], map: "idx_reminders_lead_id")
+  @@index([remind_at, id], map: "idx_reminders_remind_page")
+  @@index([status, remind_at, id], map: "idx_reminders_status_remind_page")
+  @@index([user_id, remind_at, id], map: "idx_reminders_user_remind_page")
+}
+
+model report_configs {
+  id                     String                @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  institution_program_id String?               @db.Uuid
+  name                   String                @db.VarChar(255)
+  report_type            String                @db.VarChar(100)
+  filters                Json?
+  is_active              Boolean?              @default(true)
+  created_at             DateTime?             @default(now()) @db.Timestamp(6)
+  updated_at             DateTime?             @default(now()) @db.Timestamp(6)
+  institution_programs   institution_programs? @relation(fields: [institution_program_id], references: [id], onDelete: NoAction, onUpdate: NoAction)
+
+  @@index([institution_program_id, report_type], map: "idx_report_configs_program_type")
+}
+
+model role_permissions {
+  id            String       @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  role_id       String?      @db.Uuid
+  permission_id String?      @db.Uuid
+  permissions   permissions? @relation(fields: [permission_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  roles         roles?       @relation(fields: [role_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+
+  @@unique([role_id, permission_id])
+}
+
+model roles {
+  id               String             @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  name             String             @db.VarChar(100)
+  code             String             @unique @db.VarChar(100)
+  description      String?
+  created_at       DateTime?          @default(now()) @db.Timestamp(6)
+  role_access_scopes role_access_scopes?
+  role_permissions role_permissions[]
+  user_roles       user_roles[]
+}
+
+model role_access_scopes {
+  id            String        @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  role_id       String        @unique @db.Uuid
+  scope_code    String        @db.VarChar(50)
+  created_at    DateTime?     @default(now()) @db.Timestamp(6)
+  updated_at    DateTime?     @default(now()) @db.Timestamp(6)
+  access_scopes access_scopes @relation(fields: [scope_code], references: [code], onDelete: Restrict, onUpdate: NoAction)
+  roles         roles         @relation(fields: [role_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+
+  @@index([scope_code], map: "idx_role_access_scopes_scope_code")
+}
+
+model sla_rules {
+  id               String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  name             String    @db.VarChar(255)
+  module           String?   @db.VarChar(100)
+  duration_minutes Int
+  action           String?   @db.VarChar(255)
+  is_active        Boolean?  @default(true)
+  created_at       DateTime? @default(now()) @db.Timestamp(6)
+}
+
+model student_classes {
+  id         String     @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  name       String     @db.VarChar(150)
+  code       String?    @unique @db.VarChar(100)
+  faculty_id String?    @db.Uuid
+  created_at DateTime?  @default(now()) @db.Timestamp(6)
+  faculties  faculties? @relation(fields: [faculty_id], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  students   students[]
+}
+
+model student_profiles {
+  id                              String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  lead_id                         String?   @unique @db.Uuid
+  birth_place                     String?   @db.VarChar(255)
+  nationality                     String?   @db.VarChar(100)
+  ethnicity                       String?   @db.VarChar(100)
+  religion                        String?   @db.VarChar(100)
+  cccd_issue_date                 DateTime? @db.Date
+  cccd_issue_place                String?   @db.VarChar(255)
+  graduation_year                 Int?
+  graduation_certificate          String?   @db.VarChar(255)
+  previous_graduation_certificate String?   @db.VarChar(255)
+  graduation_major                String?   @db.VarChar(255)
+  graduation_rank                 String?   @db.VarChar(100)
+  diploma_issue_place             String?   @db.VarChar(255)
+  academic_rank_12                String?   @db.VarChar(100)
+  conduct_rank_12                 String?   @db.VarChar(100)
+  high_school_name                String?   @db.VarChar(255)
+  high_school_province            String?   @db.VarChar(150)
+  high_school_district            String?   @db.VarChar(150)
+  current_job                     String?   @db.VarChar(255)
+  company_name                    String?   @db.VarChar(255)
+  created_at                      DateTime? @default(now()) @db.Timestamp(6)
+  updated_at                      DateTime? @default(now()) @db.Timestamp(6)
+  leads                           leads?    @relation(fields: [lead_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+}
+
+model student_services {
+  id         String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  student_id String?   @db.Uuid
+  type       String?   @db.VarChar(100)
+  status     String?   @default("open") @db.VarChar(50)
+  content    String?
+  handled_by String?   @db.Uuid
+  created_at DateTime? @default(now()) @db.Timestamp(6)
+  updated_at DateTime? @default(now()) @db.Timestamp(6)
+  users      users?    @relation(fields: [handled_by], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  students   students? @relation(fields: [student_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+
+  @@index([handled_by, created_at, id], map: "idx_student_services_handler_created_page")
+  @@index([status, created_at, id], map: "idx_student_services_status_created_page")
+  @@index([student_id, created_at, id], map: "idx_student_services_student_created_page")
+}
+
+model students {
+  id                     String                @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  student_code           String                @unique @db.VarChar(100)
+  lead_id                String?               @unique @db.Uuid
+  admission_profile_id   String?               @unique @db.Uuid
+  institution_program_id String?               @db.Uuid
+  major_id               String?               @db.Uuid
+  faculty_id             String?               @db.Uuid
+  class_id               String?               @db.Uuid
+  status                 String?               @default("active") @db.VarChar(50)
+  enrolled_at            DateTime?             @default(now()) @db.Timestamp(6)
+  created_at             DateTime?             @default(now()) @db.Timestamp(6)
+  student_services       student_services[]
+  admission_profiles     admission_profiles?   @relation(fields: [admission_profile_id], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  institution_programs   institution_programs? @relation(fields: [institution_program_id], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  majors                 majors?               @relation(fields: [major_id], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  student_classes        student_classes?      @relation(fields: [class_id], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  faculties              faculties?            @relation(fields: [faculty_id], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  leads                  leads?                @relation(fields: [lead_id], references: [id], onDelete: NoAction, onUpdate: NoAction)
+
+  @@index([lead_id], map: "idx_students_lead_id")
+  @@index([student_code], map: "idx_students_student_code")
+  @@index([enrolled_at, id], map: "idx_students_enrolled_page")
+  @@index([status, enrolled_at, id], map: "idx_students_status_enrolled_page")
+  @@index([institution_program_id, enrolled_at, id], map: "idx_students_program_enrolled_page")
+  @@index([major_id, enrolled_at, id], map: "idx_students_major_enrolled_page")
+  @@index([faculty_id, enrolled_at, id], map: "idx_students_faculty_enrolled_page")
+  @@index([class_id, enrolled_at, id], map: "idx_students_class_enrolled_page")
+}
+
+model system_settings {
+  id         String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  key        String    @unique @db.VarChar(150)
+  value      String?
+  type       String?   @db.VarChar(50)
+  created_at DateTime? @default(now()) @db.Timestamp(6)
+}
+
+model tags {
+  id          String        @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  name        String        @db.VarChar(150)
+  color       String?       @db.VarChar(50)
+  created_at  DateTime?     @default(now()) @db.Timestamp(6)
+  entity_tags entity_tags[]
+}
+
+model user_departments {
+  id            String       @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  user_id       String?      @db.Uuid
+  department_id String?      @db.Uuid
+  departments   departments? @relation(fields: [department_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  users         users?       @relation(fields: [user_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+
+  @@unique([user_id, department_id])
+}
+
+model user_roles {
+  id      String  @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  user_id String? @db.Uuid
+  role_id String? @db.Uuid
+  roles   roles?  @relation(fields: [role_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  users   users?  @relation(fields: [user_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+
+  @@unique([user_id, role_id])
+}
+
+model users {
+  id                                                   String                  @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  email                                                String                  @unique @db.VarChar(255)
+  password_hash                                        String
+  full_name                                            String                  @db.VarChar(255)
+  phone                                                String?                 @db.VarChar(30)
+  avatar_url                                           String?
+  status                                               String?                 @default("active") @db.VarChar(50)
+  last_login_at                                        DateTime?               @db.Timestamp(6)
+  created_at                                           DateTime?               @default(now()) @db.Timestamp(6)
+  updated_at                                           DateTime?               @default(now()) @db.Timestamp(6)
+  deleted_at                                           DateTime?               @db.Timestamp(6)
+  audit_logs                                           audit_logs[]
+  automation_rules                                     automation_rules[]
+  campaigns                                            campaigns[]
+  departments                                          departments[]
+  files                                                files[]
+  lead_activities                                      lead_activities[]
+  lead_assignments_lead_assignments_assigned_byTousers lead_assignments[]      @relation("lead_assignments_assigned_byTousers")
+  lead_assignments_lead_assignments_assigned_toTousers lead_assignments[]      @relation("lead_assignments_assigned_toTousers")
+  lead_notes                                           lead_notes[]
+  lead_status_histories                                lead_status_histories[]
+  leads_leads_assigned_toTousers                       leads[]                 @relation("leads_assigned_toTousers")
+  leads_leads_owner_idTousers                          leads[]                 @relation("leads_owner_idTousers")
+  marketing_forms                                      marketing_forms[]
+  notifications                                        notifications[]
+  reminders                                            reminders[]
+  student_services                                     student_services[]
+  user_access_scopes                                   user_access_scopes?
+  user_departments                                     user_departments[]
+  user_roles                                           user_roles[]
+  custom_fields_created_by                             custom_fields[] @relation("custom_fields_created_by")
+  custom_fields_updated_by                             custom_fields[] @relation("custom_fields_updated_by")
+
+  @@index([email], map: "idx_users_email")
+  @@index([status], map: "idx_users_status")
+}
+
+model user_access_scopes {
+  id         String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  user_id    String    @unique @db.Uuid
+  scope      String    @db.VarChar(50)
+  created_at DateTime? @default(now()) @db.Timestamp(6)
+  updated_at DateTime? @default(now()) @db.Timestamp(6)
+  users      users     @relation(fields: [user_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+
+  @@index([scope], map: "idx_user_access_scopes_scope")
+}
+
+model utm_trackings {
+  id                 String     @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  lead_id            String?    @db.Uuid
+  campaign_id        String?    @db.Uuid
+  utm_source         String?    @db.VarChar(255)
+  utm_medium         String?    @db.VarChar(255)
+  utm_campaign       String?    @db.VarChar(255)
+  utm_content        String?    @db.VarChar(255)
+  utm_term           String?    @db.VarChar(255)
+  gclid              String?
+  fbclid             String?
+  landing_page       String?
+  referrer           String?
+  leadgen_form_id    String?    @db.VarChar(255)
+  leadgen_adgroup_id String?    @db.VarChar(255)
+  facebook_sender_id String?    @db.VarChar(255)
+  inbox_url          String?
+  website_url        String?
+  bizfly_bot_id      String?    @db.VarChar(255)
+  created_at         DateTime?  @default(now()) @db.Timestamp(6)
+  campaigns          campaigns? @relation(fields: [campaign_id], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  leads              leads?     @relation(fields: [lead_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+
+  @@index([utm_source], map: "idx_utm_source")
+  @@index([created_at, id], map: "idx_utm_trackings_created_page")
+  @@index([campaign_id], map: "idx_utm_trackings_campaign_id")
+  @@index([campaign_id, created_at, id], map: "idx_utm_trackings_campaign_created_page")
+  @@index([lead_id], map: "idx_utm_trackings_lead_id")
+  @@index([utm_medium, created_at, id], map: "idx_utm_trackings_medium_created_page")
+  @@index([utm_source, created_at, id], map: "idx_utm_trackings_source_created_page")
+}
+
+model automation_rules {
+  id                     String                @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  institution_program_id String?               @db.Uuid
+  name                   String                @db.VarChar(255)
+  description            String?
+  is_active              Boolean               @default(false)
+  trigger_type           String                @db.VarChar(100)
+  graph_data             Json
+  version                Int                   @default(1)
+  created_by             String?               @db.Uuid
+  created_at             DateTime?             @default(now()) @db.Timestamp(6)
+  updated_at             DateTime?             @default(now()) @db.Timestamp(6)
+  users                  users?                @relation(fields: [created_by], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  institution_programs   institution_programs? @relation(fields: [institution_program_id], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  automation_execution_logs automation_execution_logs[]
+
+  @@index([is_active, trigger_type], map: "idx_automation_rules_active_trigger")
+  @@index([institution_program_id, created_at, id], map: "idx_automation_rules_program_created_page")
+  @@index([created_at, id], map: "idx_automation_rules_created_page")
+}
+
+model automation_execution_logs {
+  id            String            @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  rule_id       String            @db.Uuid
+  status        String            @default("running") @db.VarChar(50)
+  context_data  Json?
+  error_message String?
+  started_at    DateTime?         @default(now()) @db.Timestamp(6)
+  completed_at  DateTime?         @db.Timestamp(6)
+  automation_rules automation_rules @relation(fields: [rule_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+
+  @@index([rule_id, started_at, id], map: "idx_automation_exec_logs_rule_started_page")
+  @@index([status, started_at, id], map: "idx_automation_exec_logs_status_started_page")
+}

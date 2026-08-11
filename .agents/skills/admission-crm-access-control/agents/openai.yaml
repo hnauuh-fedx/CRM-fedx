@@ -1,0 +1,4 @@
+interface:
+  display_name: "Admission CRM Access Control"
+  short_description: "Apply CRM permissions, scopes, menus, and dashboards"
+  default_prompt: "Apply Admission CRM authorization and role-aware UI rules for this task."

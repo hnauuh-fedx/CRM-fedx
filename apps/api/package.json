@@ -1,0 +1,50 @@
+{
+  "name": "@admission-crm/api",
+  "private": true,
+  "scripts": {
+    "dev": "tsx watch src/server.ts",
+    "start": "tsx src/server.ts",
+    "typecheck": "tsc --noEmit",
+    "prisma:generate": "prisma generate",
+    "seed:demo-data": "tsx src/database/seed-demo-data.ts",
+    "seed:director-access": "tsx src/database/seed-director-access.ts",
+    "seed:sale-access": "tsx src/database/seed-sale-access.ts",
+    "seed:sensitive-permissions": "tsx src/database/seed-sensitive-permissions.ts",
+    "test:integration:leads": "tsx src/integration/lead-workflow.integration.ts",
+    "test:integration:director-leads": "tsx src/integration/director-lead-crud.integration.ts",
+    "test:integration:demo-data": "tsx src/integration/demo-data.integration.ts",
+    "test:integration:majors": "tsx src/integration/director-major-management.integration.ts",
+    "test:integration:campaigns": "tsx src/integration/marketing-campaign-management.integration.ts",
+    "test:integration:utm": "tsx src/integration/marketing-utm-analytics.integration.ts",
+    "test:integration:marketing-forms": "tsx src/integration/marketing-form-management.integration.ts",
+    "test:integration:access-control": "tsx src/integration/user-role-scope-management.integration.ts",
+    "test:integration:custom-fields": "tsx src/integration/custom-field-definition.integration.ts",
+    "test:integration:lead-custom-fields": "tsx src/integration/lead-custom-fields.integration.ts"
+  },
+  "dependencies": {
+    "@prisma/adapter-pg": "^7.8.0",
+    "@prisma/client": "^7.8.0",
+    "bcryptjs": "^3.0.3",
+    "bullmq": "^5.79.2",
+    "cors": "^2.8.6",
+    "dotenv": "^17.4.2",
+    "express": "^5.2.1",
+    "ioredis": "^5.11.1",
+    "jsonwebtoken": "^9.0.3",
+    "multer": "^2.1.1",
+    "pg": "^8.21.0",
+    "prisma": "^7.8.0",
+    "xlsx": "^0.18.5",
+    "zod": "^4.4.3"
+  },
+  "devDependencies": {
+    "@types/cors": "^2.8.19",
+    "@types/express": "^5.0.6",
+    "@types/jsonwebtoken": "^9.0.10",
+    "@types/multer": "^2.1.0",
+    "@types/node": "^25.9.1",
+    "@types/pg": "^8.20.0",
+    "tsx": "^4.22.3",
+    "typescript": "^6.0.3"
+  }
+}

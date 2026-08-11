@@ -1,0 +1,29 @@
+services:
+  postgres:
+    image: postgres:18-alpine
+    restart: unless-stopped
+    env_file:
+      - ./apps/api/.env
+    ports:
+      - "127.0.0.1:5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    entrypoint: ["/bin/sh", "-ec"]
+    command:
+      - |
+        url="$${DATABASE_URL#*://}"
+        auth="$${url%%@*}"
+        host_and_db="$${url#*@}"
+        export POSTGRES_USER="$${auth%%:*}"
+        export POSTGRES_PASSWORD="$${auth#*:}"
+        db_path="$${host_and_db#*/}"
+        export POSTGRES_DB="$${db_path%%\?*}"
+        exec docker-entrypoint.sh postgres
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -d \"$$DATABASE_URL\""]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+volumes:
+  postgres_data:

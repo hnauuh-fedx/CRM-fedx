@@ -1,0 +1,9 @@
+flowchart LR
+  Admin["Quản trị viên có quyền"] --> UI["Trang Cấu hình trường dữ liệu"]
+  UI --> API["/api/custom-fields"]
+  API --> Auth["Xác thực + permission + scope"]
+  Auth --> Definition["custom_fields\nđịnh nghĩa trường"]
+  Definition --> Renderer["DynamicFieldRenderer\ntrên form Lead"]
+  Renderer --> Values["custom_field_values\ngiá trị có kiểu"]
+  Values --> Lists["Danh sách / lọc / tìm kiếm"]
+  API --> Audit["audit_logs\nđã che dữ liệu nhạy cảm"]
