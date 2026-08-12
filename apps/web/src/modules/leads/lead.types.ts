@@ -314,9 +314,20 @@ export type LeadCustomFieldDataType =
   | "SELECT"
   | "MULTI_SELECT"
   | "EMAIL"
-  | "PHONE";
+  | "PHONE"
+  | "PROVINCE"
+  | "FILE";
 
-export type LeadCustomFieldValue = string | number | boolean | string[] | null;
+export type LeadCustomFieldFileValue = {
+  name: string;
+  size: number;
+  type: string;
+  lastModified: number;
+  dataUrl?: string;
+  url?: string;
+};
+
+export type LeadCustomFieldValue = string | number | boolean | string[] | LeadCustomFieldFileValue | LeadCustomFieldFileValue[] | null;
 
 export type LeadCustomFieldOption = {
   code: string;
@@ -330,6 +341,14 @@ export type LeadCustomField = {
   code: string;
   name: string;
   description: string | null;
+  group: {
+    id: string;
+    key: string;
+    label: string;
+    description: string | null;
+    isSystem: boolean;
+    displayOrder: number;
+  };
   dataType: LeadCustomFieldDataType;
   isRequired: boolean;
   isSensitive: boolean;

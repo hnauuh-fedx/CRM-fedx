@@ -158,6 +158,28 @@ model custom_field_values {
   @@unique([custom_field_id, entity_type, entity_id], map: "uq_custom_field_values_field_entity")
 }
 
+model custom_field_groups {
+  id            String          @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  entity_type   String          @db.VarChar(50)
+  group_key     String          @db.VarChar(150)
+  group_label   String          @db.VarChar(255)
+  description   String?
+  is_system     Boolean         @default(false)
+  is_active     Boolean         @default(true)
+  display_order Int             @default(0)
+  archived_at   DateTime?       @db.Timestamp(6)
+  created_by_id String?         @db.Uuid
+  updated_by_id String?         @db.Uuid
+  created_at    DateTime        @default(now()) @db.Timestamp(6)
+  updated_at    DateTime        @default(now()) @db.Timestamp(6)
+  custom_fields custom_fields[]
+  created_by    users?          @relation("custom_field_groups_created_by", fields: [created_by_id], references: [id], onDelete: SetNull, onUpdate: NoAction)
+  updated_by    users?          @relation("custom_field_groups_updated_by", fields: [updated_by_id], references: [id], onDelete: SetNull, onUpdate: NoAction)
+
+  @@unique([entity_type, group_key], map: "uq_custom_field_groups_entity_key")
+  @@index([entity_type, archived_at, display_order, id], map: "idx_custom_field_groups_entity_order")
+}
+
 model custom_fields {
   id                  String                @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
   module              String                @db.VarChar(100)
@@ -182,12 +204,15 @@ model custom_fields {
   updated_by_id       String?               @db.Uuid
   created_at          DateTime?             @default(now()) @db.Timestamp(6)
   updated_at          DateTime?             @default(now()) @db.Timestamp(6)
+  group_id            String                @db.Uuid
   custom_field_values custom_field_values[]
+  custom_field_groups custom_field_groups   @relation(fields: [group_id], references: [id], onDelete: Restrict, onUpdate: NoAction)
   institution_programs institution_programs? @relation(fields: [program_id], references: [id], onDelete: Restrict, onUpdate: NoAction)
   created_by          users?                @relation("custom_fields_created_by", fields: [created_by_id], references: [id], onDelete: SetNull, onUpdate: NoAction)
   updated_by          users?                @relation("custom_fields_updated_by", fields: [updated_by_id], references: [id], onDelete: SetNull, onUpdate: NoAction)
 
   @@index([entity_type, scope_type, program_id, display_order, id], map: "idx_custom_fields_entity_scope_order")
+  @@index([group_id, display_order, id], map: "idx_custom_fields_group_order")
 }
 
 model departments {
@@ -891,6 +916,8 @@ model users {
   user_roles                                           user_roles[]
   custom_fields_created_by                             custom_fields[] @relation("custom_fields_created_by")
   custom_fields_updated_by                             custom_fields[] @relation("custom_fields_updated_by")
+  custom_field_groups_created_by                       custom_field_groups[] @relation("custom_field_groups_created_by")
+  custom_field_groups_updated_by                       custom_field_groups[] @relation("custom_field_groups_updated_by")
 
   @@index([email], map: "idx_users_email")
   @@index([status], map: "idx_users_status")

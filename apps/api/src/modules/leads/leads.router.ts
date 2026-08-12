@@ -135,6 +135,10 @@ const leadBodySchema = z.object({
     context.addIssue({ code: "custom", path: ["admissionStatusId"], message: "Vui lòng chọn trạng thái hồ sơ tuyển sinh." });
   }
 });
+const createLeadBodySchema = leadBodySchema.refine((input) => Boolean(input.institutionProgramId), {
+  path: ["institutionProgramId"],
+  message: "Vui lòng chọn chương trình tuyển sinh.",
+});
 const stageBodySchema = z.object({ stageId: z.uuid() });
 const noteBodySchema = z.object({ content: z.string().trim().min(1).max(4000) });
 const fileBodySchema = z.object({
@@ -211,7 +215,7 @@ leadsRouter.post(
   async (request, response, next) => {
     try {
       const institutionProgramId = getInstitutionProgramScope(request);
-      const parsed = leadBodySchema.safeParse({
+      const parsed = createLeadBodySchema.safeParse({
         ...request.body,
         ...(institutionProgramId ? { institutionProgramId } : {}),
       });
@@ -239,7 +243,27 @@ leadsRouter.post(
   },
 );
 
-leadsRouter.get("/custom-fields", requireAuthentication, requireAnyPermission("lead.create", ...leadUpdatePermissions, "custom_field.view"), async (request, response, next) => { try { if (!request.authUser!.permissions.includes("custom_field.view")) return response.status(403).json({ message: "Bạn không có quyền xem trường dữ liệu tùy chỉnh." }); const parsed = z.object({ institutionProgramId: z.uuid().optional().or(z.literal("")).transform((value) => value || null) }).safeParse(request.query); if (!parsed.success) return response.status(400).json({ message: "Chương trình tuyển sinh không hợp lệ." }); const canEdit = request.authUser!.permissions.includes("lead.create") || request.authUser!.permissions.some((permission) => leadUpdatePermissions.includes(permission as typeof leadUpdatePermissions[number])); response.json(await getLeadCustomFieldDefinitions(request.authUser!, parsed.data.institutionProgramId, canEdit)); } catch (error) { next(error); } });
+leadsRouter.get(
+  "/custom-fields",
+  requireAuthentication,
+  requireAnyPermission("lead.create", ...leadListPermissions, ...leadUpdatePermissions),
+  async (request, response, next) => {
+    try {
+      const parsed = z.object({
+        institutionProgramId: z.uuid().optional().or(z.literal("")).transform((value) => value || null),
+      }).safeParse(request.query);
+      if (!parsed.success) {
+        response.status(400).json({ message: "Chương trình tuyển sinh không hợp lệ." });
+        return;
+      }
+      const canEdit = request.authUser!.permissions.includes("lead.create")
+        || request.authUser!.permissions.some((permission) => leadUpdatePermissions.includes(permission as typeof leadUpdatePermissions[number]));
+      response.json(await getLeadCustomFieldDefinitions(request.authUser!, parsed.data.institutionProgramId, canEdit));
+    } catch (error) {
+      next(error);
+    }
+  },
+);
 
 leadsRouter.post(
   "/import",
@@ -437,7 +461,28 @@ leadsRouter.post(
   },
 );
 
-leadsRouter.get("/:id/custom-fields", requireAuthentication, requireAnyPermission(...leadListPermissions, "custom_field.view"), async (request, response, next) => { try { const parsed = leadIdSchema.safeParse(request.params.id); if (!parsed.success) return response.status(400).json({ message: "Mã lead không hợp lệ." }); if (!request.authUser!.permissions.includes("custom_field.view")) return response.status(403).json({ message: "Bạn không có quyền xem trường dữ liệu tùy chỉnh." }); const data = await getLeadCustomFields(request.authUser!, parsed.data); if (!data) return response.status(404).json({ message: "Không tìm thấy lead trong phạm vi truy cập." }); response.json(data); } catch (error) { next(error); } });
+leadsRouter.get(
+  "/:id/custom-fields",
+  requireAuthentication,
+  requireAnyPermission(...leadListPermissions),
+  async (request, response, next) => {
+    try {
+      const parsed = leadIdSchema.safeParse(request.params.id);
+      if (!parsed.success) {
+        response.status(400).json({ message: "Mã lead không hợp lệ." });
+        return;
+      }
+      const data = await getLeadCustomFields(request.authUser!, parsed.data);
+      if (!data) {
+        response.status(404).json({ message: "Không tìm thấy lead trong phạm vi truy cập." });
+        return;
+      }
+      response.json(data);
+    } catch (error) {
+      next(error);
+    }
+  },
+);
 leadsRouter.patch("/:id/custom-fields", requireAuthentication, requireAnyPermission(...leadUpdatePermissions), async (request, response, next) => { try { const parsedId = leadIdSchema.safeParse(request.params.id), parsedBody = customFieldValuesSchema.safeParse(request.body); if (!parsedId.success || !parsedBody.success) return response.status(400).json({ message: "Giá trị trường dữ liệu không hợp lệ." }); const result = await patchLeadCustomFields(request.authUser!, parsedId.data, parsedBody.data.values, request.ip); if (!result.ok) return response.status(result.reason === "not_found" ? 404 : result.reason === "forbidden" || result.reason === "sensitive_forbidden" ? 403 : 400).json({ message: result.reason === "sensitive_forbidden" ? "Bạn không có quyền sửa trường dữ liệu nhạy cảm." : "Không thể lưu trường dữ liệu tùy chỉnh." }); response.json({ message: "Đã lưu trường dữ liệu tùy chỉnh." }); } catch (error) { next(error); } });
 
 leadsRouter.get(

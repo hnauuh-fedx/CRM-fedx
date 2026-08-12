@@ -73,6 +73,11 @@ const SaleKpiPage = lazy(() =>
     default: module.SaleKpiPage,
   })),
 );
+const SaleCustomFieldsPage = lazy(() =>
+  import("@/modules/custom-fields/pages/sale-custom-fields-page").then((module) => ({
+    default: module.SaleCustomFieldsPage,
+  })),
+);
 const AdmissionsListPage = lazy(() =>
   import("@/modules/admissions/pages/admissions-list-page").then((module) => ({
     default: module.AdmissionsListPage,
@@ -238,6 +243,9 @@ export function AppRoutes() {
               <Route path="/sale/hoat-dong" element={<SaleActivitiesPage />} />
               <Route path="/sale/nhac-viec" element={<SaleRemindersPage />} />
               <Route path="/sale/kpi" element={<SaleKpiPage />} />
+            </Route>
+            <Route element={<ProtectedRoute anyPermissions={["custom_field.view"]} />}>
+              <Route path="/sale/cau-hinh-truong" element={<SaleCustomFieldsPage />} />
             </Route>
 
             <Route element={<ProtectedRoute anyPermissions={["admission.view_all", "admission.view", "admission_document.view"]} />}>

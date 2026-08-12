@@ -36,17 +36,13 @@ export function LeadCustomFieldsCard({ leadId }: { leadId: string }) {
   const queryClient = useQueryClient();
   const [isEditing, setIsEditing] = useState(false);
   const [successMessage, setSuccessMessage] = useState("");
-  const canViewCustomFields = auth.can("custom_field.view");
   const query = useQuery({
     queryKey: ["leads", leadId, "custom-fields"],
     queryFn: () => getLeadCustomFields(leadId, auth.accessToken!),
-    enabled: Boolean(leadId && auth.accessToken && canViewCustomFields),
+    enabled: Boolean(leadId && auth.accessToken),
   });
   const fields = query.data?.fields ?? [];
 
-  if (!canViewCustomFields) {
-    return <Card className="border-border/70 shadow-xs"><CardHeader><CardTitle>Thông tin bổ sung</CardTitle><CardDescription>Bạn không có quyền xem trường dữ liệu tùy chỉnh.</CardDescription></CardHeader></Card>;
-  }
   if (query.isLoading) {
     return <Card className="border-border/70 shadow-xs"><CardHeader><CardTitle>Thông tin bổ sung</CardTitle><CardDescription>Đang tải trường dữ liệu bổ sung.</CardDescription></CardHeader><CardContent className="grid gap-4 sm:grid-cols-2"><Skeleton className="h-20" /><Skeleton className="h-20" /></CardContent></Card>;
   }

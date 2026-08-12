@@ -282,9 +282,14 @@ export function LeadsListPage() {
   const canCreate = auth.can("lead.create");
   const [partialCreateLeadId, setPartialCreateLeadId] = useState<string | null>(null);
   const canUpdate = ["lead.update_all", "lead.update_department", "lead.update_assigned"].some(auth.can);
-  const [{ page, editingLeadId }, setViewState] = useState<{ page: number; editingLeadId: string | null }>({
+  const [{ page, editingLeadId, isEditDialogOpen }, setViewState] = useState<{
+    page: number;
+    editingLeadId: string | null;
+    isEditDialogOpen: boolean;
+  }>({
     page: 1,
     editingLeadId: null,
+    isEditDialogOpen: false,
   });
   const [draftFilters, setDraftFilters] = useState<LeadListFilters>(emptyFilters);
   const [filters, setFilters] = useState<LeadListFilters>(emptyFilters);
@@ -347,7 +352,7 @@ export function LeadsListPage() {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["leads"] });
       queryClient.invalidateQueries({ queryKey: ["sale"] });
-      setViewState((current) => ({ ...current, editingLeadId: null }));
+      setViewState((current) => ({ ...current, isEditDialogOpen: false }));
     },
   });
   const data = leadsQuery.data?.data ?? [];
@@ -542,15 +547,15 @@ export function LeadsListPage() {
         canEdit={canUpdate}
         onEditLead={(leadId) => {
           updateMutation.reset();
-          setViewState((current) => ({ ...current, editingLeadId: leadId }));
+          setViewState((current) => ({ ...current, editingLeadId: leadId, isEditDialogOpen: true }));
         }}
       />
       <EditLeadDialog
-        isOpen={Boolean(editingLeadId)}
+        isOpen={isEditDialogOpen}
         lead={editingLeadQuery.data?.data}
         options={actionOptionsQuery.data}
         status={
-          editingLeadQuery.isLoading || actionOptionsQuery.isLoading
+          editingLeadQuery.isPending || actionOptionsQuery.isPending
             ? "loading"
             : editingLeadQuery.isError || actionOptionsQuery.isError
               ? "error"
@@ -560,9 +565,14 @@ export function LeadsListPage() {
         mutationError={updateMutation.error}
         onOpenChange={(open) => {
           if (!open) {
-            setViewState((current) => ({ ...current, editingLeadId: null }));
+            setViewState((current) => ({ ...current, isEditDialogOpen: false }));
             updateMutation.reset();
           }
+        }}
+        onAfterClose={() => {
+          setViewState((current) => current.isEditDialogOpen
+            ? current
+            : { ...current, editingLeadId: null });
         }}
         onSubmit={(values) => updateMutation.mutate(values)}
       />
@@ -578,6 +588,7 @@ type EditLeadDialogProps = {
   isSaving: boolean;
   mutationError: Error | null;
   onOpenChange: (open: boolean) => void;
+  onAfterClose: () => void;
   onSubmit: (values: LeadFormInput) => void;
 };
 
@@ -589,11 +600,15 @@ function EditLeadDialog({
   isSaving,
   mutationError,
   onOpenChange,
+  onAfterClose,
   onSubmit,
 }: EditLeadDialogProps) {
   return (
     <Dialog open={isOpen} onOpenChange={onOpenChange}>
-      <DialogContent className="max-h-[calc(100dvh-2rem)] overflow-y-auto sm:max-w-[calc(100vw-2rem)] xl:max-w-368">
+      <DialogContent
+        className="max-h-[calc(100dvh-2rem)] overflow-y-auto sm:max-w-[calc(100vw-2rem)] xl:max-w-368"
+        onCloseAutoFocus={onAfterClose}
+      >
         <DialogHeader>
           <DialogTitle>Chỉnh sửa thông tin ứng viên</DialogTitle>
           <DialogDescription>

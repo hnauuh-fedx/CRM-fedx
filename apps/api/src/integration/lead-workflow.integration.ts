@@ -44,7 +44,7 @@ function requireToken(login: { status: number; payload: JsonRecord }) {
 }
 
 async function preparePrincipals() {
-  const [saleDepartment, managerRole, telesaleRole, source, stages] = await Promise.all([
+  const [saleDepartment, managerRole, telesaleRole, source, stages, institutionProgram] = await Promise.all([
     prisma.departments.findUnique({ where: { code: "SALE" }, select: { id: true } }),
     prisma.roles.findUnique({
       where: { code: "SALE_MANAGER" },
@@ -56,6 +56,7 @@ async function preparePrincipals() {
     }),
     prisma.lead_sources.findFirst({ select: { id: true }, orderBy: { created_at: "asc" } }),
     prisma.pipeline_stages.findMany({ select: { id: true }, orderBy: [{ position: "asc" }, { id: "asc" }], take: 2 }),
+    prisma.institution_programs.findFirst({ where: { status: "active" }, select: { id: true }, orderBy: { created_at: "asc" } }),
   ]);
 
   assert.ok(saleDepartment, "Run seed:sale-access before the integration test.");
@@ -63,6 +64,7 @@ async function preparePrincipals() {
   assert.ok(telesaleRole);
   assert.ok(source, "A lead source is required to test lead creation.");
   assert.equal(stages.length, 2, "At least two pipeline stages are required.");
+  assert.ok(institutionProgram, "An active institution program is required to test lead creation.");
 
   const managerPermissionCodes = managerRole.role_permissions.flatMap((grant) =>
     grant.permissions ? [grant.permissions.code] : [],
@@ -70,7 +72,18 @@ async function preparePrincipals() {
   const telesalePermissionCodes = telesaleRole.role_permissions.flatMap((grant) =>
     grant.permissions ? [grant.permissions.code] : [],
   );
-  for (const code of ["lead.create", "lead.update_department", "lead.assign", "lead.reassign"]) {
+  for (const code of [
+    "lead.create",
+    "lead.update_department",
+    "lead.assign",
+    "lead.reassign",
+    "custom_field.view",
+    "custom_field.create",
+    "custom_field.update",
+    "custom_field.archive",
+    "custom_field.manage_options",
+    "custom_field.manage_groups",
+  ]) {
     assert.ok(managerPermissionCodes.includes(code), `SALE_MANAGER is missing ${code}.`);
   }
   for (const code of ["lead.update_assigned", "lead_note.create", "lead_activity.create", "lead_activity.update", "reminder.create", "reminder.update", "reminder.complete", "file.upload"]) {
@@ -112,6 +125,7 @@ async function preparePrincipals() {
     saleDepartmentId: saleDepartment.id,
     sourceId: source.id,
     stageIds: stages.map((stage) => stage.id),
+    institutionProgramId: institutionProgram.id,
   };
 }
 
@@ -176,6 +190,7 @@ async function verifyLeadWorkflow() {
       fullName: `Lead kiểm thử ${runId}`,
       phone: "0901234567",
       sourceId: fixture.sourceId,
+      institutionProgramId: fixture.institutionProgramId,
       email: `lead.${runId}@example.test`,
       status: "new",
     },

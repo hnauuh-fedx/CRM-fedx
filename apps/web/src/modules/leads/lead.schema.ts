@@ -54,7 +54,7 @@ export const leadFormSchema = z.object({
   relative2Phone: optionalPhone,
   relative2Job: optionalText(255),
   relative2Address: optionalText(1000),
-  institutionProgramId: z.string(),
+  institutionProgramId: z.uuid("Vui lòng chọn chương trình tuyển sinh."),
   majorId: z.string(),
   admissionStatusId: z.string(),
   trainingCode: optionalText(100),
@@ -79,9 +79,6 @@ export const leadFormSchema = z.object({
     values.enrollmentBatch, values.registrationStation, values.decisionNumber, values.decisionSignedDate,
     values.monthlyRevenue,
   ];
-  if (admissionFields.some(Boolean) && !values.institutionProgramId) {
-    context.addIssue({ code: "custom", path: ["institutionProgramId"], message: "Vui lòng chọn chương trình tuyển sinh." });
-  }
   if (admissionFields.some(Boolean) && !values.majorId) {
     context.addIssue({ code: "custom", path: ["majorId"], message: "Vui lòng chọn ngành đăng ký khi lập hồ sơ tuyển sinh." });
   }

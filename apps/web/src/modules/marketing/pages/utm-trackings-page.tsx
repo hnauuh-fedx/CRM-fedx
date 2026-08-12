@@ -380,7 +380,7 @@ function LeadDialog(props: {
   const { group, dimension, response, page, isLoading, isError, isFetching, onClose, onReload, onPrevious, onNext } = props;
   return (
     <Dialog open={Boolean(group)} onOpenChange={(open) => { if (!open) onClose(); }}>
-      <DialogContent className="max-h-[calc(100dvh-2rem)] overflow-y-auto sm:max-w-[calc(100vw-2rem)] xl:max-w-6xl">
+      <DialogContent className="max-h-[calc(100dvh-2rem)] overflow-y-auto sm:max-w-[calc(100vw-2rem)] xl:max-w-[72rem]">
         <DialogHeader>
           <DialogTitle>Lead phát sinh từ {group ? getGroupLabel(group, dimension) : "UTM"}</DialogTitle>
           <DialogDescription>Danh sách chỉ gồm lead thuộc phạm vi dữ liệu bạn được phép xem.</DialogDescription>

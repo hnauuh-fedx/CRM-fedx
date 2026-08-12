@@ -187,6 +187,12 @@ const permissionDefinitions = {
     ["reminder.create", "Tạo nhắc việc", "lead"],
     ["reminder.update", "Cập nhật nhắc việc", "lead"],
     ["reminder.complete", "Hoàn tất nhắc việc", "lead"],
+    ["custom_field.view", "Xem cấu hình trường dữ liệu", "custom_field"],
+    ["custom_field.create", "Tạo trường dữ liệu", "custom_field"],
+    ["custom_field.update", "Cập nhật trường dữ liệu", "custom_field"],
+    ["custom_field.archive", "Lưu trữ trường dữ liệu", "custom_field"],
+    ["custom_field.manage_options", "Quản lý lựa chọn trường dữ liệu", "custom_field"],
+    ["custom_field.manage_groups", "Quản lý nhóm trường dữ liệu", "custom_field"],
   ],
   TELESALE: [
     ["lead.view_assigned", "Xem lead được phân công", "lead"],

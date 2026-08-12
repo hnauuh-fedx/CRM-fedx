@@ -54,6 +54,7 @@ const directorPermissions = [
   { code: "custom_field.manage_options", name: "Quản lý lựa chọn trường dữ liệu", module: "custom_field" },
   { code: "custom_field.view_sensitive", name: "Xem cấu hình trường nhạy cảm", module: "custom_field" },
   { code: "custom_field.edit_sensitive", name: "Chỉnh sửa cấu hình trường nhạy cảm", module: "custom_field" },
+  { code: "custom_field.manage_groups", name: "Quản lý nhóm trường dữ liệu", module: "custom_field" },
 ] as const;
 
 async function seedDirectorAccess() {

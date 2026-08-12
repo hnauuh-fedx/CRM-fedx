@@ -99,6 +99,7 @@ async function createField(input: {
       field_label: input.key,
       field_type: input.type ?? "TEXT",
       entity_type: "LEAD",
+      group_id: "10000000-0000-4000-8000-000000000007",
       scope_type: input.scope ?? "GLOBAL",
       program_id: input.programId,
       is_active: input.active ?? true,
@@ -143,10 +144,11 @@ async function main() {
     const full = await createActor("full", ["lead.view_all", "lead.update_all", "custom_field.view", "custom_field.view_sensitive", "custom_field.edit_sensitive"], "ALL");
     const limited = await createActor("limited", ["lead.view_all", "lead.update_all", "custom_field.view"], "ALL");
     const noCustom = await createActor("no_custom", ["lead.view_all", "lead.update_all"], "ALL");
+    const creator = await createActor("creator", ["lead.create"], "ALL");
     const noUpdate = await createActor("no_update", ["lead.view_all", "custom_field.view", "custom_field.update"], "ALL");
     const outside = await createActor("outside", ["lead.view_assigned", "lead.update_assigned", "custom_field.view"], "ASSIGNED_ONLY");
-    const [fullToken, limitedToken, noCustomToken, noUpdateToken, outsideToken] = await Promise.all([
-      login(baseUrl, full.email), login(baseUrl, limited.email), login(baseUrl, noCustom.email), login(baseUrl, noUpdate.email), login(baseUrl, outside.email),
+    const [fullToken, limitedToken, noCustomToken, creatorToken, noUpdateToken, outsideToken] = await Promise.all([
+      login(baseUrl, full.email), login(baseUrl, limited.email), login(baseUrl, noCustom.email), login(baseUrl, creator.email), login(baseUrl, noUpdate.email), login(baseUrl, outside.email),
     ]);
 
     const institution = await prisma.institutions.create({ data: { code: `INST_${runId}`, name: "Integration Institution" }, select: { id: true } });
@@ -168,6 +170,8 @@ async function main() {
     const archivedId = await createField({ key: "archived", archived: true });
     const sensitiveId = await createField({ key: "sensitive", sensitive: true });
     const rollbackNumberId = await createField({ key: "rollback_number", type: "NUMBER" });
+    const provinceId = await createField({ key: "province", type: "PROVINCE" });
+    const fileId = await createField({ key: "file", type: "FILE", validationRules: { maxFiles: 5 } });
 
     const scopedGet = await request(baseUrl, `/leads/${lead.id}/custom-fields`, fullToken);
     equal(scopedGet.status, 200, "Actor đúng scope phải đọc được Lead.");
@@ -181,8 +185,28 @@ async function main() {
     check(globalOnlyIds.has(globalId) && !globalOnlyIds.has(programAId), "Lead không có program chỉ nhận GLOBAL field.");
     equal((await request(baseUrl, `/leads/${lead.id}/custom-fields`, outsideToken)).status, 404, "Actor ngoài scope không được GET.");
     equal((await request(baseUrl, `/leads/${lead.id}/custom-fields`, outsideToken, "PATCH", { values: [{ fieldId: globalId, value: "blocked" }] })).status, 404, "Actor ngoài scope không được PATCH.");
-    equal((await request(baseUrl, `/leads/${lead.id}/custom-fields`, noCustomToken)).status, 403, "Thiếu custom_field.view phải bị từ chối.");
+    const oldLeadResponse = await request(baseUrl, `/leads/${lead.id}/custom-fields`, noCustomToken);
+    equal(oldLeadResponse.status, 200, "Quyền xem Lead phải được đọc custom field mà không cần quyền quản trị cấu hình.");
+    const oldLeadGlobalField = fields(oldLeadResponse.payload).find((field) => field.id === globalId);
+    check(oldLeadGlobalField?.value === null, "Lead được tạo trước custom field vẫn phải hiển thị field mới với giá trị rỗng.");
+    check(oldLeadGlobalField?.canEdit, "Người có quyền cập nhật Lead phải chỉnh sửa được field mới trên Lead cũ.");
+    const createDefinitions = await request(baseUrl, `/leads/custom-fields?institutionProgramId=${programIds[0]}`, creatorToken);
+    equal(createDefinitions.status, 200, "Quyền tạo Lead phải được tải custom field mà không cần quyền quản trị cấu hình.");
+    const createDefinitionIds = new Set(fields(createDefinitions.payload).map((field) => field.id));
+    check(createDefinitionIds.has(globalId) && createDefinitionIds.has(programAId), "Form tạo Lead phải nhận field GLOBAL và field đúng chương trình.");
     equal((await request(baseUrl, `/leads/${lead.id}/custom-fields`, noUpdateToken, "PATCH", { values: [{ fieldId: globalId, value: "blocked" }] })).status, 403, "custom_field.update không thay quyền sửa Lead.");
+
+    const fileValue = [
+      { name: "hoc-ba-1.jpg", size: 2048, type: "image/jpeg", lastModified: 1786492800000 },
+      { name: "hoc-ba-2.png", size: 4096, type: "image/png", lastModified: 1786492800001 },
+    ];
+    equal((await request(baseUrl, `/leads/${lead.id}/custom-fields`, fullToken, "PATCH", { values: [{ fieldId: provinceId, value: "tra_vinh" }] })).status, 400, "Old province codes must be rejected.");
+    equal((await request(baseUrl, `/leads/${lead.id}/custom-fields`, fullToken, "PATCH", { values: [{ fieldId: provinceId, value: "vinh_long" }, { fieldId: fileId, value: fileValue }] })).status, 200, "Province and file metadata must be saved.");
+    const typedFields = fields((await request(baseUrl, `/leads/${lead.id}/custom-fields`, fullToken)).payload);
+    equal(typedFields.find((field) => field.id === provinceId)?.value, "vinh_long", "Province field must read back the saved province code.");
+    equal(typedFields.find((field) => field.id === fileId)?.value, fileValue, "File field must read back the saved metadata.");
+    equal((await request(baseUrl, `/leads/${lead.id}/custom-fields`, fullToken, "PATCH", { values: [{ fieldId: fileId, value: Array.from({ length: 6 }, (_, index) => ({ name: `over-${index}.jpg`, size: 1024, type: "image/jpeg", lastModified: 1786492800100 + index })) }] })).status, 400, "File field must reject values over the configured max.");
+    equal((await request(baseUrl, `/leads/${lead.id}/custom-fields`, fullToken, "PATCH", { values: [{ fieldId: fileId, value: [{ name: "hoc-ba.pdf", size: 2048, type: "application/pdf", lastModified: 1786492800002, dataUrl: "data:application/pdf;base64,JVBERi0x" }] }] })).status, 200, "File field must allow non-image files for download-only usage.");
 
     const secretOne = `secret-one-${runId}`;
     const secretTwo = `secret-two-${runId}`;

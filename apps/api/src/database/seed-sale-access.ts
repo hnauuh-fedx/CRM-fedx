@@ -23,6 +23,12 @@ const roleDefinitions = {
       { code: "reminder.create", name: "Tạo nhắc việc", module: "lead" },
       { code: "reminder.update", name: "Cập nhật nhắc việc", module: "lead" },
       { code: "reminder.complete", name: "Hoàn tất nhắc việc", module: "lead" },
+      { code: "custom_field.view", name: "Xem cấu hình trường dữ liệu", module: "custom_field" },
+      { code: "custom_field.create", name: "Tạo trường dữ liệu", module: "custom_field" },
+      { code: "custom_field.update", name: "Cập nhật trường dữ liệu", module: "custom_field" },
+      { code: "custom_field.archive", name: "Lưu trữ trường dữ liệu", module: "custom_field" },
+      { code: "custom_field.manage_options", name: "Quản lý lựa chọn trường dữ liệu", module: "custom_field" },
+      { code: "custom_field.manage_groups", name: "Quản lý nhóm trường dữ liệu", module: "custom_field" },
     ],
   },
   TELESALE: {

@@ -1,9 +1,9 @@
-import { useEffect, useRef, useState, type CSSProperties, type HTMLAttributes, type HTMLInputTypeAttribute, type ReactNode } from "react";
+import { useEffect, useMemo, useRef, useState, type CSSProperties, type HTMLAttributes, type HTMLInputTypeAttribute, type ReactNode } from "react";
 import { useQuery } from "@tanstack/react-query";
-import { useForm, type FieldErrors, type UseFormRegister } from "react-hook-form";
+import { useForm, type Control, type FieldErrors, type UseFormRegister } from "react-hook-form";
 
 import { Button } from "@/components/ui/button";
-import { Field, FieldError, FieldGroup, FieldLabel } from "@/components/ui/field";
+import { Field, FieldDescription, FieldError, FieldGroup, FieldLabel } from "@/components/ui/field";
 import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectGroup, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
@@ -12,7 +12,7 @@ import { useAuth } from "@/modules/auth/auth-context";
 import { getLeadCustomFieldDefinitions, getLeadCustomFields } from "@/services/lead.service";
 import { DynamicFieldRenderer } from "./dynamic-field-renderer";
 import { leadFormSchema } from "../lead.schema";
-import type { LeadActionOptions, LeadCustomFieldValue, LeadFormInput } from "../lead.types";
+import type { LeadActionOptions, LeadCustomField, LeadCustomFieldValue, LeadFormInput } from "../lead.types";
 
 const statusOptions = [
   { value: "new", label: "Mới" },
@@ -42,18 +42,41 @@ type LeadFormProps = {
 export function LeadForm({ defaultValues, options, leadId, submitLabel, isPending, onSubmit }: LeadFormProps) {
   const auth = useAuth();
   const { selectedProgramId } = useInstitutionProgram();
-  const form = useForm<LeadFormInput>({ defaultValues });
+  const form = useForm<LeadFormInput>({
+    defaultValues: {
+      ...defaultValues,
+      institutionProgramId: defaultValues.institutionProgramId || selectedProgramId || "",
+    },
+  });
   const programId = form.watch("institutionProgramId");
+  const selectedProgram = options.institutionPrograms.find((program) => program.id === programId);
   const customFieldsQuery = useQuery({
     queryKey: ["leads", "form", "custom-fields", leadId ?? "new", programId],
     queryFn: () => leadId ? getLeadCustomFields(leadId, auth.accessToken!) : getLeadCustomFieldDefinitions(programId, auth.accessToken!),
-    enabled: Boolean(auth.accessToken && auth.can("custom_field.view")),
+    enabled: Boolean(auth.accessToken && (leadId || programId)),
   });
-  const customFields = customFieldsQuery.data?.fields ?? [];
+  const customFields = useMemo(() => customFieldsQuery.data?.fields ?? [], [customFieldsQuery.data?.fields]);
+  const customFieldsByGroup = useMemo(() => {
+    const grouped = new Map<string, LeadCustomField[]>();
+    for (const field of customFields) grouped.set(field.group.key, [...(grouped.get(field.group.key) ?? []), field]);
+    return grouped;
+  }, [customFields]);
+  const customGroups = useMemo(() => {
+    const groups = new Map<string, LeadCustomField["group"]>();
+    for (const field of customFields) if (!field.group.isSystem) groups.set(field.group.id, field.group);
+    return [...groups.values()].sort((left, right) => left.displayOrder - right.displayOrder);
+  }, [customFields]);
   const previousCustomFieldIds = useRef<string[]>([]);
   const [hiddenCustomValueWarning, setHiddenCustomValueWarning] = useState(false);
   useEffect(() => form.reset({ ...defaultValues, institutionProgramId: defaultValues.institutionProgramId || selectedProgramId || "" }), [defaultValues, form, selectedProgramId]);
-  useEffect(() => { for (const field of customFields) { if (field.canView && form.getValues(`customFieldValues.${field.id}`) === undefined) form.setValue(`customFieldValues.${field.id}`, leadId ? field.value : field.value ?? field.defaultValue ?? null); } }, [customFields, form, leadId]);
+  useEffect(() => {
+    for (const field of customFields) {
+      const path = `customFieldValues.${field.id}` as const;
+      if (field.canView && !form.getFieldState(path).isDirty) {
+        form.setValue(path, leadId ? field.value : field.value ?? field.defaultValue ?? null);
+      }
+    }
+  }, [customFields, form, leadId]);
   useEffect(() => { const currentIds = new Set(customFields.map((field) => field.id)); if (previousCustomFieldIds.current.some((fieldId) => !currentIds.has(fieldId) && form.getFieldState(`customFieldValues.${fieldId}`).isDirty)) setHiddenCustomValueWarning(true); previousCustomFieldIds.current = [...currentIds]; }, [customFields, form]);
 
   return (
@@ -120,6 +143,7 @@ export function LeadForm({ defaultValues, options, leadId, submitLabel, isPendin
           <FieldLabel htmlFor="lead-specific-address">Địa chỉ cụ thể</FieldLabel>
           <Input id="lead-specific-address" {...form.register("specificAddress")} />
         </Field>
+        <CustomFieldInputs fields={customFieldsByGroup.get("basic") ?? []} control={form.control} isPending={isPending} />
       </FormSection>
 
       <FormSection title="Học vấn và tốt nghiệp" description="Thông tin trường THPT, văn bằng và kết quả tốt nghiệp.">
@@ -136,6 +160,7 @@ export function LeadForm({ defaultValues, options, leadId, submitLabel, isPendin
           <TextField name="highSchoolDistrict" id="lead-school-district" label="Quận/huyện của trường THPT" register={form.register} errors={form.formState.errors} />
           <TextField name="highSchoolProvince" id="lead-school-province" label="Tỉnh/TP của trường THPT" register={form.register} errors={form.formState.errors} />
         </FieldGroup>
+        <CustomFieldInputs fields={customFieldsByGroup.get("education") ?? []} control={form.control} isPending={isPending} />
       </FormSection>
 
       <FormSection title="Địa chỉ và công việc hiện nay" description="Nơi cư trú hiện tại và thông tin công tác nếu có.">
@@ -150,6 +175,7 @@ export function LeadForm({ defaultValues, options, leadId, submitLabel, isPendin
           <TextField name="currentJob" id="lead-current-job" label="Công việc hiện nay" register={form.register} errors={form.formState.errors} />
           <TextField name="companyName" id="lead-company" label="Cơ quan công tác" register={form.register} errors={form.formState.errors} />
         </FieldGroup>
+        <CustomFieldInputs fields={customFieldsByGroup.get("current-address") ?? []} control={form.control} isPending={isPending} />
       </FormSection>
 
       <FormSection title="Người thân đại diện" description="Lưu tối đa hai người liên hệ khi cần hỗ trợ hồ sơ.">
@@ -169,6 +195,7 @@ export function LeadForm({ defaultValues, options, leadId, submitLabel, isPendin
           <TextField name="relative2Job" id="relative-2-job" label="Nghề nghiệp" register={form.register} errors={form.formState.errors} />
           <TextField name="relative2Address" id="relative-2-address" label="Địa chỉ" register={form.register} errors={form.formState.errors} />
         </FieldGroup>
+        <CustomFieldInputs fields={customFieldsByGroup.get("relatives") ?? []} control={form.control} isPending={isPending} />
       </FormSection>
 
       <FormSection title="Thông tin tuyển sinh" description="Hồ sơ được ghi vào chương trình đang chọn trên thanh công cụ; ngành đăng ký và trạng thái hồ sơ là bắt buộc khi nhập phần này.">
@@ -203,6 +230,7 @@ export function LeadForm({ defaultValues, options, leadId, submitLabel, isPendin
           <TextField name="decisionSignedDate" id="lead-decision-date" label="Ngày ký quyết định" register={form.register} errors={form.formState.errors} type="date" />
           <TextField name="monthlyRevenue" id="lead-monthly-revenue" label="Doanh số tháng" register={form.register} errors={form.formState.errors} inputMode="decimal" />
         </FieldGroup>
+        <CustomFieldInputs fields={customFieldsByGroup.get("admission") ?? []} control={form.control} isPending={isPending} />
       </FormSection>
 
       <FormSection title="Chăm sóc và phân loại" description="Thông tin phục vụ telesale, marketing và phân loại ứng viên.">
@@ -222,23 +250,44 @@ export function LeadForm({ defaultValues, options, leadId, submitLabel, isPendin
           <FieldLabel htmlFor="lead-note-input">Ghi chú</FieldLabel>
           <Textarea id="lead-note-input" rows={3} placeholder="Nhập ghi chú ban đầu hoặc nhu cầu tư vấn..." {...form.register("note")} />
         </Field>
+        <CustomFieldInputs fields={customFieldsByGroup.get("classification") ?? []} control={form.control} isPending={isPending} />
       </FormSection>
       <FormSection title="Thông tin bổ sung" description="Các trường dữ liệu tùy chỉnh áp dụng theo chương trình tuyển sinh đã chọn.">
-        <Field data-invalid={Boolean(form.formState.errors.institutionProgramId)}>
-          <FieldLabel htmlFor="lead-institution-program">Chương trình tuyển sinh</FieldLabel>
-          <Select value={programId || "__empty__"} onValueChange={(value) => form.setValue("institutionProgramId", value === "__empty__" ? "" : value, { shouldDirty: true })}>
-            <SelectTrigger id="lead-institution-program" className="w-full"><SelectValue placeholder="Chưa chọn chương trình" /></SelectTrigger>
-            <SelectContent><SelectItem value="__empty__">Chưa chọn chương trình</SelectItem>{options.institutionPrograms.map((program) => <SelectItem key={program.id} value={program.id}>{program.institutionName} - {program.name}</SelectItem>)}</SelectContent>
-          </Select>
+        <Field data-invalid={Boolean(form.formState.errors.institutionProgramId)} data-disabled>
+          <FieldLabel htmlFor="lead-institution-program">Chương trình tuyển sinh *</FieldLabel>
+          <Input
+            id="lead-institution-program"
+            value={selectedProgram ? `${selectedProgram.institutionName} - ${selectedProgram.name}` : ""}
+            disabled
+            aria-invalid={Boolean(form.formState.errors.institutionProgramId)}
+            placeholder="Chưa có chương trình đang làm việc"
+          />
+          <FieldDescription>{leadId ? "Chương trình của ứng viên không thể thay đổi tại đây." : "Tự động theo chương trình đang làm việc và không thể thay đổi trong form."}</FieldDescription>
           <FieldError errors={[form.formState.errors.institutionProgramId]} />
         </Field>
         {hiddenCustomValueWarning && <p role="status" className="text-sm text-amber-700">Một số giá trị vừa nhập không còn áp dụng theo chương trình mới. Chúng được giữ trong form nhưng sẽ không được lưu.</p>}
-        {customFieldsQuery.isLoading ? <p className="text-sm text-muted-foreground">Đang tải trường dữ liệu bổ sung…</p> : customFieldsQuery.isError ? <p role="alert" className="text-sm text-destructive">Không thể tải trường dữ liệu bổ sung. Vui lòng thử lại.</p> : customFields.length === 0 ? <p className="text-sm text-muted-foreground">Chưa có trường dữ liệu bổ sung áp dụng.</p> : <FieldGroup className="grid gap-4 md:grid-cols-2">{customFields.map((field) => field.canView ? <DynamicFieldRenderer key={field.id} field={field} control={form.control} name={`customFieldValues.${field.id}`} disabled={isPending} /> : <div key={field.id}><p className="text-sm text-muted-foreground">{field.name}</p><p className="text-sm font-medium">Không có quyền xem</p></div>)}</FieldGroup>}
+        {customFieldsQuery.isLoading ? <p className="text-sm text-muted-foreground">Đang tải trường dữ liệu bổ sung…</p> : customFieldsQuery.isError ? <p role="alert" className="text-sm text-destructive">Không thể tải trường dữ liệu bổ sung. Vui lòng thử lại.</p> : <CustomFieldInputs fields={customFieldsByGroup.get("additional") ?? []} control={form.control} isPending={isPending} emptyLabel="Chưa có trường dữ liệu bổ sung áp dụng." />}
       </FormSection>
+      {customGroups.map((group) => (
+        <FormSection key={group.id} title={group.label} description={group.description ?? "Nhóm trường dữ liệu tùy chỉnh."}>
+          <CustomFieldInputs fields={customFields.filter((field) => field.group.id === group.id)} control={form.control} isPending={isPending} />
+        </FormSection>
+      ))}
       <div className="flex justify-end">
         <Button type="submit" disabled={isPending}>{isPending ? "Đang lưu..." : submitLabel}</Button>
       </div>
     </form>
+  );
+}
+
+function CustomFieldInputs({ fields, control, isPending, emptyLabel }: { fields: LeadCustomField[]; control: Control<LeadFormInput>; isPending: boolean; emptyLabel?: string }) {
+  if (fields.length === 0) return emptyLabel ? <p className="text-sm text-muted-foreground">{emptyLabel}</p> : null;
+  return (
+    <FieldGroup className="grid gap-4 md:grid-cols-2">
+      {fields.map((field) => field.canView
+        ? <DynamicFieldRenderer key={field.id} field={field} control={control} name={`customFieldValues.${field.id}`} disabled={isPending} />
+        : <div key={field.id}><p className="text-sm text-muted-foreground">{field.name}</p><p className="text-sm font-medium">Không có quyền xem</p></div>)}
+    </FieldGroup>
   );
 }
 

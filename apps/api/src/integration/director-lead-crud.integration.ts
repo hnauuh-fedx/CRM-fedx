@@ -130,6 +130,19 @@ async function verifyDirectorLeadCrud() {
     400,
   );
 
+  assert.equal(
+    (await request(baseUrl, "/leads", {
+      token,
+      method: "POST",
+      body: {
+        fullName: "Thiếu chương trình tuyển sinh",
+        phone: "0909876500",
+        sourceId: fixture.sourceId,
+      },
+    })).status,
+    400,
+  );
+
   const createResponse = await request(baseUrl, "/leads", {
     token,
     method: "POST",
@@ -169,6 +182,7 @@ async function verifyDirectorLeadCrud() {
         fullName: "Lead trùng số điện thoại",
         phone: "0909876543",
         sourceId: fixture.sourceId,
+        institutionProgramId: fixture.institutionProgramId,
       },
     })).status,
     409,
@@ -181,6 +195,7 @@ async function verifyDirectorLeadCrud() {
       fullName: "Lead kiểm tra sửa trùng điện thoại",
       phone: "0909876544",
       sourceId: fixture.sourceId,
+      institutionProgramId: fixture.institutionProgramId,
     },
   });
   assert.equal(secondLeadResponse.status, 201);
