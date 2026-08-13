@@ -22,6 +22,7 @@ import type {
   BusinessRecordListResponse,
 } from "@/components/shared/business-records.types";
 import { apiRequest } from "./api";
+import { saveRuntimeCustomFields } from "./custom-field.service";
 
 type AdmissionListParams = {
   page: number;
@@ -52,12 +53,18 @@ export function getAdmissionActionOptions(accessToken: string) {
   return apiRequest<AdmissionActionOptions>("/admissions/action-options", {}, accessToken);
 }
 
-export function createAdmissionProfile(input: AdmissionProfileInput, accessToken: string) {
-  return apiRequest<{ id: string }>("/admissions", { method: "POST", body: JSON.stringify(input) }, accessToken);
+export async function createAdmissionProfile(input: AdmissionProfileInput, accessToken: string) {
+  const { customFieldValues, ...payload } = input;
+  const result = await apiRequest<{ id: string }>("/admissions", { method: "POST", body: JSON.stringify(payload) }, accessToken);
+  if (customFieldValues && Object.keys(customFieldValues).length > 0) await saveRuntimeCustomFields("ADMISSION_PROFILE", result.id, customFieldValues, accessToken);
+  return result;
 }
 
-export function updateAdmissionProfile(id: string, input: AdmissionProfileInput, accessToken: string) {
-  return apiRequest<{ id: string }>(`/admissions/${id}`, { method: "PUT", body: JSON.stringify(input) }, accessToken);
+export async function updateAdmissionProfile(id: string, input: AdmissionProfileInput, accessToken: string) {
+  const { customFieldValues, ...payload } = input;
+  const result = await apiRequest<{ id: string }>(`/admissions/${id}`, { method: "PUT", body: JSON.stringify(payload) }, accessToken);
+  if (customFieldValues) await saveRuntimeCustomFields("ADMISSION_PROFILE", id, customFieldValues, accessToken);
+  return result;
 }
 
 export function approveAdmissionProfile(id: string, statusId: string | undefined, accessToken: string) {
@@ -123,8 +130,11 @@ export function getAdmissionDocumentActionOptions(accessToken: string) {
   return apiRequest<AdmissionDocumentActionOptions>("/admissions/documents/action-options", {}, accessToken);
 }
 
-export function uploadAdmissionDocument(input: AdmissionDocumentInput, accessToken: string) {
-  return apiRequest<{ id: string }>("/admissions/documents", { method: "POST", body: JSON.stringify(input) }, accessToken);
+export async function uploadAdmissionDocument(input: AdmissionDocumentInput, accessToken: string) {
+  const { customFieldValues, ...payload } = input;
+  const result = await apiRequest<{ id: string }>("/admissions/documents", { method: "POST", body: JSON.stringify(payload) }, accessToken);
+  if (customFieldValues && Object.keys(customFieldValues).length > 0) await saveRuntimeCustomFields("ADMISSION_DOCUMENT", result.id, customFieldValues, accessToken);
+  return result;
 }
 
 export function updateAdmissionDocumentStatus(
@@ -166,12 +176,18 @@ export function getAdmissionStatusFlow(accessToken: string) {
   return apiRequest<AdmissionStatusFlowResponse>("/admissions/statuses/flow", {}, accessToken);
 }
 
-export function createAdmissionStatus(input: AdmissionStatusInput, accessToken: string) {
-  return apiRequest<{ id: string }>("/admissions/statuses", { method: "POST", body: JSON.stringify(input) }, accessToken);
+export async function createAdmissionStatus(input: AdmissionStatusInput, accessToken: string) {
+  const { customFieldValues, ...payload } = input;
+  const result = await apiRequest<{ id: string }>("/admissions/statuses", { method: "POST", body: JSON.stringify(payload) }, accessToken);
+  if (customFieldValues && Object.keys(customFieldValues).length > 0) await saveRuntimeCustomFields("ADMISSION_STATUS", result.id, customFieldValues, accessToken);
+  return result;
 }
 
-export function updateAdmissionStatus(id: string, input: AdmissionStatusInput, accessToken: string) {
-  return apiRequest<{ id: string }>(`/admissions/statuses/${id}`, { method: "PUT", body: JSON.stringify(input) }, accessToken);
+export async function updateAdmissionStatus(id: string, input: AdmissionStatusInput, accessToken: string) {
+  const { customFieldValues, ...payload } = input;
+  const result = await apiRequest<{ id: string }>(`/admissions/statuses/${id}`, { method: "PUT", body: JSON.stringify(payload) }, accessToken);
+  if (customFieldValues) await saveRuntimeCustomFields("ADMISSION_STATUS", id, customFieldValues, accessToken);
+  return result;
 }
 
 export function deleteAdmissionStatus(id: string, accessToken: string) {

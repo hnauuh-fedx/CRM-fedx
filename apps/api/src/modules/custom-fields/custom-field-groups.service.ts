@@ -18,6 +18,41 @@ const select = {
   _count: { select: { custom_fields: { where: { archived_at: null } } } },
 } as const;
 
+const defaultSystemGroups: Record<string, Array<{ id: string; groupKey: string; groupLabel: string; description: string; displayOrder: number }>> = {
+  SALE_ACTIVITY: [
+    { id: "40000000-0000-4000-8000-000000000001", groupKey: "basic", groupLabel: "Th\u00f4ng tin ho\u1ea1t \u0111\u1ed9ng", description: "Th\u00f4ng tin ch\u00ednh d\u00f9ng \u0111\u1ec3 ghi nh\u1eadn ho\u1ea1t \u0111\u1ed9ng ch\u0103m s\u00f3c lead.", displayOrder: 10 },
+    { id: "40000000-0000-4000-8000-000000000002", groupKey: "additional", groupLabel: "Th\u00f4ng tin b\u1ed5 sung", description: "C\u00e1c tr\u01b0\u1eddng d\u1eef li\u1ec7u t\u1ef1 c\u1ea5u h\u00ecnh cho form ho\u1ea1t \u0111\u1ed9ng sale.", displayOrder: 20 },
+  ],
+  SALE_REMINDER: [
+    { id: "50000000-0000-4000-8000-000000000001", groupKey: "basic", groupLabel: "Th\u00f4ng tin nh\u1eafc vi\u1ec7c", description: "Th\u00f4ng tin ch\u00ednh d\u00f9ng \u0111\u1ec3 t\u1ea1o v\u00e0 theo d\u00f5i nh\u1eafc vi\u1ec7c sale.", displayOrder: 10 },
+    { id: "50000000-0000-4000-8000-000000000002", groupKey: "additional", groupLabel: "Th\u00f4ng tin b\u1ed5 sung", description: "C\u00e1c tr\u01b0\u1eddng d\u1eef li\u1ec7u t\u1ef1 c\u1ea5u h\u00ecnh cho form nh\u1eafc vi\u1ec7c sale.", displayOrder: 20 },
+  ],
+  MARKETING_CAMPAIGN: [
+    { id: "60000000-0000-4000-8000-000000000001", groupKey: "basic", groupLabel: "Th\u00f4ng tin chi\u1ebfn d\u1ecbch", description: "Th\u00f4ng tin ch\u00ednh d\u00f9ng \u0111\u1ec3 t\u1ea1o v\u00e0 theo d\u00f5i chi\u1ebfn d\u1ecbch Marketing.", displayOrder: 10 },
+    { id: "60000000-0000-4000-8000-000000000002", groupKey: "additional", groupLabel: "Th\u00f4ng tin b\u1ed5 sung", description: "C\u00e1c tr\u01b0\u1eddng d\u1eef li\u1ec7u t\u1ef1 c\u1ea5u h\u00ecnh cho form chi\u1ebfn d\u1ecbch Marketing.", displayOrder: 20 },
+  ],
+  MARKETING_FORM: [
+    { id: "63000000-0000-4000-8000-000000000001", groupKey: "basic", groupLabel: "Th\u00f4ng tin Form & Survey", description: "Th\u00f4ng tin ch\u00ednh d\u00f9ng \u0111\u1ec3 c\u1ea5u h\u00ecnh bi\u1ec3u m\u1eabu Marketing.", displayOrder: 10 },
+    { id: "63000000-0000-4000-8000-000000000002", groupKey: "additional", groupLabel: "Th\u00f4ng tin b\u1ed5 sung", description: "C\u00e1c tr\u01b0\u1eddng d\u1eef li\u1ec7u t\u1ef1 c\u1ea5u h\u00ecnh cho Form & Survey.", displayOrder: 20 },
+  ],
+  ADMISSION_PROFILE: [
+    { id: "70000000-0000-4000-8000-000000000001", groupKey: "basic", groupLabel: "Th\u00f4ng tin h\u1ed3 s\u01a1 tuy\u1ec3n sinh", description: "Th\u00f4ng tin ch\u00ednh d\u00f9ng \u0111\u1ec3 t\u1ea1o v\u00e0 x\u1eed l\u00fd h\u1ed3 s\u01a1 tuy\u1ec3n sinh.", displayOrder: 10 },
+    { id: "70000000-0000-4000-8000-000000000002", groupKey: "additional", groupLabel: "Th\u00f4ng tin b\u1ed5 sung", description: "C\u00e1c tr\u01b0\u1eddng d\u1eef li\u1ec7u t\u1ef1 c\u1ea5u h\u00ecnh cho form h\u1ed3 s\u01a1 tuy\u1ec3n sinh.", displayOrder: 20 },
+  ],
+  ADMISSION_DOCUMENT: [
+    { id: "71000000-0000-4000-8000-000000000001", groupKey: "basic", groupLabel: "Th\u00f4ng tin t\u00e0i li\u1ec7u h\u1ed3 s\u01a1", description: "Th\u00f4ng tin ch\u00ednh d\u00f9ng \u0111\u1ec3 upload v\u00e0 ki\u1ec3m tra t\u00e0i li\u1ec7u h\u1ed3 s\u01a1.", displayOrder: 10 },
+    { id: "71000000-0000-4000-8000-000000000002", groupKey: "additional", groupLabel: "Th\u00f4ng tin b\u1ed5 sung", description: "C\u00e1c tr\u01b0\u1eddng d\u1eef li\u1ec7u t\u1ef1 c\u1ea5u h\u00ecnh cho form t\u00e0i li\u1ec7u h\u1ed3 s\u01a1.", displayOrder: 20 },
+  ],
+  ADMISSION_STATUS: [
+    { id: "72000000-0000-4000-8000-000000000001", groupKey: "basic", groupLabel: "Th\u00f4ng tin tr\u1ea1ng th\u00e1i h\u1ed3 s\u01a1", description: "Th\u00f4ng tin ch\u00ednh d\u00f9ng \u0111\u1ec3 khai b\u00e1o tr\u1ea1ng th\u00e1i x\u1eed l\u00fd h\u1ed3 s\u01a1.", displayOrder: 10 },
+    { id: "72000000-0000-4000-8000-000000000002", groupKey: "additional", groupLabel: "Th\u00f4ng tin b\u1ed5 sung", description: "C\u00e1c tr\u01b0\u1eddng d\u1eef li\u1ec7u t\u1ef1 c\u1ea5u h\u00ecnh cho form tr\u1ea1ng th\u00e1i h\u1ed3 s\u01a1.", displayOrder: 20 },
+  ],
+  ADMISSION_MAJOR: [
+    { id: "73000000-0000-4000-8000-000000000001", groupKey: "basic", groupLabel: "Th\u00f4ng tin ng\u00e0nh", description: "Th\u00f4ng tin ch\u00ednh d\u00f9ng \u0111\u1ec3 qu\u1ea3n l\u00fd ng\u00e0nh tuy\u1ec3n sinh.", displayOrder: 10 },
+    { id: "73000000-0000-4000-8000-000000000002", groupKey: "additional", groupLabel: "Th\u00f4ng tin b\u1ed5 sung", description: "C\u00e1c tr\u01b0\u1eddng d\u1eef li\u1ec7u t\u1ef1 c\u1ea5u h\u00ecnh cho form ng\u00e0nh tuy\u1ec3n sinh.", displayOrder: 20 },
+  ],
+};
+
 function serialize(group: any) {
   return {
     id: group.id,
@@ -48,6 +83,33 @@ function audit(group: any) {
 }
 
 export async function listCustomFieldGroups(query: { entityType: string; includeArchived: boolean }) {
+  const defaults = defaultSystemGroups[query.entityType];
+  if (defaults) {
+    await prisma.$transaction(
+      defaults.map((group) =>
+        prisma.custom_field_groups.upsert({
+          where: { entity_type_group_key: { entity_type: query.entityType, group_key: group.groupKey } },
+          create: {
+            id: group.id,
+            entity_type: query.entityType,
+            group_key: group.groupKey,
+            group_label: group.groupLabel,
+            description: group.description,
+            is_system: true,
+            is_active: true,
+            display_order: group.displayOrder,
+          },
+          update: {
+            group_label: group.groupLabel,
+            description: group.description,
+            is_system: true,
+            is_active: true,
+            display_order: group.displayOrder,
+          },
+        }),
+      ),
+    );
+  }
   const groups = await prisma.custom_field_groups.findMany({
     where: { entity_type: query.entityType, ...(query.includeArchived ? {} : { archived_at: null }) },
     select,

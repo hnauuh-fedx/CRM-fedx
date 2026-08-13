@@ -16,6 +16,7 @@ import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { useAuth } from "@/modules/auth/auth-context";
+import { RuntimeCustomFieldsSection } from "@/modules/custom-fields/runtime-custom-fields-section";
 import {
   createAdmissionStatus,
   deleteAdmissionStatus,
@@ -411,6 +412,7 @@ function StatusFormDialog(props: {
     name: status?.name ?? "",
     code: status?.code ?? "",
     color: status?.color ?? "#2563EB",
+    customFieldValues: {},
   });
   const setValue = (field: keyof AdmissionStatusInput, value: string) => setForm((current) => ({ ...current, [field]: value }));
 
@@ -436,6 +438,7 @@ function StatusFormDialog(props: {
               <Input id="status-color" type="color" value={form.color ?? "#2563EB"} onChange={(event) => setValue("color", event.target.value)} />
             </Field>
           </FieldGroup>
+          <RuntimeCustomFieldsSection entityType="ADMISSION_STATUS" entityId={status?.id} disabled={props.isSubmitting} onChange={(values) => setForm((current) => ({ ...current, customFieldValues: values }))} />
           {props.error && <p className="text-sm text-destructive">{getErrorMessage(props.error)}</p>}
           <DialogFooter>
             <Button type="submit" disabled={props.isSubmitting || !form.name.trim() || !form.code.trim()}>

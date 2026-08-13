@@ -73,6 +73,7 @@ export type AdmissionProfileInput = {
   monthlyRevenue?: string;
   feeStatus?: string;
   tuitionStatus?: string;
+  customFieldValues?: Record<string, LeadCustomFieldValue>;
 };
 
 export type AdmissionActionOptions = {
@@ -97,6 +98,7 @@ export type AdmissionDocumentInput = {
   fileUrl?: string;
   mimeType?: string;
   fileSize?: number;
+  customFieldValues?: Record<string, LeadCustomFieldValue>;
 };
 
 export type AdmissionDocumentItem = {
@@ -129,6 +131,7 @@ export type AdmissionStatusInput = {
   name: string;
   code: string;
   color?: string;
+  customFieldValues?: Record<string, LeadCustomFieldValue>;
 };
 
 export type AdmissionStatusItem = {
@@ -198,3 +201,4 @@ export type AdmissionFeeHistoryResponse = {
     actorName: string | null;
   }>;
 };
+import type { LeadCustomFieldValue } from "@/modules/leads/lead.types";

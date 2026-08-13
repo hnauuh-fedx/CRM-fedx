@@ -28,6 +28,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { useAuth } from "@/modules/auth/auth-context";
 import { useInstitutionProgram } from "@/modules/institutions/institution-program-context";
 import { ApiError } from "@/services/api";
+import { RuntimeCustomFieldsSection } from "@/modules/custom-fields/runtime-custom-fields-section";
 import { createCampaign, deleteCampaign, getCampaignFilterOptions, getCampaigns, updateCampaign } from "@/services/campaign.service";
 import type {
   CampaignFilterOptions,
@@ -208,6 +209,7 @@ export function CampaignsListPage() {
             <DialogDescription>Khai báo thời gian, ngân sách và trạng thái triển khai ban đầu.</DialogDescription>
           </DialogHeader>
           <CampaignForm
+            entityId={undefined}
             defaultValues={{ ...emptyCampaignForm, institutionProgramId: selectedProgramId ?? "" }}
             options={optionsQuery.data}
             selectedProgramId={selectedProgramId}
@@ -226,6 +228,7 @@ export function CampaignsListPage() {
           </DialogHeader>
           {editingCampaign && (
             <CampaignForm
+              entityId={editingCampaign.id}
               defaultValues={{
                 name: editingCampaign.name,
                 type: editingCampaign.type ?? "",
@@ -444,6 +447,7 @@ function SortableTable({ table }: { table: DataTable<CampaignListItem> }) {
 }
 
 function CampaignForm({
+  entityId,
   defaultValues,
   options,
   selectedProgramId,
@@ -452,6 +456,7 @@ function CampaignForm({
   submitLabel,
   onSubmit,
 }: {
+  entityId?: string;
   defaultValues: CampaignInput;
   options?: CampaignFilterOptions;
   selectedProgramId?: string | null;
@@ -474,7 +479,7 @@ function CampaignForm({
           });
           return;
         }
-        onSubmit(parsed.data);
+        onSubmit({ ...parsed.data, customFieldValues: form.getValues("customFieldValues") });
       })}
     >
       {error && <MutationError error={error} />}
@@ -530,6 +535,7 @@ function CampaignForm({
           </Select>
         </Field>
       </FieldGroup>
+      <RuntimeCustomFieldsSection entityType="MARKETING_CAMPAIGN" entityId={entityId} disabled={isPending} onChange={(values) => form.setValue("customFieldValues", values)} />
       <DialogFooter>
         <Button type="submit" disabled={isPending}>{isPending ? "Đang lưu..." : submitLabel}</Button>
       </DialogFooter>

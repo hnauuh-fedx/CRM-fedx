@@ -1,6 +1,7 @@
 import { prisma } from "../../database/prisma";
 import type { AuthUser } from "../auth/auth.types";
 import { getLeadScopeWhere } from "./lead-list.service";
+import { saveSaleCustomFieldValues, type SaleCustomFieldInput } from "./sale-custom-fields.service";
 
 export type AssignmentListQuery = {
   page: number;
@@ -36,6 +37,7 @@ export type ManualActivityInput = {
   leadId: string;
   type: string;
   content: string;
+  customFieldValues?: SaleCustomFieldInput[];
 };
 
 export type ReminderInput = {
@@ -43,7 +45,16 @@ export type ReminderInput = {
   title: string;
   content?: string;
   remindAt: string;
+  customFieldValues?: SaleCustomFieldInput[];
 };
+
+function customFieldError(reason: string) {
+  return new Error(`sale_custom_fields:${reason}`);
+}
+
+function customFieldErrorReason(error: unknown) {
+  return error instanceof Error && error.message.startsWith("sale_custom_fields:") ? error.message.slice("sale_custom_fields:".length) : null;
+}
 
 export async function listLeadAssignments(query: AssignmentListQuery) {
   const where = {
@@ -224,15 +235,16 @@ export async function listLeadActivities(user: AuthUser, query: ActivityListQuer
   };
 }
 
-export async function createManualActivity(user: AuthUser, input: ManualActivityInput, institutionProgramId?: string) {
+export async function createManualActivity(user: AuthUser, input: ManualActivityInput, institutionProgramId?: string, ip?: string) {
   const lead = await prisma.leads.findFirst({
     where: { id: input.leadId, deleted_at: null, ...getLeadScopeWhere(user), ...(institutionProgramId ? { institution_program_id: institutionProgramId } : {}) },
-    select: { id: true },
+    select: { id: true, institution_program_id: true },
   });
   if (!lead) {
     return { ok: false as const, reason: "lead_not_found" as const };
   }
-  return prisma.$transaction(async (tx) => {
+  try {
+    return await prisma.$transaction(async (tx) => {
     const activity = await tx.lead_activities.create({
       data: {
         lead_id: lead.id,
@@ -252,20 +264,28 @@ export async function createManualActivity(user: AuthUser, input: ManualActivity
         new_data: { leadId: lead.id, type: input.type, content: input.content.trim() },
       },
     });
-    return { ok: true as const, data: activity };
-  });
+      const customFieldsResult = await saveSaleCustomFieldValues(tx, user, "SALE_ACTIVITY", activity.id, lead.institution_program_id, input.customFieldValues ?? [], ip);
+      if (!customFieldsResult.ok) throw customFieldError(customFieldsResult.reason);
+      return { ok: true as const, data: activity };
+    });
+  } catch (error) {
+    const reason = customFieldErrorReason(error);
+    if (reason) return { ok: false as const, reason };
+    throw error;
+  }
 }
 
-export async function updateManualActivity(user: AuthUser, activityId: string, input: Omit<ManualActivityInput, "leadId">, institutionProgramId?: string) {
+export async function updateManualActivity(user: AuthUser, activityId: string, input: Omit<ManualActivityInput, "leadId">, institutionProgramId?: string, ip?: string) {
   const activity = await prisma.lead_activities.findFirst({
     where: { id: activityId, leads: { is: { deleted_at: null, ...getLeadScopeWhere(user), ...(institutionProgramId ? { institution_program_id: institutionProgramId } : {}) } } },
-    select: { id: true, type: true, content: true, metadata: true },
+    select: { id: true, type: true, content: true, metadata: true, leads: { select: { institution_program_id: true } } },
   });
   const metadata = activity?.metadata as { origin?: string } | null;
   if (!activity || metadata?.origin !== "manual") {
     return { ok: false as const, reason: "activity_not_found" as const };
   }
-  return prisma.$transaction(async (tx) => {
+  try {
+    return await prisma.$transaction(async (tx) => {
     await tx.lead_activities.update({
       where: { id: activityId },
       data: { type: input.type, content: input.content.trim() },
@@ -280,8 +300,15 @@ export async function updateManualActivity(user: AuthUser, activityId: string, i
         new_data: { type: input.type, content: input.content.trim() },
       },
     });
-    return { ok: true as const, data: { id: activityId } };
-  });
+      const customFieldsResult = await saveSaleCustomFieldValues(tx, user, "SALE_ACTIVITY", activityId, activity.leads?.institution_program_id ?? null, input.customFieldValues ?? [], ip);
+      if (!customFieldsResult.ok) throw customFieldError(customFieldsResult.reason);
+      return { ok: true as const, data: { id: activityId } };
+    });
+  } catch (error) {
+    const reason = customFieldErrorReason(error);
+    if (reason) return { ok: false as const, reason };
+    throw error;
+  }
 }
 
 export async function listReminders(user: AuthUser, query: ReminderListQuery) {
@@ -348,15 +375,16 @@ export async function listReminders(user: AuthUser, query: ReminderListQuery) {
   };
 }
 
-export async function createReminder(user: AuthUser, input: ReminderInput, institutionProgramId?: string) {
+export async function createReminder(user: AuthUser, input: ReminderInput, institutionProgramId?: string, ip?: string) {
   const lead = await prisma.leads.findFirst({
     where: { id: input.leadId, deleted_at: null, ...getLeadScopeWhere(user), ...(institutionProgramId ? { institution_program_id: institutionProgramId } : {}) },
-    select: { id: true, full_name: true },
+    select: { id: true, full_name: true, institution_program_id: true },
   });
   if (!lead) {
     return { ok: false as const, reason: "lead_not_found" as const };
   }
-  return prisma.$transaction(async (tx) => {
+  try {
+    return await prisma.$transaction(async (tx) => {
     const reminder = await tx.reminders.create({
       data: {
         lead_id: lead.id,
@@ -380,25 +408,33 @@ export async function createReminder(user: AuthUser, input: ReminderInput, insti
         new_data: { leadId: lead.id, title: input.title.trim(), remindAt: input.remindAt },
       },
     });
-    return { ok: true as const, data: reminder };
-  });
+      const customFieldsResult = await saveSaleCustomFieldValues(tx, user, "SALE_REMINDER", reminder.id, lead.institution_program_id, input.customFieldValues ?? [], ip);
+      if (!customFieldsResult.ok) throw customFieldError(customFieldsResult.reason);
+      return { ok: true as const, data: reminder };
+    });
+  } catch (error) {
+    const reason = customFieldErrorReason(error);
+    if (reason) return { ok: false as const, reason };
+    throw error;
+  }
 }
 
 async function findVisibleReminder(user: AuthUser, reminderId: string, institutionProgramId?: string) {
   return prisma.reminders.findFirst({
     where: { id: reminderId, leads: { is: { deleted_at: null, ...getLeadScopeWhere(user), ...(institutionProgramId ? { institution_program_id: institutionProgramId } : {}) } } },
-    select: { id: true, lead_id: true, title: true, content: true, remind_at: true, status: true },
+    select: { id: true, lead_id: true, title: true, content: true, remind_at: true, status: true, leads: { select: { institution_program_id: true } } },
   });
 }
 
-export async function updateReminder(user: AuthUser, reminderId: string, input: Omit<ReminderInput, "leadId">, institutionProgramId?: string) {
+export async function updateReminder(user: AuthUser, reminderId: string, input: Omit<ReminderInput, "leadId">, institutionProgramId?: string, ip?: string) {
   const reminder = await findVisibleReminder(user, reminderId, institutionProgramId);
   if (!reminder || !reminder.lead_id) {
     return { ok: false as const, reason: "reminder_not_found" as const };
   }
   const nextRemindAt = new Date(input.remindAt);
   const timeChanged = reminder.remind_at.getTime() !== nextRemindAt.getTime();
-  return prisma.$transaction(async (tx) => {
+  try {
+    return await prisma.$transaction(async (tx) => {
     await tx.reminders.update({
       where: { id: reminderId },
       data: {
@@ -421,8 +457,15 @@ export async function updateReminder(user: AuthUser, reminderId: string, input: 
         new_data: { title: input.title.trim(), content: input.content?.trim() || null, remindAt: input.remindAt },
       },
     });
-    return { ok: true as const, data: { id: reminderId } };
-  });
+      const customFieldsResult = await saveSaleCustomFieldValues(tx, user, "SALE_REMINDER", reminderId, reminder.leads?.institution_program_id ?? null, input.customFieldValues ?? [], ip);
+      if (!customFieldsResult.ok) throw customFieldError(customFieldsResult.reason);
+      return { ok: true as const, data: { id: reminderId } };
+    });
+  } catch (error) {
+    const reason = customFieldErrorReason(error);
+    if (reason) return { ok: false as const, reason };
+    throw error;
+  }
 }
 
 export async function completeReminder(user: AuthUser, reminderId: string, institutionProgramId?: string) {

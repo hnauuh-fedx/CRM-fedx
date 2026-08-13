@@ -17,6 +17,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Textarea } from "@/components/ui/textarea";
 import { useAuth } from "@/modules/auth/auth-context";
+import { RuntimeCustomFieldsSection } from "@/modules/custom-fields/runtime-custom-fields-section";
 import {
   getAdmissionDocumentActionOptions,
   getAdmissionDocumentList,
@@ -369,7 +370,7 @@ function UploadDocumentDialog(props: {
   onClose: () => void;
   onSubmit: (input: AdmissionDocumentInput) => void;
 }) {
-  const [form, setForm] = useState<AdmissionDocumentInput>({ leadId: "", documentType: "", fileName: "", fileUrl: "", mimeType: "", fileSize: undefined });
+  const [form, setForm] = useState<AdmissionDocumentInput>({ leadId: "", documentType: "", fileName: "", fileUrl: "", mimeType: "", fileSize: undefined, customFieldValues: {} });
   const setValue = (field: keyof AdmissionDocumentInput, value: string) => {
     setForm((current) => ({ ...current, [field]: field === "fileSize" ? (value ? Number(value) : undefined) : value }));
   };
@@ -411,6 +412,7 @@ function UploadDocumentDialog(props: {
               <Input id="document-size" type="number" min={1} value={form.fileSize ?? ""} onChange={(event) => setValue("fileSize", event.target.value)} />
             </Field>
           </FieldGroup>
+          <RuntimeCustomFieldsSection entityType="ADMISSION_DOCUMENT" disabled={props.isSubmitting} onChange={(values) => setForm((current) => ({ ...current, customFieldValues: values }))} />
           {props.error && <p className="text-sm text-destructive">{getErrorMessage(props.error)}</p>}
           <DialogFooter>
             <Button type="submit" disabled={props.isSubmitting || !form.leadId || !form.documentType.trim()}>{props.isSubmitting ? "Đang lưu..." : "Lưu tài liệu"}</Button>

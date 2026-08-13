@@ -31,6 +31,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { useAuth } from "@/modules/auth/auth-context";
 import { useInstitutionProgram } from "@/modules/institutions/institution-program-context";
 import { ApiError } from "@/services/api";
+import { RuntimeCustomFieldsSection } from "@/modules/custom-fields/runtime-custom-fields-section";
 import {
   createMarketingForm,
   deleteMarketingForm,
@@ -636,7 +637,7 @@ function FormDetailBuilder({ formItem, defaultValues, options, error, successMes
   }
 
   return (
-    <form className="space-y-4" onSubmit={form.handleSubmit(onSubmit)}>
+    <form className="space-y-4" onSubmit={form.handleSubmit((values) => onSubmit({ ...values, customFieldValues: form.getValues("customFieldValues") }))}>
       <div className="flex flex-col gap-3 border-b bg-background px-5 py-4 lg:flex-row lg:items-center lg:justify-between">
         <nav className="flex flex-wrap items-center gap-2 text-sm text-muted-foreground" aria-label="Đường dẫn Form & Survey">
           <Link to="/tong-quan" className="inline-flex items-center gap-1 text-foreground hover:text-primary" onClick={confirmLeaveWithUnsavedChanges}><Home aria-hidden="true" />Trang chủ</Link>
@@ -752,6 +753,8 @@ function FormDetailBuilder({ formItem, defaultValues, options, error, successMes
         </div>
         )}
       </div>
+
+      <RuntimeCustomFieldsSection entityType="MARKETING_FORM" entityId={formItem.id} disabled={isPending} onChange={(values) => form.setValue("customFieldValues", values, { shouldDirty: true })} />
 
       {error && <MutationError error={error} />}
       {successMessage && <MutationSuccess message={successMessage} />}
@@ -1185,7 +1188,7 @@ function MarketingFormEditor({ savedForm, defaultValues, options, error, isPendi
         parsed.error.issues.forEach((issue) => form.setError(issue.path.join(".") as never, { message: issue.message }));
         return;
       }
-      onSubmit(parsed.data);
+      onSubmit({ ...parsed.data, customFieldValues: form.getValues("customFieldValues") });
     })}>
       {error && <MutationError error={error} />}
       <FieldGroup className="grid gap-4 sm:grid-cols-2">
@@ -1324,6 +1327,7 @@ function MarketingFormEditor({ savedForm, defaultValues, options, error, isPendi
           <code className="mt-3 block overflow-x-auto rounded bg-background px-3 py-2 text-xs text-muted-foreground">{savedIframeCode}</code>
         </section>
       )}
+      <RuntimeCustomFieldsSection entityType="MARKETING_FORM" entityId={savedForm?.id} disabled={isPending} onChange={(values) => form.setValue("customFieldValues", values, { shouldDirty: false })} />
       <DialogFooter>
         <Button type="submit" disabled={isPending}>{isPending ? "Đang lưu..." : submitLabel}</Button>
       </DialogFooter>

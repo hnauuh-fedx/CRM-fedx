@@ -1,4 +1,4 @@
-export const customFieldEntityTypes = ["LEAD", "ADMISSION_PROFILE", "STUDENT"] as const;
+export const customFieldEntityTypes = ["LEAD", "SALE_ACTIVITY", "SALE_REMINDER", "MARKETING_CAMPAIGN", "MARKETING_FORM", "ADMISSION_PROFILE", "ADMISSION_DOCUMENT", "ADMISSION_STATUS", "ADMISSION_MAJOR", "STUDENT"] as const;
 export const customFieldDataTypes = ["TEXT", "TEXTAREA", "NUMBER", "DATE", "DATETIME", "BOOLEAN", "SELECT", "MULTI_SELECT", "EMAIL", "PHONE", "PROVINCE", "FILE"] as const;
 export const customFieldScopeTypes = ["GLOBAL", "PROGRAM"] as const;
 export type CustomFieldEntityType = typeof customFieldEntityTypes[number];

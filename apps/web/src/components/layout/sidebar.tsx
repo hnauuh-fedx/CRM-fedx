@@ -100,6 +100,8 @@ type NavigationLinkProps = {
 
 function NavigationLink({ item, onNavigate, isNested, isCollapsed }: NavigationLinkProps) {
   const Icon = item.icon;
+  const location = useLocation();
+  const isActive = isLinkActive(location.pathname, location.search, item.href);
 
   return (
     <NavLink
@@ -107,16 +109,14 @@ function NavigationLink({ item, onNavigate, isNested, isCollapsed }: NavigationL
       onClick={onNavigate}
       title={isCollapsed ? item.label : undefined}
       aria-label={isCollapsed ? item.label : undefined}
-      className={({ isActive }) =>
-        cn(
-          "mb-1 flex min-h-11 items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium transition-colors",
-          isNested && "ml-4 min-h-10 border-l border-border pl-4 text-xs",
-          isCollapsed && "justify-center px-0",
-          isActive
-            ? "bg-accent text-accent-foreground shadow-xs"
-            : "text-muted-foreground hover:bg-accent hover:text-accent-foreground",
-        )
-      }
+      className={cn(
+        "mb-1 flex min-h-11 items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium transition-colors",
+        isNested && "ml-4 min-h-10 border-l border-border pl-4 text-xs",
+        isCollapsed && "justify-center px-0",
+        isActive
+          ? "bg-accent text-accent-foreground shadow-xs"
+          : "text-muted-foreground hover:bg-accent hover:text-accent-foreground",
+      )}
     >
       <Icon aria-hidden="true" />
       <span className={cn(isCollapsed && "sr-only")}>{item.label}</span>
@@ -183,5 +183,12 @@ function NavigationGroup({ item, onNavigate, isCollapsed, onExpand }: Navigation
 }
 
 function isPathActive(pathname: string, href: string) {
-  return pathname === href || pathname.startsWith(`${href}/`);
+  const hrefPath = href.split("?")[0];
+  return pathname === hrefPath || pathname.startsWith(`${hrefPath}/`);
+}
+
+function isLinkActive(pathname: string, search: string, href: string) {
+  const [hrefPath, hrefSearch] = href.split("?");
+  if (hrefSearch) return pathname === hrefPath && search === `?${hrefSearch}`;
+  return pathname === hrefPath || pathname.startsWith(`${hrefPath}/`);
 }

@@ -6,6 +6,7 @@ import type {
   CampaignSortField,
 } from "@/modules/marketing/campaign.types";
 import { apiRequest } from "./api";
+import { saveRuntimeCustomFields } from "./custom-field.service";
 
 type CampaignListParams = {
   page: number;
@@ -32,12 +33,18 @@ export function getCampaignFilterOptions(accessToken: string) {
   return apiRequest<CampaignFilterOptions>("/campaigns/options", {}, accessToken);
 }
 
-export function createCampaign(input: CampaignInput, accessToken: string) {
-  return apiRequest<{ id: string }>("/campaigns", { method: "POST", body: JSON.stringify(input) }, accessToken);
+export async function createCampaign(input: CampaignInput, accessToken: string) {
+  const { customFieldValues, ...payload } = input;
+  const result = await apiRequest<{ id: string }>("/campaigns", { method: "POST", body: JSON.stringify(payload) }, accessToken);
+  if (customFieldValues && Object.keys(customFieldValues).length > 0) await saveRuntimeCustomFields("MARKETING_CAMPAIGN", result.id, customFieldValues, accessToken);
+  return result;
 }
 
-export function updateCampaign(campaignId: string, input: CampaignInput, accessToken: string) {
-  return apiRequest<{ id: string }>(`/campaigns/${campaignId}`, { method: "PATCH", body: JSON.stringify(input) }, accessToken);
+export async function updateCampaign(campaignId: string, input: CampaignInput, accessToken: string) {
+  const { customFieldValues, ...payload } = input;
+  const result = await apiRequest<{ id: string }>(`/campaigns/${campaignId}`, { method: "PATCH", body: JSON.stringify(payload) }, accessToken);
+  if (customFieldValues) await saveRuntimeCustomFields("MARKETING_CAMPAIGN", campaignId, customFieldValues, accessToken);
+  return result;
 }
 
 export function deleteCampaign(campaignId: string, accessToken: string) {

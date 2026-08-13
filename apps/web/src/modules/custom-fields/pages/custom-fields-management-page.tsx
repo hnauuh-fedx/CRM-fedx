@@ -1,4 +1,4 @@
-import { useMemo, useRef, useState, type FormEvent } from "react";
+import { useMemo, useRef, useState, type FormEvent, type ReactNode } from "react";
 import { useFieldArray, useForm, type Path } from "react-hook-form";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Archive, CirclePause, CirclePlay, LockKeyhole, Pencil, Plus, Search, Trash2 } from "lucide-react";
@@ -145,6 +145,8 @@ export type CustomFieldsManagementConfig = {
   subjectLabel: string;
   systemFieldGroups?: SystemFormFieldGroup[];
   customFieldGroupId?: string;
+  inlineCustomFieldGroupKey?: string;
+  formSelector?: ReactNode;
 };
 
 export function CustomFieldsManagementPage({ config }: { config: CustomFieldsManagementConfig }) {
@@ -280,7 +282,14 @@ export function CustomFieldsManagementPage({ config }: { config: CustomFieldsMan
         title={config.title}
         description={config.description}
         scopeLabel={config.subjectLabel}
-        actions={canCreate ? <Button type="button" disabled={groupQuery.isLoading || groupQuery.isError} onClick={() => setDialog({ type: "create" })}><Plus data-icon="inline-start" />Thêm trường</Button> : undefined}
+        actions={
+          config.formSelector || canCreate ? (
+            <div className="flex flex-wrap items-center gap-2">
+              {config.formSelector}
+              {canCreate && <Button type="button" disabled={groupQuery.isLoading || groupQuery.isError} onClick={() => setDialog({ type: "create" })}><Plus data-icon="inline-start" />Thêm trường</Button>}
+            </div>
+          ) : undefined
+        }
       />
 
       {successMessage && (
@@ -324,7 +333,7 @@ export function CustomFieldsManagementPage({ config }: { config: CustomFieldsMan
 
       <Card>
         <CardHeader>
-          <CardTitle>Cấu trúc form lead</CardTitle>
+          <CardTitle>Cấu trúc {config.subjectLabel.toLocaleLowerCase("vi")}</CardTitle>
           <CardDescription>{visibleSystemFieldCount} trường hệ thống và {visibleCustomFields.length} trường tùy chỉnh phù hợp với bộ lọc hiện tại.</CardDescription>
         </CardHeader>
         <CardContent className="p-0">
@@ -394,7 +403,8 @@ export function CustomFieldsManagementPage({ config }: { config: CustomFieldsMan
               key={editingField?.id ?? "create"}
               entityType={config.entityType}
               initialField={editingField}
-              groups={groupQuery.data ?? []}
+              groups={getFormGroups(groupQuery.data ?? [], config.inlineCustomFieldGroupKey)}
+              inlineGroupKey={config.inlineCustomFieldGroupKey}
               programs={programs}
               selectedProgramId={selectedProgramId}
               capabilities={{ canManageOptions, canEditSensitive, canManageGroups }}
@@ -420,10 +430,11 @@ export function CustomFieldsManagementPage({ config }: { config: CustomFieldsMan
   );
 }
 
-function CustomFieldForm({ entityType, initialField, groups, programs, selectedProgramId, capabilities, isPending, error, onCancel, onCreate, onUpdate, onCreateGroup }: {
+function CustomFieldForm({ entityType, initialField, groups, inlineGroupKey, programs, selectedProgramId, capabilities, isPending, error, onCancel, onCreate, onUpdate, onCreateGroup }: {
   entityType: CustomFieldEntityType;
   initialField: CustomFieldDefinition | null;
   groups: CustomFieldGroupDefinition[];
+  inlineGroupKey?: string;
   programs: Array<{ id: string; name: string; institutionName: string }>;
   selectedProgramId: string | null;
   capabilities: { canManageOptions: boolean; canEditSensitive: boolean; canManageGroups: boolean };
@@ -440,7 +451,7 @@ function CustomFieldForm({ entityType, initialField, groups, programs, selectedP
   const [newGroupLabel, setNewGroupLabel] = useState("");
   const [newGroupKey, setNewGroupKey] = useState("");
   const [newGroupDescription, setNewGroupDescription] = useState("");
-  const form = useForm<CustomFieldFormValues>({ defaultValues: toFormValues(initialField, selectedProgramId, groups) });
+  const form = useForm<CustomFieldFormValues>({ defaultValues: toFormValues(initialField, selectedProgramId, groups, inlineGroupKey) });
   const optionArray = useFieldArray({ control: form.control, name: "options" });
   const fieldType = form.watch("fieldType");
   const scopeType = form.watch("scopeType");
@@ -675,7 +686,14 @@ function MutationError({ error }: { error: Error }) {
   return <Alert variant="destructive"><AlertTitle>Không thể lưu thay đổi</AlertTitle><AlertDescription>{error instanceof ApiError ? error.message : "Đã xảy ra lỗi. Vui lòng thử lại."}</AlertDescription></Alert>;
 }
 
-function toFormValues(field: CustomFieldDefinition | null, selectedProgramId: string | null, groups: CustomFieldGroupDefinition[]): CustomFieldFormValues {
+function getFormGroups(groups: CustomFieldGroupDefinition[], inlineGroupKey?: string) {
+  if (!inlineGroupKey) return groups;
+  return groups.map((group) => group.groupKey === inlineGroupKey
+    ? { ...group, groupLabel: "Không chọn nhóm · Hiển thị cùng trường hệ thống", isSystem: false }
+    : group);
+}
+
+function toFormValues(field: CustomFieldDefinition | null, selectedProgramId: string | null, groups: CustomFieldGroupDefinition[], preferredGroupKey?: string): CustomFieldFormValues {
   return field ? {
     groupId: field.groupId,
     fieldLabel: field.fieldLabel,
@@ -692,7 +710,7 @@ function toFormValues(field: CustomFieldDefinition | null, selectedProgramId: st
     displayOrder: field.displayOrder,
     options: (field.options ?? []).map((option) => ({ code: option.code, label: option.label, isActive: option.isActive })),
   } : {
-    groupId: groups.find((group) => group.groupKey === "additional")?.id ?? groups[0]?.id ?? "",
+    groupId: groups.find((group) => group.groupKey === preferredGroupKey)?.id ?? groups.find((group) => group.groupKey === "additional")?.id ?? groups[0]?.id ?? "",
     fieldLabel: "",
     fieldKey: "",
     description: "",

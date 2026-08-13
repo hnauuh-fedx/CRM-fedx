@@ -8,6 +8,7 @@ import type {
   SaleFilterOptions,
   SaleKpiResponse,
 } from "@/modules/sale/sale.types";
+import type { LeadCustomFieldsResponse, LeadCustomFieldValue } from "@/modules/leads/lead.types";
 import { apiRequest } from "./api";
 
 type ListParams<T> = {
@@ -35,7 +36,7 @@ export function getLeadActivities(params: ListParams<ActivityFilters>, accessTok
 }
 
 export function createLeadActivity(
-  input: { leadId: string; type: string; content: string },
+  input: { leadId: string; type: string; content: string; customFieldValues?: Record<string, LeadCustomFieldValue> },
   accessToken: string,
 ) {
   return apiRequest<{ id: string }>("/sale/activities", { method: "POST", body: JSON.stringify(input) }, accessToken);
@@ -43,10 +44,19 @@ export function createLeadActivity(
 
 export function updateLeadActivity(
   activityId: string,
-  input: { type: string; content: string },
+  input: { type: string; content: string; customFieldValues?: Record<string, LeadCustomFieldValue> },
   accessToken: string,
 ) {
   return apiRequest<{ id: string }>(`/sale/activities/${activityId}`, { method: "PATCH", body: JSON.stringify(input) }, accessToken);
+}
+
+export function getSaleActivityCustomFieldDefinitions(leadId: string | undefined, accessToken: string) {
+  const query = leadId ? `?leadId=${encodeURIComponent(leadId)}` : "";
+  return apiRequest<LeadCustomFieldsResponse>(`/sale/activities/custom-fields${query}`, {}, accessToken);
+}
+
+export function getSaleActivityCustomFields(activityId: string, accessToken: string) {
+  return apiRequest<LeadCustomFieldsResponse>(`/sale/activities/${activityId}/custom-fields`, {}, accessToken);
 }
 
 export function getSaleReminders(params: ListParams<ReminderFilters>, accessToken: string) {
@@ -54,7 +64,7 @@ export function getSaleReminders(params: ListParams<ReminderFilters>, accessToke
 }
 
 export function createSaleReminder(
-  input: { leadId: string; title: string; content?: string; remindAt: string },
+  input: { leadId: string; title: string; content?: string; remindAt: string; customFieldValues?: Record<string, LeadCustomFieldValue> },
   accessToken: string,
 ) {
   return apiRequest<{ id: string }>("/sale/reminders", { method: "POST", body: JSON.stringify(input) }, accessToken);
@@ -62,10 +72,19 @@ export function createSaleReminder(
 
 export function updateSaleReminder(
   reminderId: string,
-  input: { title: string; content?: string; remindAt: string },
+  input: { title: string; content?: string; remindAt: string; customFieldValues?: Record<string, LeadCustomFieldValue> },
   accessToken: string,
 ) {
   return apiRequest<{ id: string }>(`/sale/reminders/${reminderId}`, { method: "PATCH", body: JSON.stringify(input) }, accessToken);
+}
+
+export function getSaleReminderCustomFieldDefinitions(leadId: string | undefined, accessToken: string) {
+  const query = leadId ? `?leadId=${encodeURIComponent(leadId)}` : "";
+  return apiRequest<LeadCustomFieldsResponse>(`/sale/reminders/custom-fields${query}`, {}, accessToken);
+}
+
+export function getSaleReminderCustomFields(reminderId: string, accessToken: string) {
+  return apiRequest<LeadCustomFieldsResponse>(`/sale/reminders/${reminderId}/custom-fields`, {}, accessToken);
 }
 
 export function completeSaleReminder(reminderId: string, accessToken: string) {

@@ -78,6 +78,16 @@ const SaleCustomFieldsPage = lazy(() =>
     default: module.SaleCustomFieldsPage,
   })),
 );
+const MarketingCustomFieldsPage = lazy(() =>
+  import("@/modules/custom-fields/pages/marketing-custom-fields-page").then((module) => ({
+    default: module.MarketingCustomFieldsPage,
+  })),
+);
+const AdmissionCustomFieldsPage = lazy(() =>
+  import("@/modules/custom-fields/pages/admission-custom-fields-page").then((module) => ({
+    default: module.AdmissionCustomFieldsPage,
+  })),
+);
 const AdmissionsListPage = lazy(() =>
   import("@/modules/admissions/pages/admissions-list-page").then((module) => ({
     default: module.AdmissionsListPage,
@@ -246,6 +256,8 @@ export function AppRoutes() {
             </Route>
             <Route element={<ProtectedRoute anyPermissions={["custom_field.view"]} />}>
               <Route path="/sale/cau-hinh-truong" element={<SaleCustomFieldsPage />} />
+              <Route path="/marketing/cau-hinh-truong" element={<MarketingCustomFieldsPage />} />
+              <Route path="/tuyen-sinh/cau-hinh-truong" element={<AdmissionCustomFieldsPage />} />
             </Route>
 
             <Route element={<ProtectedRoute anyPermissions={["admission.view_all", "admission.view", "admission_document.view"]} />}>

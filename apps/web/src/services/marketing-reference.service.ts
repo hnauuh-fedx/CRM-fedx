@@ -19,6 +19,7 @@ import type {
   UtmTrackingSortField,
 } from "@/modules/marketing/marketing-reference.types";
 import { apiRequest } from "./api";
+import { saveRuntimeCustomFields } from "./custom-field.service";
 
 type LeadSourceParams = {
   page: number;
@@ -137,16 +138,22 @@ export function getMarketingFormFilterOptions(accessToken: string) {
   return apiRequest<MarketingFormFilterOptions>("/forms/options", {}, accessToken);
 }
 
-export function createMarketingForm(input: MarketingFormInput, accessToken: string) {
-  return apiRequest<{ id: string; slug?: string; public_key?: string; webhookSecret?: string }>("/forms", { method: "POST", body: JSON.stringify(input) }, accessToken);
+export async function createMarketingForm(input: MarketingFormInput, accessToken: string) {
+  const { customFieldValues, ...payload } = input;
+  const result = await apiRequest<{ id: string; slug?: string; public_key?: string; webhookSecret?: string }>("/forms", { method: "POST", body: JSON.stringify(payload) }, accessToken);
+  if (customFieldValues && Object.keys(customFieldValues).length > 0) await saveRuntimeCustomFields("MARKETING_FORM", result.id, customFieldValues, accessToken);
+  return result;
 }
 
 export function getMarketingForm(formId: string, accessToken: string) {
   return apiRequest<MarketingFormItem>(`/forms/${formId}`, {}, accessToken);
 }
 
-export function updateMarketingForm(formId: string, input: MarketingFormInput, accessToken: string) {
-  return apiRequest<{ id: string; slug?: string }>(`/forms/${formId}`, { method: "PUT", body: JSON.stringify(input) }, accessToken);
+export async function updateMarketingForm(formId: string, input: MarketingFormInput, accessToken: string) {
+  const { customFieldValues, ...payload } = input;
+  const result = await apiRequest<{ id: string; slug?: string }>(`/forms/${formId}`, { method: "PUT", body: JSON.stringify(payload) }, accessToken);
+  if (customFieldValues) await saveRuntimeCustomFields("MARKETING_FORM", formId, customFieldValues, accessToken);
+  return result;
 }
 
 export function publishMarketingForm(formId: string, accessToken: string) {

@@ -35,6 +35,7 @@ import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { useAuth } from "@/modules/auth/auth-context";
+import { RuntimeCustomFieldsSection } from "@/modules/custom-fields/runtime-custom-fields-section";
 import {
   approveAdmissionProfile,
   changeAdmissionStatus,
@@ -503,6 +504,7 @@ function AdmissionProfileForm(props: {
     monthlyRevenue: profile?.monthlyRevenue ?? "",
     feeStatus: profile?.feeStatus ?? "",
     tuitionStatus: profile?.tuitionStatus ?? "",
+    customFieldValues: {},
   }));
   const setValue = (field: keyof AdmissionProfileInput, value: string) => setForm((current) => ({ ...current, [field]: value }));
 
@@ -549,6 +551,7 @@ function AdmissionProfileForm(props: {
         <TextInput id="admission-form-fee" label="Trạng thái phí" value={form.feeStatus ?? ""} onChange={(value) => setValue("feeStatus", value)} />
         <TextInput id="admission-form-tuition" label="Trạng thái học phí" value={form.tuitionStatus ?? ""} onChange={(value) => setValue("tuitionStatus", value)} />
       </FieldGroup>
+      <RuntimeCustomFieldsSection entityType="ADMISSION_PROFILE" entityId={profile?.id} disabled={isSubmitting} onChange={(values) => setForm((current) => ({ ...current, customFieldValues: values }))} />
       {error && <p className="text-sm text-destructive">{getErrorMessage(error)}</p>}
       <DialogFooter>
         <Button type="submit" disabled={isSubmitting}>{isSubmitting ? "Đang lưu..." : "Lưu hồ sơ"}</Button>

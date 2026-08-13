@@ -19,6 +19,7 @@ import {
 } from "./sale-overview.service";
 import { leadListPermissions } from "./lead-list.service";
 import { getInstitutionProgramScope } from "../institutions/institution-program-scope";
+import { getSaleCustomFieldDefinitions, getSaleCustomFields } from "./sale-custom-fields.service";
 
 const pagingSchema = {
   page: z.coerce.number().int().min(1).default(1),
@@ -45,6 +46,7 @@ const activityBodySchema = z.object({
   leadId: z.uuid(),
   type: z.string().trim().min(2).max(100),
   content: z.string().trim().min(1).max(4000),
+  customFieldValues: z.record(z.uuid(), z.unknown().nullable()).optional().default({}),
 });
 const activityUpdateBodySchema = activityBodySchema.omit({ leadId: true });
 const reminderBodySchema = z.object({
@@ -52,9 +54,11 @@ const reminderBodySchema = z.object({
   title: z.string().trim().min(2).max(255),
   content: z.string().trim().max(4000).optional().transform((value) => value || undefined),
   remindAt: z.iso.datetime({ offset: true }),
+  customFieldValues: z.record(z.uuid(), z.unknown().nullable()).optional().default({}),
 });
 const reminderUpdateBodySchema = reminderBodySchema.omit({ leadId: true });
 const entityIdSchema = z.uuid();
+const customFieldDefinitionQuerySchema = z.object({ leadId: z.uuid().optional() });
 
 export const saleOverviewRouter = Router();
 
@@ -101,12 +105,50 @@ saleOverviewRouter.post("/activities", requireAnyPermission("lead_activity.creat
       response.status(400).json({ message: "Thông tin hoạt động không hợp lệ." });
       return;
     }
-    const result = await createManualActivity(request.authUser!, parsed.data, getInstitutionProgramScope(request));
+    const result = await createManualActivity(request.authUser!, { ...parsed.data, customFieldValues: toCustomFieldValueList(parsed.data.customFieldValues) }, getInstitutionProgramScope(request), request.ip);
     if (!result.ok) {
-      response.status(404).json({ message: "Không tìm thấy lead trong phạm vi truy cập." });
+      response.status(saleWriteStatus(result.reason)).json({ message: saleWriteMessage(result.reason, "lead") });
       return;
     }
     response.status(201).json(result.data);
+  } catch (error) {
+    next(error);
+  }
+});
+
+saleOverviewRouter.get("/activities/custom-fields", requireAnyPermission("lead_activity.create", "lead_activity.update", ...leadListPermissions), async (request, response, next) => {
+  try {
+    const parsed = customFieldDefinitionQuerySchema.safeParse(request.query);
+    if (!parsed.success) {
+      response.status(400).json({ message: "Lead không hợp lệ." });
+      return;
+    }
+    const canEdit = request.authUser!.permissions.some((permission) => ["lead_activity.create", "lead_activity.update"].includes(permission));
+    const data = await getSaleCustomFieldDefinitions(request.authUser!, "SALE_ACTIVITY", parsed.data.leadId, canEdit, getInstitutionProgramScope(request));
+    if (!data) {
+      response.status(404).json({ message: "Không tìm thấy lead trong phạm vi truy cập." });
+      return;
+    }
+    response.json(data);
+  } catch (error) {
+    next(error);
+  }
+});
+
+saleOverviewRouter.get("/activities/:id/custom-fields", requireAnyPermission("lead_activity.update", ...leadListPermissions), async (request, response, next) => {
+  try {
+    const parsed = entityIdSchema.safeParse(request.params.id);
+    if (!parsed.success) {
+      response.status(400).json({ message: "Mã hoạt động không hợp lệ." });
+      return;
+    }
+    const canEdit = request.authUser!.permissions.includes("lead_activity.update");
+    const data = await getSaleCustomFields(request.authUser!, "SALE_ACTIVITY", parsed.data, canEdit, getInstitutionProgramScope(request));
+    if (!data) {
+      response.status(404).json({ message: "Không tìm thấy hoạt động trong phạm vi truy cập." });
+      return;
+    }
+    response.json(data);
   } catch (error) {
     next(error);
   }
@@ -120,9 +162,9 @@ saleOverviewRouter.patch("/activities/:id", requireAnyPermission("lead_activity.
       response.status(400).json({ message: "Thông tin hoạt động không hợp lệ." });
       return;
     }
-    const result = await updateManualActivity(request.authUser!, parsedId.data, parsedBody.data, getInstitutionProgramScope(request));
+    const result = await updateManualActivity(request.authUser!, parsedId.data, { ...parsedBody.data, customFieldValues: toCustomFieldValueList(parsedBody.data.customFieldValues) }, getInstitutionProgramScope(request), request.ip);
     if (!result.ok) {
-      response.status(404).json({ message: "Không tìm thấy hoạt động thủ công trong phạm vi truy cập." });
+      response.status(saleWriteStatus(result.reason)).json({ message: saleWriteMessage(result.reason, "activity") });
       return;
     }
     response.json(result.data);
@@ -151,12 +193,50 @@ saleOverviewRouter.post("/reminders", requireAnyPermission("reminder.create"), a
       response.status(400).json({ message: "Thông tin nhắc việc không hợp lệ." });
       return;
     }
-    const result = await createReminder(request.authUser!, parsed.data, getInstitutionProgramScope(request));
+    const result = await createReminder(request.authUser!, { ...parsed.data, customFieldValues: toCustomFieldValueList(parsed.data.customFieldValues) }, getInstitutionProgramScope(request), request.ip);
     if (!result.ok) {
-      response.status(404).json({ message: "Không tìm thấy lead trong phạm vi truy cập." });
+      response.status(saleWriteStatus(result.reason)).json({ message: saleWriteMessage(result.reason, "lead") });
       return;
     }
     response.status(201).json(result.data);
+  } catch (error) {
+    next(error);
+  }
+});
+
+saleOverviewRouter.get("/reminders/custom-fields", requireAnyPermission("reminder.create", "reminder.update", ...leadListPermissions), async (request, response, next) => {
+  try {
+    const parsed = customFieldDefinitionQuerySchema.safeParse(request.query);
+    if (!parsed.success) {
+      response.status(400).json({ message: "Lead không hợp lệ." });
+      return;
+    }
+    const canEdit = request.authUser!.permissions.some((permission) => ["reminder.create", "reminder.update"].includes(permission));
+    const data = await getSaleCustomFieldDefinitions(request.authUser!, "SALE_REMINDER", parsed.data.leadId, canEdit, getInstitutionProgramScope(request));
+    if (!data) {
+      response.status(404).json({ message: "Không tìm thấy lead trong phạm vi truy cập." });
+      return;
+    }
+    response.json(data);
+  } catch (error) {
+    next(error);
+  }
+});
+
+saleOverviewRouter.get("/reminders/:id/custom-fields", requireAnyPermission("reminder.update", ...leadListPermissions), async (request, response, next) => {
+  try {
+    const parsed = entityIdSchema.safeParse(request.params.id);
+    if (!parsed.success) {
+      response.status(400).json({ message: "Mã nhắc việc không hợp lệ." });
+      return;
+    }
+    const canEdit = request.authUser!.permissions.includes("reminder.update");
+    const data = await getSaleCustomFields(request.authUser!, "SALE_REMINDER", parsed.data, canEdit, getInstitutionProgramScope(request));
+    if (!data) {
+      response.status(404).json({ message: "Không tìm thấy nhắc việc trong phạm vi truy cập." });
+      return;
+    }
+    response.json(data);
   } catch (error) {
     next(error);
   }
@@ -170,9 +250,9 @@ saleOverviewRouter.patch("/reminders/:id", requireAnyPermission("reminder.update
       response.status(400).json({ message: "Thông tin nhắc việc không hợp lệ." });
       return;
     }
-    const result = await updateReminder(request.authUser!, parsedId.data, parsedBody.data, getInstitutionProgramScope(request));
+    const result = await updateReminder(request.authUser!, parsedId.data, { ...parsedBody.data, customFieldValues: toCustomFieldValueList(parsedBody.data.customFieldValues) }, getInstitutionProgramScope(request), request.ip);
     if (!result.ok) {
-      response.status(404).json({ message: "Không tìm thấy nhắc việc trong phạm vi truy cập." });
+      response.status(saleWriteStatus(result.reason)).json({ message: saleWriteMessage(result.reason, "reminder") });
       return;
     }
     response.json(result.data);
@@ -206,3 +286,21 @@ saleOverviewRouter.get("/kpi", requireAnyPermission("lead.view_all"), async (req
     next(error);
   }
 });
+
+function toCustomFieldValueList(values: Record<string, unknown | null>) {
+  return Object.entries(values).map(([fieldId, value]) => ({ fieldId, value }));
+}
+
+function saleWriteStatus(reason: string) {
+  if (reason === "sensitive_forbidden") return 403;
+  if (reason === "not_applicable" || reason === "invalid") return 400;
+  return 404;
+}
+
+function saleWriteMessage(reason: string, target: "lead" | "activity" | "reminder") {
+  if (reason === "sensitive_forbidden") return "Bạn không có quyền sửa trường dữ liệu nhạy cảm.";
+  if (reason === "not_applicable" || reason === "invalid") return "Không thể lưu trường dữ liệu tùy chỉnh.";
+  if (target === "activity") return "Không tìm thấy hoạt động thủ công trong phạm vi truy cập.";
+  if (target === "reminder") return "Không tìm thấy nhắc việc trong phạm vi truy cập.";
+  return "Không tìm thấy lead trong phạm vi truy cập.";
+}

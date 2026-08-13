@@ -16,6 +16,7 @@ import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { useAuth } from "@/modules/auth/auth-context";
+import { RuntimeCustomFieldsSection } from "@/modules/custom-fields/runtime-custom-fields-section";
 import { useInstitutionProgram } from "@/modules/institutions/institution-program-context";
 import { ApiError } from "@/services/api";
 import {
@@ -215,6 +216,7 @@ export function MajorsManagementPage() {
             <DialogDescription>Ngành mới sẽ thuộc chương trình đang làm việc.</DialogDescription>
           </DialogHeader>
           <MajorForm
+            entityId={undefined}
             defaultValues={emptyMajorForm}
             options={optionsQuery.data?.faculties ?? []}
             isPending={createMutation.isPending}
@@ -233,6 +235,7 @@ export function MajorsManagementPage() {
           </DialogHeader>
           {editingMajor && (
             <MajorForm
+              entityId={editingMajor.id}
               defaultValues={{ name: editingMajor.name, code: editingMajor.code ?? "", facultyId: editingMajor.facultyId ?? "" }}
               options={optionsQuery.data?.faculties ?? []}
               isPending={updateMutation.isPending}
@@ -265,6 +268,7 @@ export function MajorsManagementPage() {
 }
 
 function MajorForm({
+  entityId,
   defaultValues,
   options,
   isPending,
@@ -272,6 +276,7 @@ function MajorForm({
   submitLabel,
   onSubmit,
 }: {
+  entityId?: string;
   defaultValues: MajorInput;
   options: Array<{ id: string; name: string }>;
   isPending: boolean;
@@ -293,7 +298,7 @@ function MajorForm({
           });
           return;
         }
-        onSubmit(parsed.data);
+        onSubmit({ ...parsed.data, customFieldValues: form.getValues("customFieldValues") });
       })}
     >
       {error && <MutationError error={error} />}
@@ -321,6 +326,7 @@ function MajorForm({
           </Select>
         </Field>
       </FieldGroup>
+      <RuntimeCustomFieldsSection entityType="ADMISSION_MAJOR" entityId={entityId} disabled={isPending} onChange={(values) => form.setValue("customFieldValues", values)} />
       <DialogFooter>
         <Button type="submit" disabled={isPending}>{isPending ? "Đang lưu..." : submitLabel}</Button>
       </DialogFooter>

@@ -9,6 +9,7 @@ import type {
   CustomFieldUpdateInput,
 } from "@/modules/custom-fields/custom-field.types";
 import { apiRequest } from "./api";
+import type { LeadCustomFieldsResponse, LeadCustomFieldValue } from "@/modules/leads/lead.types";
 
 export function getCustomFields(
   params: {
@@ -63,4 +64,15 @@ export function createCustomFieldGroup(input: CustomFieldGroupInput, accessToken
     { method: "POST", body: JSON.stringify(input) },
     accessToken,
   );
+}
+
+export type RuntimeCustomFieldEntityType = "MARKETING_CAMPAIGN" | "MARKETING_FORM" | "ADMISSION_PROFILE" | "ADMISSION_DOCUMENT" | "ADMISSION_STATUS" | "ADMISSION_MAJOR";
+
+export function getRuntimeCustomFields(entityType: RuntimeCustomFieldEntityType, entityId: string | undefined, accessToken: string) {
+  const query = entityId ? `?entityId=${encodeURIComponent(entityId)}` : "";
+  return apiRequest<LeadCustomFieldsResponse>(`/custom-fields/runtime/${entityType}${query}`, {}, accessToken);
+}
+
+export function saveRuntimeCustomFields(entityType: RuntimeCustomFieldEntityType, entityId: string, values: Record<string, LeadCustomFieldValue>, accessToken: string) {
+  return apiRequest<{ message: string }>(`/custom-fields/runtime/${entityType}/${entityId}`, { method: "PATCH", body: JSON.stringify({ values }) }, accessToken);
 }

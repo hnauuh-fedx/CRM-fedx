@@ -46,4 +46,6 @@ export type CampaignInput = {
   endDate: string;
   budget: number;
   institutionProgramId: string;
+  customFieldValues?: Record<string, LeadCustomFieldValue>;
 };
+import type { LeadCustomFieldValue } from "@/modules/leads/lead.types";

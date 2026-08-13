@@ -87,12 +87,6 @@ const navigationSections: NavigationSection[] = [
             icon: UserPlus,
             permissions: ["lead.view_all"],
           },
-          {
-            label: "Cấu hình trường dữ liệu",
-            href: "/sale/cau-hinh-truong",
-            icon: ListPlus,
-            permissions: ["custom_field.view"],
-          },
         ],
       },
       {
@@ -117,6 +111,32 @@ const navigationSections: NavigationSection[] = [
             href: "/sale/kpi",
             icon: BarChart3,
             permissions: ["lead.view_all"],
+          },
+        ],
+      },
+      {
+        type: "group",
+        label: "Cấu hình trường dữ liệu",
+        icon: ListPlus,
+        permissions: ["custom_field.view"],
+        children: [
+          {
+            label: "Form lead",
+            href: "/sale/cau-hinh-truong?form=lead",
+            icon: ContactRound,
+            permissions: ["custom_field.view"],
+          },
+          {
+            label: "Form hoạt động",
+            href: "/sale/cau-hinh-truong?form=activity",
+            icon: ListChecks,
+            permissions: ["custom_field.view"],
+          },
+          {
+            label: "Form nhắc việc",
+            href: "/sale/cau-hinh-truong?form=reminder",
+            icon: Bell,
+            permissions: ["custom_field.view"],
           },
         ],
       },
@@ -150,6 +170,16 @@ const navigationSections: NavigationSection[] = [
         href: "/marketing/form-survey",
         icon: Workflow,
         permissions: ["campaign.view_all", "marketing_form.manage", "marketing_form.create", "marketing_form.update_own"],
+      },
+      {
+        type: "group",
+        label: "Cấu hình trường dữ liệu",
+        icon: ListPlus,
+        permissions: ["custom_field.view"],
+        children: [
+          { label: "Form chiến dịch", href: "/marketing/cau-hinh-truong?form=campaign", icon: Megaphone, permissions: ["custom_field.view"] },
+          { label: "Form & Survey", href: "/marketing/cau-hinh-truong?form=survey", icon: Workflow, permissions: ["custom_field.view"] },
+        ],
       },
     ],
   },
@@ -187,6 +217,18 @@ const navigationSections: NavigationSection[] = [
         href: "/tuyen-sinh/phi-hoc-phi",
         icon: BadgeDollarSign,
         permissions: ["admission.view_all", "admission.view"],
+      },
+      {
+        type: "group",
+        label: "Cấu hình trường dữ liệu",
+        icon: ListPlus,
+        permissions: ["custom_field.view"],
+        children: [
+          { label: "Form hồ sơ", href: "/tuyen-sinh/cau-hinh-truong?form=profile", icon: ClipboardList, permissions: ["custom_field.view"] },
+          { label: "Form tài liệu", href: "/tuyen-sinh/cau-hinh-truong?form=document", icon: FileText, permissions: ["custom_field.view"] },
+          { label: "Form trạng thái", href: "/tuyen-sinh/cau-hinh-truong?form=status", icon: ClipboardCheck, permissions: ["custom_field.view"] },
+          { label: "Form ngành", href: "/tuyen-sinh/cau-hinh-truong?form=major", icon: GraduationCap, permissions: ["custom_field.view"] },
+        ],
       },
     ],
   },
@@ -381,7 +423,8 @@ function getFirstNavigationHref(items: NavigationItem[]): string | null {
 
 function isNavigationItemActive(pathname: string, item: NavigationItem): boolean {
   if (isNavigationLink(item)) {
-    return pathname === item.href || pathname.startsWith(`${item.href}/`);
+    const hrefPath = item.href.split("?")[0];
+    return pathname === hrefPath || pathname.startsWith(`${hrefPath}/`);
   }
   return item.children.some((child) => isNavigationItemActive(pathname, child));
 }

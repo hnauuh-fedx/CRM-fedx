@@ -209,6 +209,7 @@ export type MarketingFormInput = {
   advancedSettings?: MarketingFormSettings;
   fields: MarketingFormField[];
   mappings: MarketingFormMapping[];
+  customFieldValues?: Record<string, LeadCustomFieldValue>;
 };
 
 export type MarketingFormSubmission = {
@@ -307,3 +308,4 @@ export type PublicMarketingFormConfig = {
     sortOrder: number;
   }>;
 };
+import type { LeadCustomFieldValue } from "@/modules/leads/lead.types";

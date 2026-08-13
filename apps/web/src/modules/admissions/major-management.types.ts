@@ -27,4 +27,6 @@ export type MajorInput = {
   name: string;
   code: string;
   facultyId: string;
+  customFieldValues?: Record<string, LeadCustomFieldValue>;
 };
+import type { LeadCustomFieldValue } from "@/modules/leads/lead.types";
