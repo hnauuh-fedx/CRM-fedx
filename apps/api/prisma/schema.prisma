@@ -295,6 +295,7 @@ model institution_programs {
   lead_sources       lead_sources[]
   leads              leads[]
   report_configs     report_configs[]
+  role_institution_programs role_institution_programs[]
   students           students[]
   majors             majors[]
 
@@ -737,8 +738,22 @@ model roles {
   description      String?
   created_at       DateTime?          @default(now()) @db.Timestamp(6)
   role_access_scopes role_access_scopes?
+  role_institution_programs role_institution_programs[]
   role_permissions role_permissions[]
   user_roles       user_roles[]
+}
+
+model role_institution_programs {
+  id                     String               @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  role_id                String               @db.Uuid
+  institution_program_id String               @db.Uuid
+  created_at             DateTime?            @default(now()) @db.Timestamp(6)
+  roles                  roles                @relation(fields: [role_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  institution_programs   institution_programs @relation(fields: [institution_program_id], references: [id], onDelete: Restrict, onUpdate: NoAction)
+
+  @@unique([role_id, institution_program_id])
+  @@index([institution_program_id, role_id], map: "idx_role_institution_programs_program_role")
+  @@index([role_id], map: "idx_role_institution_programs_role_id")
 }
 
 model role_access_scopes {

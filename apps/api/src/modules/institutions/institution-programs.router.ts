@@ -41,10 +41,14 @@ function resultMessage(reason: string) {
   return "Không tìm thấy chương trình tuyển sinh.";
 }
 
-institutionProgramsRouter.get("/options", requireAuthentication, async (_request, response, next) => {
+institutionProgramsRouter.get("/options", requireAuthentication, async (request, response, next) => {
   try {
     const programs = await prisma.institution_programs.findMany({
-      where: { status: "active", institutions: { is: { status: "active" } } },
+      where: {
+        id: { in: request.authUser!.institutionProgramIds },
+        status: "active",
+        institutions: { is: { status: "active" } },
+      },
       select: {
         id: true,
         name: true,

@@ -7,6 +7,13 @@ export type ManagedPermission = {
   module: string | null;
 };
 
+export type ManagedProgram = {
+  id: string;
+  code: string;
+  name: string;
+  institutionName: string;
+};
+
 export type ManagedRole = {
   id: string;
   code: string;
@@ -15,6 +22,7 @@ export type ManagedRole = {
   scopeCode: AccessScopeCode;
   userCount: number;
   permissions: ManagedPermission[];
+  programs: ManagedProgram[];
   createdAt: string | null;
 };
 
@@ -32,6 +40,7 @@ export type RoleListResponse = {
 export type RoleManagementOptions = {
   permissions: ManagedPermission[];
   scopes: ManagedAccessScope[];
+  programs: ManagedProgram[];
 };
 
 export type RoleInput = {
@@ -40,6 +49,7 @@ export type RoleInput = {
   description: string;
   scopeCode: AccessScopeCode;
   permissionIds: string[];
+  programIds: string[];
 };
 
 export type ScopeInput = {

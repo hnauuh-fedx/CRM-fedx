@@ -100,8 +100,16 @@ async function seedDirectorAccess() {
       data: [{ user_id: user.id, role_id: role.id }],
       skipDuplicates: true,
     });
+    const programs = await transaction.institution_programs.findMany({
+      where: { status: "active", institutions: { is: { status: "active" } } },
+      select: { id: true },
+    });
+    const programAssignments = await transaction.role_institution_programs.createMany({
+      data: programs.map((program) => ({ role_id: role.id, institution_program_id: program.id })),
+      skipDuplicates: true,
+    });
 
-    if (grants.count > 0 || assignments.count > 0) {
+    if (grants.count > 0 || assignments.count > 0 || programAssignments.count > 0) {
       await transaction.audit_logs.create({
         data: {
           entity_type: "role",
@@ -109,6 +117,7 @@ async function seedDirectorAccess() {
           action: "seed_director_access",
           new_data: {
             permissionCodes: directorPermissions.map((permission) => permission.code),
+            institutionProgramIds: programs.map((program) => program.id),
             userEmail: directorEmail,
           },
         },
@@ -118,12 +127,13 @@ async function seedDirectorAccess() {
     return {
       createdGrants: grants.count,
       createdAssignments: assignments.count,
+      createdProgramAssignments: programAssignments.count,
       permissions: directorPermissions.map((permission) => permission.code),
     };
   });
 
   console.log(
-    `Director access ready: ${result.createdGrants} grant(s), ${result.createdAssignments} user assignment(s).`,
+    `Director access ready: ${result.createdGrants} grant(s), ${result.createdAssignments} user assignment(s), ${result.createdProgramAssignments} program assignment(s).`,
   );
 }
 

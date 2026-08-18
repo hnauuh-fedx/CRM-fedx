@@ -68,6 +68,16 @@ const activityLabels: Record<string, string> = {
   other: "Hoạt động khác",
 };
 
+function getLeadWorkflowLabel(lead: LeadDetail) {
+  if (lead.pipelineStage?.name) {
+    return lead.pipelineStage.name;
+  }
+  if (!lead.status) {
+    return "Chưa chọn tiến trình";
+  }
+  return statusLabels[lead.status] ?? lead.status;
+}
+
 function formatDate(value: string | null) {
   return value ? dateFormatter.format(new Date(value)) : "-";
 }
@@ -129,7 +139,7 @@ export function LeadDetailPage() {
         eyebrow="CRM Sale / Chi tiết lead"
         title={lead.fullName}
         description={`${lead.leadCode ?? "Chưa có mã lead"} · Tạo ngày ${formatDate(lead.createdAt)}`}
-        actions={<Badge variant="secondary">{lead.status ? (statusLabels[lead.status] ?? lead.status) : "Chưa xác định"}</Badge>}
+        actions={<Badge variant="secondary">{getLeadWorkflowLabel(lead)}</Badge>}
       />
 
       <div className="grid gap-6 xl:grid-cols-[1.15fr_0.85fr]">

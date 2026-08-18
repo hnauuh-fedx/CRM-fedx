@@ -81,6 +81,14 @@ async function seedSaleAccess() {
         })),
         skipDuplicates: true,
       });
+      const programs = await transaction.institution_programs.findMany({
+        where: { status: "active", institutions: { is: { status: "active" } } },
+        select: { id: true },
+      });
+      await transaction.role_institution_programs.createMany({
+        data: programs.map((program) => ({ role_id: role.id, institution_program_id: program.id })),
+        skipDuplicates: true,
+      });
       grantedPermissions += grants.count;
       permissionCodes[code] = permissions.map((permission) => permission.code);
     }

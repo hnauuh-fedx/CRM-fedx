@@ -85,7 +85,7 @@ const navigationSections: NavigationSection[] = [
             label: "Phân công lead",
             href: "/sale/phan-cong",
             icon: UserPlus,
-            permissions: ["lead.view_all"],
+            permissions: ["lead.assign", "lead.reassign"],
           },
         ],
       },

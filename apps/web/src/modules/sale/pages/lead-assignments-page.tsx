@@ -1,5 +1,5 @@
 import { useMemo, useState } from "react";
-import { useQuery } from "@tanstack/react-query";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   flexRender,
   getCoreRowModel,
@@ -9,7 +9,8 @@ import {
   type Table as DataTable,
   useReactTable,
 } from "@tanstack/react-table";
-import { ArrowDown, ArrowUp, ArrowUpDown, ChevronLeft, ChevronRight, Search } from "lucide-react";
+import { ArrowDown, ArrowUp, ArrowUpDown, ChevronLeft, ChevronRight, Eye, Search } from "lucide-react";
+import { Link } from "react-router-dom";
 
 import { EmptyState } from "@/components/shared/data-states";
 import { ErrorState } from "@/components/shared/error-state";
@@ -21,10 +22,13 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Field, FieldGroup, FieldLabel } from "@/components/ui/field";
 import { Input } from "@/components/ui/input";
+import { Select, SelectContent, SelectGroup, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { useAuth } from "@/modules/auth/auth-context";
+import { ApiError } from "@/services/api";
+import { assignLead as assignLeadToTelesale } from "@/services/lead.service";
 import { getLeadAssignments, getSaleFilterOptions } from "@/services/sale.service";
-import type { AssignmentFilters, AssignmentItem, AssignmentListResponse, SaleFilterOptions } from "../sale.types";
+import type { AssignmentFilters, AssignmentItem, AssignmentListResponse, AssignmentStatus, SaleFilterOptions } from "../sale.types";
 
 const pageSize = 20;
 const emptyFilters: AssignmentFilters = { search: "", assigneeId: "", departmentId: "" };
@@ -36,24 +40,42 @@ function formatDate(value: string | null) {
 
 export function LeadAssignmentsPage() {
   const auth = useAuth();
+  const queryClient = useQueryClient();
   const [page, setPage] = useState(1);
   const [draftFilters, setDraftFilters] = useState(emptyFilters);
   const [filters, setFilters] = useState(emptyFilters);
+  const [status, setStatus] = useState<AssignmentStatus>("unassigned");
   const [sorting, setSorting] = useState<SortingState>([{ id: "assignedAt", desc: true }]);
   const sortOrder = (sorting[0]?.desc ?? true) ? "desc" : "asc";
   const listQuery = useQuery({
-    queryKey: ["sale", "assignments", page, pageSize, sortOrder, filters],
-    queryFn: () => getLeadAssignments({ page, limit: pageSize, sortOrder, ...filters }, auth.accessToken!),
+    queryKey: ["sale", "assignments", status, page, pageSize, sortOrder, filters],
+    queryFn: () => getLeadAssignments({ page, limit: pageSize, sortOrder, status, ...filters }, auth.accessToken!),
     placeholderData: (previousData) => previousData,
   });
   const optionsQuery = useQuery({
     queryKey: ["sale", "options"],
     queryFn: () => getSaleFilterOptions(auth.accessToken!),
   });
+  const assignmentMutation = useMutation({
+    mutationFn: ({ leadId, assigneeId }: { leadId: string; assigneeId: string }) =>
+      assignLeadToTelesale(leadId, { assigneeId }, auth.accessToken!),
+    onSuccess: async () => {
+      await Promise.all([
+        queryClient.invalidateQueries({ queryKey: ["sale", "assignments"] }),
+        queryClient.invalidateQueries({ queryKey: ["sale", "options"] }),
+        queryClient.invalidateQueries({ queryKey: ["leads"] }),
+      ]);
+    },
+  });
   const data = listQuery.data?.data ?? [];
   const table = useReactTable({
     data,
-    columns: useColumns(),
+    columns: useColumns({
+      status,
+      telesales: optionsQuery.data?.telesales ?? [],
+      assigningLeadId: assignmentMutation.isPending ? assignmentMutation.variables?.leadId : undefined,
+      onAssign: (leadId, assigneeId) => assignmentMutation.mutate({ leadId, assigneeId }),
+    }),
     state: { sorting },
     manualSorting: true,
     enableMultiSort: false,
@@ -82,7 +104,13 @@ export function LeadAssignmentsPage() {
         onApply={() => { setFilters(draftFilters); setPage(1); }}
         onReset={() => { setDraftFilters(emptyFilters); setFilters(emptyFilters); setPage(1); }}
       />
+      {assignmentMutation.isError && (
+        <p role="alert" className="text-sm text-destructive">
+          {assignmentMutation.error instanceof ApiError ? assignmentMutation.error.message : "Không thể phân công Sale phụ trách. Vui lòng thử lại."}
+        </p>
+      )}
       <Results
+        status={status}
         table={table}
         data={data}
         pagination={listQuery.data?.pagination}
@@ -90,6 +118,7 @@ export function LeadAssignmentsPage() {
         isLoading={listQuery.isLoading}
         isError={listQuery.isError}
         isFetching={listQuery.isFetching}
+        onStatusChange={(nextStatus) => { setStatus(nextStatus); setPage(1); }}
         onReload={() => listQuery.refetch()}
         onPrevious={() => setPage((current) => Math.max(1, current - 1))}
         onNext={() => setPage((current) => current + 1)}
@@ -98,27 +127,87 @@ export function LeadAssignmentsPage() {
   );
 }
 
-function useColumns() {
+function useColumns({ status, telesales, assigningLeadId, onAssign }: {
+  status: AssignmentStatus;
+  telesales: SaleFilterOptions["telesales"];
+  assigningLeadId?: string;
+  onAssign: (leadId: string, assigneeId: string) => void;
+}) {
   return useMemo<ColumnDef<AssignmentItem>[]>(
     () => [
       {
         id: "lead",
         header: "Lead",
         enableSorting: false,
-        cell: ({ row }) => row.original.lead ? `${row.original.lead.fullName} (${row.original.lead.leadCode ?? "chưa có mã"})` : "-",
+        cell: ({ row }) => row.original.lead ? <LeadCell item={row.original} /> : "-",
       },
-      { id: "assignee", header: "Nhân viên", enableSorting: false, cell: ({ row }) => row.original.assignee?.fullName ?? "-" },
+      {
+        id: "assignee",
+        header: "Nhân viên",
+        enableSorting: false,
+        cell: ({ row }) => status === "unassigned"
+          ? <InlineAssigneeSelect item={row.original} telesales={telesales} isPending={assigningLeadId === row.original.lead?.id} onAssign={onAssign} />
+          : row.original.assignee?.fullName ?? "-",
+      },
       { id: "department", header: "Phòng ban", enableSorting: false, cell: ({ row }) => row.original.department?.name ?? "-" },
       { id: "assignedBy", header: "Người phân công", enableSorting: false, cell: ({ row }) => row.original.assignedBy?.fullName ?? "Hệ thống" },
       {
         id: "owner",
         header: "Vai trò",
         enableSorting: false,
-        cell: ({ row }) => <Badge variant="secondary">{row.original.isMainOwner ? "Phụ trách chính" : "Phối hợp"}</Badge>,
+        cell: ({ row }) => <Badge variant="secondary">{status === "unassigned" ? "Chưa phân công" : row.original.isMainOwner ? "Phụ trách chính" : "Phối hợp"}</Badge>,
       },
       { accessorKey: "assignedAt", header: "Ngày phân công", cell: ({ row }) => formatDate(row.original.assignedAt) },
     ],
-    [],
+    [assigningLeadId, onAssign, status, telesales],
+  );
+}
+
+function LeadCell({ item }: { item: AssignmentItem }) {
+  if (!item.lead) {
+    return "-";
+  }
+
+  return (
+    <div className="flex min-w-56 items-center gap-2">
+      <Button asChild variant="ghost" size="icon" className="size-9 shrink-0">
+        <Link to={`/sale/leads/${item.lead.id}`} aria-label={`Xem chi tiết ${item.lead.fullName}`}>
+          <Eye aria-hidden="true" />
+        </Link>
+      </Button>
+      <div className="min-w-0">
+        <p className="truncate font-medium">{item.lead.fullName}</p>
+        <p className="truncate text-xs text-muted-foreground">{item.lead.leadCode ?? "Chưa có mã"}</p>
+      </div>
+    </div>
+  );
+}
+
+function InlineAssigneeSelect({ item, telesales, isPending, onAssign }: {
+  item: AssignmentItem;
+  telesales: SaleFilterOptions["telesales"];
+  isPending: boolean;
+  onAssign: (leadId: string, assigneeId: string) => void;
+}) {
+  if (!item.lead) return "-";
+  return (
+    <Select
+      value="__placeholder__"
+      disabled={isPending || telesales.length === 0}
+      onValueChange={(assigneeId) => {
+        if (assigneeId !== "__placeholder__") onAssign(item.lead.id, assigneeId);
+      }}
+    >
+      <SelectTrigger className="min-h-11 min-w-48" aria-label={`Chọn Sale phụ trách cho ${item.lead.fullName}`}>
+        {isPending ? <span>Đang phân công…</span> : telesales.length === 0 ? <span>Không có Telesale</span> : <SelectValue />}
+      </SelectTrigger>
+      <SelectContent>
+        <SelectGroup>
+          <SelectItem value="__placeholder__" disabled>Chọn Sale phụ trách</SelectItem>
+          {telesales.map((telesale) => <SelectItem key={telesale.id} value={telesale.id}>{telesale.fullName}</SelectItem>)}
+        </SelectGroup>
+      </SelectContent>
+    </Select>
   );
 }
 
@@ -159,6 +248,7 @@ function Filters({ filters, options, onChange, onApply, onReset }: {
 }
 
 function Results(props: {
+  status: AssignmentStatus;
   table: DataTable<AssignmentItem>;
   data: AssignmentItem[];
   pagination?: AssignmentListResponse["pagination"];
@@ -166,31 +256,36 @@ function Results(props: {
   isLoading: boolean;
   isError: boolean;
   isFetching: boolean;
+  onStatusChange: (status: AssignmentStatus) => void;
   onReload: () => void;
   onPrevious: () => void;
   onNext: () => void;
 }) {
-  const { table, data, pagination, page, isLoading, isError, isFetching, onReload, onPrevious, onNext } = props;
+  const { status, table, data, pagination, page, isLoading, isError, isFetching, onStatusChange, onReload, onPrevious, onNext } = props;
+  const isUnassigned = status === "unassigned";
   return (
     <Card className="gap-0 overflow-hidden border-border/70 py-0 shadow-xs">
       <CardHeader className="gap-1 border-b py-5">
-        <CardTitle>Lượt phân công</CardTitle>
-        <CardDescription>{pagination ? `Hiển thị ${data.length} trong tổng số ${pagination.total} lượt phân công` : "Đang lấy dữ liệu phân công…"}</CardDescription>
+        <div role="tablist" aria-label="Trạng thái phân công lead" className="flex flex-wrap gap-2">
+          <Button type="button" role="tab" aria-selected={isUnassigned} aria-controls="assignment-results-panel" variant={isUnassigned ? "default" : "ghost"} className="min-h-11" onClick={() => onStatusChange("unassigned")}>Chưa phân công</Button>
+          <Button type="button" role="tab" aria-selected={!isUnassigned} aria-controls="assignment-results-panel" variant={!isUnassigned ? "default" : "ghost"} className="min-h-11" onClick={() => onStatusChange("assigned")}>Đã phân công</Button>
+        </div>
+        <CardDescription>{pagination ? `Hiển thị ${data.length} trong tổng số ${pagination.total} lead ${isUnassigned ? "chưa được phân công" : "đã được phân công"}` : "Đang lấy dữ liệu phân công…"}</CardDescription>
       </CardHeader>
-      <CardContent className="p-0">
+      <CardContent id="assignment-results-panel" role="tabpanel" className="p-0">
         {isError ? <ErrorState title="Không thể tải phân công lead" description="Vui lòng thử lại để cập nhật dữ liệu phân công." onReload={onReload} /> : isLoading ? (
           <TableLoadingState label="Đang tải phân công lead" />
         ) : data.length === 0 ? (
-          <EmptyState title="Chưa có phân công phù hợp với bộ lọc" description="Điều chỉnh bộ lọc để tìm lượt phân công cần theo dõi." />
-        ) : <SortableTable table={table} />}
+          <EmptyState title={isUnassigned ? "Không có lead chưa phân công" : "Không có lead đã phân công phù hợp"} description={isUnassigned ? "Tất cả lead hiện tại đều đã có Sale phụ trách." : "Điều chỉnh bộ lọc để tìm lead đã phân công cần theo dõi."} />
+        ) : <SortableTable table={table} status={status} />}
       </CardContent>
       {pagination && pagination.total > 0 && <Pager page={page} pagination={pagination} isFetching={isFetching} onPrevious={onPrevious} onNext={onNext} />}
     </Card>
   );
 }
 
-function SortableTable({ table }: { table: DataTable<AssignmentItem> }) {
-  return <Table className="min-w-260"><caption className="sr-only">Danh sách phân công lead</caption><TableHeader className="bg-muted/55 text-xs uppercase tracking-wide text-muted-foreground">{table.getHeaderGroups().map((group) => <TableRow key={group.id} className="hover:bg-muted/55">{group.headers.map((header) => <SortHeader key={header.id} header={header} />)}</TableRow>)}</TableHeader><TableBody>{table.getRowModel().rows.map((row) => <TableRow key={row.id}>{row.getVisibleCells().map((cell) => <TableCell key={cell.id} className="px-5 py-4">{flexRender(cell.column.columnDef.cell, cell.getContext())}</TableCell>)}</TableRow>)}</TableBody></Table>;
+function SortableTable({ table, status }: { table: DataTable<AssignmentItem>; status: AssignmentStatus }) {
+  return <Table className="min-w-260"><caption className="sr-only">Danh sách lead {status === "unassigned" ? "chưa phân công" : "đã phân công"}</caption><TableHeader className="bg-muted/55 text-xs uppercase tracking-wide text-muted-foreground">{table.getHeaderGroups().map((group) => <TableRow key={group.id} className="hover:bg-muted/55">{group.headers.map((header) => <SortHeader key={header.id} header={header} />)}</TableRow>)}</TableHeader><TableBody>{table.getRowModel().rows.map((row) => <TableRow key={row.id}>{row.getVisibleCells().map((cell) => <TableCell key={cell.id} className="px-5 py-4">{flexRender(cell.column.columnDef.cell, cell.getContext())}</TableCell>)}</TableRow>)}</TableBody></Table>;
 }
 
 function SortHeader({ header }: { header: Header<AssignmentItem, unknown> }) {

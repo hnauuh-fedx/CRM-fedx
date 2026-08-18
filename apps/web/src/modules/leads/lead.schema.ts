@@ -9,13 +9,14 @@ export const leadFormSchema = z.object({
   fullName: z.string().trim().min(2, "Vui lòng nhập họ và tên ứng viên.").max(255),
   phone: requiredPhone,
   sourceId: z.string().min(1, "Vui lòng chọn nguồn học viên."),
+  assigneeId: z.string(),
   pipelineStageId: z.string(),
   email: z.string().trim().email("Email không hợp lệ.").or(z.literal("")),
   gender: optionalText(20),
   dateOfBirth: z.string(),
   cccd: optionalText(30),
   note: optionalText(2000),
-  status: optionalText(50),
+  status: optionalText(150),
   temperature: optionalText(50),
   birthPlace: optionalText(255),
   cccdIssueDate: z.string(),
@@ -88,8 +89,8 @@ export const leadFormSchema = z.object({
 });
 
 export const emptyLeadForm = {
-  fullName: "", phone: "", sourceId: "", pipelineStageId: "", email: "", gender: "", dateOfBirth: "", cccd: "", note: "",
-  status: "new", temperature: "", birthPlace: "", cccdIssueDate: "", cccdIssuePlace: "", nationality: "",
+  fullName: "", phone: "", sourceId: "", assigneeId: "", pipelineStageId: "", email: "", gender: "", dateOfBirth: "", cccd: "", note: "",
+  status: "", temperature: "", birthPlace: "", cccdIssueDate: "", cccdIssuePlace: "", nationality: "",
   ethnicity: "", religion: "", graduationYear: "", graduationCertificate: "", previousGraduationCertificate: "",
   graduationMajor: "", graduationRank: "", diplomaIssuePlace: "", academicRank12: "", conductRank12: "",
   highSchoolName: "", highSchoolProvince: "", highSchoolDistrict: "", currentJob: "", companyName: "",

@@ -6,6 +6,7 @@ import { saveSaleCustomFieldValues, type SaleCustomFieldInput } from "./sale-cus
 export type AssignmentListQuery = {
   page: number;
   limit: number;
+  status: "assigned" | "unassigned";
   search?: string;
   assigneeId?: string;
   departmentId?: string;
@@ -56,10 +57,59 @@ function customFieldErrorReason(error: unknown) {
   return error instanceof Error && error.message.startsWith("sale_custom_fields:") ? error.message.slice("sale_custom_fields:".length) : null;
 }
 
-export async function listLeadAssignments(query: AssignmentListQuery) {
+export async function listLeadAssignments(user: AuthUser, query: AssignmentListQuery) {
+  if (query.status === "unassigned") {
+    const where = {
+      deleted_at: null,
+      assigned_to: null,
+      ...getLeadScopeWhere(user),
+      ...(query.institutionProgramId ? { institution_program_id: query.institutionProgramId } : {}),
+      ...(query.search
+        ? {
+            OR: [
+              { full_name: { contains: query.search, mode: "insensitive" as const } },
+              { lead_code: { contains: query.search, mode: "insensitive" as const } },
+            ],
+          }
+        : {}),
+    };
+    const [items, total] = await prisma.$transaction([
+      prisma.leads.findMany({
+        where,
+        select: { id: true, lead_code: true, full_name: true, status: true },
+        orderBy: [{ created_at: query.sortOrder }, { id: "asc" }],
+        skip: (query.page - 1) * query.limit,
+        take: query.limit,
+      }),
+      prisma.leads.count({ where }),
+    ]);
+
+    return {
+      data: items.map((item) => ({
+        id: item.id,
+        assignedAt: null,
+        isMainOwner: false,
+        lead: { id: item.id, leadCode: item.lead_code, fullName: item.full_name, status: item.status },
+        assignee: null,
+        assignedBy: null,
+        department: null,
+      })),
+      pagination: pagination(query.page, query.limit, total),
+      sort: { sortOrder: query.sortOrder },
+      filters: {
+        status: query.status,
+        search: query.search ?? "",
+        assigneeId: "",
+        departmentId: "",
+      },
+    };
+  }
+
   const where = {
     AND: [
-      { leads: { is: { deleted_at: null } } },
+      { is_main_owner: true },
+      { leads: { is: { deleted_at: null, assigned_to: { not: null } } } },
+      { leads: { is: getLeadScopeWhere(user) } },
       ...(query.institutionProgramId ? [{ leads: { is: { institution_program_id: query.institutionProgramId } } }] : []),
       ...(query.search
         ? [
@@ -129,6 +179,7 @@ export async function listLeadAssignments(query: AssignmentListQuery) {
     pagination: pagination(query.page, query.limit, total),
     sort: { sortOrder: query.sortOrder },
     filters: {
+      status: query.status,
       search: query.search ?? "",
       assigneeId: query.assigneeId ?? "",
       departmentId: query.departmentId ?? "",
@@ -137,14 +188,34 @@ export async function listLeadAssignments(query: AssignmentListQuery) {
 }
 
 export async function getSaleFilterOptions(user: AuthUser, institutionProgramId?: string) {
+  const canViewAll = user.accessScope === "ALL" && user.permissions.includes("lead.view_all");
   const scopeWhere = {
     deleted_at: null,
     ...getLeadScopeWhere(user),
     ...(institutionProgramId ? { institution_program_id: institutionProgramId } : {}),
   };
-  const [assignees, departments, activityTypes, reminderStatuses, leads] = await prisma.$transaction([
+  const [assignees, telesales, departments, activityTypes, reminderStatuses, leads] = await prisma.$transaction([
     prisma.users.findMany({
       where: { deleted_at: null, status: "active", leads_leads_assigned_toTousers: { some: scopeWhere } },
+      select: { id: true, full_name: true },
+      orderBy: { full_name: "asc" },
+    }),
+    prisma.users.findMany({
+      where: {
+        deleted_at: null,
+        status: "active",
+        user_roles: {
+          some: {
+            roles: {
+              role_permissions: {
+                some: { permissions: { code: "lead.view_assigned" } },
+                none: { permissions: { code: { in: ["lead.view_department", "lead.view_all"] } } },
+              },
+            },
+          },
+        },
+        ...(!canViewAll ? { user_departments: { some: { department_id: { in: user.departmentIds } } } } : {}),
+      },
       select: { id: true, full_name: true },
       orderBy: { full_name: "asc" },
     }),
@@ -165,6 +236,7 @@ export async function getSaleFilterOptions(user: AuthUser, institutionProgramId?
 
   return {
     assignees: assignees.map((item) => ({ id: item.id, fullName: item.full_name })),
+    telesales: telesales.map((item) => ({ id: item.id, fullName: item.full_name })),
     departments,
     activityTypes: activityTypes.map((item) => item.type).sort(),
     reminderStatuses: reminderStatuses.flatMap((item) => (item.status ? [item.status] : [])).sort(),

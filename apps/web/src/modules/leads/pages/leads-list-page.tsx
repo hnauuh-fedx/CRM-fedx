@@ -73,10 +73,14 @@ function formatDate(value: string | null) {
 
 function getStatusLabel(status: string | null) {
   if (!status) {
-    return "Chưa xác định";
+    return "Chưa chọn tiến trình";
   }
 
   return statusLabels[status] ?? status;
+}
+
+function getLeadWorkflowLabel(lead: LeadListItem) {
+  return lead.pipelineStage?.name ?? getStatusLabel(lead.status);
 }
 
 const leadInformationFields: Array<{
@@ -363,7 +367,21 @@ export function LeadsListPage() {
       {
         accessorKey: "fullName",
         header: "Họ và tên",
-        cell: ({ row }) => <span className="font-medium">{row.original.fullName}</span>,
+        cell: ({ row }) => (
+          <div className="flex min-w-56 items-center gap-2">
+            <Button asChild variant="ghost" size="icon" className="size-9 shrink-0">
+              <Link
+                to={`/sale/leads/${row.original.id}`}
+                aria-label={`Xem chi tiết ${row.original.fullName}`}
+                onClick={(event) => event.stopPropagation()}
+                onKeyDown={(event) => event.stopPropagation()}
+              >
+                <Eye aria-hidden="true" />
+              </Link>
+            </Button>
+            <span className="font-medium">{row.original.fullName}</span>
+          </div>
+        ),
       },
       {
         id: "pipelineStage",
@@ -380,7 +398,7 @@ export function LeadsListPage() {
       {
         accessorKey: "status",
         header: "Quy trình Telesale",
-        cell: ({ row }) => <Badge variant="secondary">{getStatusLabel(row.original.status)}</Badge>,
+        cell: ({ row }) => <Badge variant="secondary">{getLeadWorkflowLabel(row.original)}</Badge>,
       },
       ...leadInformationFields.map(({ key, label, format }) => ({
         id: key,
@@ -390,24 +408,6 @@ export function LeadsListPage() {
           <TableValue value={format ? format((row.original[key] as string | null) ?? null) : row.original[key]} />
         ),
       })),
-      {
-        id: "actions",
-        header: "Thao tác",
-        enableSorting: false,
-        cell: ({ row }) => (
-          <Button asChild variant="ghost" size="sm">
-            <Link
-              to={`/sale/leads/${row.original.id}`}
-              aria-label={`Xem chi tiết ${row.original.fullName}`}
-              onClick={(event) => event.stopPropagation()}
-              onKeyDown={(event) => event.stopPropagation()}
-            >
-              <Eye aria-hidden="true" />
-              Xem
-            </Link>
-          </Button>
-        ),
-      },
     ],
     [],
   );
@@ -478,6 +478,7 @@ export function LeadsListPage() {
                   options={{
                     sources: actionOptionsQuery.data?.sources ?? [],
                     stages: actionOptionsQuery.data?.stages ?? [],
+                    telesales: actionOptionsQuery.data?.telesales ?? [],
                     institutionPrograms: actionOptionsQuery.data?.institutionPrograms ?? [],
                     majors: actionOptionsQuery.data?.majors ?? [],
                     admissionStatuses: actionOptionsQuery.data?.admissionStatuses ?? [],

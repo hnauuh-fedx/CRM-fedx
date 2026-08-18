@@ -17,6 +17,7 @@ import {
 import { dashboardRouter } from "./modules/dashboard/dashboard.router";
 import { departmentsRouter } from "./modules/departments/departments.router";
 import { institutionProgramsRouter } from "./modules/institutions/institution-programs.router";
+import { InstitutionProgramScopeError } from "./modules/institutions/institution-program-scope";
 import { leadsRouter } from "./modules/leads/leads.router";
 import { saleOverviewRouter } from "./modules/leads/sale-overview.router";
 import { personalNotificationsRouter } from "./modules/notifications/personal-notifications.router";
@@ -69,6 +70,10 @@ app.use("/api/users", usersRouter);
 app.use("/api/custom-fields", customFieldsRouter);
 
 const errorHandler: ErrorRequestHandler = (error, _request, response, _next) => {
+  if (error instanceof InstitutionProgramScopeError) {
+    response.status(error.statusCode).json({ message: error.message });
+    return;
+  }
   console.error(error);
   response.status(500).json({
     message: "Đã xảy ra lỗi máy chủ. Vui lòng thử lại.",

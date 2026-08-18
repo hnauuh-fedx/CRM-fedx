@@ -29,6 +29,14 @@ const principalInclude = {
               },
             },
           },
+          role_institution_programs: {
+            select: {
+              institution_program_id: true,
+              institution_programs: {
+                select: { status: true },
+              },
+            },
+          },
           id: true,
         },
       },
@@ -86,6 +94,10 @@ async function serializeUser(user: {
       id: string;
       code: string;
       role_permissions: Array<{ permissions: { code: string; is_active: boolean | null } | null }>;
+      role_institution_programs: Array<{
+        institution_program_id: string;
+        institution_programs: { status: string | null };
+      }>;
     } | null;
   }>;
 }): Promise<AuthUser> {
@@ -117,6 +129,15 @@ async function serializeUser(user: {
         ),
       ),
     ],
+    institutionProgramIds: [
+      ...new Set(
+        user.user_roles.flatMap((assignment) =>
+          assignment.roles?.role_institution_programs.flatMap((grant) =>
+            grant.institution_programs.status === "active" ? [grant.institution_program_id] : [],
+          ) ?? [],
+        ),
+      ),
+    ].sort(),
     accessScope: (await getStoredAccessScope(user.id)) ?? (await getRoleAccessScope(roleIds)) ?? inferAccessScope(uniqueRoles),
   };
 }

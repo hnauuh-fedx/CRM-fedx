@@ -16,6 +16,7 @@ export type LeadInput = {
   fullName: string;
   phone: string;
   sourceId: string;
+  assigneeId?: string | null;
   pipelineStageId?: string;
   email?: string;
   gender?: string;
@@ -113,6 +114,10 @@ function emptyToNull(value?: string) {
   return value?.trim() || null;
 }
 
+function normalizeLeadStatus(value?: string | null) {
+  return value?.trim().slice(0, 50) || null;
+}
+
 function toLeadData(input: LeadInput) {
   return {
     full_name: input.fullName.trim(),
@@ -125,9 +130,13 @@ function toLeadData(input: LeadInput) {
     date_of_birth: input.dateOfBirth ? new Date(input.dateOfBirth) : null,
     cccd: emptyToNull(input.cccd),
     note: emptyToNull(input.note),
-    ...(input.status ? { status: input.status } : {}),
+    ...(input.status !== undefined ? { status: normalizeLeadStatus(input.status) } : {}),
     ...(input.temperature ? { temperature: input.temperature } : {}),
   };
+}
+
+function toStageStatus(stage: { name: string } | null) {
+  return normalizeLeadStatus(stage?.name);
 }
 
 async function getSelectedStage(
@@ -142,6 +151,51 @@ async function getSelectedStage(
     where: { id: pipelineStageId },
     select: { id: true, name: true },
   });
+}
+
+const assignableSaleWhere = {
+  user_roles: {
+    some: {
+      roles: {
+        role_permissions: {
+          some: { permissions: { code: "lead.view_assigned" } },
+          none: { permissions: { code: { in: ["lead.view_department", "lead.view_all"] } } },
+        },
+      },
+    },
+  },
+};
+
+async function findActiveAssignableSale(
+  tx: Parameters<Parameters<typeof prisma.$transaction>[0]>[0],
+  assigneeId: string,
+  departmentId?: string,
+) {
+  return tx.users.findFirst({
+    where: {
+      id: assigneeId,
+      status: "active",
+      deleted_at: null,
+      ...assignableSaleWhere,
+      ...(departmentId ? { user_departments: { some: { department_id: departmentId } } } : {}),
+    },
+    select: {
+      id: true,
+      full_name: true,
+      user_departments: { select: { department_id: true }, orderBy: { id: "asc" } },
+    },
+  });
+}
+
+function selectAssigneeDepartment(
+  user: AuthUser,
+  memberships: Array<{ department_id: string | null }>,
+  requestedDepartmentId?: string,
+) {
+  if (requestedDepartmentId) return requestedDepartmentId;
+  return memberships.find((membership) => membership.department_id && user.departmentIds.includes(membership.department_id))?.department_id
+    ?? memberships[0]?.department_id
+    ?? null;
 }
 
 async function recordStageChange(
@@ -178,7 +232,8 @@ async function recordStageChange(
 
 export async function getLeadActionOptions(user: AuthUser, institutionProgramId?: string) {
   const canAssign = user.permissions.includes("lead.assign") || user.permissions.includes("lead.reassign");
-  const [sources, stages, assignees, departments, institutionPrograms, majors, admissionStatuses, tags] = await prisma.$transaction([
+  const canAssignAll = user.accessScope === "ALL" && user.permissions.includes("lead.view_all");
+  const [sources, stages, assignees, telesales, departments, institutionPrograms, majors, admissionStatuses, tags] = await prisma.$transaction([
     prisma.lead_sources.findMany({
       where: institutionProgramId
         ? { OR: [{ institution_program_id: institutionProgramId }, { institution_program_id: null }] }
@@ -197,6 +252,18 @@ export async function getLeadActionOptions(user: AuthUser, institutionProgramId?
           orderBy: { full_name: "asc" },
         })
       : prisma.users.findMany({ where: { id: user.id }, select: { id: true, full_name: true } }),
+    prisma.users.findMany({
+      where: {
+        status: "active",
+        deleted_at: null,
+        ...assignableSaleWhere,
+        ...(canAssign && !canAssignAll
+          ? { user_departments: { some: { department_id: { in: user.departmentIds } } } }
+          : {}),
+      },
+      select: { id: true, full_name: true },
+      orderBy: { full_name: "asc" },
+    }),
     canAssign
       ? prisma.departments.findMany({
           select: { id: true, name: true },
@@ -236,6 +303,7 @@ export async function getLeadActionOptions(user: AuthUser, institutionProgramId?
       pipelineName: stage.pipelines?.name ?? null,
     })),
     assignees: assignees.map((assignee) => ({ id: assignee.id, fullName: assignee.full_name })),
+    telesales: telesales.map((telesale) => ({ id: telesale.id, fullName: telesale.full_name })),
     departments,
     institutionPrograms: institutionPrograms.map((program) => ({
       id: program.id,
@@ -275,14 +343,19 @@ export async function createLead(user: AuthUser, input: LeadInput) {
     if (input.pipelineStageId && !selectedStage) {
       return { ok: false as const, reason: "stage_not_found" as const };
     }
+    const assignee = input.assigneeId ? await findActiveAssignableSale(tx, input.assigneeId) : null;
+    if (input.assigneeId && !assignee) {
+      return { ok: false as const, reason: "assignee_not_telesale" as const };
+    }
 
     const lead = await tx.leads.create({
       data: {
         ...toLeadData(input),
         pipeline_stage_id: selectedStage?.id ?? null,
+        ...(input.pipelineStageId !== undefined ? { status: toStageStatus(selectedStage) } : {}),
         lead_code: `LD-${Date.now().toString(36).toUpperCase()}`,
         owner_id: user.id,
-        assigned_to: user.id,
+        assigned_to: assignee?.id ?? null,
       },
       select: { id: true },
     });
@@ -291,15 +364,6 @@ export async function createLead(user: AuthUser, input: LeadInput) {
     await saveAdmissionProfile(tx, lead.id, input);
     await saveLeadAttributionAndTags(tx, lead.id, input);
 
-    await tx.lead_assignments.create({
-      data: {
-        lead_id: lead.id,
-        assigned_to: user.id,
-        assigned_by: user.id,
-        department_id: user.departmentIds[0] ?? null,
-        is_main_owner: true,
-      },
-    });
     await tx.lead_activities.create({
       data: { lead_id: lead.id, user_id: user.id, type: "lead_created", content: "Tạo lead mới." },
     });
@@ -309,13 +373,46 @@ export async function createLead(user: AuthUser, input: LeadInput) {
         entity_type: "lead",
         entity_id: lead.id,
         action: "create",
-        new_data: { fullName: input.fullName, sourceId: input.sourceId },
+        new_data: { fullName: input.fullName, sourceId: input.sourceId, assigneeId: assignee?.id ?? null },
       },
     });
+    if (assignee) {
+      const departmentId = selectAssigneeDepartment(user, assignee.user_departments);
+      await tx.lead_assignments.create({
+        data: {
+          lead_id: lead.id,
+          assigned_to: assignee.id,
+          assigned_by: user.id,
+          department_id: departmentId,
+          is_main_owner: true,
+        },
+      });
+      await tx.lead_activities.create({
+        data: { lead_id: lead.id, user_id: user.id, type: "lead_assigned", content: `Phân công lead cho ${assignee.full_name}.` },
+      });
+      await tx.notifications.create({
+        data: {
+          user_id: assignee.id,
+          title: "Bạn được phân công lead mới",
+          content: `Lead ${input.fullName.trim()} đã được phân công cho bạn.`,
+          type: "lead_assignment",
+        },
+      });
+      await tx.audit_logs.create({
+        data: {
+          user_id: user.id,
+          entity_type: "lead",
+          entity_id: lead.id,
+          action: "assign",
+          old_data: { assigneeId: null },
+          new_data: { assigneeId: assignee.id, departmentId },
+        },
+      });
+    }
     if (selectedStage) {
       await recordStageChange(tx, user, lead.id, null, selectedStage);
     }
-    return { ok: true as const, data: { id: lead.id } };
+    return { ok: true as const, data: { id: lead.id, assigneeId: assignee?.id ?? null } };
   });
 
   if (result.ok) {
@@ -323,6 +420,12 @@ export async function createLead(user: AuthUser, input: LeadInput) {
       leadId: result.data.id, 
       institutionProgramId: input.institutionProgramId ?? undefined 
     }).catch(console.error);
+    if (result.data.assigneeId) {
+      triggerAutomation("lead_assigned", {
+        leadId: result.data.id,
+        institutionProgramId: input.institutionProgramId ?? undefined,
+      }).catch(console.error);
+    }
   }
   return result;
 }
@@ -333,7 +436,7 @@ export async function updateLead(user: AuthUser, leadId: string, input: LeadInpu
     return { ok: false as const, reason: "lead_not_found" as const };
   }
 
-  return prisma.$transaction(async (tx) => {
+  const result = await prisma.$transaction(async (tx) => {
     const duplicate = await tx.leads.findFirst({
       where: { phone: input.phone.trim(), deleted_at: null, id: { not: leadId } },
       select: { id: true },
@@ -354,12 +457,29 @@ export async function updateLead(user: AuthUser, leadId: string, input: LeadInpu
       return { ok: false as const, reason: "stage_not_found" as const };
     }
     const nextStageId = selectedStage?.id ?? null;
+    const assignmentChanged = input.assigneeId !== undefined && input.assigneeId !== existing.assigned_to;
+    if (assignmentChanged && !user.permissions.some((permission) => ["lead.assign", "lead.reassign"].includes(permission))) {
+      return { ok: false as const, reason: "assignment_forbidden" as const };
+    }
+    const nextAssignee = assignmentChanged && input.assigneeId
+      ? await findActiveAssignableSale(tx, input.assigneeId)
+      : null;
+    const canAssignAll = user.accessScope === "ALL" && user.permissions.includes("lead.view_all");
+    const assigneeInScope = nextAssignee && (
+      canAssignAll
+      || nextAssignee.user_departments.some((membership) => membership.department_id && user.departmentIds.includes(membership.department_id))
+    );
+    if (assignmentChanged && input.assigneeId && (!nextAssignee || !assigneeInScope)) {
+      return { ok: false as const, reason: "assignee_not_telesale" as const };
+    }
 
     await tx.leads.update({
       where: { id: leadId },
       data: {
         ...toLeadData(input),
         ...(hasStageSelection ? { pipeline_stage_id: nextStageId } : {}),
+        ...(hasStageSelection ? { status: toStageStatus(selectedStage) } : {}),
+        ...(assignmentChanged ? { assigned_to: nextAssignee?.id ?? null } : {}),
         updated_at: new Date(),
       },
     });
@@ -380,14 +500,68 @@ export async function updateLead(user: AuthUser, leadId: string, input: LeadInpu
           sourceId: existing.source_id,
           status: existing.status,
         },
-        new_data: { fullName: input.fullName, sourceId: input.sourceId, status: input.status ?? existing.status },
+        new_data: { fullName: input.fullName, sourceId: input.sourceId, status: hasStageSelection ? toStageStatus(selectedStage) : input.status ?? existing.status },
       },
     });
     if (hasStageSelection && existing.pipeline_stage_id !== nextStageId) {
       await recordStageChange(tx, user, leadId, existing.pipeline_stage_id, selectedStage);
     }
-    return { ok: true as const, data: { id: leadId } };
+    if (assignmentChanged) {
+      await tx.lead_assignments.updateMany({
+        where: { lead_id: leadId, is_main_owner: true },
+        data: { is_main_owner: false },
+      });
+      if (nextAssignee) {
+        const departmentId = selectAssigneeDepartment(user, nextAssignee.user_departments);
+        await tx.lead_assignments.create({
+          data: {
+            lead_id: leadId,
+            assigned_to: nextAssignee.id,
+            assigned_by: user.id,
+            department_id: departmentId,
+            is_main_owner: true,
+          },
+        });
+        await tx.lead_activities.create({
+          data: { lead_id: leadId, user_id: user.id, type: "lead_assigned", content: `Phân công lead cho ${nextAssignee.full_name}.` },
+        });
+        await tx.notifications.create({
+          data: {
+            user_id: nextAssignee.id,
+            title: "Bạn được phân công lead mới",
+            content: `Lead ${input.fullName.trim()} đã được phân công cho bạn.`,
+            type: "lead_assignment",
+          },
+        });
+      } else {
+        await tx.lead_activities.create({
+          data: { lead_id: leadId, user_id: user.id, type: "lead_unassigned", content: "Thu hồi Sale phụ trách khỏi lead." },
+        });
+      }
+      await tx.audit_logs.create({
+        data: {
+          user_id: user.id,
+          entity_type: "lead",
+          entity_id: leadId,
+          action: nextAssignee ? (existing.assigned_to ? "reassign" : "assign") : "unassign",
+          old_data: { assigneeId: existing.assigned_to },
+          new_data: { assigneeId: nextAssignee?.id ?? null },
+        },
+      });
+    }
+    return {
+      ok: true as const,
+      data: { id: leadId, assignmentEvent: assignmentChanged ? (nextAssignee ? "lead_assigned" as const : "lead_unassigned" as const) : null },
+    };
   });
+
+  if (result.ok && result.data.assignmentEvent) {
+    triggerAutomation(result.data.assignmentEvent, {
+      leadId: result.data.id,
+      institutionProgramId: institutionProgramId ?? undefined,
+    }).catch(console.error);
+  }
+  return result;
 }
 
 export async function deleteLead(user: AuthUser, leadId: string, institutionProgramId?: string) {
@@ -430,10 +604,13 @@ export async function changeLeadStage(user: AuthUser, leadId: string, stageId: s
       return { ok: false as const, reason: "stage_not_found" as const };
     }
     if (lead.pipeline_stage_id === stageId) {
+      if (lead.status !== toStageStatus(stage)) {
+        await tx.leads.update({ where: { id: leadId }, data: { status: toStageStatus(stage), updated_at: new Date() } });
+      }
       return { ok: true as const, data: { id: leadId, pipelineStageId: stageId } };
     }
 
-    await tx.leads.update({ where: { id: leadId }, data: { pipeline_stage_id: stageId, updated_at: new Date() } });
+    await tx.leads.update({ where: { id: leadId }, data: { pipeline_stage_id: stageId, status: toStageStatus(stage), updated_at: new Date() } });
     await tx.lead_status_histories.create({
       data: { lead_id: leadId, from_stage_id: lead.pipeline_stage_id, to_stage_id: stageId, changed_by: user.id },
     });
@@ -453,7 +630,7 @@ export async function changeLeadStage(user: AuthUser, leadId: string, stageId: s
         entity_id: leadId,
         action: "pipeline_stage_changed",
         old_data: { pipelineStageId: lead.pipeline_stage_id },
-        new_data: { pipelineStageId: stageId },
+        new_data: { pipelineStageId: stageId, status: toStageStatus(stage) },
       },
     });
     return { ok: true as const, data: { id: leadId, pipelineStageId: stageId } };
@@ -529,20 +706,16 @@ export async function assignLead(
   }
 
   const result = await prisma.$transaction(async (tx) => {
-    const assignee = await tx.users.findFirst({
-      where: {
-        id: input.assigneeId,
-        status: "active",
-        deleted_at: null,
-        ...(input.departmentId
-          ? { user_departments: { some: { department_id: input.departmentId } } }
-          : {}),
-      },
-      select: { id: true, full_name: true },
-    });
-    if (!assignee) {
+    const assignee = await findActiveAssignableSale(tx, input.assigneeId, input.departmentId);
+    const canAssignAll = user.accessScope === "ALL" && user.permissions.includes("lead.view_all");
+    const assigneeInScope = assignee && (
+      canAssignAll
+      || assignee.user_departments.some((membership) => membership.department_id && user.departmentIds.includes(membership.department_id))
+    );
+    if (!assignee || !assigneeInScope) {
       return { ok: false as const, reason: "assignee_not_found" as const };
     }
+    const departmentId = selectAssigneeDepartment(user, assignee.user_departments, input.departmentId);
 
     await tx.lead_assignments.updateMany({ where: { lead_id: leadId, is_main_owner: true }, data: { is_main_owner: false } });
     await tx.lead_assignments.create({
@@ -550,7 +723,7 @@ export async function assignLead(
         lead_id: leadId,
         assigned_to: assignee.id,
         assigned_by: user.id,
-        department_id: input.departmentId ?? null,
+        department_id: departmentId,
         is_main_owner: true,
       },
     });
@@ -573,7 +746,7 @@ export async function assignLead(
         entity_id: leadId,
         action: lead.assigned_to ? "reassign" : "assign",
         old_data: { assigneeId: lead.assigned_to },
-        new_data: { assigneeId: assignee.id, departmentId: input.departmentId ?? null },
+        new_data: { assigneeId: assignee.id, departmentId },
       },
     });
     return { ok: true as const, data: { id: leadId, assigneeId: assignee.id } };

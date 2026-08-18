@@ -249,7 +249,9 @@ export function AppRoutes() {
             >
               <Route path="/sale/leads" element={<LeadsListPage />} />
               <Route path="/sale/leads/:leadId" element={<LeadDetailPage />} />
-              <Route path="/sale/phan-cong" element={<LeadAssignmentsPage />} />
+              <Route element={<ProtectedRoute anyPermissions={["lead.assign", "lead.reassign"]} />}>
+                <Route path="/sale/phan-cong" element={<LeadAssignmentsPage />} />
+              </Route>
               <Route path="/sale/hoat-dong" element={<SaleActivitiesPage />} />
               <Route path="/sale/nhac-viec" element={<SaleRemindersPage />} />
               <Route path="/sale/kpi" element={<SaleKpiPage />} />

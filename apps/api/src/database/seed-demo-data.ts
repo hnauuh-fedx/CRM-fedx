@@ -352,6 +352,19 @@ async function seedBusinessData(principals: Awaited<ReturnType<typeof seedAccess
     prisma.institution_programs.upsert({ where: { code: "TVU-CQ-2026" }, update: { institution_id: institutions[0].id, program_type_id: programTypes[0].id, name: "Chinh quy 2026", status: "active" }, create: { id: ids.institutionPrograms[0], code: "TVU-CQ-2026", institution_id: institutions[0].id, program_type_id: programTypes[0].id, name: "Chinh quy 2026", status: "active" } }),
     prisma.institution_programs.upsert({ where: { code: "TVU-LI-VLVH-2026" }, update: { institution_id: institutions[1].id, program_type_id: programTypes[1].id, name: "Lien ket VLVH 2026", status: "active" }, create: { id: ids.institutionPrograms[1], code: "TVU-LI-VLVH-2026", institution_id: institutions[1].id, program_type_id: programTypes[1].id, name: "Lien ket VLVH 2026", status: "active" } }),
   ]);
+  const demoRoles = await prisma.roles.findMany({
+    where: { code: { in: ["DIRECTOR", "SALE_MANAGER", "TELESALE", "MARKETING_MANAGER", "STUDENT_SERVICE"] } },
+    select: { id: true },
+  });
+  await prisma.role_institution_programs.createMany({
+    data: demoRoles.flatMap((role) =>
+      institutionPrograms.map((program) => ({
+        role_id: role.id,
+        institution_program_id: program.id,
+      })),
+    ),
+    skipDuplicates: true,
+  });
   const pipeline = await prisma.pipelines.upsert({
     where: { id: ids.pipeline },
     update: { name: "Tiến trình tuyển sinh 2026", module: "sale" },
