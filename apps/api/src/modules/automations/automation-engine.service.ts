@@ -38,7 +38,11 @@ export type ExecutionJobData = {
 };
 type ActionResult = { nextSourceHandle: string | null; delayMinutes: number };
 
-export const AUTOMATION_QUEUE_NAME = "automation_engine_queue";
+const DEFAULT_AUTOMATION_QUEUE_NAME = "automation_engine_queue";
+const DEFAULT_DELAY_MS_PER_MINUTE = 60_000;
+
+export const AUTOMATION_QUEUE_NAME = getAutomationQueueName();
+const delayMsPerMinute = getDelayMsPerMinute();
 const isAutomationDisabled = process.env.DISABLE_AUTOMATION_WORKER === "true" || process.env.NODE_ENV === "test";
 
 export const automationQueue = isAutomationDisabled
@@ -186,7 +190,10 @@ async function processAutomationNode(job: Job<ExecutionJobData>) {
       : await executeNodeAction(node, context, nodeExecution.id);
     const nextNodes = getNextNodes(node.id, graph, actionResult.nextSourceHandle);
     for (const { nextNodeId } of nextNodes) {
-      await enqueueAutomationJob({ context, nodeId: nextNodeId, graph, logId }, actionResult.delayMinutes * 60 * 1000);
+      await enqueueAutomationJob(
+        { context, nodeId: nextNodeId, graph, logId },
+        actionResult.delayMinutes * delayMsPerMinute,
+      );
     }
     await prisma.$transaction(async (tx) => {
       await tx.automation_node_executions.update({
@@ -364,4 +371,22 @@ async function requireActor(context: AutomationContext) {
 
 function toErrorMessage(error: unknown) {
   return error instanceof Error ? error.message : String(error);
+}
+
+function getAutomationQueueName() {
+  if (process.env.NODE_ENV !== "integration") return DEFAULT_AUTOMATION_QUEUE_NAME;
+  const queueName = process.env.AUTOMATION_QUEUE_NAME?.trim() || DEFAULT_AUTOMATION_QUEUE_NAME;
+  if (!/^[a-zA-Z0-9_-]{1,100}$/.test(queueName)) {
+    throw new Error("AUTOMATION_QUEUE_NAME integration phải gồm 1-100 ký tự chữ, số, gạch dưới hoặc gạch ngang.");
+  }
+  return queueName;
+}
+
+function getDelayMsPerMinute() {
+  if (process.env.NODE_ENV !== "integration") return DEFAULT_DELAY_MS_PER_MINUTE;
+  const value = Number(process.env.AUTOMATION_DELAY_MS_PER_MINUTE ?? DEFAULT_DELAY_MS_PER_MINUTE);
+  if (!Number.isInteger(value) || value <= 0) {
+    throw new Error("AUTOMATION_DELAY_MS_PER_MINUTE integration phải là số nguyên dương.");
+  }
+  return value;
 }

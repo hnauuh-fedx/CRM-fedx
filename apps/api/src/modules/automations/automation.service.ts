@@ -243,7 +243,10 @@ export async function toggleAutomationRule(user: AuthUser, id: string, isActive:
     });
     return changedRule;
   });
-  return { ok: true as const, data: updated };
+  return {
+    ok: true as const,
+    data: { id: updated.id, name: updated.name, isActive: updated.is_active },
+  };
 }
 
 export async function validateAutomationRule(id: string) {

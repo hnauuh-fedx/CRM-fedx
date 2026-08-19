@@ -20,6 +20,7 @@
     "test:integration:access-control": "tsx src/integration/user-role-scope-management.integration.ts",
     "test:integration:custom-fields": "tsx src/integration/custom-field-definition.integration.ts",
     "test:integration:lead-custom-fields": "tsx src/integration/lead-custom-fields.integration.ts",
+    "test:integration:automation": "tsx src/integration/automation-engine.integration.ts",
     "test:automation": "tsx --test src/modules/automations/*.test.ts"
   },
   "dependencies": {
