@@ -11,7 +11,9 @@ import {
   listExecutionLogs,
   toggleAutomationRule,
   updateAutomationRule,
+  validateAutomationRule,
 } from "./automation.service";
+import { SUPPORTED_AUTOMATION_TRIGGER_TYPES } from "./automation.types";
 
 export const automationsRouter = Router();
 
@@ -32,7 +34,7 @@ const listQuerySchema = z.object({
 const createSchema = z.object({
   name: z.string().trim().min(2).max(255),
   description: z.string().trim().max(1000).optional().transform((v) => v || undefined),
-  triggerType: z.string().trim().min(1).max(100),
+  triggerType: z.enum(SUPPORTED_AUTOMATION_TRIGGER_TYPES),
   graphData: z.record(z.string(), z.unknown()).default({ nodes: [], edges: [] }),
   institutionProgramId: z.string().uuid().optional().or(z.literal("")).transform((v) => v || undefined),
 });
@@ -40,9 +42,8 @@ const createSchema = z.object({
 const updateSchema = z.object({
   name: z.string().trim().min(2).max(255).optional(),
   description: z.string().trim().max(1000).optional(),
-  triggerType: z.string().trim().min(1).max(100).optional(),
+  triggerType: z.enum(SUPPORTED_AUTOMATION_TRIGGER_TYPES).optional(),
   graphData: z.record(z.string(), z.unknown()).optional(),
-  isActive: z.boolean().optional(),
   institutionProgramId: z.string().uuid().optional().or(z.literal("")).transform((v) => v || undefined),
 });
 
@@ -79,9 +80,32 @@ automationsRouter.get(
 automationsRouter.get(
   "/options",
   requireAnyPermission("automation.manage"),
-  async (_request, response, next) => {
+  async (request, response, next) => {
     try {
-      response.json(await getAutomationOptions());
+      response.json(await getAutomationOptions(request.authUser!));
+    } catch (error) {
+      next(error);
+    }
+  },
+);
+
+// POST /api/automations/:id/validate
+automationsRouter.post(
+  "/:id/validate",
+  requireAnyPermission("automation.manage"),
+  async (request, response, next) => {
+    try {
+      const parsedId = entityIdSchema.safeParse(request.params.id);
+      if (!parsedId.success) {
+        response.status(400).json({ message: "Mã automation không hợp lệ." });
+        return;
+      }
+      const validation = await validateAutomationRule(parsedId.data);
+      if (!validation) {
+        response.status(404).json({ message: "Không tìm thấy automation rule." });
+        return;
+      }
+      response.status(validation.valid ? 200 : 422).json(validation);
     } catch (error) {
       next(error);
     }
@@ -147,7 +171,11 @@ automationsRouter.patch(
         response.status(404).json({ message: "Không tìm thấy automation rule." });
         return;
       }
-      response.json(updated);
+      if (!updated.ok) {
+        response.status(409).json({ message: "Hãy tắt rule trước khi thay đổi cấu hình thực thi." });
+        return;
+      }
+      response.json(updated.data);
     } catch (error) {
       next(error);
     }
@@ -171,7 +199,16 @@ automationsRouter.patch(
         response.status(404).json({ message: "Không tìm thấy automation rule." });
         return;
       }
-      response.json(updated);
+      if (!updated.ok) {
+        response.status(422).json({
+          message: updated.reason === "unsupported_trigger"
+            ? "Sự kiện kích hoạt này chưa được hệ thống hỗ trợ thực thi."
+            : "Rule chưa hợp lệ. Vui lòng sửa các node và kết nối trước khi bật.",
+          validation: updated.validation,
+        });
+        return;
+      }
+      response.json(updated.data);
     } catch (error) {
       next(error);
     }

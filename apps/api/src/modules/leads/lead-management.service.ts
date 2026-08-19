@@ -5,12 +5,9 @@ import { saveCandidateProfile } from "../students/candidate-profile.service";
 import { prisma } from "../../database/prisma";
 import { getLeadScopeWhere } from "./lead-list.service";
 import { triggerAutomation } from "../automations/automation-engine.service";
+import { assignVisibleLead, changeVisibleLeadStage } from "./lead-owner-stage-mutations.service";
 
-export const leadUpdatePermissions = [
-  "lead.update_all",
-  "lead.update_department",
-  "lead.update_assigned",
-] as const;
+export { leadUpdatePermissions } from "./lead-owner-stage-mutations.service";
 
 export type LeadInput = {
   fullName: string;
@@ -321,6 +318,7 @@ export async function createLead(user: AuthUser, input: LeadInput) {
   if (result.ok) {
     triggerAutomation("lead_created", { 
       leadId: result.data.id, 
+      actorId: user.id,
       institutionProgramId: input.institutionProgramId ?? undefined 
     }).catch(console.error);
   }
@@ -419,49 +417,12 @@ export async function deleteLead(user: AuthUser, leadId: string, institutionProg
 }
 
 export async function changeLeadStage(user: AuthUser, leadId: string, stageId: string, institutionProgramId?: string) {
-  const lead = await findVisibleLead(user, leadId, institutionProgramId);
-  if (!lead) {
-    return { ok: false as const, reason: "lead_not_found" as const };
-  }
+  const result = await changeVisibleLeadStage(user, leadId, stageId, institutionProgramId);
 
-  const result = await prisma.$transaction(async (tx) => {
-    const stage = await tx.pipeline_stages.findUnique({ where: { id: stageId }, select: { id: true, name: true } });
-    if (!stage) {
-      return { ok: false as const, reason: "stage_not_found" as const };
-    }
-    if (lead.pipeline_stage_id === stageId) {
-      return { ok: true as const, data: { id: leadId, pipelineStageId: stageId } };
-    }
-
-    await tx.leads.update({ where: { id: leadId }, data: { pipeline_stage_id: stageId, updated_at: new Date() } });
-    await tx.lead_status_histories.create({
-      data: { lead_id: leadId, from_stage_id: lead.pipeline_stage_id, to_stage_id: stageId, changed_by: user.id },
-    });
-    await tx.lead_activities.create({
-      data: {
-        lead_id: leadId,
-        user_id: user.id,
-        type: "pipeline_stage_changed",
-        content: `Chuyển lead sang giai đoạn ${stage.name}.`,
-        metadata: { fromStageId: lead.pipeline_stage_id, toStageId: stageId },
-      },
-    });
-    await tx.audit_logs.create({
-      data: {
-        user_id: user.id,
-        entity_type: "lead",
-        entity_id: leadId,
-        action: "pipeline_stage_changed",
-        old_data: { pipelineStageId: lead.pipeline_stage_id },
-        new_data: { pipelineStageId: stageId },
-      },
-    });
-    return { ok: true as const, data: { id: leadId, pipelineStageId: stageId } };
-  });
-
-  if (result.ok) {
+  if (result.ok && result.data.changed) {
     triggerAutomation("lead_status_changed", {
       leadId: result.data.id,
+      actorId: user.id,
       institutionProgramId: institutionProgramId ?? undefined
     }).catch(console.error);
   }
@@ -523,65 +484,12 @@ export async function assignLead(
   input: { assigneeId: string; departmentId?: string },
   institutionProgramId?: string,
 ) {
-  const lead = await findVisibleLead(user, leadId, institutionProgramId);
-  if (!lead) {
-    return { ok: false as const, reason: "lead_not_found" as const };
-  }
-
-  const result = await prisma.$transaction(async (tx) => {
-    const assignee = await tx.users.findFirst({
-      where: {
-        id: input.assigneeId,
-        status: "active",
-        deleted_at: null,
-        ...(input.departmentId
-          ? { user_departments: { some: { department_id: input.departmentId } } }
-          : {}),
-      },
-      select: { id: true, full_name: true },
-    });
-    if (!assignee) {
-      return { ok: false as const, reason: "assignee_not_found" as const };
-    }
-
-    await tx.lead_assignments.updateMany({ where: { lead_id: leadId, is_main_owner: true }, data: { is_main_owner: false } });
-    await tx.lead_assignments.create({
-      data: {
-        lead_id: leadId,
-        assigned_to: assignee.id,
-        assigned_by: user.id,
-        department_id: input.departmentId ?? null,
-        is_main_owner: true,
-      },
-    });
-    await tx.leads.update({ where: { id: leadId }, data: { assigned_to: assignee.id, updated_at: new Date() } });
-    await tx.lead_activities.create({
-      data: { lead_id: leadId, user_id: user.id, type: "lead_assigned", content: `Phân công lead cho ${assignee.full_name}.` },
-    });
-    await tx.notifications.create({
-      data: {
-        user_id: assignee.id,
-        title: "Bạn được phân công lead mới",
-        content: `Lead ${lead.full_name} đã được phân công cho bạn.`,
-        type: "lead_assignment",
-      },
-    });
-    await tx.audit_logs.create({
-      data: {
-        user_id: user.id,
-        entity_type: "lead",
-        entity_id: leadId,
-        action: lead.assigned_to ? "reassign" : "assign",
-        old_data: { assigneeId: lead.assigned_to },
-        new_data: { assigneeId: assignee.id, departmentId: input.departmentId ?? null },
-      },
-    });
-    return { ok: true as const, data: { id: leadId, assigneeId: assignee.id } };
-  });
+  const result = await assignVisibleLead(user, leadId, input, institutionProgramId);
 
   if (result.ok) {
     triggerAutomation("lead_assigned", {
       leadId: result.data.id,
+      actorId: user.id,
       institutionProgramId: institutionProgramId ?? undefined
     }).catch(console.error);
   }

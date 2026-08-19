@@ -5,16 +5,18 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import type { AutomationNode, AutomationNodeData } from "../../automation.types";
+import type { AutomationNode, AutomationNodeData, AutomationOptions } from "../../automation.types";
 
 export type NodePropertiesPanelProps = {
   selectedNodeId: string | null;
   nodes: AutomationNode[];
+  options?: AutomationOptions;
+  isLoadingOptions: boolean;
   onNodeUpdate: (nodeId: string, data: Partial<AutomationNodeData>) => void;
   onClose: () => void;
 };
 
-export function NodePropertiesPanel({ selectedNodeId, nodes, onNodeUpdate, onClose }: NodePropertiesPanelProps) {
+export function NodePropertiesPanel({ selectedNodeId, nodes, options, isLoadingOptions, onNodeUpdate, onClose }: NodePropertiesPanelProps) {
   const selectedNode = nodes.find((n) => n.id === selectedNodeId);
   const [localData, setLocalData] = useState<AutomationNodeData | null>(null);
 
@@ -40,7 +42,7 @@ export function NodePropertiesPanel({ selectedNodeId, nodes, onNodeUpdate, onClo
     <div className="w-80 border-l bg-background flex flex-col h-full shadow-sm z-10 shrink-0">
       <div className="flex items-center justify-between border-b px-4 py-3">
         <h3 className="font-semibold text-sm">Cấu hình thao tác</h3>
-        <Button variant="ghost" size="icon" className="h-6 w-6" onClick={onClose}>
+        <Button variant="ghost" size="icon" className="h-9 w-9" onClick={onClose} aria-label="Đóng bảng cấu hình node">
           <X className="h-4 w-4" />
         </Button>
       </div>
@@ -57,20 +59,8 @@ export function NodePropertiesPanel({ selectedNodeId, nodes, onNodeUpdate, onClo
 
         {/* Dynamic fields based on node type */}
         {selectedNode.type === "trigger" && (
-          <div className="space-y-2">
-            <Label>Loại đối tượng</Label>
-            <Select 
-              value={localData.triggerType || "lead_created"} 
-              onValueChange={(val) => handleChange("triggerType", val)}
-            >
-              <SelectTrigger>
-                <SelectValue placeholder="Chọn đối tượng..." />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="lead_created">Khách hàng (Lead) mới</SelectItem>
-                <SelectItem value="lead_updated">Cập nhật Lead</SelectItem>
-              </SelectContent>
-            </Select>
+          <div className="rounded-md border bg-muted/30 p-3 text-sm text-muted-foreground">
+            Sự kiện kích hoạt được cấu hình ở cấp rule. Node này chỉ đóng vai trò điểm bắt đầu của luồng.
           </div>
         )}
 
@@ -133,19 +123,36 @@ export function NodePropertiesPanel({ selectedNodeId, nodes, onNodeUpdate, onClo
                 <SelectValue placeholder="Chọn nhân viên..." />
               </SelectTrigger>
               <SelectContent>
-                <SelectItem value="user-1">Nguyễn Văn A (Sale)</SelectItem>
-                <SelectItem value="user-2">Trần Thị B (CSKH)</SelectItem>
-                <SelectItem value="user-3">Lê Văn C (Manager)</SelectItem>
+                {options?.assignees.map((assignee) => (
+                  <SelectItem key={assignee.id} value={assignee.id}>{assignee.fullName}</SelectItem>
+                ))}
               </SelectContent>
             </Select>
-            <p className="text-xs text-muted-foreground mt-1">
-              (Dữ liệu nhân sự mẫu)
+            <p className="mt-1 text-xs text-muted-foreground">
+              {isLoadingOptions
+                ? "Đang tải danh sách nhân viên..."
+                : options?.assignees.length
+                  ? "Chỉ hiển thị nhân viên trong phạm vi quyền phân công."
+                  : "Không có nhân viên phù hợp hoặc bạn chưa có quyền phân công lead."}
             </p>
           </div>
         )}
 
         {selectedNode.type === "action_notification" && (
           <div className="space-y-4">
+            <div className="space-y-2">
+              <Label>Vai trò nhận thông báo</Label>
+              <Select value={localData.targetRole || ""} onValueChange={(val) => handleChange("targetRole", val)}>
+                <SelectTrigger>
+                  <SelectValue placeholder={isLoadingOptions ? "Đang tải..." : "Chọn vai trò..."} />
+                </SelectTrigger>
+                <SelectContent>
+                  {options?.targetRoles.map((role) => (
+                    <SelectItem key={role.id} value={role.code}>{role.name}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
             <div className="space-y-2">
               <Label>Tiêu đề thông báo</Label>
               <Input 
@@ -206,12 +213,16 @@ export function NodePropertiesPanel({ selectedNodeId, nodes, onNodeUpdate, onClo
                 <SelectValue placeholder="Chọn giai đoạn..." />
               </SelectTrigger>
               <SelectContent>
-                <SelectItem value="stage-new">Khách hàng mới</SelectItem>
-                <SelectItem value="stage-contacted">Đã liên hệ</SelectItem>
-                <SelectItem value="stage-interested">Quan tâm</SelectItem>
-                <SelectItem value="stage-won">Chốt Sale</SelectItem>
+                {options?.pipelineStages.map((stage) => (
+                  <SelectItem key={stage.id} value={stage.id}>
+                    {stage.pipelineName ? `${stage.pipelineName} — ${stage.name}` : stage.name}
+                  </SelectItem>
+                ))}
               </SelectContent>
             </Select>
+            {!isLoadingOptions && !options?.pipelineStages.length && (
+              <p className="text-xs text-muted-foreground">Chưa có giai đoạn pipeline để lựa chọn.</p>
+            )}
           </div>
         )}
 

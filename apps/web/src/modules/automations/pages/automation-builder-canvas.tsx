@@ -5,14 +5,14 @@ import {
   Controls,
   MiniMap,
   addEdge,
-  useNodesState,
-  useEdgesState,
+  applyEdgeChanges,
+  applyNodeChanges,
   type Connection,
   type NodeTypes,
   BackgroundVariant,
 } from "@xyflow/react";
 import "@xyflow/react/dist/style.css";
-import type { AutomationNode, AutomationNodeType } from "../automation.types";
+import type { AutomationEdge, AutomationNode, AutomationNodeType } from "../automation.types";
 
 import { AutomationNodeComponent } from "./builder/automation-node";
 import { NodePalette } from "./builder/node-palette";
@@ -29,10 +29,10 @@ const nodeTypes: NodeTypes = {
 
 type AutomationBuilderCanvasProps = {
   nodes: AutomationNode[];
-  edges: { id: string; source: string; target: string; sourceHandle?: string | null }[];
+  edges: AutomationEdge[];
   selectedNodeId: string | null;
   onNodesChange: (nodes: AutomationNode[]) => void;
-  onEdgesChange: (edges: { id: string; source: string; target: string }[]) => void;
+  onEdgesChange: (edges: AutomationEdge[]) => void;
   onNodeSelect: (nodeId: string | null) => void;
 };
 
@@ -44,21 +44,13 @@ export function AutomationBuilderCanvas({
   onEdgesChange,
   onNodeSelect,
 }: AutomationBuilderCanvasProps) {
-  const [nodes, setNodes, onNodesChangeInternal] = useNodesState<AutomationNode>(
-    initialNodes.map((n) => ({ ...n, selected: n.id === selectedNodeId })),
-  );
-  const [edges, setEdges, onEdgesChangeInternal] = useEdgesState(initialEdges);
   const reactFlowWrapper = useRef<HTMLDivElement>(null);
 
   const onConnect = useCallback(
     (params: Connection) => {
-      setEdges((eds) => {
-        const next = addEdge(params, eds);
-        onEdgesChange(next as { id: string; source: string; target: string }[]);
-        return next;
-      });
+      onEdgesChange(addEdge(params, initialEdges) as AutomationEdge[]);
     },
-    [setEdges, onEdgesChange],
+    [initialEdges, onEdgesChange],
   );
 
   const onDragOver = useCallback((event: React.DragEvent) => {
@@ -86,35 +78,21 @@ export function AutomationBuilderCanvas({
         data: { label },
       };
 
-      setNodes((nds) => [...nds, newNode]);
-      onNodesChange([...nodes, newNode]);
+      onNodesChange([...initialNodes, newNode]);
     },
-    [setNodes, onNodesChange],
+    [initialNodes, onNodesChange],
   );
 
   return (
     <div ref={reactFlowWrapper} className="h-full w-full">
       <ReactFlow
-        nodes={nodes.map((n) => ({
+        nodes={initialNodes.map((n) => ({
           ...n,
           selected: n.id === selectedNodeId,
         }))}
-        edges={edges}
-        onNodesChange={(changes) => {
-          onNodesChangeInternal(changes);
-          // Propagate updated positions
-          setNodes((current) => {
-            onNodesChange(current as AutomationNode[]);
-            return current;
-          });
-        }}
-        onEdgesChange={(changes) => {
-          onEdgesChangeInternal(changes);
-          setEdges((current) => {
-            onEdgesChange(current as { id: string; source: string; target: string }[]);
-            return current;
-          });
-        }}
+        edges={initialEdges}
+        onNodesChange={(changes) => onNodesChange(applyNodeChanges(changes, initialNodes) as AutomationNode[])}
+        onEdgesChange={(changes) => onEdgesChange(applyEdgeChanges(changes, initialEdges) as AutomationEdge[])}
         onConnect={onConnect}
         onDrop={onDrop}
         onDragOver={onDragOver}

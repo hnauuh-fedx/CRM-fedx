@@ -1,11 +1,19 @@
-import { Queue, Worker, type Job } from "bullmq";
+import { Queue, UnrecoverableError, Worker, type Job } from "bullmq";
 
 import { redisConnection } from "../../config/redis";
 import { prisma } from "../../database/prisma";
+import { getAuthUser } from "../auth/auth.service";
+import {
+  assignVisibleLead,
+  changeVisibleLeadStage,
+  leadUpdatePermissions,
+} from "../leads/lead-owner-stage-mutations.service";
+import { validateAutomationGraph } from "./automation-graph.validator";
 import type { AutomationGraphData, AutomationNode, AutomationEdge } from "./automation.types";
 
 export type AutomationContext = {
   ruleId: string;
+  actorId?: string;
   leadId?: string;
   studentId?: string;
   institutionProgramId?: string;
@@ -33,6 +41,7 @@ async function enqueueAutomationJob(data: ExecutionJobData, delay = 0) {
   if (!automationQueue) return;
   await automationQueue.add("execute_node", data, {
     delay,
+    jobId: data.logId ? `${data.logId}-${data.nodeId}` : undefined,
     removeOnComplete: true,
     removeOnFail: false,
   });
@@ -58,13 +67,25 @@ export async function triggerAutomation(
 
   for (const rule of rules) {
     const graph = rule.graph_data as unknown as AutomationGraphData;
-    if (!graph || !Array.isArray(graph.nodes) || !Array.isArray(graph.edges)) continue;
+    const validation = validateAutomationGraph(graph);
+    if (!validation.valid) {
+      await prisma.automation_execution_logs.create({
+        data: {
+          rule_id: rule.id,
+          status: "failed",
+          context_data: JSON.parse(JSON.stringify(context)),
+          error_message: "Rule không hợp lệ tại thời điểm nhận sự kiện.",
+          completed_at: new Date(),
+        },
+      });
+      continue;
+    }
 
     // Find trigger node
     const triggerNode = graph.nodes.find((n) => n.type === "trigger");
     if (!triggerNode) continue;
 
-  const nextNodes = getNextNodes(triggerNode.id, graph, null);
+    const nextNodes = getNextNodes(triggerNode.id, graph, null);
     
     // Create execution log
     const log = await prisma.automation_execution_logs.create({
@@ -119,6 +140,10 @@ export const automationWorker = isAutomationDisabled
         case "delay":
           delayMinutes = node.data.delayMinutes ? Number(node.data.delayMinutes) : 0;
           break;
+        case "trigger":
+          throw new UnrecoverableError("Node khởi động không được thực thi như một action.");
+        default:
+          throw new UnrecoverableError(`Loại node không được hỗ trợ: ${String(node.type)}`);
       }
     } catch (error) {
       success = false;
@@ -139,7 +164,7 @@ export const automationWorker = isAutomationDisabled
       // Find and queue next nodes
       const nextNodes = getNextNodes(node.id, graph, nextSourceHandle);
       
-      if (nextNodes.length === 0 && logId && delayMinutes === 0) {
+      if (nextNodes.length === 0 && logId) {
         // Workflow ended here
         await prisma.automation_execution_logs.update({
           where: { id: logId },
@@ -182,7 +207,9 @@ function getNextNodes(nodeId: string, graph: AutomationGraphData, sourceHandle: 
 
 async function evaluateCondition(node: AutomationNode, context: AutomationContext): Promise<boolean> {
   const { field, operator, value } = node.data;
-  if (!field || !operator || !context.leadId) return false;
+  if (!field || !operator || !context.leadId) {
+    throw new UnrecoverableError("Node điều kiện thiếu trường, toán tử hoặc lead context.");
+  }
   
   const lead = await prisma.leads.findUnique({ where: { id: context.leadId } });
   if (!lead) return false;
@@ -202,11 +229,23 @@ async function evaluateCondition(node: AutomationNode, context: AutomationContex
 
 async function executeNotificationAction(node: AutomationNode, context: AutomationContext) {
   const { title, content, targetRole } = node.data;
-  if (!title || !content || !targetRole) return;
+  if (!title || !content || !targetRole) {
+    throw new UnrecoverableError("Node thông báo thiếu tiêu đề, nội dung hoặc vai trò nhận.");
+  }
+  const actor = await requireActor(context);
+
+  const scopeWhere = actor.accessScope === "ALL"
+    ? {}
+    : actor.accessScope === "DEPARTMENT" && actor.departmentIds.length > 0
+      ? { user_departments: { some: { department_id: { in: actor.departmentIds } } } }
+      : { id: actor.id };
 
   const users = await prisma.users.findMany({
     where: {
-      user_roles: { some: { roles: { code: targetRole } } }
+      status: "active",
+      deleted_at: null,
+      user_roles: { some: { roles: { code: targetRole } } },
+      ...scopeWhere,
     },
     select: { id: true }
   });
@@ -225,37 +264,53 @@ async function executeNotificationAction(node: AutomationNode, context: Automati
 
 async function executeAssignAction(node: AutomationNode, context: AutomationContext) {
   const { assignToUserId } = node.data;
-  if (!assignToUserId || !context.leadId) return;
-
-  await prisma.leads.update({
-    where: { id: context.leadId },
-    data: { assigned_to: assignToUserId, updated_at: new Date() },
-  });
+  if (!assignToUserId || !context.leadId) {
+    throw new UnrecoverableError("Node phân công thiếu nhân viên hoặc lead context.");
+  }
+  const actor = await requireActor(context);
+  const result = await assignVisibleLead(actor, context.leadId, { assigneeId: assignToUserId }, context.institutionProgramId);
+  if (!result.ok) throw new UnrecoverableError(`Không thể phân công lead: ${result.reason}`);
 }
 
 async function executeUpdateStageAction(node: AutomationNode, context: AutomationContext) {
   const { stageId } = node.data;
-  if (!stageId || !context.leadId) return;
-
-  await prisma.leads.update({
-    where: { id: context.leadId },
-    data: { pipeline_stage_id: stageId, updated_at: new Date() },
-  });
+  if (!stageId || !context.leadId) {
+    throw new UnrecoverableError("Node cập nhật pipeline thiếu giai đoạn hoặc lead context.");
+  }
+  const actor = await requireActor(context);
+  const result = await changeVisibleLeadStage(actor, context.leadId, stageId, context.institutionProgramId);
+  if (!result.ok) throw new UnrecoverableError(`Không thể đổi giai đoạn lead: ${result.reason}`);
 }
 
 async function executeActivityAction(node: AutomationNode, context: AutomationContext) {
   const { activityType, activityContent } = node.data;
-  if (!activityType || !activityContent || !context.leadId) return;
+  if (!activityType || !activityContent || !context.leadId) {
+    throw new UnrecoverableError("Node hoạt động thiếu loại, nội dung hoặc lead context.");
+  }
+  const actor = await requireActor(context);
+  const canWriteActivity = actor.permissions.includes("lead_activity.create") ||
+    leadUpdatePermissions.some((permission) => actor.permissions.includes(permission));
+  if (!canWriteActivity) throw new UnrecoverableError("Tài khoản kích hoạt không có quyền ghi hoạt động lead.");
 
-  const lead = await prisma.leads.findUnique({ where: { id: context.leadId }, select: { assigned_to: true } });
-  if (!lead?.assigned_to) return; // Only log if there's an assignee
+  await prisma.$transaction([
+    prisma.lead_activities.create({
+      data: { lead_id: context.leadId, user_id: actor.id, type: activityType, content: activityContent },
+    }),
+    prisma.audit_logs.create({
+      data: {
+        user_id: actor.id,
+        entity_type: "lead",
+        entity_id: context.leadId,
+        action: "automation_activity_created",
+        new_data: { ruleId: context.ruleId, activityType },
+      },
+    }),
+  ]);
+}
 
-  await prisma.lead_activities.create({
-    data: {
-      lead_id: context.leadId,
-      user_id: lead.assigned_to,
-      type: activityType,
-      content: activityContent,
-    },
-  });
+async function requireActor(context: AutomationContext) {
+  if (!context.actorId) throw new UnrecoverableError("Automation context không có tài khoản kích hoạt.");
+  const actor = await getAuthUser(context.actorId);
+  if (!actor) throw new UnrecoverableError("Tài khoản kích hoạt automation không còn hoạt động.");
+  return actor;
 }

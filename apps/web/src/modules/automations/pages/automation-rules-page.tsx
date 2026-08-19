@@ -26,6 +26,7 @@ import {
 import { Input } from "@/components/ui/input";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useAuth } from "@/modules/auth/auth-context";
+import { ApiError } from "@/services/api";
 import {
   listAutomationRules,
   toggleAutomationRule,
@@ -33,6 +34,7 @@ import {
   createAutomationRule,
 } from "@/services/automation.service";
 import {
+  SUPPORTED_AUTOMATION_TRIGGER_TYPES,
   TRIGGER_TYPE_LABELS,
   type AutomationRuleListItem,
 } from "../automation.types";
@@ -109,6 +111,14 @@ export function AutomationRulesPage() {
           Tạo rule mới
         </Button>
       </div>
+
+      {toggleMutation.error && (
+        <p role="alert" className="rounded-md border border-destructive/30 bg-destructive/5 px-4 py-3 text-sm text-destructive">
+          {toggleMutation.error instanceof ApiError
+            ? toggleMutation.error.message
+            : "Không thể thay đổi trạng thái rule. Vui lòng thử lại."}
+        </p>
+      )}
 
       {/* Rule list */}
       {rulesQuery.isLoading ? (
@@ -309,8 +319,8 @@ function CreateRuleDialog({
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>
-                {Object.entries(TRIGGER_TYPE_LABELS).map(([value, label]) => (
-                  <SelectItem key={value} value={value}>{label}</SelectItem>
+                {SUPPORTED_AUTOMATION_TRIGGER_TYPES.map((value) => (
+                  <SelectItem key={value} value={value}>{TRIGGER_TYPE_LABELS[value]}</SelectItem>
                 ))}
               </SelectContent>
             </Select>

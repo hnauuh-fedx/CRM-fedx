@@ -1,5 +1,7 @@
 import { prisma } from "../../database/prisma";
 import type { AuthUser } from "../auth/auth.types";
+import { validateAutomationGraph } from "./automation-graph.validator";
+import { SUPPORTED_AUTOMATION_TRIGGER_TYPES } from "./automation.types";
 
 export type AutomationRuleListQuery = {
   page: number;
@@ -18,9 +20,7 @@ export type AutomationRuleCreateInput = {
   institutionProgramId?: string;
 };
 
-export type AutomationRuleUpdateInput = Partial<AutomationRuleCreateInput> & {
-  isActive?: boolean;
-};
+export type AutomationRuleUpdateInput = Partial<AutomationRuleCreateInput>;
 
 export async function listAutomationRules(query: AutomationRuleListQuery) {
   const where = {
@@ -119,8 +119,18 @@ export async function createAutomationRule(user: AuthUser, input: AutomationRule
 }
 
 export async function updateAutomationRule(user: AuthUser, id: string, input: AutomationRuleUpdateInput) {
-  const existing = await prisma.automation_rules.findUnique({ where: { id }, select: { id: true, name: true, version: true } });
+  const existing = await prisma.automation_rules.findUnique({
+    where: { id },
+    select: { id: true, name: true, version: true, is_active: true },
+  });
   if (!existing) return null;
+  if (existing.is_active && (
+    input.graphData !== undefined ||
+    input.triggerType !== undefined ||
+    input.institutionProgramId !== undefined
+  )) {
+    return { ok: false as const, reason: "rule_is_active" as const };
+  }
 
   const updated = await prisma.automation_rules.update({
     where: { id },
@@ -129,7 +139,6 @@ export async function updateAutomationRule(user: AuthUser, id: string, input: Au
       ...(input.description !== undefined ? { description: input.description?.trim() || null } : {}),
       ...(input.triggerType !== undefined ? { trigger_type: input.triggerType } : {}),
       ...(input.graphData !== undefined ? { graph_data: input.graphData as object, version: { increment: 1 } } : {}),
-      ...(input.isActive !== undefined ? { is_active: input.isActive } : {}),
       ...(input.institutionProgramId !== undefined ? { institution_program_id: input.institutionProgramId || null } : {}),
       updated_at: new Date(),
     },
@@ -146,7 +155,7 @@ export async function updateAutomationRule(user: AuthUser, id: string, input: Au
       new_data: { name: updated.name, isActive: updated.is_active, version: updated.version },
     },
   });
-  return updated;
+  return { ok: true as const, data: updated };
 }
 
 export async function deleteAutomationRule(user: AuthUser, id: string) {
@@ -171,8 +180,23 @@ export async function deleteAutomationRule(user: AuthUser, id: string) {
 }
 
 export async function toggleAutomationRule(user: AuthUser, id: string, isActive: boolean) {
-  const existing = await prisma.automation_rules.findUnique({ where: { id }, select: { id: true, name: true, is_active: true } });
+  const existing = await prisma.automation_rules.findUnique({
+    where: { id },
+    select: { id: true, name: true, is_active: true, trigger_type: true, graph_data: true },
+  });
   if (!existing) return null;
+
+  if (isActive) {
+    const validation = validateRuleConfiguration(existing.trigger_type, existing.graph_data);
+    if (!validation.valid) {
+      const unsupportedTrigger = validation.issues.some((issue) => issue.code === "UNSUPPORTED_TRIGGER");
+      return {
+        ok: false as const,
+        reason: unsupportedTrigger ? "unsupported_trigger" as const : "invalid_graph" as const,
+        validation,
+      };
+    }
+  }
 
   const updated = await prisma.automation_rules.update({
     where: { id },
@@ -189,7 +213,33 @@ export async function toggleAutomationRule(user: AuthUser, id: string, isActive:
       new_data: { isActive: updated.is_active },
     },
   });
-  return updated;
+  return { ok: true as const, data: updated };
+}
+
+export async function validateAutomationRule(id: string) {
+  const rule = await prisma.automation_rules.findUnique({
+    where: { id },
+    select: { id: true, trigger_type: true, graph_data: true },
+  });
+  if (!rule) return null;
+  return validateRuleConfiguration(rule.trigger_type, rule.graph_data);
+}
+
+function validateRuleConfiguration(triggerType: string, graphData: unknown) {
+  const graphValidation = validateAutomationGraph(graphData);
+  if (SUPPORTED_AUTOMATION_TRIGGER_TYPES.includes(triggerType as typeof SUPPORTED_AUTOMATION_TRIGGER_TYPES[number])) {
+    return graphValidation;
+  }
+  return {
+    valid: false,
+    issues: [
+      {
+        code: "UNSUPPORTED_TRIGGER" as const,
+        message: `Sự kiện kích hoạt ${triggerType} chưa có bộ phát sự kiện trong hệ thống.`,
+      },
+      ...graphValidation.issues,
+    ],
+  };
 }
 
 export async function listExecutionLogs(ruleId: string, page: number, limit: number) {
@@ -224,22 +274,43 @@ export async function listExecutionLogs(ruleId: string, page: number, limit: num
   };
 }
 
-export async function getAutomationOptions() {
-  const [programs, triggerTypes] = await Promise.all([
+export async function getAutomationOptions(user: AuthUser) {
+  const canAssign = user.permissions.includes("lead.assign") || user.permissions.includes("lead.reassign");
+  const [programs, assignees, pipelineStages, targetRoles] = await Promise.all([
     prisma.institution_programs.findMany({
       where: { status: "active" },
       select: { id: true, name: true, institutions: { select: { name: true } } },
       orderBy: { name: "asc" },
     }),
-    prisma.automation_rules.findMany({
-      select: { trigger_type: true },
-      distinct: ["trigger_type"],
-      take: 50,
+    canAssign
+      ? prisma.users.findMany({
+          where: { status: "active", deleted_at: null },
+          select: { id: true, full_name: true },
+          orderBy: { full_name: "asc" },
+          take: 500,
+        })
+      : Promise.resolve([]),
+    prisma.pipeline_stages.findMany({
+      select: { id: true, name: true, pipelines: { select: { name: true } } },
+      orderBy: [{ pipelines: { name: "asc" } }, { position: "asc" }, { name: "asc" }],
+      take: 500,
+    }),
+    prisma.roles.findMany({
+      select: { id: true, code: true, name: true },
+      orderBy: { name: "asc" },
+      take: 100,
     }),
   ]);
   return {
     institutionPrograms: programs.map((p) => ({ id: p.id, name: p.name, institutionName: p.institutions.name })),
-    triggerTypes: triggerTypes.map((r) => r.trigger_type).sort(),
+    triggerTypes: [...SUPPORTED_AUTOMATION_TRIGGER_TYPES],
+    assignees: assignees.map((assignee) => ({ id: assignee.id, fullName: assignee.full_name })),
+    pipelineStages: pipelineStages.map((stage) => ({
+      id: stage.id,
+      name: stage.name,
+      pipelineName: stage.pipelines?.name ?? null,
+    })),
+    targetRoles,
   };
 }
 

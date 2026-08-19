@@ -1,4 +1,4 @@
-import { useState, useCallback } from "react";
+import { useState, useCallback, useEffect } from "react";
 import { useParams, useNavigate } from "react-router";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { ArrowLeft, Save, Play, Pause, Loader2 } from "lucide-react";
@@ -8,7 +8,8 @@ import { Badge } from "@/components/ui/badge";
 import { ErrorState } from "@/components/shared/error-state";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useAuth } from "@/modules/auth/auth-context";
-import { getAutomationRule, toggleAutomationRule, updateAutomationRule } from "@/services/automation.service";
+import { getAutomationOptions, getAutomationRule, toggleAutomationRule, updateAutomationRule } from "@/services/automation.service";
+import { ApiError } from "@/services/api";
 import type { AutomationNode, AutomationNodeData, AutomationEdge, AutomationGraphData } from "../automation.types";
 import { TRIGGER_TYPE_LABELS } from "../automation.types";
 import { AutomationBuilderCanvas } from "./automation-builder-canvas";
@@ -32,13 +33,18 @@ export function AutomationBuilderPage() {
     enabled: !!id,
   });
 
-  // Initialize graph from server once
-  if (ruleQuery.data && !initialized) {
+  const optionsQuery = useQuery({
+    queryKey: ["automations", "options"],
+    queryFn: () => getAutomationOptions(auth.accessToken!),
+  });
+
+  useEffect(() => {
+    if (!ruleQuery.data || initialized) return;
     const graphData = ruleQuery.data.graphData as AutomationGraphData;
-    setNodes((graphData?.nodes as AutomationNode[]) ?? []);
-    setEdges((graphData?.edges as AutomationEdge[]) ?? []);
+    setNodes(graphData?.nodes ?? []);
+    setEdges(graphData?.edges ?? []);
     setInitialized(true);
-  }
+  }, [initialized, ruleQuery.data]);
 
   const saveMutation = useMutation({
     mutationFn: () =>
@@ -46,6 +52,7 @@ export function AutomationBuilderPage() {
     onSuccess: () => {
       setIsDirty(false);
       queryClient.invalidateQueries({ queryKey: ["automations"] });
+      queryClient.invalidateQueries({ queryKey: ["automations", "detail", id] });
     },
   });
 
@@ -77,6 +84,7 @@ export function AutomationBuilderPage() {
   }, []);
 
   const rule = ruleQuery.data;
+  const mutationError = saveMutation.error ?? toggleMutation.error;
 
   if (ruleQuery.isLoading) {
     return (
@@ -125,6 +133,11 @@ export function AutomationBuilderPage() {
           </Badge>
         </div>
         <div className="flex items-center gap-2">
+          {mutationError && (
+            <p role="alert" className="max-w-80 text-sm text-destructive">
+              {mutationError instanceof ApiError ? mutationError.message : "Không thể cập nhật rule. Vui lòng thử lại."}
+            </p>
+          )}
           {isDirty && (
             <span className="text-xs text-muted-foreground">Chưa lưu</span>
           )}
@@ -133,7 +146,8 @@ export function AutomationBuilderPage() {
             size="sm"
             variant="outline"
             onClick={() => saveMutation.mutate()}
-            disabled={saveMutation.isPending || !isDirty}
+            disabled={saveMutation.isPending || !isDirty || rule.isActive}
+            title={rule.isActive ? "Dừng rule trước khi lưu thay đổi" : undefined}
           >
             {saveMutation.isPending ? (
               <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" />
@@ -147,7 +161,8 @@ export function AutomationBuilderPage() {
             size="sm"
             variant={rule.isActive ? "secondary" : "default"}
             onClick={() => toggleMutation.mutate(!rule.isActive)}
-            disabled={toggleMutation.isPending}
+            disabled={toggleMutation.isPending || saveMutation.isPending || (isDirty && !rule.isActive)}
+            title={isDirty && !rule.isActive ? "Lưu thay đổi trước khi bật rule" : undefined}
           >
             {toggleMutation.isPending ? (
               <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" />
@@ -177,6 +192,8 @@ export function AutomationBuilderPage() {
           <NodePropertiesPanel
             selectedNodeId={selectedNodeId}
             nodes={nodes}
+            options={optionsQuery.data}
+            isLoadingOptions={optionsQuery.isLoading}
             onNodeUpdate={handleNodeUpdate}
             onClose={() => setSelectedNodeId(null)}
           />

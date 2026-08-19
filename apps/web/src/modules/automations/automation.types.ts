@@ -88,7 +88,16 @@ export type AutomationRuleListResponse = {
 export type AutomationOptions = {
   institutionPrograms: Array<{ id: string; name: string; institutionName: string }>;
   triggerTypes: string[];
+  assignees: Array<{ id: string; fullName: string }>;
+  pipelineStages: Array<{ id: string; name: string; pipelineName: string | null }>;
+  targetRoles: Array<{ id: string; code: string; name: string }>;
 };
+
+export const SUPPORTED_AUTOMATION_TRIGGER_TYPES = [
+  "lead_created",
+  "lead_status_changed",
+  "lead_assigned",
+] as const;
 
 export const TRIGGER_TYPE_LABELS: Record<string, string> = {
   lead_created: "Lead được tạo mới",
