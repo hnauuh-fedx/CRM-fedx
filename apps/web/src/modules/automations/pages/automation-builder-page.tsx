@@ -14,6 +14,7 @@ import type { AutomationNode, AutomationNodeData, AutomationEdge, AutomationGrap
 import { TRIGGER_TYPE_LABELS } from "../automation.types";
 import { AutomationBuilderCanvas } from "./automation-builder-canvas";
 import { NodePropertiesPanel } from "./builder/node-properties-panel";
+import { AutomationTestRunDialog } from "./builder/automation-test-run-dialog";
 
 export function AutomationBuilderPage() {
   const { id } = useParams<{ id: string }>();
@@ -85,6 +86,7 @@ export function AutomationBuilderPage() {
 
   const rule = ruleQuery.data;
   const mutationError = saveMutation.error ?? toggleMutation.error;
+  const canTestRun = ["lead.view_all", "lead.view_department", "lead.view_assigned"].some(auth.can);
 
   if (ruleQuery.isLoading) {
     return (
@@ -140,6 +142,13 @@ export function AutomationBuilderPage() {
           )}
           {isDirty && (
             <span className="text-xs text-muted-foreground">Chưa lưu</span>
+          )}
+          {canTestRun && id && auth.accessToken && (
+            <AutomationTestRunDialog
+              ruleId={id}
+              accessToken={auth.accessToken}
+              disabled={isDirty || saveMutation.isPending || toggleMutation.isPending}
+            />
           )}
           <Button
             id="save-rule-btn"

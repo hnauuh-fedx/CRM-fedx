@@ -2,13 +2,17 @@ import { Router } from "express";
 import { z } from "zod";
 
 import { requireAnyPermission, requireAuthentication } from "../../middlewares/auth.middleware";
+import { leadListPermissions } from "../leads/lead-list.service";
 import {
   createAutomationRule,
   deleteAutomationRule,
   getAutomationOptions,
+  getAutomationExecution,
   getAutomationRule,
   listAutomationRules,
   listExecutionLogs,
+  listAutomationTestLeads,
+  runAutomationTest,
   toggleAutomationRule,
   updateAutomationRule,
   validateAutomationRule,
@@ -54,6 +58,16 @@ const toggleSchema = z.object({
 const logQuerySchema = z.object({
   page: z.coerce.number().int().min(1).default(1),
   limit: z.coerce.number().int().min(1).max(100).default(20),
+});
+
+const testLeadQuerySchema = z.object({
+  page: z.coerce.number().int().min(1).default(1),
+  limit: z.coerce.number().int().min(1).max(50).default(20),
+  search: z.string().trim().max(100).optional().transform((value) => value || undefined),
+});
+
+const testRunSchema = z.object({
+  leadId: z.string().uuid(),
 });
 
 const entityIdSchema = z.string().uuid();
@@ -106,6 +120,71 @@ automationsRouter.post(
         return;
       }
       response.status(validation.valid ? 200 : 422).json(validation);
+    } catch (error) {
+      next(error);
+    }
+  },
+);
+
+// GET /api/automations/:id/test-leads
+automationsRouter.get(
+  "/:id/test-leads",
+  requireAnyPermission("automation.manage"),
+  requireAnyPermission(...leadListPermissions),
+  async (request, response, next) => {
+    try {
+      const parsedId = entityIdSchema.safeParse(request.params.id);
+      const parsedQuery = testLeadQuerySchema.safeParse(request.query);
+      if (!parsedId.success || !parsedQuery.success) {
+        response.status(400).json({ message: "Tham số tìm Lead chạy thử không hợp lệ." });
+        return;
+      }
+      const result = await listAutomationTestLeads(request.authUser!, parsedId.data, parsedQuery.data);
+      if (!result) {
+        response.status(404).json({ message: "Không tìm thấy automation rule." });
+        return;
+      }
+      response.json(result);
+    } catch (error) {
+      next(error);
+    }
+  },
+);
+
+// POST /api/automations/:id/test-run
+automationsRouter.post(
+  "/:id/test-run",
+  requireAnyPermission("automation.manage"),
+  requireAnyPermission(...leadListPermissions),
+  async (request, response, next) => {
+    try {
+      const parsedId = entityIdSchema.safeParse(request.params.id);
+      const parsedBody = testRunSchema.safeParse(request.body);
+      if (!parsedId.success || !parsedBody.success) {
+        response.status(400).json({ message: "Dữ liệu chạy thử automation không hợp lệ." });
+        return;
+      }
+      const result = await runAutomationTest(request.authUser!, parsedId.data, parsedBody.data.leadId);
+      if (!result.ok) {
+        if (result.reason === "rule_not_found" || result.reason === "lead_not_found") {
+          response.status(404).json({
+            message: result.reason === "rule_not_found"
+              ? "Không tìm thấy automation rule."
+              : "Không tìm thấy Lead trong phạm vi truy cập hoặc phạm vi chương trình của rule.",
+          });
+          return;
+        }
+        if (result.reason === "queue_unavailable") {
+          response.status(503).json({ message: "Automation worker hiện không khả dụng." });
+          return;
+        }
+        response.status(422).json({
+          message: "Rule chưa hợp lệ để chạy thử.",
+          validation: "validation" in result ? result.validation : undefined,
+        });
+        return;
+      }
+      response.status(202).json(result.data);
     } catch (error) {
       next(error);
     }
@@ -255,6 +334,30 @@ automationsRouter.get(
         return;
       }
       response.json(await listExecutionLogs(parsedId.data, parsedQuery.data.page, parsedQuery.data.limit));
+    } catch (error) {
+      next(error);
+    }
+  },
+);
+
+// GET /api/automations/:id/logs/:executionId
+automationsRouter.get(
+  "/:id/logs/:executionId",
+  requireAnyPermission("automation.manage"),
+  async (request, response, next) => {
+    try {
+      const parsedRuleId = entityIdSchema.safeParse(request.params.id);
+      const parsedExecutionId = entityIdSchema.safeParse(request.params.executionId);
+      if (!parsedRuleId.success || !parsedExecutionId.success) {
+        response.status(400).json({ message: "Mã execution không hợp lệ." });
+        return;
+      }
+      const execution = await getAutomationExecution(parsedRuleId.data, parsedExecutionId.data);
+      if (!execution) {
+        response.status(404).json({ message: "Không tìm thấy lần thực thi automation." });
+        return;
+      }
+      response.json(execution);
     } catch (error) {
       next(error);
     }

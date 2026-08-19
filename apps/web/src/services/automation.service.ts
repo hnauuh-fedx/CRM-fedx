@@ -1,7 +1,10 @@
 import type {
   AutomationOptions,
+  AutomationExecutionDetail,
   AutomationRuleDetail,
   AutomationRuleListResponse,
+  AutomationTestLeadResponse,
+  AutomationTestRunResponse,
 } from "@/modules/automations/automation.types";
 import { apiRequest } from "./api";
 
@@ -45,13 +48,30 @@ export function createAutomationRule(
 
 export function updateAutomationRule(
   id: string,
-  body: { name?: string; description?: string; triggerType?: string; graphData?: object; isActive?: boolean },
+  body: { name?: string; description?: string; triggerType?: string; graphData?: object; institutionProgramId?: string },
   accessToken: string,
 ) {
   return apiRequest<{ id: string; name: string; isActive: boolean; version: number }>(`/automations/${id}`, {
     method: "PATCH",
     body: JSON.stringify(body),
   }, accessToken);
+}
+
+export function getAutomationTestLeads(id: string, accessToken: string, search?: string) {
+  const query = new URLSearchParams({ limit: "50" });
+  if (search) query.set("search", search);
+  return apiRequest<AutomationTestLeadResponse>(`/automations/${id}/test-leads?${query.toString()}`, {}, accessToken);
+}
+
+export function runAutomationTest(id: string, leadId: string, accessToken: string) {
+  return apiRequest<AutomationTestRunResponse>(`/automations/${id}/test-run`, {
+    method: "POST",
+    body: JSON.stringify({ leadId }),
+  }, accessToken);
+}
+
+export function getAutomationExecution(id: string, executionId: string, accessToken: string) {
+  return apiRequest<AutomationExecutionDetail>(`/automations/${id}/logs/${executionId}`, {}, accessToken);
 }
 
 export function toggleAutomationRule(id: string, isActive: boolean, accessToken: string) {

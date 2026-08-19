@@ -93,6 +93,46 @@ export type AutomationOptions = {
   targetRoles: Array<{ id: string; code: string; name: string }>;
 };
 
+export type AutomationTestLead = {
+  id: string;
+  leadCode: string | null;
+  fullName: string;
+  phone: string | null;
+  institutionProgramId: string | null;
+};
+
+export type AutomationTestLeadResponse = {
+  data: AutomationTestLead[];
+  pagination: { page: number; limit: number; total: number; totalPages: number };
+};
+
+export type AutomationTestRunResponse = {
+  executionId: string;
+  status: string;
+  version: number;
+};
+
+export type AutomationExecutionDetail = {
+  id: string;
+  source: string;
+  status: string;
+  version: number | null;
+  contextData: unknown;
+  errorMessage: string | null;
+  startedAt: string | null;
+  completedAt: string | null;
+  nodes: Array<{
+    id: string;
+    nodeId: string;
+    nodeType: string;
+    status: string;
+    attemptCount: number;
+    errorMessage: string | null;
+    startedAt: string | null;
+    completedAt: string | null;
+  }>;
+};
+
 export const SUPPORTED_AUTOMATION_TRIGGER_TYPES = [
   "lead_created",
   "lead_status_changed",

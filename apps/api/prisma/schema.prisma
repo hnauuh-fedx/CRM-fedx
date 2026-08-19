@@ -150,12 +150,12 @@ model custom_field_values {
   updated_at      DateTime?      @default(now()) @db.Timestamp(6)
   custom_fields   custom_fields? @relation(fields: [custom_field_id], references: [id], onDelete: Restrict, onUpdate: NoAction)
 
+  @@unique([custom_field_id, entity_type, entity_id], map: "uq_custom_field_values_field_entity")
   @@index([entity_type, entity_id], map: "idx_custom_field_values_entity")
   @@index([custom_field_id, value_text], map: "idx_custom_field_values_text_lookup")
   @@index([custom_field_id, value_number], map: "idx_custom_field_values_number_lookup")
   @@index([custom_field_id, value_date], map: "idx_custom_field_values_date_lookup")
   @@index([custom_field_id, value_boolean], map: "idx_custom_field_values_boolean_lookup")
-  @@unique([custom_field_id, entity_type, entity_id], map: "uq_custom_field_values_field_entity")
 }
 
 model custom_field_groups {
@@ -181,35 +181,35 @@ model custom_field_groups {
 }
 
 model custom_fields {
-  id                  String                @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
-  module              String                @db.VarChar(100)
-  field_key           String                @db.VarChar(150)
-  field_label         String                @db.VarChar(255)
-  field_type          String                @db.VarChar(100)
-  is_required         Boolean?              @default(false)
-  description         String?
-  entity_type         String?               @db.VarChar(50)
-  scope_type          String?               @default("GLOBAL") @db.VarChar(20)
-  program_id          String?               @db.Uuid
-  is_active           Boolean?              @default(true)
-  archived_at         DateTime?             @db.Timestamp(6)
-  is_searchable       Boolean?              @default(false)
-  is_filterable       Boolean?              @default(false)
-  is_sensitive        Boolean?              @default(false)
-  display_order       Int?                  @default(0)
-  options             Json?
-  validation_rules    Json?
-  default_value       Json?
-  created_by_id       String?               @db.Uuid
-  updated_by_id       String?               @db.Uuid
-  created_at          DateTime?             @default(now()) @db.Timestamp(6)
-  updated_at          DateTime?             @default(now()) @db.Timestamp(6)
-  group_id            String                @db.Uuid
-  custom_field_values custom_field_values[]
-  custom_field_groups custom_field_groups   @relation(fields: [group_id], references: [id], onDelete: Restrict, onUpdate: NoAction)
+  id                   String                @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  module               String                @db.VarChar(100)
+  field_key            String                @db.VarChar(150)
+  field_label          String                @db.VarChar(255)
+  field_type           String                @db.VarChar(100)
+  is_required          Boolean?              @default(false)
+  description          String?
+  entity_type          String?               @db.VarChar(50)
+  scope_type           String?               @default("GLOBAL") @db.VarChar(20)
+  program_id           String?               @db.Uuid
+  is_active            Boolean?              @default(true)
+  archived_at          DateTime?             @db.Timestamp(6)
+  is_searchable        Boolean?              @default(false)
+  is_filterable        Boolean?              @default(false)
+  is_sensitive         Boolean?              @default(false)
+  display_order        Int?                  @default(0)
+  options              Json?
+  validation_rules     Json?
+  default_value        Json?
+  created_by_id        String?               @db.Uuid
+  updated_by_id        String?               @db.Uuid
+  created_at           DateTime?             @default(now()) @db.Timestamp(6)
+  updated_at           DateTime?             @default(now()) @db.Timestamp(6)
+  group_id             String                @db.Uuid
+  custom_field_values  custom_field_values[]
+  custom_field_groups  custom_field_groups   @relation(fields: [group_id], references: [id], onDelete: Restrict, onUpdate: NoAction)
   institution_programs institution_programs? @relation(fields: [program_id], references: [id], onDelete: Restrict, onUpdate: NoAction)
-  created_by          users?                @relation("custom_fields_created_by", fields: [created_by_id], references: [id], onDelete: SetNull, onUpdate: NoAction)
-  updated_by          users?                @relation("custom_fields_updated_by", fields: [updated_by_id], references: [id], onDelete: SetNull, onUpdate: NoAction)
+  created_by           users?                @relation("custom_fields_created_by", fields: [created_by_id], references: [id], onDelete: SetNull, onUpdate: NoAction)
+  updated_by           users?                @relation("custom_fields_updated_by", fields: [updated_by_id], references: [id], onDelete: SetNull, onUpdate: NoAction)
 
   @@index([entity_type, scope_type, program_id, display_order, id], map: "idx_custom_fields_entity_scope_order")
   @@index([group_id, display_order, id], map: "idx_custom_fields_group_order")
@@ -395,27 +395,27 @@ model lead_status_histories {
 }
 
 model leads {
-  id                             String                  @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
-  lead_code                      String?                 @unique @db.VarChar(100)
-  full_name                      String                  @db.VarChar(255)
-  gender                         String?                 @db.VarChar(20)
-  date_of_birth                  DateTime?               @db.Date
-  phone                          String                  @db.VarChar(30)
-  email                          String?                 @db.VarChar(255)
-  cccd                           String?                 @db.VarChar(30)
-  source_id                      String?                 @db.Uuid
-  institution_program_id         String?                 @db.Uuid
-  major_id                       String?                 @db.Uuid
-  pipeline_stage_id              String?                 @db.Uuid
-  owner_id                       String?                 @db.Uuid
-  assigned_to                    String?                 @db.Uuid
-  status                         String?                 @default("new") @db.VarChar(50)
-  lead_score                     Int?                    @default(0)
-  temperature                    String?                 @db.VarChar(50)
+  id                             String                       @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  lead_code                      String?                      @unique @db.VarChar(100)
+  full_name                      String                       @db.VarChar(255)
+  gender                         String?                      @db.VarChar(20)
+  date_of_birth                  DateTime?                    @db.Date
+  phone                          String                       @db.VarChar(30)
+  email                          String?                      @db.VarChar(255)
+  cccd                           String?                      @db.VarChar(30)
+  source_id                      String?                      @db.Uuid
+  institution_program_id         String?                      @db.Uuid
+  major_id                       String?                      @db.Uuid
+  pipeline_stage_id              String?                      @db.Uuid
+  owner_id                       String?                      @db.Uuid
+  assigned_to                    String?                      @db.Uuid
+  status                         String?                      @default("new") @db.VarChar(50)
+  lead_score                     Int?                         @default(0)
+  temperature                    String?                      @db.VarChar(50)
   note                           String?
-  created_at                     DateTime?               @default(now()) @db.Timestamp(6)
-  updated_at                     DateTime?               @default(now()) @db.Timestamp(6)
-  deleted_at                     DateTime?               @db.Timestamp(6)
+  created_at                     DateTime?                    @default(now()) @db.Timestamp(6)
+  updated_at                     DateTime?                    @default(now()) @db.Timestamp(6)
+  deleted_at                     DateTime?                    @db.Timestamp(6)
   addresses                      addresses[]
   admission_documents            admission_documents[]
   admission_profiles             admission_profiles?
@@ -424,12 +424,12 @@ model leads {
   lead_notes                     lead_notes[]
   lead_status_histories          lead_status_histories[]
   marketing_form_submissions     marketing_form_submissions[]
-  users_leads_assigned_toTousers users?                  @relation("leads_assigned_toTousers", fields: [assigned_to], references: [id], onDelete: NoAction, onUpdate: NoAction)
-  users_leads_owner_idTousers    users?                  @relation("leads_owner_idTousers", fields: [owner_id], references: [id], onDelete: NoAction, onUpdate: NoAction)
-  pipeline_stages                pipeline_stages?        @relation(fields: [pipeline_stage_id], references: [id], onDelete: NoAction, onUpdate: NoAction)
-  lead_sources                   lead_sources?           @relation(fields: [source_id], references: [id], onDelete: NoAction, onUpdate: NoAction)
-  institution_programs           institution_programs?   @relation(fields: [institution_program_id], references: [id], onDelete: NoAction, onUpdate: NoAction)
-  majors                         majors?                 @relation(fields: [major_id], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  users_leads_assigned_toTousers users?                       @relation("leads_assigned_toTousers", fields: [assigned_to], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  users_leads_owner_idTousers    users?                       @relation("leads_owner_idTousers", fields: [owner_id], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  pipeline_stages                pipeline_stages?             @relation(fields: [pipeline_stage_id], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  lead_sources                   lead_sources?                @relation(fields: [source_id], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  institution_programs           institution_programs?        @relation(fields: [institution_program_id], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  majors                         majors?                      @relation(fields: [major_id], references: [id], onDelete: NoAction, onUpdate: NoAction)
   relatives                      relatives[]
   reminders                      reminders[]
   student_profiles               student_profiles?
@@ -471,41 +471,41 @@ model majors {
 }
 
 model marketing_forms {
-  id                              String                          @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
-  name                            String                          @db.VarChar(255)
-  slug                            String?                         @unique @db.VarChar(160)
-  platform                        String?                         @db.VarChar(100)
-  form_code                       String?                         @db.VarChar(255)
-  campaign_id                     String?                         @db.Uuid
-  source_id                       String?                         @db.Uuid
-  form_type                       String?                         @default("lead_form") @db.VarChar(50)
-  title                           String?                         @db.VarChar(255)
-  subtitle                        String?                         @db.VarChar(500)
-  description                     String?
-  submit_button_label             String?                         @db.VarChar(150)
-  template_id                     String?                         @db.Uuid
-  primary_color                   String?                         @db.VarChar(32)
-  background_color                String?                         @db.VarChar(32)
-  public_key                      String?                         @unique @db.VarChar(64)
-  webhook_enabled                 Boolean?                        @default(false)
-  webhook_secret                  String?                         @db.VarChar(128)
-  display_settings                Json?
-  duplicate_settings              Json?
-  success_settings                Json?
-  access_settings                 Json?
-  close_settings                  Json?
-  advanced_settings               Json?
-  created_by                      String?                         @db.Uuid
-  status                          String?                         @default("active") @db.VarChar(50)
-  created_at                      DateTime?                       @default(now()) @db.Timestamp(6)
-  updated_at                      DateTime?                       @default(now()) @db.Timestamp(6)
-  users                           users?                          @relation(fields: [created_by], references: [id], onDelete: NoAction, onUpdate: NoAction)
-  campaigns                       campaigns?                      @relation(fields: [campaign_id], references: [id], onDelete: NoAction, onUpdate: NoAction)
-  lead_sources                    lead_sources?                   @relation(fields: [source_id], references: [id], onDelete: NoAction, onUpdate: NoAction)
-  marketing_form_templates        marketing_form_templates?       @relation(fields: [template_id], references: [id], onDelete: NoAction, onUpdate: NoAction)
-  marketing_form_fields           marketing_form_fields[]
-  marketing_form_submissions      marketing_form_submissions[]
-  marketing_form_field_mappings   marketing_form_field_mappings[]
+  id                            String                          @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  name                          String                          @db.VarChar(255)
+  slug                          String?                         @unique @db.VarChar(160)
+  platform                      String?                         @db.VarChar(100)
+  form_code                     String?                         @db.VarChar(255)
+  campaign_id                   String?                         @db.Uuid
+  source_id                     String?                         @db.Uuid
+  form_type                     String?                         @default("lead_form") @db.VarChar(50)
+  title                         String?                         @db.VarChar(255)
+  subtitle                      String?                         @db.VarChar(500)
+  description                   String?
+  submit_button_label           String?                         @db.VarChar(150)
+  template_id                   String?                         @db.Uuid
+  primary_color                 String?                         @db.VarChar(32)
+  background_color              String?                         @db.VarChar(32)
+  public_key                    String?                         @unique @db.VarChar(64)
+  webhook_enabled               Boolean?                        @default(false)
+  webhook_secret                String?                         @db.VarChar(128)
+  display_settings              Json?
+  duplicate_settings            Json?
+  success_settings              Json?
+  access_settings               Json?
+  close_settings                Json?
+  advanced_settings             Json?
+  created_by                    String?                         @db.Uuid
+  status                        String?                         @default("active") @db.VarChar(50)
+  created_at                    DateTime?                       @default(now()) @db.Timestamp(6)
+  updated_at                    DateTime?                       @default(now()) @db.Timestamp(6)
+  users                         users?                          @relation(fields: [created_by], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  campaigns                     campaigns?                      @relation(fields: [campaign_id], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  lead_sources                  lead_sources?                   @relation(fields: [source_id], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  marketing_form_templates      marketing_form_templates?       @relation(fields: [template_id], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  marketing_form_fields         marketing_form_fields[]
+  marketing_form_submissions    marketing_form_submissions[]
+  marketing_form_field_mappings marketing_form_field_mappings[]
 
   @@index([campaign_id, created_at, id], map: "idx_marketing_forms_campaign_created_page")
   @@index([created_at, id], map: "idx_marketing_forms_created_page")
@@ -518,23 +518,23 @@ model marketing_forms {
 }
 
 model marketing_form_fields {
-  id                String          @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
-  marketing_form_id String          @db.Uuid
-  field_key         String          @db.VarChar(150)
-  label             String          @db.VarChar(255)
-  placeholder       String?         @db.VarChar(255)
-  field_type        String          @db.VarChar(50)
-  is_required       Boolean         @default(false)
-  options           Json?
-  validation_rules  Json?
-  lead_field        String?         @db.VarChar(100)
-  crm_mapping_field String?         @db.VarChar(100)
-  default_value     String?
-  sort_order        Int             @default(0)
-  is_active         Boolean         @default(true)
-  created_at        DateTime?       @default(now()) @db.Timestamp(6)
-  updated_at        DateTime?       @default(now()) @db.Timestamp(6)
-  marketing_forms   marketing_forms @relation(fields: [marketing_form_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  id                            String                          @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  marketing_form_id             String                          @db.Uuid
+  field_key                     String                          @db.VarChar(150)
+  label                         String                          @db.VarChar(255)
+  placeholder                   String?                         @db.VarChar(255)
+  field_type                    String                          @db.VarChar(50)
+  is_required                   Boolean                         @default(false)
+  options                       Json?
+  validation_rules              Json?
+  lead_field                    String?                         @db.VarChar(100)
+  crm_mapping_field             String?                         @db.VarChar(100)
+  default_value                 String?
+  sort_order                    Int                             @default(0)
+  is_active                     Boolean                         @default(true)
+  created_at                    DateTime?                       @default(now()) @db.Timestamp(6)
+  updated_at                    DateTime?                       @default(now()) @db.Timestamp(6)
+  marketing_forms               marketing_forms                 @relation(fields: [marketing_form_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
   marketing_form_field_mappings marketing_form_field_mappings[]
 
   @@unique([marketing_form_id, field_key])
@@ -543,17 +543,17 @@ model marketing_form_fields {
 }
 
 model marketing_form_field_mappings {
-  id                String          @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
-  marketing_form_id String          @db.Uuid
-  form_field_id     String?         @db.Uuid
-  source_field      String          @db.VarChar(150)
-  lead_field        String          @db.VarChar(100)
-  is_required       Boolean         @default(false)
-  target_table      String?         @db.VarChar(100)
-  target_column     String?         @db.VarChar(100)
-  transform_rule    Json?
-  created_at        DateTime?       @default(now()) @db.Timestamp(6)
-  marketing_forms   marketing_forms @relation(fields: [marketing_form_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  id                    String                 @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  marketing_form_id     String                 @db.Uuid
+  form_field_id         String?                @db.Uuid
+  source_field          String                 @db.VarChar(150)
+  lead_field            String                 @db.VarChar(100)
+  is_required           Boolean                @default(false)
+  target_table          String?                @db.VarChar(100)
+  target_column         String?                @db.VarChar(100)
+  transform_rule        Json?
+  created_at            DateTime?              @default(now()) @db.Timestamp(6)
+  marketing_forms       marketing_forms        @relation(fields: [marketing_form_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
   marketing_form_fields marketing_form_fields? @relation(fields: [form_field_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
 
   @@unique([marketing_form_id, source_field])
@@ -574,23 +574,23 @@ model marketing_form_templates {
 }
 
 model marketing_form_submissions {
-  id                 String           @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
-  marketing_form_id  String           @db.Uuid
-  lead_id            String?          @db.Uuid
+  id                 String          @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  marketing_form_id  String          @db.Uuid
+  lead_id            String?         @db.Uuid
   raw_payload        Json
   normalized_payload Json?
   answers            Json?
-  source             String?          @db.VarChar(100)
-  utm_source         String?          @db.VarChar(255)
-  utm_medium         String?          @db.VarChar(255)
-  utm_campaign       String?          @db.VarChar(255)
-  ip_address         String?          @db.VarChar(100)
+  source             String?         @db.VarChar(100)
+  utm_source         String?         @db.VarChar(255)
+  utm_medium         String?         @db.VarChar(255)
+  utm_campaign       String?         @db.VarChar(255)
+  ip_address         String?         @db.VarChar(100)
   user_agent         String?
-  status             String           @default("received") @db.VarChar(50)
+  status             String          @default("received") @db.VarChar(50)
   error_message      String?
-  created_at         DateTime?        @default(now()) @db.Timestamp(6)
-  marketing_forms    marketing_forms  @relation(fields: [marketing_form_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
-  leads              leads?           @relation(fields: [lead_id], references: [id], onDelete: SetNull, onUpdate: NoAction)
+  created_at         DateTime?       @default(now()) @db.Timestamp(6)
+  marketing_forms    marketing_forms @relation(fields: [marketing_form_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  leads              leads?          @relation(fields: [lead_id], references: [id], onDelete: SetNull, onUpdate: NoAction)
 
   @@index([created_at, id], map: "idx_marketing_form_submissions_created_page")
   @@index([lead_id, created_at, id], map: "idx_marketing_form_submissions_lead_page")
@@ -731,14 +731,14 @@ model role_permissions {
 }
 
 model roles {
-  id               String             @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
-  name             String             @db.VarChar(100)
-  code             String             @unique @db.VarChar(100)
-  description      String?
-  created_at       DateTime?          @default(now()) @db.Timestamp(6)
+  id                 String              @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  name               String              @db.VarChar(100)
+  code               String              @unique @db.VarChar(100)
+  description        String?
+  created_at         DateTime?           @default(now()) @db.Timestamp(6)
   role_access_scopes role_access_scopes?
-  role_permissions role_permissions[]
-  user_roles       user_roles[]
+  role_permissions   role_permissions[]
+  user_roles         user_roles[]
 }
 
 model role_access_scopes {
@@ -884,29 +884,31 @@ model user_roles {
 }
 
 model users {
-  id                                                   String                  @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
-  email                                                String                  @unique @db.VarChar(255)
+  id                                                   String                      @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  email                                                String                      @unique @db.VarChar(255)
   password_hash                                        String
-  full_name                                            String                  @db.VarChar(255)
-  phone                                                String?                 @db.VarChar(30)
+  full_name                                            String                      @db.VarChar(255)
+  phone                                                String?                     @db.VarChar(30)
   avatar_url                                           String?
-  status                                               String?                 @default("active") @db.VarChar(50)
-  last_login_at                                        DateTime?               @db.Timestamp(6)
-  created_at                                           DateTime?               @default(now()) @db.Timestamp(6)
-  updated_at                                           DateTime?               @default(now()) @db.Timestamp(6)
-  deleted_at                                           DateTime?               @db.Timestamp(6)
+  status                                               String?                     @default("active") @db.VarChar(50)
+  last_login_at                                        DateTime?                   @db.Timestamp(6)
+  created_at                                           DateTime?                   @default(now()) @db.Timestamp(6)
+  updated_at                                           DateTime?                   @default(now()) @db.Timestamp(6)
+  deleted_at                                           DateTime?                   @db.Timestamp(6)
   audit_logs                                           audit_logs[]
+  automation_execution_logs                            automation_execution_logs[]
+  automation_rule_versions                             automation_rule_versions[]
   automation_rules                                     automation_rules[]
   campaigns                                            campaigns[]
   departments                                          departments[]
   files                                                files[]
   lead_activities                                      lead_activities[]
-  lead_assignments_lead_assignments_assigned_byTousers lead_assignments[]      @relation("lead_assignments_assigned_byTousers")
-  lead_assignments_lead_assignments_assigned_toTousers lead_assignments[]      @relation("lead_assignments_assigned_toTousers")
+  lead_assignments_lead_assignments_assigned_byTousers lead_assignments[]          @relation("lead_assignments_assigned_byTousers")
+  lead_assignments_lead_assignments_assigned_toTousers lead_assignments[]          @relation("lead_assignments_assigned_toTousers")
   lead_notes                                           lead_notes[]
   lead_status_histories                                lead_status_histories[]
-  leads_leads_assigned_toTousers                       leads[]                 @relation("leads_assigned_toTousers")
-  leads_leads_owner_idTousers                          leads[]                 @relation("leads_owner_idTousers")
+  leads_leads_assigned_toTousers                       leads[]                     @relation("leads_assigned_toTousers")
+  leads_leads_owner_idTousers                          leads[]                     @relation("leads_owner_idTousers")
   marketing_forms                                      marketing_forms[]
   notifications                                        notifications[]
   reminders                                            reminders[]
@@ -914,10 +916,10 @@ model users {
   user_access_scopes                                   user_access_scopes?
   user_departments                                     user_departments[]
   user_roles                                           user_roles[]
-  custom_fields_created_by                             custom_fields[] @relation("custom_fields_created_by")
-  custom_fields_updated_by                             custom_fields[] @relation("custom_fields_updated_by")
-  custom_field_groups_created_by                       custom_field_groups[] @relation("custom_field_groups_created_by")
-  custom_field_groups_updated_by                       custom_field_groups[] @relation("custom_field_groups_updated_by")
+  custom_fields_created_by                             custom_fields[]             @relation("custom_fields_created_by")
+  custom_fields_updated_by                             custom_fields[]             @relation("custom_fields_updated_by")
+  custom_field_groups_created_by                       custom_field_groups[]       @relation("custom_field_groups_created_by")
+  custom_field_groups_updated_by                       custom_field_groups[]       @relation("custom_field_groups_updated_by")
 
   @@index([email], map: "idx_users_email")
   @@index([status], map: "idx_users_status")
@@ -967,36 +969,81 @@ model utm_trackings {
 }
 
 model automation_rules {
-  id                     String                @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
-  institution_program_id String?               @db.Uuid
-  name                   String                @db.VarChar(255)
-  description            String?
-  is_active              Boolean               @default(false)
-  trigger_type           String                @db.VarChar(100)
-  graph_data             Json
-  version                Int                   @default(1)
-  created_by             String?               @db.Uuid
-  created_at             DateTime?             @default(now()) @db.Timestamp(6)
-  updated_at             DateTime?             @default(now()) @db.Timestamp(6)
-  users                  users?                @relation(fields: [created_by], references: [id], onDelete: NoAction, onUpdate: NoAction)
-  institution_programs   institution_programs? @relation(fields: [institution_program_id], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  id                        String                      @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  institution_program_id    String?                     @db.Uuid
+  name                      String                      @db.VarChar(255)
+  description               String?
+  is_active                 Boolean                     @default(false)
+  trigger_type              String                      @db.VarChar(100)
+  graph_data                Json
+  version                   Int                         @default(1)
+  created_by                String?                     @db.Uuid
+  created_at                DateTime?                   @default(now()) @db.Timestamp(6)
+  updated_at                DateTime?                   @default(now()) @db.Timestamp(6)
+  users                     users?                      @relation(fields: [created_by], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  institution_programs      institution_programs?       @relation(fields: [institution_program_id], references: [id], onDelete: NoAction, onUpdate: NoAction)
   automation_execution_logs automation_execution_logs[]
+  automation_rule_versions  automation_rule_versions[]
 
   @@index([is_active, trigger_type], map: "idx_automation_rules_active_trigger")
   @@index([institution_program_id, created_at, id], map: "idx_automation_rules_program_created_page")
   @@index([created_at, id], map: "idx_automation_rules_created_page")
 }
 
+model automation_rule_versions {
+  id                        String                      @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  rule_id                   String                      @db.Uuid
+  version                   Int
+  trigger_type              String                      @db.VarChar(100)
+  graph_data                Json
+  institution_program_id    String?                     @db.Uuid
+  created_by                String?                     @db.Uuid
+  created_at                DateTime?                   @default(now()) @db.Timestamp(6)
+  automation_rules          automation_rules            @relation(fields: [rule_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  users                     users?                      @relation(fields: [created_by], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  automation_execution_logs automation_execution_logs[]
+
+  @@unique([rule_id, version], map: "uq_automation_rule_versions_rule_version")
+  @@index([rule_id, created_at, id], map: "idx_automation_rule_versions_rule_created")
+}
+
 model automation_execution_logs {
-  id            String            @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
-  rule_id       String            @db.Uuid
-  status        String            @default("running") @db.VarChar(50)
-  context_data  Json?
-  error_message String?
-  started_at    DateTime?         @default(now()) @db.Timestamp(6)
-  completed_at  DateTime?         @db.Timestamp(6)
-  automation_rules automation_rules @relation(fields: [rule_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  id                         String                       @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  rule_id                    String                       @db.Uuid
+  rule_version_id            String?                      @db.Uuid
+  requested_by               String?                      @db.Uuid
+  source                     String                       @default("event") @db.VarChar(50)
+  status                     String                       @default("running") @db.VarChar(50)
+  context_data               Json?
+  error_message              String?
+  started_at                 DateTime?                    @default(now()) @db.Timestamp(6)
+  completed_at               DateTime?                    @db.Timestamp(6)
+  automation_rules           automation_rules             @relation(fields: [rule_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  automation_rule_versions   automation_rule_versions?    @relation(fields: [rule_version_id], references: [id], onDelete: SetNull, onUpdate: NoAction)
+  users                      users?                       @relation(fields: [requested_by], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  automation_node_executions automation_node_executions[]
 
   @@index([rule_id, started_at, id], map: "idx_automation_exec_logs_rule_started_page")
   @@index([status, started_at, id], map: "idx_automation_exec_logs_status_started_page")
+  @@index([rule_version_id], map: "idx_automation_exec_logs_rule_version")
+  @@index([requested_by, started_at, id], map: "idx_automation_exec_logs_requester")
+}
+
+model automation_node_executions {
+  id                        String                    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  execution_log_id          String                    @db.Uuid
+  node_id                   String                    @db.VarChar(255)
+  node_type                 String                    @db.VarChar(100)
+  status                    String                    @default("processing") @db.VarChar(50)
+  attempt_count             Int                       @default(0)
+  next_source_handle        String?                   @db.VarChar(100)
+  delay_minutes             Int                       @default(0)
+  error_message             String?
+  started_at                DateTime?                 @default(now()) @db.Timestamp(6)
+  action_completed_at       DateTime?                 @db.Timestamp(6)
+  completed_at              DateTime?                 @db.Timestamp(6)
+  automation_execution_logs automation_execution_logs @relation(fields: [execution_log_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+
+  @@unique([execution_log_id, node_id], map: "uq_automation_node_exec_log_node")
+  @@index([status, started_at, id], map: "idx_automation_node_exec_status_started")
 }

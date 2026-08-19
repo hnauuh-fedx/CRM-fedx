@@ -2,6 +2,9 @@ import { prisma } from "../../database/prisma";
 import type { AuthUser } from "../auth/auth.types";
 import { getLeadScopeWhere } from "./lead-list.service";
 
+type TransactionClient = Parameters<Parameters<typeof prisma.$transaction>[0]>[0];
+export type LeadMutationTransactionEffect = (tx: TransactionClient) => Promise<void>;
+
 export const leadUpdatePermissions = [
   "lead.update_all",
   "lead.update_department",
@@ -13,6 +16,7 @@ export async function changeVisibleLeadStage(
   leadId: string,
   stageId: string,
   institutionProgramId?: string,
+  transactionEffect?: LeadMutationTransactionEffect,
 ) {
   if (!leadUpdatePermissions.some((permission) => actor.permissions.includes(permission))) {
     return { ok: false as const, reason: "permission_denied" as const };
@@ -25,6 +29,7 @@ export async function changeVisibleLeadStage(
     const stage = await tx.pipeline_stages.findUnique({ where: { id: stageId }, select: { id: true, name: true } });
     if (!stage) return { ok: false as const, reason: "stage_not_found" as const };
     if (lead.pipeline_stage_id === stageId) {
+      await transactionEffect?.(tx);
       return { ok: true as const, data: { id: leadId, pipelineStageId: stageId, changed: false } };
     }
 
@@ -51,6 +56,7 @@ export async function changeVisibleLeadStage(
         new_data: { pipelineStageId: stageId },
       },
     });
+    await transactionEffect?.(tx);
     return { ok: true as const, data: { id: leadId, pipelineStageId: stageId, changed: true } };
   });
 }
@@ -60,6 +66,7 @@ export async function assignVisibleLead(
   leadId: string,
   input: { assigneeId: string; departmentId?: string },
   institutionProgramId?: string,
+  transactionEffect?: LeadMutationTransactionEffect,
 ) {
   if (!actor.permissions.includes("lead.assign") && !actor.permissions.includes("lead.reassign")) {
     return { ok: false as const, reason: "permission_denied" as const };
@@ -112,6 +119,7 @@ export async function assignVisibleLead(
         new_data: { assigneeId: assignee.id, departmentId: input.departmentId ?? null },
       },
     });
+    await transactionEffect?.(tx);
     return { ok: true as const, data: { id: leadId, assigneeId: assignee.id } };
   });
 }
