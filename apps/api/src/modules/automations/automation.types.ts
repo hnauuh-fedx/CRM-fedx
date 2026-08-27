@@ -91,6 +91,7 @@ export type AutomationOptions = {
   assignees: Array<{ id: string; fullName: string }>;
   pipelineStages: Array<{ id: string; name: string; pipelineName: string | null }>;
   targetRoles: Array<{ id: string; code: string; name: string }>;
+  systemFieldOptions: Record<string, Array<{ code: string; label: string }>>;
 };
 
 export const SUPPORTED_AUTOMATION_TRIGGER_TYPES = [

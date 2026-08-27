@@ -15,6 +15,7 @@ const scopedRoleCode = `AUTO_SCOPED_${runId}`.toUpperCase();
 const notificationTitle = `[AUTOMATION ${runId}] Thông báo nhánh đúng`;
 const activityContent = `[AUTOMATION ${runId}] Hoàn tất nhánh đúng`;
 const delayedActivityContent = `[AUTOMATION ${runId}] Hoàn tất sau delay`;
+const matchingLeadName = `Automation Matching Lead ${runId}`;
 
 const permissionDefinitions = [
   { code: "automation.manage", name: "Quản lý Rule Automation", module: "system" },
@@ -34,6 +35,7 @@ const leadIds: string[] = [];
 const userIds: string[] = [];
 const roleIds: string[] = [];
 const permissionSnapshots: Array<{ id: string; existed: boolean; isActive: boolean | null }> = [];
+const customFieldIds: string[] = [];
 
 async function request(
   baseUrl: string,
@@ -180,7 +182,7 @@ async function createFixtures() {
   const [matchingLead, nonMatchingLead] = await Promise.all([
     prisma.leads.create({
       data: {
-        full_name: `Automation Matching Lead ${runId}`,
+        full_name: matchingLeadName,
         phone: `091${Date.now().toString().slice(-7)}`,
         status: "new",
         pipeline_stage_id: initialStage.id,
@@ -196,18 +198,48 @@ async function createFixtures() {
     }),
   ]);
   leadIds.push(matchingLead.id, nonMatchingLead.id);
-  return { actor, target, scoped, initialStage, targetStage, matchingLead, nonMatchingLead };
+  const customFieldGroup = await prisma.custom_field_groups.findFirst({
+    where: { entity_type: "LEAD", is_active: true, archived_at: null },
+    select: { id: true },
+    orderBy: { display_order: "asc" },
+  });
+  assert.ok(customFieldGroup, "Integration test yêu cầu nhóm trường dữ liệu Lead đang hoạt động.");
+  const customField = await prisma.custom_fields.create({
+    data: {
+      module: "LEAD",
+      entity_type: "LEAD",
+      group_id: customFieldGroup.id,
+      field_key: `automation_segment_${runId}`,
+      field_label: `Phân khúc Automation ${runId}`,
+      field_type: "TEXT",
+      scope_type: "GLOBAL",
+      is_active: true,
+      is_required: false,
+      is_sensitive: false,
+    },
+  });
+  customFieldIds.push(customField.id);
+  await prisma.custom_field_values.create({
+    data: {
+      custom_field_id: customField.id,
+      entity_type: "LEAD",
+      entity_id: matchingLead.id,
+      value: "VIP",
+      value_text: "VIP",
+    },
+  });
+  return { actor, target, scoped, initialStage, targetStage, matchingLead, nonMatchingLead, customField };
 }
 
-function automationGraph(targetUserId: string, targetStageId: string) {
+function automationGraph(targetUserId: string, targetStageId: string, customFieldId: string) {
   return {
     nodes: [
       { id: "trigger", type: "trigger", position: { x: 0, y: 0 }, data: { label: "Lead được tạo", triggerType: "lead_created" } },
-      { id: "condition", type: "condition", position: { x: 250, y: 0 }, data: { label: "Lead mới", field: "status", operator: "equals", value: "new" } },
-      { id: "notification", type: "action_notification", position: { x: 500, y: -120 }, data: { label: "Thông báo", title: notificationTitle, content: "Rule integration đã chạy nhánh đúng.", targetRole: targetRoleCode } },
+      { id: "condition", type: "condition", position: { x: 250, y: 0 }, data: { label: "Lead VIP", field: `custom:${customFieldId}`, operator: "equals", value: "VIP" } },
+      { id: "notification", type: "action_notification", position: { x: 500, y: -120 }, data: { label: "Thông báo", title: `${notificationTitle} {{system:fullName}}`, content: "Rule integration đã chạy nhánh đúng.", targetRole: targetRoleCode } },
       { id: "assign", type: "action_assign", position: { x: 750, y: -120 }, data: { label: "Phân công", assignToUserId: targetUserId } },
       { id: "stage", type: "action_update_stage", position: { x: 1000, y: -120 }, data: { label: "Đổi pipeline", stageId: targetStageId } },
-      { id: "activity", type: "action_activity", position: { x: 1250, y: -120 }, data: { label: "Ghi hoạt động", activityType: "automation_integration", activityContent } },
+      { id: "activity", type: "action_activity", position: { x: 1250, y: -120 }, data: { label: "Ghi hoạt động", activityType: "automation_integration", activityContent: `${activityContent} {{system:fullName}}` } },
       { id: "delay", type: "delay", position: { x: 500, y: 160 }, data: { label: "Chờ nhánh sai", delayMinutes: 1 } },
       { id: "delayed_activity", type: "action_activity", position: { x: 750, y: 160 }, data: { label: "Ghi sau delay", activityType: "automation_integration_delay", activityContent: delayedActivityContent } },
       { id: "terminal_delay", type: "delay", position: { x: 1000, y: 160 }, data: { label: "Delay kết thúc", delayMinutes: 1 } },
@@ -230,6 +262,8 @@ async function cleanup() {
   if (ruleId) await prisma.automation_rules.deleteMany({ where: { id: ruleId } });
   await prisma.audit_logs.deleteMany({ where: { user_id: { in: userIds } } });
   await prisma.notifications.deleteMany({ where: { user_id: { in: userIds } } });
+  await prisma.custom_field_values.deleteMany({ where: { custom_field_id: { in: customFieldIds } } });
+  await prisma.custom_fields.deleteMany({ where: { id: { in: customFieldIds } } });
   await prisma.leads.deleteMany({ where: { id: { in: leadIds } } });
   await prisma.user_access_scopes.deleteMany({ where: { user_id: { in: userIds } } });
   await prisma.user_roles.deleteMany({ where: { user_id: { in: userIds } } });
@@ -288,11 +322,25 @@ async function main() {
       body: {
         name: `[INTEGRATION ${runId}] Automation node actions`,
         triggerType: "lead_created",
-        graphData: automationGraph(fixtures.target.id, fixtures.targetStage.id),
+        graphData: automationGraph(fixtures.target.id, fixtures.targetStage.id, fixtures.customField.id),
       },
     });
     assert.equal(created.status, 201, "Actor có quyền phải tạo được rule.");
     ruleId = created.payload.id as string;
+
+    const options = await request(baseUrl, "/automations/options", { token: actorToken });
+    assert.equal(options.status, 200);
+    assert.ok(
+      options.payload.customDataFields.some((field: JsonRecord) => field.reference === `custom:${fixtures.customField.id}`),
+      "Options phải trả trường dữ liệu tùy chỉnh đang hoạt động cho builder.",
+    );
+    const filteredRules = await request(
+      baseUrl,
+      `/automations?search=${runId}&isActive=false&triggerType=lead_created&page=1&limit=20`,
+      { token: actorToken },
+    );
+    assert.equal(filteredRules.status, 200);
+    assert.equal(filteredRules.payload.pagination.total, 1, "Bộ lọc rule phải kết hợp từ khóa, trạng thái và trigger phía server.");
 
     const validation = await request(baseUrl, `/automations/${ruleId}/validate`, {
       token: actorToken,
@@ -348,7 +396,7 @@ async function main() {
       "Action stage phải ghi timeline activity.",
     );
     assert.equal(
-      matchingLead.payload.data.activities.filter((activity: JsonRecord) => activity.content === activityContent).length,
+      matchingLead.payload.data.activities.filter((activity: JsonRecord) => activity.content === `${activityContent} ${matchingLeadName}`).length,
       1,
       "Action activity phải chỉ ghi đúng một lần.",
     );
@@ -356,7 +404,7 @@ async function main() {
     const targetNotifications = await request(baseUrl, "/notifications?page=1&limit=50", { token: targetToken });
     assert.equal(targetNotifications.status, 200);
     assert.equal(
-      targetNotifications.payload.data.filter((notification: JsonRecord) => notification.title === notificationTitle).length,
+      targetNotifications.payload.data.filter((notification: JsonRecord) => notification.title === `${notificationTitle} ${matchingLeadName}`).length,
       1,
       "Action notification phải gửi đúng một thông báo tới role đích.",
     );
@@ -404,7 +452,7 @@ async function main() {
     assert.equal(nonMatchingLead.payload.data.assignments.length, 0, "Nhánh false không được phân công Lead.");
     assert.equal(nonMatchingLead.payload.data.stageHistory.length, 0, "Nhánh false không được đổi pipeline.");
     assert.equal(
-      nonMatchingLead.payload.data.activities.filter((activity: JsonRecord) => activity.content === activityContent).length,
+      nonMatchingLead.payload.data.activities.filter((activity: JsonRecord) => activity.content === `${activityContent} ${matchingLeadName}`).length,
       0,
       "Nhánh false không được ghi activity của nhánh đúng.",
     );

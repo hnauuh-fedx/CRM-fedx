@@ -32,8 +32,11 @@ export function getAutomationRule(id: string, accessToken: string) {
   return apiRequest<AutomationRuleDetail>(`/automations/${id}`, {}, accessToken);
 }
 
-export function getAutomationOptions(accessToken: string) {
-  return apiRequest<AutomationOptions>(`/automations/options`, {}, accessToken);
+export function getAutomationOptions(accessToken: string, institutionProgramId?: string) {
+  const query = new URLSearchParams();
+  if (institutionProgramId) query.set("institutionProgramId", institutionProgramId);
+  const suffix = query.size ? `?${query.toString()}` : "";
+  return apiRequest<AutomationOptions>(`/automations/options${suffix}`, {}, accessToken);
 }
 
 export function createAutomationRule(

@@ -81,7 +81,14 @@ export async function assignVisibleLead(
         id: input.assigneeId,
         status: "active",
         deleted_at: null,
-        ...(input.departmentId ? { user_departments: { some: { department_id: input.departmentId } } } : {}),
+        AND: [
+          actor.accessScope === "ALL"
+            ? {}
+            : (actor.accessScope === "DEPARTMENT" || actor.permissions.includes("lead.view_department")) && actor.departmentIds.length > 0
+              ? { user_departments: { some: { department_id: { in: actor.departmentIds } } } }
+              : { id: actor.id },
+          ...(input.departmentId ? [{ user_departments: { some: { department_id: input.departmentId } } }] : []),
+        ],
       },
       select: { id: true, full_name: true },
     });

@@ -8,6 +8,10 @@ import {
   Settings2,
   Zap,
   CircleDot,
+  ChevronLeft,
+  ChevronRight,
+  FilterX,
+  Search,
 } from "lucide-react";
 import { useNavigate } from "react-router";
 
@@ -29,6 +33,7 @@ import { useAuth } from "@/modules/auth/auth-context";
 import { ApiError } from "@/services/api";
 import {
   listAutomationRules,
+  getAutomationOptions,
   toggleAutomationRule,
   deleteAutomationRule,
   createAutomationRule,
@@ -62,11 +67,30 @@ export function AutomationRulesPage() {
   const queryClient = useQueryClient();
   const [search, setSearch] = useState("");
   const [draftSearch, setDraftSearch] = useState("");
+  const [statusFilter, setStatusFilter] = useState("all");
+  const [triggerFilter, setTriggerFilter] = useState("all");
+  const [programFilter, setProgramFilter] = useState("all");
+  const [page, setPage] = useState(1);
   const [createOpen, setCreateOpen] = useState(false);
 
+  const optionsQuery = useQuery({
+    queryKey: ["automations", "options"],
+    queryFn: () => getAutomationOptions(auth.accessToken!),
+    enabled: Boolean(auth.accessToken),
+  });
+  const programs = optionsQuery.data?.institutionPrograms ?? [];
+
   const rulesQuery = useQuery({
-    queryKey: ["automations", "list", search],
-    queryFn: () => listAutomationRules({ search: search || undefined, limit: 50 }, auth.accessToken!),
+    queryKey: ["automations", "list", { page, search, statusFilter, triggerFilter, programFilter }],
+    queryFn: () => listAutomationRules({
+      page,
+      limit: 20,
+      search: search || undefined,
+      isActive: statusFilter === "all" ? undefined : statusFilter === "active",
+      triggerType: triggerFilter === "all" ? undefined : triggerFilter,
+      institutionProgramId: programFilter === "all" ? undefined : programFilter,
+    }, auth.accessToken!),
+    enabled: Boolean(auth.accessToken),
   });
 
   const toggleMutation = useMutation({
@@ -82,35 +106,79 @@ export function AutomationRulesPage() {
 
   function handleSearch(e: React.FormEvent) {
     e.preventDefault();
-    setSearch(draftSearch);
+    setSearch(draftSearch.trim());
+    setPage(1);
   }
+
+  function resetFilters() {
+    setDraftSearch("");
+    setSearch("");
+    setStatusFilter("all");
+    setTriggerFilter("all");
+    setProgramFilter("all");
+    setPage(1);
+  }
+
+  const hasFilters = Boolean(search || statusFilter !== "all" || triggerFilter !== "all" || programFilter !== "all");
 
   return (
     <div className="mx-auto flex max-w-7xl flex-col gap-6">
       <PageHeader
         eyebrow="Quản lý hệ thống"
         title="Rule Automation"
-        scopeLabel="Toàn hệ thống"
+        scopeLabel={auth.user?.accessScope === "ALL" ? "Toàn hệ thống" : "Theo phạm vi truy cập"}
         description="Xây dựng quy trình tự động hóa theo sự kiện để chăm sóc lead, gửi thông báo và cập nhật dữ liệu."
       />
 
-      {/* Toolbar */}
-      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-        <form className="flex gap-2" onSubmit={handleSearch}>
-          <Input
-            id="automation-search"
-            placeholder="Tìm kiếm rule..."
-            value={draftSearch}
-            onChange={(e) => setDraftSearch(e.target.value)}
-            className="w-64"
-          />
-          <Button type="submit" variant="outline">Tìm</Button>
-        </form>
-        <Button id="create-automation-btn" onClick={() => setCreateOpen(true)}>
-          <Plus className="mr-2 h-4 w-4" />
-          Tạo rule mới
-        </Button>
-      </div>
+      <Card>
+        <CardHeader className="pb-4">
+          <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+            <div>
+              <CardTitle className="text-base">Bộ lọc Automation Rule</CardTitle>
+              <CardDescription>Tìm theo tên, trạng thái, sự kiện kích hoạt hoặc chương trình tuyển sinh.</CardDescription>
+            </div>
+            <Button id="create-automation-btn" className="min-h-11" onClick={() => setCreateOpen(true)}>
+              <Plus data-icon="inline-start" />Tạo rule mới
+            </Button>
+          </div>
+        </CardHeader>
+        <CardContent className="grid gap-4 lg:grid-cols-[minmax(16rem,1fr)_13rem_16rem_minmax(16rem,1fr)_auto] lg:items-end">
+          <form className="grid gap-2" onSubmit={handleSearch}>
+            <Label htmlFor="automation-search">Tìm kiếm</Label>
+            <div className="flex gap-2">
+              <div className="relative min-w-0 flex-1">
+                <Search className="pointer-events-none absolute top-1/2 left-3 size-4 -translate-y-1/2 text-muted-foreground" aria-hidden="true" />
+                <Input id="automation-search" placeholder="Tên rule automation" value={draftSearch} onChange={(event) => setDraftSearch(event.target.value)} className="min-h-11 pl-9" />
+              </div>
+              <Button type="submit" variant="outline" className="min-h-11">Tìm</Button>
+            </div>
+          </form>
+          <div className="grid gap-2">
+            <Label htmlFor="automation-status-filter">Trạng thái</Label>
+            <Select value={statusFilter} onValueChange={(value) => { setStatusFilter(value); setPage(1); }}>
+              <SelectTrigger id="automation-status-filter" className="min-h-11 w-full"><SelectValue /></SelectTrigger>
+              <SelectContent><SelectItem value="all">Tất cả trạng thái</SelectItem><SelectItem value="active">Đang chạy</SelectItem><SelectItem value="inactive">Đang tắt</SelectItem></SelectContent>
+            </Select>
+          </div>
+          <div className="grid gap-2">
+            <Label htmlFor="automation-trigger-filter">Sự kiện kích hoạt</Label>
+            <Select value={triggerFilter} onValueChange={(value) => { setTriggerFilter(value); setPage(1); }}>
+              <SelectTrigger id="automation-trigger-filter" className="min-h-11 w-full"><SelectValue /></SelectTrigger>
+              <SelectContent><SelectItem value="all">Tất cả sự kiện</SelectItem>{SUPPORTED_AUTOMATION_TRIGGER_TYPES.map((value) => <SelectItem key={value} value={value}>{TRIGGER_TYPE_LABELS[value]}</SelectItem>)}</SelectContent>
+            </Select>
+          </div>
+          <div className="grid gap-2">
+            <Label htmlFor="automation-program-filter">Chương trình tuyển sinh</Label>
+            <Select value={programFilter} onValueChange={(value) => { setProgramFilter(value); setPage(1); }}>
+              <SelectTrigger id="automation-program-filter" className="min-h-11 w-full"><SelectValue /></SelectTrigger>
+              <SelectContent><SelectItem value="all">Tất cả chương trình</SelectItem>{programs.map((program) => <SelectItem key={program.id} value={program.id}>{program.institutionName} - {program.name}</SelectItem>)}</SelectContent>
+            </Select>
+          </div>
+          <Button type="button" variant="ghost" className="min-h-11" disabled={!hasFilters} onClick={resetFilters}>
+            <FilterX data-icon="inline-start" />Xóa lọc
+          </Button>
+        </CardContent>
+      </Card>
 
       {toggleMutation.error && (
         <p role="alert" className="rounded-md border border-destructive/30 bg-destructive/5 px-4 py-3 text-sm text-destructive">
@@ -136,8 +204,8 @@ export function AutomationRulesPage() {
       ) : rulesQuery.data.data.length === 0 ? (
         <Card>
           <EmptyState
-            title="Chưa có automation rule nào"
-            description="Tạo rule mới để bắt đầu tự động hoá quy trình sale."
+            title={hasFilters ? "Không tìm thấy rule phù hợp" : "Chưa có automation rule nào"}
+            description={hasFilters ? "Thay đổi hoặc xóa bộ lọc để xem các rule khác." : "Tạo rule mới để bắt đầu tự động hoá quy trình sale."}
           />
         </Card>
       ) : (
@@ -151,6 +219,22 @@ export function AutomationRulesPage() {
               onEdit={() => navigate(`/automations/${rule.id}/builder`)}
             />
           ))}
+        </div>
+      )}
+
+      {rulesQuery.data && rulesQuery.data.pagination.total > 0 && (
+        <div className="flex flex-col items-center justify-between gap-3 text-sm sm:flex-row">
+          <p className="text-muted-foreground">
+            {rulesQuery.data.pagination.total} rule · Trang {rulesQuery.data.pagination.page} / {rulesQuery.data.pagination.totalPages}
+          </p>
+          <div className="flex gap-2">
+            <Button type="button" variant="outline" size="sm" className="min-h-11" disabled={page <= 1 || rulesQuery.isFetching} onClick={() => setPage((value) => Math.max(1, value - 1))}>
+              <ChevronLeft aria-hidden="true" />Trang trước
+            </Button>
+            <Button type="button" variant="outline" size="sm" className="min-h-11" disabled={page >= rulesQuery.data.pagination.totalPages || rulesQuery.isFetching} onClick={() => setPage((value) => value + 1)}>
+              Trang sau<ChevronRight aria-hidden="true" />
+            </Button>
+          </div>
         </div>
       )}
 
@@ -210,7 +294,7 @@ function RuleCard({
           size="sm"
           variant="outline"
           onClick={onEdit}
-          className="flex-1"
+          className="min-h-11 flex-1"
         >
           <Settings2 className="mr-1.5 h-3.5 w-3.5" />
           Chỉnh sửa
@@ -219,6 +303,8 @@ function RuleCard({
           id={`toggle-rule-${rule.id}`}
           size="sm"
           variant={rule.isActive ? "secondary" : "default"}
+          className="min-h-11 min-w-11"
+          aria-label={rule.isActive ? `Tắt rule ${rule.name}` : `Bật rule ${rule.name}`}
           onClick={() => onToggle(!rule.isActive)}
         >
           {rule.isActive ? <Pause className="h-3.5 w-3.5" /> : <Play className="h-3.5 w-3.5" />}
@@ -227,8 +313,9 @@ function RuleCard({
           id={`delete-rule-${rule.id}`}
           size="sm"
           variant="ghost"
-          className="text-destructive hover:bg-destructive/10 hover:text-destructive"
+          className="min-h-11 min-w-11 text-destructive hover:bg-destructive/10 hover:text-destructive"
           disabled={rule.isActive}
+          aria-label={rule.isActive ? `Không thể xóa rule ${rule.name} khi đang chạy` : `Xóa rule ${rule.name}`}
           title={rule.isActive ? "Tắt rule trước khi xoá" : "Xoá rule"}
           onClick={() => setConfirmOpen(true)}
         >

@@ -35,8 +35,9 @@ export function AutomationBuilderPage() {
   });
 
   const optionsQuery = useQuery({
-    queryKey: ["automations", "options"],
-    queryFn: () => getAutomationOptions(auth.accessToken!),
+    queryKey: ["automations", "options", ruleQuery.data?.institutionProgramId ?? "global"],
+    queryFn: () => getAutomationOptions(auth.accessToken!, ruleQuery.data?.institutionProgramId ?? undefined),
+    enabled: Boolean(auth.accessToken && ruleQuery.data),
   });
 
   useEffect(() => {

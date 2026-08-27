@@ -6,6 +6,7 @@ import { validateAutomationGraph } from "./automation-graph.validator";
 import { ensureAutomationRuleVersionSnapshot } from "./automation-rule-version.service";
 import { SUPPORTED_AUTOMATION_TRIGGER_TYPES } from "./automation.types";
 import type { AutomationGraphData } from "./automation.types";
+import { getAutomationCustomDataFields } from "./automation-data-field.service";
 
 export type AutomationRuleListQuery = {
   page: number;
@@ -26,12 +27,55 @@ export type AutomationRuleCreateInput = {
 
 export type AutomationRuleUpdateInput = Partial<AutomationRuleCreateInput>;
 
-export async function listAutomationRules(query: AutomationRuleListQuery) {
+async function getAccessibleAutomationProgramIds(user: AuthUser) {
+  if (user.accessScope === "ALL" && user.permissions.includes("lead.view_all")) return null;
+
+  const rows = await prisma.leads.findMany({
+    where: {
+      deleted_at: null,
+      institution_program_id: { not: null },
+      ...getLeadScopeWhere(user),
+    },
+    select: { institution_program_id: true },
+    distinct: ["institution_program_id"],
+  });
+  return rows.flatMap((row) => row.institution_program_id ? [row.institution_program_id] : []);
+}
+
+async function getAutomationRuleScopeWhere(user: AuthUser) {
+  const accessibleProgramIds = await getAccessibleAutomationProgramIds(user);
+  return accessibleProgramIds === null
+    ? {}
+    : { OR: [{ institution_program_id: null }, { institution_program_id: { in: accessibleProgramIds } }] };
+}
+
+async function canAccessAutomationProgram(user: AuthUser, institutionProgramId?: string | null) {
+  if (!institutionProgramId) return true;
+  const accessibleProgramIds = await getAccessibleAutomationProgramIds(user);
+  return accessibleProgramIds === null || accessibleProgramIds.includes(institutionProgramId);
+}
+
+export async function listAutomationRules(user: AuthUser, query: AutomationRuleListQuery) {
+  const accessibleProgramIds = await getAccessibleAutomationProgramIds(user);
+  if (query.institutionProgramId && accessibleProgramIds !== null && !accessibleProgramIds.includes(query.institutionProgramId)) {
+    return null;
+  }
+
   const where = {
-    ...(query.search ? { name: { contains: query.search, mode: "insensitive" as const } } : {}),
-    ...(query.isActive !== undefined ? { is_active: query.isActive } : {}),
-    ...(query.triggerType ? { trigger_type: query.triggerType } : {}),
-    ...(query.institutionProgramId ? { institution_program_id: query.institutionProgramId } : {}),
+    AND: [
+      ...(accessibleProgramIds === null
+        ? []
+        : [{ OR: [{ institution_program_id: null }, { institution_program_id: { in: accessibleProgramIds } }] }]),
+      ...(query.search ? [{
+        OR: [
+          { name: { contains: query.search, mode: "insensitive" as const } },
+          { description: { contains: query.search, mode: "insensitive" as const } },
+        ],
+      }] : []),
+      ...(query.isActive !== undefined ? [{ is_active: query.isActive }] : []),
+      ...(query.triggerType ? [{ trigger_type: query.triggerType }] : []),
+      ...(query.institutionProgramId ? [{ institution_program_id: query.institutionProgramId }] : []),
+    ],
   };
 
   const [items, total] = await prisma.$transaction([
@@ -75,9 +119,9 @@ export async function listAutomationRules(query: AutomationRuleListQuery) {
   };
 }
 
-export async function getAutomationRule(id: string) {
-  const rule = await prisma.automation_rules.findUnique({
-    where: { id },
+export async function getAutomationRule(user: AuthUser, id: string) {
+  const rule = await prisma.automation_rules.findFirst({
+    where: { id, ...(await getAutomationRuleScopeWhere(user)) },
     select: {
       id: true,
       name: true,
@@ -98,6 +142,7 @@ export async function getAutomationRule(id: string) {
 }
 
 export async function createAutomationRule(user: AuthUser, input: AutomationRuleCreateInput) {
+  if (!(await canAccessAutomationProgram(user, input.institutionProgramId))) return null;
   const rule = await prisma.automation_rules.create({
     data: {
       name: input.name.trim(),
@@ -123,11 +168,12 @@ export async function createAutomationRule(user: AuthUser, input: AutomationRule
 }
 
 export async function updateAutomationRule(user: AuthUser, id: string, input: AutomationRuleUpdateInput) {
-  const existing = await prisma.automation_rules.findUnique({
-    where: { id },
-    select: { id: true, name: true, version: true, is_active: true },
+  const existing = await prisma.automation_rules.findFirst({
+    where: { id, ...(await getAutomationRuleScopeWhere(user)) },
+    select: { id: true, name: true, version: true, is_active: true, institution_program_id: true },
   });
   if (!existing) return null;
+  if (input.institutionProgramId !== undefined && !(await canAccessAutomationProgram(user, input.institutionProgramId))) return null;
   if (existing.is_active && (
     input.graphData !== undefined ||
     input.triggerType !== undefined ||
@@ -168,8 +214,8 @@ export async function updateAutomationRule(user: AuthUser, id: string, input: Au
 }
 
 export async function deleteAutomationRule(user: AuthUser, id: string) {
-  const existing = await prisma.automation_rules.findUnique({
-    where: { id },
+  const existing = await prisma.automation_rules.findFirst({
+    where: { id, ...(await getAutomationRuleScopeWhere(user)) },
     select: { id: true, name: true, is_active: true },
   });
   if (!existing) return null;
@@ -189,8 +235,8 @@ export async function deleteAutomationRule(user: AuthUser, id: string) {
 }
 
 export async function toggleAutomationRule(user: AuthUser, id: string, isActive: boolean) {
-  const existing = await prisma.automation_rules.findUnique({
-    where: { id },
+  const existing = await prisma.automation_rules.findFirst({
+    where: { id, ...(await getAutomationRuleScopeWhere(user)) },
     select: {
       id: true,
       name: true,
@@ -249,9 +295,9 @@ export async function toggleAutomationRule(user: AuthUser, id: string, isActive:
   };
 }
 
-export async function validateAutomationRule(id: string) {
-  const rule = await prisma.automation_rules.findUnique({
-    where: { id },
+export async function validateAutomationRule(user: AuthUser, id: string) {
+  const rule = await prisma.automation_rules.findFirst({
+    where: { id, ...(await getAutomationRuleScopeWhere(user)) },
     select: { id: true, trigger_type: true, graph_data: true },
   });
   if (!rule) return null;
@@ -275,7 +321,12 @@ function validateRuleConfiguration(triggerType: string, graphData: unknown) {
   };
 }
 
-export async function listExecutionLogs(ruleId: string, page: number, limit: number) {
+export async function listExecutionLogs(user: AuthUser, ruleId: string, page: number, limit: number) {
+  const rule = await prisma.automation_rules.findFirst({
+    where: { id: ruleId, ...(await getAutomationRuleScopeWhere(user)) },
+    select: { id: true },
+  });
+  if (!rule) return null;
   const where = { rule_id: ruleId };
   const [items, total] = await prisma.$transaction([
     prisma.automation_execution_logs.findMany({
@@ -315,7 +366,12 @@ export async function listExecutionLogs(ruleId: string, page: number, limit: num
   };
 }
 
-export async function getAutomationExecution(ruleId: string, executionId: string) {
+export async function getAutomationExecution(user: AuthUser, ruleId: string, executionId: string) {
+  const rule = await prisma.automation_rules.findFirst({
+    where: { id: ruleId, ...(await getAutomationRuleScopeWhere(user)) },
+    select: { id: true },
+  });
+  if (!rule) return null;
   const log = await prisma.automation_execution_logs.findFirst({
     where: { id: executionId, rule_id: ruleId },
     select: {
@@ -370,8 +426,8 @@ export async function listAutomationTestLeads(
   ruleId: string,
   query: { page: number; limit: number; search?: string },
 ) {
-  const rule = await prisma.automation_rules.findUnique({
-    where: { id: ruleId },
+  const rule = await prisma.automation_rules.findFirst({
+    where: { id: ruleId, ...(await getAutomationRuleScopeWhere(user)) },
     select: { institution_program_id: true },
   });
   if (!rule) return null;
@@ -417,8 +473,8 @@ export async function listAutomationTestLeads(
 }
 
 export async function runAutomationTest(user: AuthUser, ruleId: string, leadId: string) {
-  const rule = await prisma.automation_rules.findUnique({
-    where: { id: ruleId },
+  const rule = await prisma.automation_rules.findFirst({
+    where: { id: ruleId, ...(await getAutomationRuleScopeWhere(user)) },
     select: {
       id: true,
       version: true,
@@ -464,22 +520,44 @@ export async function runAutomationTest(user: AuthUser, ruleId: string, leadId: 
   return execution;
 }
 
-export async function getAutomationOptions(user: AuthUser) {
+export async function getAutomationOptions(user: AuthUser, institutionProgramId?: string) {
+  const accessibleProgramIds = await getAccessibleAutomationProgramIds(user);
+  if (institutionProgramId && accessibleProgramIds !== null && !accessibleProgramIds.includes(institutionProgramId)) {
+    return null;
+  }
   const canAssign = user.permissions.includes("lead.assign") || user.permissions.includes("lead.reassign");
-  const [programs, assignees, pipelineStages, targetRoles] = await Promise.all([
+  const scopedLeadWhere = { deleted_at: null, ...getLeadScopeWhere(user) };
+  const [programs, assignees, pipelineStages, targetRoles, customDataFields, sources, majors, admissionStatuses, tags] = await Promise.all([
     prisma.institution_programs.findMany({
-      where: { status: "active" },
+      where: {
+        status: "active",
+        ...(accessibleProgramIds === null ? {} : { id: { in: accessibleProgramIds } }),
+      },
       select: { id: true, name: true, institutions: { select: { name: true } } },
       orderBy: { name: "asc" },
     }),
-    canAssign
+    canAssign && accessibleProgramIds === null
       ? prisma.users.findMany({
           where: { status: "active", deleted_at: null },
           select: { id: true, full_name: true },
           orderBy: { full_name: "asc" },
           take: 500,
         })
-      : Promise.resolve([]),
+      : canAssign && (user.accessScope === "DEPARTMENT" || user.permissions.includes("lead.view_department"))
+        ? prisma.users.findMany({
+            where: {
+              status: "active",
+              deleted_at: null,
+              user_departments: { some: { department_id: { in: user.departmentIds } } },
+            },
+            select: { id: true, full_name: true },
+            orderBy: { full_name: "asc" },
+            take: 500,
+          })
+        : prisma.users.findMany({
+            where: { id: user.id, status: "active", deleted_at: null },
+            select: { id: true, full_name: true },
+          }),
     prisma.pipeline_stages.findMany({
       select: { id: true, name: true, pipelines: { select: { name: true } } },
       orderBy: [{ pipelines: { name: "asc" } }, { position: "asc" }, { name: "asc" }],
@@ -489,6 +567,36 @@ export async function getAutomationOptions(user: AuthUser) {
       select: { id: true, code: true, name: true },
       orderBy: { name: "asc" },
       take: 100,
+    }),
+    getAutomationCustomDataFields(user, institutionProgramId ?? null),
+    prisma.lead_sources.findMany({
+      where: {
+        ...(institutionProgramId
+          ? { OR: [{ institution_program_id: institutionProgramId }, { institution_program_id: null }] }
+          : accessibleProgramIds === null
+            ? {}
+            : { leads: { some: scopedLeadWhere } }),
+      },
+      select: { id: true, name: true },
+      orderBy: { name: "asc" },
+    }),
+    prisma.majors.findMany({
+      where: institutionProgramId
+        ? { OR: [{ institution_program_id: institutionProgramId }, { institution_program_id: null }] }
+        : accessibleProgramIds === null
+          ? undefined
+          : { admission_profiles: { some: { leads: { is: scopedLeadWhere } } } },
+      select: { id: true, name: true },
+      orderBy: { name: "asc" },
+    }),
+    prisma.admission_statuses.findMany({ select: { id: true, name: true }, orderBy: { name: "asc" } }),
+    prisma.tags.findMany({
+      where: accessibleProgramIds === null
+        ? undefined
+        : { entity_tags: { some: { entity_type: "lead", leads: { is: scopedLeadWhere } } } },
+      select: { name: true },
+      orderBy: { name: "asc" },
+      take: 200,
     }),
   ]);
   return {
@@ -501,6 +609,26 @@ export async function getAutomationOptions(user: AuthUser) {
       pipelineName: stage.pipelines?.name ?? null,
     })),
     targetRoles,
+    customDataFields,
+    systemFieldOptions: {
+      lead_sources: sources.map((source) => ({ code: source.id, label: source.name })),
+      majors: majors.map((major) => ({ code: major.id, label: major.name })),
+      admission_statuses: admissionStatuses.map((status) => ({ code: status.id, label: status.name })),
+      tags: tags.map((tag) => ({ code: tag.name, label: tag.name })),
+      institution_programs: programs.map((program) => ({ code: program.id, label: `${program.institutions.name} - ${program.name}` })),
+      "Danh sách cố định": [
+        { code: "male", label: "Nam" },
+        { code: "female", label: "Nữ" },
+        { code: "other", label: "Khác" },
+      ],
+      "Danh sách trạng thái Telesale": [
+        { code: "new", label: "Mới" },
+        { code: "contacted", label: "Đã liên hệ" },
+        { code: "qualified", label: "Tiềm năng" },
+        { code: "converted", label: "Đã chuyển đổi" },
+        { code: "lost", label: "Không phù hợp" },
+      ],
+    },
   };
 }
 

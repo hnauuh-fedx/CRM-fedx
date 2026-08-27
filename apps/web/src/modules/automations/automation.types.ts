@@ -91,6 +91,38 @@ export type AutomationOptions = {
   assignees: Array<{ id: string; fullName: string }>;
   pipelineStages: Array<{ id: string; name: string; pipelineName: string | null }>;
   targetRoles: Array<{ id: string; code: string; name: string }>;
+  customDataFields: AutomationCustomDataField[];
+  systemFieldOptions: Record<string, AutomationDataFieldOption[]>;
+};
+
+export type AutomationDataFieldOption = {
+  code: string;
+  label: string;
+};
+
+export type AutomationDataField = {
+  reference: string;
+  key: string;
+  label: string;
+  description: string | null;
+  dataType: string;
+  groupKey: string;
+  groupLabel: string;
+  source: "system" | "custom";
+  isSensitive: boolean;
+  options: AutomationDataFieldOption[];
+};
+
+export type AutomationCustomDataField = {
+  reference: string;
+  id: string;
+  key: string;
+  label: string;
+  description: string | null;
+  dataType: string;
+  group: { id: string; key: string; label: string };
+  isSensitive: boolean;
+  options: unknown;
 };
 
 export type AutomationTestLead = {

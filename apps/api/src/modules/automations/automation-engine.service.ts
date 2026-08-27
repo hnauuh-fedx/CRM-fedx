@@ -3,8 +3,8 @@ import { Queue, UnrecoverableError, Worker, type Job } from "bullmq";
 import { redisConnection } from "../../config/redis";
 import { prisma } from "../../database/prisma";
 import { getAuthUser } from "../auth/auth.service";
-import { getLeadScopeWhere } from "../leads/lead-list.service";
 import { assignVisibleLead, changeVisibleLeadStage, leadUpdatePermissions } from "../leads/lead-owner-stage-mutations.service";
+import { getAutomationLeadData, getAutomationTemplateReferences, renderAutomationTemplate } from "./automation-data-field.service";
 import { decideNodeExecution } from "./automation-execution-state";
 import { validateAutomationGraph } from "./automation-graph.validator";
 import { ensureAutomationRuleVersionSnapshot } from "./automation-rule-version.service";
@@ -275,9 +275,9 @@ async function evaluateCondition(node: AutomationNode, context: AutomationContex
   const { field, operator, value } = node.data;
   if (!field || !operator || !context.leadId) throw new UnrecoverableError("Node điều kiện thiếu trường, toán tử hoặc lead context.");
   const actor = await requireActor(context);
-  const lead = await prisma.leads.findFirst({ where: { id: context.leadId, deleted_at: null, ...getLeadScopeWhere(actor) } });
-  if (!lead) throw new UnrecoverableError("Lead không tồn tại trong phạm vi của tài khoản kích hoạt.");
-  const actualValue = (lead as Record<string, unknown>)[field];
+  const leadData = await getAutomationLeadData(actor, context.leadId, context.institutionProgramId, [field]);
+  if (!leadData) throw new UnrecoverableError("Lead không tồn tại trong phạm vi của tài khoản kích hoạt.");
+  const actualValue = leadData.get(field);
   const compareValue = String(value);
   const actualString = String(actualValue ?? "");
   switch (operator) {
@@ -293,6 +293,13 @@ async function executeNotificationAction(node: AutomationNode, context: Automati
   const { title, content, targetRole } = node.data;
   if (!title || !content || !targetRole) throw new UnrecoverableError("Node thông báo thiếu tiêu đề, nội dung hoặc vai trò nhận.");
   const actor = await requireActor(context);
+  const templateReferences = getAutomationTemplateReferences(title, content);
+  const leadData = context.leadId && templateReferences.length > 0
+    ? await getAutomationLeadData(actor, context.leadId, context.institutionProgramId, templateReferences)
+    : new Map<string, unknown>();
+  if (!leadData) throw new UnrecoverableError("Lead không tồn tại trong phạm vi của tài khoản kích hoạt.");
+  const renderedTitle = renderAutomationTemplate(title, leadData);
+  const renderedContent = renderAutomationTemplate(content, leadData);
   const scopeWhere = actor.accessScope === "ALL"
     ? {}
     : actor.accessScope === "DEPARTMENT" && actor.departmentIds.length > 0
@@ -304,7 +311,7 @@ async function executeNotificationAction(node: AutomationNode, context: Automati
   });
   const result = { nextSourceHandle: "default", delayMinutes: 0 };
   await prisma.$transaction(async (tx) => {
-    if (users.length > 0) await tx.notifications.createMany({ data: users.map((user) => ({ user_id: user.id, title, content, type: "system" })) });
+    if (users.length > 0) await tx.notifications.createMany({ data: users.map((user) => ({ user_id: user.id, title: renderedTitle, content: renderedContent, type: "system" })) });
     await markActionCompleted(tx, nodeExecutionId, result);
   });
   return result;
@@ -336,11 +343,15 @@ async function executeActivityAction(node: AutomationNode, context: AutomationCo
   const actor = await requireActor(context);
   const canWriteActivity = actor.permissions.includes("lead_activity.create") || leadUpdatePermissions.some((permission) => actor.permissions.includes(permission));
   if (!canWriteActivity) throw new UnrecoverableError("Tài khoản kích hoạt không có quyền ghi hoạt động lead.");
-  const lead = await prisma.leads.findFirst({ where: { id: context.leadId, deleted_at: null, ...getLeadScopeWhere(actor) }, select: { id: true } });
-  if (!lead) throw new UnrecoverableError("Lead không tồn tại trong phạm vi của tài khoản kích hoạt.");
+  const templateReferences = getAutomationTemplateReferences(activityContent);
+  const leadData = templateReferences.length > 0
+    ? await getAutomationLeadData(actor, context.leadId, context.institutionProgramId, templateReferences)
+    : new Map<string, unknown>();
+  if (!leadData) throw new UnrecoverableError("Lead không tồn tại trong phạm vi của tài khoản kích hoạt.");
+  const renderedContent = renderAutomationTemplate(activityContent, leadData);
   const result = { nextSourceHandle: "default", delayMinutes: 0 };
   await prisma.$transaction(async (tx) => {
-    await tx.lead_activities.create({ data: { lead_id: context.leadId, user_id: actor.id, type: activityType, content: activityContent } });
+    await tx.lead_activities.create({ data: { lead_id: context.leadId, user_id: actor.id, type: activityType, content: renderedContent } });
     await tx.audit_logs.create({
       data: { user_id: actor.id, entity_type: "lead", entity_id: context.leadId, action: "automation_activity_created", new_data: { ruleId: context.ruleId, activityType } },
     });

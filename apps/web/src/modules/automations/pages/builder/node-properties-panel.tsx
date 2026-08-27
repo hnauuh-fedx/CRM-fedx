@@ -1,11 +1,14 @@
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import type { AutomationNode, AutomationNodeData, AutomationOptions } from "../../automation.types";
+import { useAuth } from "@/modules/auth/auth-context";
+import { buildAutomationDataFields, normalizeAutomationFieldReference } from "../../automation-data-fields";
+import type { AutomationDataField, AutomationNode, AutomationNodeData, AutomationOptions } from "../../automation.types";
+import { AutomationFieldPicker } from "./automation-field-picker";
 
 export type NodePropertiesPanelProps = {
   selectedNodeId: string | null;
@@ -17,8 +20,23 @@ export type NodePropertiesPanelProps = {
 };
 
 export function NodePropertiesPanel({ selectedNodeId, nodes, options, isLoadingOptions, onNodeUpdate, onClose }: NodePropertiesPanelProps) {
+  const auth = useAuth();
+  const canViewSensitiveLeadData = auth.can("lead.sensitive.view");
   const selectedNode = nodes.find((n) => n.id === selectedNodeId);
   const [localData, setLocalData] = useState<AutomationNodeData | null>(null);
+  const dataFields = useMemo(() => buildAutomationDataFields(
+    options?.customDataFields ?? [],
+    canViewSensitiveLeadData,
+    options?.systemFieldOptions,
+  ).map((field) => {
+    if (field.reference === "system:pipelineStageId") {
+      return { ...field, options: (options?.pipelineStages ?? []).map((stage) => ({ code: stage.id, label: stage.pipelineName ? `${stage.pipelineName} — ${stage.name}` : stage.name })) };
+    }
+    if (field.reference === "system:assigneeId") {
+      return { ...field, options: (options?.assignees ?? []).map((assignee) => ({ code: assignee.id, label: assignee.fullName })) };
+    }
+    return field;
+  }), [canViewSensitiveLeadData, options?.assignees, options?.customDataFields, options?.pipelineStages, options?.systemFieldOptions]);
 
   // Sync local state when selected node changes
   useEffect(() => {
@@ -33,16 +51,25 @@ export function NodePropertiesPanel({ selectedNodeId, nodes, options, isLoadingO
     return null;
   }
 
-  const handleChange = (key: keyof AutomationNodeData, value: any) => {
+  const handleChange = (key: keyof AutomationNodeData, value: unknown) => {
     setLocalData((prev) => (prev ? { ...prev, [key]: value } : null));
     onNodeUpdate(selectedNode.id, { [key]: value });
   };
+
+  const insertFieldToken = (key: "title" | "content" | "activityContent", field: AutomationDataField) => {
+    const current = String(localData[key] ?? "");
+    const separator = current.length > 0 && !/\s$/.test(current) ? " " : "";
+    handleChange(key, `${current}${separator}{{${field.reference}}}`);
+  };
+
+  const normalizedConditionReference = normalizeAutomationFieldReference(localData.field);
+  const selectedConditionField = dataFields.find((field) => field.reference === normalizedConditionReference);
 
   return (
     <div className="w-80 border-l bg-background flex flex-col h-full shadow-sm z-10 shrink-0">
       <div className="flex items-center justify-between border-b px-4 py-3">
         <h3 className="font-semibold text-sm">Cấu hình thao tác</h3>
-        <Button variant="ghost" size="icon" className="h-9 w-9" onClick={onClose} aria-label="Đóng bảng cấu hình node">
+        <Button variant="ghost" size="icon" className="size-11" onClick={onClose} aria-label="Đóng bảng cấu hình node">
           <X className="h-4 w-4" />
         </Button>
       </div>
@@ -69,21 +96,18 @@ export function NodePropertiesPanel({ selectedNodeId, nodes, options, isLoadingO
             <h4 className="text-sm font-medium">Bộ lọc điều kiện</h4>
             <div className="space-y-2">
               <Label className="text-xs">Trường dữ liệu (Field)</Label>
-              <Select 
-                value={localData.field || ""} 
-                onValueChange={(val) => handleChange("field", val)}
-              >
-                <SelectTrigger>
-                  <SelectValue placeholder="Chọn trường..." />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="source_id">Nguồn (Source)</SelectItem>
-                  <SelectItem value="pipeline_stage_id">Giai đoạn (Pipeline Stage)</SelectItem>
-                  <SelectItem value="status">Trạng thái Lead (Status)</SelectItem>
-                  <SelectItem value="assigned_to">Người phụ trách (Assignee)</SelectItem>
-                  <SelectItem value="gender">Giới tính (Gender)</SelectItem>
-                </SelectContent>
-              </Select>
+              <AutomationFieldPicker
+                fields={dataFields}
+                selectedReference={normalizedConditionReference}
+                placeholder={isLoadingOptions ? "Đang tải trường dữ liệu..." : "Chọn trường dữ liệu..."}
+                onSelect={(field) => {
+                  handleChange("field", field.reference);
+                  handleChange("value", "");
+                }}
+              />
+              <p className="text-xs text-muted-foreground">
+                {dataFields.length} trường hệ thống và trường tùy chỉnh đang khả dụng theo cấu hình dữ liệu.
+              </p>
             </div>
             <div className="space-y-2">
               <Label className="text-xs">Toán tử (Operator)</Label>
@@ -98,17 +122,31 @@ export function NodePropertiesPanel({ selectedNodeId, nodes, options, isLoadingO
                   <SelectItem value="equals">Bằng (Equals)</SelectItem>
                   <SelectItem value="not_equals">Khác (Not equals)</SelectItem>
                   <SelectItem value="contains">Chứa (Contains)</SelectItem>
+                  <SelectItem value="exists">Có dữ liệu (Exists)</SelectItem>
                 </SelectContent>
               </Select>
             </div>
-            <div className="space-y-2">
+            {localData.operator !== "exists" && <div className="space-y-2">
               <Label className="text-xs">Giá trị so sánh (Value)</Label>
-              <Input 
-                placeholder="VD: new, 123..." 
-                value={localData.value || ""} 
-                onChange={(e) => handleChange("value", e.target.value)}
-              />
-            </div>
+              {selectedConditionField?.options.length ? (
+                <Select value={localData.value || ""} onValueChange={(value) => handleChange("value", value)}>
+                  <SelectTrigger><SelectValue placeholder="Chọn giá trị..." /></SelectTrigger>
+                  <SelectContent>{selectedConditionField.options.map((option) => <SelectItem key={option.code} value={option.code}>{option.label}</SelectItem>)}</SelectContent>
+                </Select>
+              ) : selectedConditionField?.dataType === "BOOLEAN" ? (
+                <Select value={localData.value || ""} onValueChange={(value) => handleChange("value", value)}>
+                  <SelectTrigger><SelectValue placeholder="Chọn giá trị..." /></SelectTrigger>
+                  <SelectContent><SelectItem value="true">Có</SelectItem><SelectItem value="false">Không</SelectItem></SelectContent>
+                </Select>
+              ) : (
+                <Input
+                  type={selectedConditionField?.dataType === "NUMBER" ? "number" : selectedConditionField?.dataType === "DATE" ? "date" : "text"}
+                  placeholder="Nhập giá trị so sánh"
+                  value={localData.value || ""}
+                  onChange={(event) => handleChange("value", event.target.value)}
+                />
+              )}
+            </div>}
           </div>
         )}
 
@@ -160,6 +198,7 @@ export function NodePropertiesPanel({ selectedNodeId, nodes, options, isLoadingO
                 value={localData.title || ""} 
                 onChange={(e) => handleChange("title", e.target.value)}
               />
+              <AutomationFieldPicker fields={dataFields} placeholder="Chèn trường vào tiêu đề" onSelect={(field) => insertFieldToken("title", field)} />
             </div>
             <div className="space-y-2">
               <Label>Nội dung thông báo</Label>
@@ -168,6 +207,8 @@ export function NodePropertiesPanel({ selectedNodeId, nodes, options, isLoadingO
                 value={localData.content || ""} 
                 onChange={(e) => handleChange("content", e.target.value)}
               />
+              <AutomationFieldPicker fields={dataFields} placeholder="Chèn trường vào nội dung" onSelect={(field) => insertFieldToken("content", field)} />
+              <p className="text-xs text-muted-foreground">Giá trị trường sẽ được thay thế tự động khi rule chạy.</p>
             </div>
           </div>
         )}
@@ -198,6 +239,7 @@ export function NodePropertiesPanel({ selectedNodeId, nodes, options, isLoadingO
                 value={localData.activityContent || ""} 
                 onChange={(e) => handleChange("activityContent", e.target.value)}
               />
+              <AutomationFieldPicker fields={dataFields} placeholder="Chèn trường vào nội dung" onSelect={(field) => insertFieldToken("activityContent", field)} />
             </div>
           </div>
         )}

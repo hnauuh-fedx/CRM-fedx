@@ -35,6 +35,10 @@ const listQuerySchema = z.object({
   institutionProgramId: z.string().uuid().optional().or(z.literal("")).transform((v) => v || undefined),
 });
 
+const optionsQuerySchema = z.object({
+  institutionProgramId: z.string().uuid().optional().or(z.literal("")).transform((value) => value || undefined),
+});
+
 const createSchema = z.object({
   name: z.string().trim().min(2).max(255),
   description: z.string().trim().max(1000).optional().transform((v) => v || undefined),
@@ -83,7 +87,12 @@ automationsRouter.get(
         response.status(400).json({ message: "Tham số danh sách automation không hợp lệ." });
         return;
       }
-      response.json(await listAutomationRules(parsed.data));
+      const result = await listAutomationRules(request.authUser!, parsed.data);
+      if (!result) {
+        response.status(404).json({ message: "Không tìm thấy chương trình tuyển sinh trong phạm vi truy cập." });
+        return;
+      }
+      response.json(result);
     } catch (error) {
       next(error);
     }
@@ -96,7 +105,17 @@ automationsRouter.get(
   requireAnyPermission("automation.manage"),
   async (request, response, next) => {
     try {
-      response.json(await getAutomationOptions(request.authUser!));
+      const parsed = optionsQuerySchema.safeParse(request.query);
+      if (!parsed.success) {
+        response.status(400).json({ message: "Chương trình tuyển sinh không hợp lệ." });
+        return;
+      }
+      const result = await getAutomationOptions(request.authUser!, parsed.data.institutionProgramId);
+      if (!result) {
+        response.status(404).json({ message: "Không tìm thấy chương trình tuyển sinh trong phạm vi truy cập." });
+        return;
+      }
+      response.json(result);
     } catch (error) {
       next(error);
     }
@@ -114,7 +133,7 @@ automationsRouter.post(
         response.status(400).json({ message: "Mã automation không hợp lệ." });
         return;
       }
-      const validation = await validateAutomationRule(parsedId.data);
+      const validation = await validateAutomationRule(request.authUser!, parsedId.data);
       if (!validation) {
         response.status(404).json({ message: "Không tìm thấy automation rule." });
         return;
@@ -202,7 +221,7 @@ automationsRouter.get(
         response.status(400).json({ message: "Mã automation không hợp lệ." });
         return;
       }
-      const rule = await getAutomationRule(parsedId.data);
+      const rule = await getAutomationRule(request.authUser!, parsedId.data);
       if (!rule) {
         response.status(404).json({ message: "Không tìm thấy automation rule." });
         return;
@@ -226,6 +245,10 @@ automationsRouter.post(
         return;
       }
       const rule = await createAutomationRule(request.authUser!, parsed.data);
+      if (!rule) {
+        response.status(404).json({ message: "Không tìm thấy chương trình tuyển sinh trong phạm vi truy cập." });
+        return;
+      }
       response.status(201).json(rule);
     } catch (error) {
       next(error);
@@ -333,7 +356,12 @@ automationsRouter.get(
         response.status(400).json({ message: "Tham số không hợp lệ." });
         return;
       }
-      response.json(await listExecutionLogs(parsedId.data, parsedQuery.data.page, parsedQuery.data.limit));
+      const result = await listExecutionLogs(request.authUser!, parsedId.data, parsedQuery.data.page, parsedQuery.data.limit);
+      if (!result) {
+        response.status(404).json({ message: "Không tìm thấy automation rule." });
+        return;
+      }
+      response.json(result);
     } catch (error) {
       next(error);
     }
@@ -352,7 +380,7 @@ automationsRouter.get(
         response.status(400).json({ message: "Mã execution không hợp lệ." });
         return;
       }
-      const execution = await getAutomationExecution(parsedRuleId.data, parsedExecutionId.data);
+      const execution = await getAutomationExecution(request.authUser!, parsedRuleId.data, parsedExecutionId.data);
       if (!execution) {
         response.status(404).json({ message: "Không tìm thấy lần thực thi automation." });
         return;
