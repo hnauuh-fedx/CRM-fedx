@@ -52,19 +52,12 @@ export function getLeadScopeWhere(user: AuthUser) {
   if (user.accessScope === "DEPARTMENT" || permissions.has("lead.view_department")) {
     if (user.departmentIds.length === 0) return { id: "00000000-0000-4000-8000-000000000000" };
     return {
-      OR: [
-        {
-          lead_assignments: {
-            some: {
-              department_id: { in: user.departmentIds },
-              is_main_owner: true,
-            },
-          },
+      lead_assignments: {
+        some: {
+          department_id: { in: user.departmentIds },
+          is_main_owner: true,
         },
-        {
-          assigned_to: null,
-        },
-      ],
+      },
     };
   }
 

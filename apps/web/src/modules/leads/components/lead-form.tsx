@@ -1,12 +1,13 @@
-import { useEffect, useMemo, useRef, useState, type CSSProperties, type HTMLAttributes, type HTMLInputTypeAttribute, type ReactNode } from "react";
+import { useEffect, useMemo, useRef, useState, type CSSProperties, type FormEvent, type HTMLAttributes, type HTMLInputTypeAttribute, type ReactNode } from "react";
 import { useQuery } from "@tanstack/react-query";
-import { useForm, type Control, type FieldErrors, type UseFormRegister } from "react-hook-form";
+import { useForm, type Control, type FieldErrors, type UseFormRegister, type UseFormReturn } from "react-hook-form";
 
 import { Button } from "@/components/ui/button";
 import { Field, FieldDescription, FieldError, FieldGroup, FieldLabel } from "@/components/ui/field";
 import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectGroup, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
+import { cn } from "@/lib/utils";
 import { useInstitutionProgram } from "@/modules/institutions/institution-program-context";
 import { useAuth } from "@/modules/auth/auth-context";
 import { getLeadCustomFieldDefinitions, getLeadCustomFields } from "@/services/lead.service";
@@ -30,9 +31,10 @@ type LeadFormProps = {
   submitLabel: string;
   isPending: boolean;
   onSubmit: (values: LeadFormInput) => void;
+  dialogLayout?: boolean;
 };
 
-export function LeadForm({ defaultValues, options, leadId, submitLabel, isPending, onSubmit }: LeadFormProps) {
+export function LeadForm({ defaultValues, options, leadId, submitLabel, isPending, onSubmit, dialogLayout = false }: LeadFormProps) {
   const auth = useAuth();
   const canManageAssignment = !leadId || auth.can("lead.assign") || auth.can("lead.reassign");
   const { selectedProgramId } = useInstitutionProgram();
@@ -50,6 +52,7 @@ export function LeadForm({ defaultValues, options, leadId, submitLabel, isPendin
     enabled: Boolean(auth.accessToken && (leadId || programId)),
   });
   const customFields = useMemo(() => customFieldsQuery.data?.fields ?? [], [customFieldsQuery.data?.fields]);
+  const { formRef, handleFormSubmit } = useLeadFormSubmission(form, customFields, onSubmit);
   const customFieldsByGroup = useMemo(() => {
     const grouped = new Map<string, LeadCustomField[]>();
     for (const field of customFields) grouped.set(field.group.key, [...(grouped.get(field.group.key) ?? []), field]);
@@ -99,26 +102,12 @@ export function LeadForm({ defaultValues, options, leadId, submitLabel, isPendin
 
   return (
     <form
-      className="flex flex-col gap-6"
-      onSubmit={(event) => {
-        form.clearErrors();
-        void form.handleSubmit((values) => {
-          const parsed = leadFormSchema.safeParse(values);
-          if (!parsed.success) {
-            parsed.error.issues.forEach((issue) => {
-              const field = issue.path[0] as keyof LeadFormInput;
-              form.setError(field, { message: issue.message });
-            });
-            return;
-          }
-          const customFieldValues: Record<string, LeadCustomFieldValue> = {};
-          for (const field of customFields) {
-            if (field.canView && field.canEdit && form.getFieldState(`customFieldValues.${field.id}`).isDirty) customFieldValues[field.id] = values.customFieldValues[field.id] ?? null;
-          }
-          onSubmit({ ...parsed.data, customFieldValues });
-        })(event);
-      }}
+      ref={formRef}
+      className={cn("flex flex-col", dialogLayout ? "min-h-0 flex-1 gap-0" : "gap-6")}
+      noValidate
+      onSubmit={(event) => void handleFormSubmit(event)}
     >
+      <div className={cn("flex flex-col gap-6", dialogLayout && "min-h-0 flex-1 overflow-y-auto px-6 py-5")}>
       <FormSection title="Tiến trình" description="Chọn bước xử lý hiện tại của học viên. Mỗi lần thay đổi sẽ được lưu vào lịch sử và nhật ký hệ thống.">
         <LeadProgressSelector
           value={form.watch("pipelineStageId")}
@@ -313,11 +302,61 @@ export function LeadForm({ defaultValues, options, leadId, submitLabel, isPendin
           <CustomFieldInputs fields={customFields.filter((field) => field.group.id === group.id)} control={form.control} isPending={isPending} />
         </FormSection>
       ))}
-      <div className="flex justify-end">
+      </div>
+      <div className={cn("flex shrink-0 justify-end", dialogLayout && "border-t bg-background px-6 py-4")}>
         <Button type="submit" disabled={isPending}>{isPending ? "Đang lưu..." : submitLabel}</Button>
       </div>
     </form>
   );
+}
+
+function useLeadFormSubmission(
+  form: UseFormReturn<LeadFormInput>,
+  customFields: LeadCustomField[],
+  onSubmit: (values: LeadFormInput) => void,
+) {
+  const formRef = useRef<HTMLFormElement>(null);
+
+  const focusFirstInvalidField = () => {
+    window.requestAnimationFrame(() => {
+      const invalidField = formRef.current?.querySelector<HTMLElement>('[aria-invalid="true"]');
+      if (!invalidField) return;
+      invalidField.scrollIntoView({
+        behavior: window.matchMedia("(prefers-reduced-motion: reduce)").matches ? "auto" : "smooth",
+        block: "center",
+      });
+      if (!invalidField.matches(":disabled")) invalidField.focus({ preventScroll: true });
+    });
+  };
+
+  const handleFormSubmit = async (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    form.clearErrors();
+    const values = form.getValues();
+    const parsed = leadFormSchema.safeParse(values);
+    if (!parsed.success) {
+      parsed.error.issues.forEach((issue) => {
+        const field = issue.path[0] as keyof LeadFormInput;
+        form.setError(field, { message: issue.message });
+      });
+    }
+
+    const customFieldsAreValid = await form.trigger("customFieldValues", { shouldFocus: false });
+    if (!parsed.success || !customFieldsAreValid) {
+      focusFirstInvalidField();
+      return;
+    }
+
+    const customFieldValues: Record<string, LeadCustomFieldValue> = {};
+    for (const field of customFields) {
+      if (field.canView && field.canEdit && form.getFieldState(`customFieldValues.${field.id}`).isDirty) {
+        customFieldValues[field.id] = values.customFieldValues[field.id] ?? null;
+      }
+    }
+    onSubmit({ ...parsed.data, customFieldValues });
+  };
+
+  return { formRef, handleFormSubmit };
 }
 
 function CustomFieldInputs({ fields, control, isPending, emptyLabel }: { fields: LeadCustomField[]; control: Control<LeadFormInput>; isPending: boolean; emptyLabel?: string }) {

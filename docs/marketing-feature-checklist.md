@@ -5,7 +5,7 @@
 - [x] Danh sách phân trang, tìm kiếm, lọc trạng thái và loại chiến dịch.
 - [x] Tạo, chỉnh sửa và xóa chiến dịch theo quyền được cấp.
 - [x] Quản lý trạng thái: lập kế hoạch, đang chạy, tạm dừng, đã kết thúc.
-- [x] Quản lý thời gian triển khai, chương trình tuyển sinh và ngân sách.
+- [x] Quản lý thời gian triển khai và chương trình tuyển sinh.
 - [x] Hiển thị lead phát sinh, hồ sơ tuyển sinh, sinh viên nhập học, tỷ lệ vào hồ sơ và chi phí/lead.
 - [x] Ghi audit cho thao tác tạo, cập nhật, xóa; không xóa chiến dịch đã có UTM hoặc biểu mẫu.
 - [x] Áp dụng phạm vi `campaign.view`, `campaign.view_own`, `campaign.update_own` và quyền mutation riêng biệt tại API/UI.

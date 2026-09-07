@@ -2,6 +2,16 @@ import { readSelectedInstitutionProgramId } from "@/modules/institutions/institu
 
 const apiUrl = import.meta.env.VITE_API_URL ?? "http://localhost:3000/api";
 
+function authorizedHeaders(accessToken?: string | null) {
+  const headers = new Headers();
+  if (accessToken) {
+    headers.set("Authorization", `Bearer ${accessToken}`);
+    const selectedProgramId = readSelectedInstitutionProgramId();
+    if (selectedProgramId) headers.set("X-Institution-Program-Id", selectedProgramId);
+  }
+  return headers;
+}
+
 export class ApiError extends Error {
   constructor(
     message: string,
@@ -66,4 +76,23 @@ export async function apiFormRequest<T>(
   }
 
   return payload as T;
+}
+
+export async function apiDownload(path: string, accessToken: string) {
+  const response = await fetch(`${apiUrl}${path}`, { headers: authorizedHeaders(accessToken) });
+  if (!response.ok) {
+    const payload = (await response.json().catch(() => ({}))) as { message?: string };
+    throw new ApiError(payload.message ?? "Không thể tải tệp báo cáo.", response.status);
+  }
+  const blob = await response.blob();
+  const disposition = response.headers.get("Content-Disposition") ?? "";
+  const fileName = disposition.match(/filename="?([^";]+)"?/i)?.[1] ?? "bao-cao-kpi";
+  const url = URL.createObjectURL(blob);
+  const anchor = document.createElement("a");
+  anchor.href = url;
+  anchor.download = fileName;
+  document.body.appendChild(anchor);
+  anchor.click();
+  anchor.remove();
+  URL.revokeObjectURL(url);
 }

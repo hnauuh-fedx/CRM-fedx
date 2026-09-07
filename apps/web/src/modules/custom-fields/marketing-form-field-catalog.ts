@@ -19,7 +19,6 @@ export const marketingCampaignFormFieldCatalog: SystemFormFieldGroup[] = [
       field("status", "Tr\u1ea1ng th\u00e1i", "SELECT", "campaigns.status", { isRequired: true, optionSource: "Danh s\u00e1ch tr\u1ea1ng th\u00e1i chi\u1ebfn d\u1ecbch" }),
       field("startDate", "Ng\u00e0y b\u1eaft \u0111\u1ea7u", "DATE", "campaigns.start_date"),
       field("endDate", "Ng\u00e0y k\u1ebft th\u00fac", "DATE", "campaigns.end_date"),
-      field("budget", "Ng\u00e2n s\u00e1ch (VND)", "NUMBER", "campaigns.budget", { isRequired: true }),
       field("institutionProgramId", "Ch\u01b0\u01a1ng tr\u00ecnh", "SELECT", "campaigns.institution_program_id", { optionSource: "Ch\u01b0\u01a1ng tr\u00ecnh tuy\u1ec3n sinh" }),
     ],
   },

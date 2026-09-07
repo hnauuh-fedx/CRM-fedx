@@ -57,7 +57,7 @@ Dashboard giúp người dùng xem nhanh tình hình vận hành theo quyền c�
 
 Phân hệ Marketing hỗ trợ:
 
-- Quản lý chiến dịch marketing theo trạng thái, loại chiến dịch, ngân sách và chương trình tuyển sinh.
+- Quản lý chiến dịch marketing theo trạng thái, loại chiến dịch và chương trình tuyển sinh.
 - Quản lý nguồn lead.
 - Theo dõi UTM để biết lead đến từ kênh, campaign hoặc medium nào.
 - Quản lý biểu mẫu marketing, mapping field biểu mẫu về dữ liệu lead.

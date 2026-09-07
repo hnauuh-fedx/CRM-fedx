@@ -25,5 +25,45 @@ services:
       timeout: 5s
       retries: 10
 
+  metabase-postgres:
+    image: postgres:18-alpine
+    restart: unless-stopped
+    env_file:
+      - ./apps/metabase/.env
+    ports:
+      - "127.0.0.1:5433:5432"
+    volumes:
+      - metabase_postgres_data:/var/lib/postgresql
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $$POSTGRES_USER -d $$POSTGRES_DB"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+
+  metabase:
+    image: metabase/metabase:v0.63.2.x
+    restart: unless-stopped
+    env_file:
+      - ./apps/metabase/.env
+    entrypoint: ["/bin/sh", "-ec"]
+    command:
+      - |
+        export MB_DB_DBNAME="$${POSTGRES_DB}"
+        export MB_DB_USER="$${POSTGRES_USER}"
+        export MB_DB_PASS="$${POSTGRES_PASSWORD}"
+        exec /app/run_metabase.sh
+    environment:
+      MB_DB_HOST: metabase-postgres
+      MB_DB_PORT: 5432
+      MB_ENABLE_PUBLIC_SHARING: "false"
+      MB_ENABLE_EMBEDDING_SIMPLE: "true"
+      MB_ENABLE_EMBEDDING_STATIC: "true"
+    depends_on:
+      metabase-postgres:
+        condition: service_healthy
+    ports:
+      - "127.0.0.1:3001:3000"
+
 volumes:
   postgres_data:
+  metabase_postgres_data:

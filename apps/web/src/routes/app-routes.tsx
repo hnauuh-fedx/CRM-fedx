@@ -153,6 +153,16 @@ const StudentDetailReportPage = lazy(() =>
     default: module.StudentDetailReportPage,
   })),
 );
+const PersonalReportsPage = lazy(() =>
+  import("@/modules/reports/pages/personal-reports-page").then((module) => ({
+    default: module.PersonalReportsPage,
+  })),
+);
+const MetabaseDashboardPage = lazy(() =>
+  import("@/modules/reports/pages/metabase-dashboard-page").then((module) => ({
+    default: module.MetabaseDashboardPage,
+  })),
+);
 const CampaignsListPage = lazy(() =>
   import("@/modules/marketing/pages/campaigns-list-page").then((module) => ({
     default: module.CampaignsListPage,
@@ -282,14 +292,24 @@ export function AppRoutes() {
 
             <Route element={<ProtectedRoute anyPermissions={["report.view_all"]} />}>
               <Route path="/bao-cao/tong-hop" element={<OverviewReportPage />} />
-              <Route path="/bao-cao/tuyen-sinh" element={<AdmissionDetailReportPage />} />
-              <Route path="/bao-cao/sinh-vien" element={<StudentDetailReportPage />} />
             </Route>
             <Route element={<ProtectedRoute anyPermissions={["report.view_all", "report.marketing.view", "report.marketing.view_own"]} />}>
               <Route path="/bao-cao/marketing" element={<MarketingDetailReportPage />} />
             </Route>
-            <Route element={<ProtectedRoute anyPermissions={["report.view_all", "report.sale.view_department"]} />}>
+            <Route element={<ProtectedRoute anyPermissions={["report.view_all", "report.sale.view_department", "report.sale.view_assigned"]} />}>
               <Route path="/bao-cao/sale" element={<SaleDetailReportPage />} />
+            </Route>
+            <Route element={<ProtectedRoute anyPermissions={["report.personal.view"]} />}>
+              <Route path="/bao-cao/dashboard" element={<MetabaseDashboardPage />} />
+            </Route>
+            <Route element={<ProtectedRoute anyPermissions={["report.view_all", "report.admission.view", "admission.view_all", "admission.view"]} />}>
+              <Route path="/bao-cao/tuyen-sinh" element={<AdmissionDetailReportPage />} />
+            </Route>
+            <Route element={<ProtectedRoute anyPermissions={["report.view_all", "report.student.view", "student.view_all", "student.view"]} />}>
+              <Route path="/bao-cao/sinh-vien" element={<StudentDetailReportPage />} />
+            </Route>
+            <Route element={<ProtectedRoute anyPermissions={["report.personal.view"]} />}>
+              <Route path="/bao-cao/kpi-ca-nhan" element={<PersonalReportsPage />} />
             </Route>
 
             <Route element={<ProtectedRoute anyPermissions={["campaign.view_all", "campaign.view", "campaign.view_own"]} />}>

@@ -3,6 +3,7 @@ import { Prisma } from "../../generated/prisma/client";
 import type { AuthUser } from "../auth/auth.types";
 import type { CampaignViewer } from "../campaigns/campaign-list.service";
 import { getLeadScopeWhere } from "../leads/lead-list.service";
+import { APPLICATION_PIPELINE_STAGE_LIKE, applicationStageLeadWhere } from "../leads/pipeline-stage-semantics";
 
 export type ReportDateRange = {
   fromDate?: string;
@@ -12,7 +13,6 @@ export type ReportDateRange = {
 
 type MarketingSummaryRow = {
   campaignCount: number | bigint;
-  totalBudget: unknown;
   trackingCount: number | bigint;
   leadCount: number | bigint;
   applicationCount: number | bigint;
@@ -25,7 +25,6 @@ type MarketingPerformanceRow = {
   name: string | null;
   type: string | null;
   status: string | null;
-  budget: unknown;
   trackingCount: number | bigint;
   leadCount: number | bigint;
   applicationCount: number | bigint;
@@ -48,21 +47,21 @@ export async function getMarketingDetailReport(user: CampaignViewer, query: Repo
   const [summaryRows, campaignRows, sourceRows] = await Promise.all([
     prisma.$queryRaw<MarketingSummaryRow[]>(Prisma.sql`
       WITH scoped_campaigns AS (
-        SELECT campaign.id, campaign.budget
+        SELECT campaign.id
         FROM campaigns campaign
         WHERE ${where}
       )
       SELECT
         (SELECT COUNT(*)::int FROM scoped_campaigns) AS "campaignCount",
-        (SELECT COALESCE(SUM(budget), 0) FROM scoped_campaigns) AS "totalBudget",
         COUNT(tracking.id)::int AS "trackingCount",
         COUNT(DISTINCT tracking.lead_id)::int AS "leadCount",
-        COUNT(DISTINCT application.lead_id)::int AS "applicationCount",
+        COUNT(DISTINCT CASE WHEN application_stage.id IS NOT NULL THEN tracking.lead_id END)::int AS "applicationCount",
         COUNT(DISTINCT student.lead_id)::int AS "enrolledStudentCount",
         (SELECT COUNT(*)::int FROM marketing_forms form WHERE form.campaign_id IN (SELECT id FROM scoped_campaigns)) AS "formCount"
       FROM scoped_campaigns campaign
       LEFT JOIN utm_trackings tracking ON tracking.campaign_id = campaign.id
-      LEFT JOIN admission_profiles application ON application.lead_id = tracking.lead_id
+      LEFT JOIN leads application_lead ON application_lead.id = tracking.lead_id AND application_lead.deleted_at IS NULL
+      LEFT JOIN pipeline_stages application_stage ON application_stage.id = application_lead.pipeline_stage_id AND application_stage.name ILIKE ${APPLICATION_PIPELINE_STAGE_LIKE}
       LEFT JOIN students student ON student.lead_id = tracking.lead_id
     `),
     prisma.$queryRaw<MarketingPerformanceRow[]>(Prisma.sql`
@@ -71,17 +70,17 @@ export async function getMarketingDetailReport(user: CampaignViewer, query: Repo
         campaign.name,
         campaign.type,
         campaign.status,
-        COALESCE(campaign.budget, 0) AS "budget",
         COUNT(tracking.id)::int AS "trackingCount",
         COUNT(DISTINCT tracking.lead_id)::int AS "leadCount",
-        COUNT(DISTINCT application.lead_id)::int AS "applicationCount",
+        COUNT(DISTINCT CASE WHEN application_stage.id IS NOT NULL THEN tracking.lead_id END)::int AS "applicationCount",
         COUNT(DISTINCT student.lead_id)::int AS "enrolledStudentCount"
       FROM campaigns campaign
       LEFT JOIN utm_trackings tracking ON tracking.campaign_id = campaign.id
-      LEFT JOIN admission_profiles application ON application.lead_id = tracking.lead_id
+      LEFT JOIN leads application_lead ON application_lead.id = tracking.lead_id AND application_lead.deleted_at IS NULL
+      LEFT JOIN pipeline_stages application_stage ON application_stage.id = application_lead.pipeline_stage_id AND application_stage.name ILIKE ${APPLICATION_PIPELINE_STAGE_LIKE}
       LEFT JOIN students student ON student.lead_id = tracking.lead_id
       WHERE ${where}
-      GROUP BY campaign.id, campaign.name, campaign.type, campaign.status, campaign.budget
+      GROUP BY campaign.id, campaign.name, campaign.type, campaign.status
       ORDER BY COUNT(DISTINCT tracking.lead_id) DESC, campaign.created_at DESC, campaign.id ASC
       LIMIT 10
     `),
@@ -90,11 +89,12 @@ export async function getMarketingDetailReport(user: CampaignViewer, query: Repo
         tracking.utm_source AS "source",
         COUNT(tracking.id)::int AS "trackingCount",
         COUNT(DISTINCT tracking.lead_id)::int AS "leadCount",
-        COUNT(DISTINCT application.lead_id)::int AS "applicationCount",
+        COUNT(DISTINCT CASE WHEN application_stage.id IS NOT NULL THEN tracking.lead_id END)::int AS "applicationCount",
         COUNT(DISTINCT student.lead_id)::int AS "enrolledStudentCount"
       FROM campaigns campaign
       JOIN utm_trackings tracking ON tracking.campaign_id = campaign.id
-      LEFT JOIN admission_profiles application ON application.lead_id = tracking.lead_id
+      LEFT JOIN leads application_lead ON application_lead.id = tracking.lead_id AND application_lead.deleted_at IS NULL
+      LEFT JOIN pipeline_stages application_stage ON application_stage.id = application_lead.pipeline_stage_id AND application_stage.name ILIKE ${APPLICATION_PIPELINE_STAGE_LIKE}
       LEFT JOIN students student ON student.lead_id = tracking.lead_id
       WHERE ${where}
       GROUP BY tracking.utm_source
@@ -111,7 +111,6 @@ export async function getMarketingDetailReport(user: CampaignViewer, query: Repo
     filters: normalizedFilters(query),
     summary: {
       campaignCount: Number(summary?.campaignCount ?? 0),
-      totalBudget: Number(summary?.totalBudget ?? 0),
       trackingCount: Number(summary?.trackingCount ?? 0),
       leadCount,
       applicationCount,
@@ -126,10 +125,8 @@ export async function getMarketingDetailReport(user: CampaignViewer, query: Repo
         name: row.name ?? "Chưa xác định",
         type: row.type,
         status: row.status,
-        budget: Number(row.budget ?? 0),
         ...metrics,
         conversionRate: metrics.leadCount > 0 ? Number(((metrics.applicationCount / metrics.leadCount) * 100).toFixed(1)) : 0,
-        costPerLead: metrics.leadCount > 0 ? Number(row.budget ?? 0) / metrics.leadCount : null,
       };
     }),
     sourcePerformance: sourceRows.map((row) => ({
@@ -195,9 +192,11 @@ export async function getSaleDetailReport(user: AuthUser, query: ReportDateRange
     }),
     Promise.all(assigneeIds.map(async (assigneeId) => ({
       assigneeId,
-      total: await prisma.admission_profiles.count({
+      total: await prisma.leads.count({
         where: {
-          leads: { is: { ...scopedLeadWhere, assigned_to: assigneeId } },
+          ...scopedLeadWhere,
+          assigned_to: assigneeId,
+          ...applicationStageLeadWhere(),
           ...dateWhereObject("created_at", query),
         },
       }),
@@ -213,7 +212,7 @@ export async function getSaleDetailReport(user: AuthUser, query: ReportDateRange
     }))),
   ]);
 
-  const stageNames = new Map(stages.map((stage) => [stage.id, stage.name]));
+  const stagesById = new Map(stages.map((stage) => [stage.id, stage]));
   const staffNames = new Map(staffIds.map((staff) => [staff.id, staff.full_name]));
   const applicationsByStaff = new Map(staffApplicationCounts.map((group) => [group.assigneeId, group.total]));
   const studentsByStaff = new Map(staffStudentCounts.map((group) => [group.assigneeId, group.total]));
@@ -229,11 +228,15 @@ export async function getSaleDetailReport(user: AuthUser, query: ReportDateRange
       overdueReminders,
       assignmentRate: totalLeads > 0 ? Number(((assignedLeads / totalLeads) * 100).toFixed(1)) : 0,
     },
-    pipelineBreakdown: stageGroups.map((group) => ({
-      id: group.pipeline_stage_id,
-      name: group.pipeline_stage_id ? (stageNames.get(group.pipeline_stage_id) ?? "Chưa xác định") : "Chưa có giai đoạn",
-      total: group._count._all,
-    })),
+    pipelineBreakdown: stageGroups
+      .map((group) => ({
+        id: group.pipeline_stage_id,
+        name: group.pipeline_stage_id ? (stagesById.get(group.pipeline_stage_id)?.name ?? "Chưa xác định") : "Chưa có giai đoạn",
+        position: group.pipeline_stage_id ? stagesById.get(group.pipeline_stage_id)?.position ?? null : null,
+        total: group._count._all,
+      }))
+      .sort((left, right) => comparePipelineStagePosition(left.position, right.position, left.name, right.name))
+      .map(({ position: _position, ...stage }) => stage),
     staffPerformance: staffGroups.map((group) => {
       const assignedLeadCount = group._count._all;
       const applicationCount = applicationsByStaff.get(group.assigned_to ?? "") ?? 0;
@@ -251,6 +254,15 @@ export async function getSaleDetailReport(user: AuthUser, query: ReportDateRange
 
 export async function getAdmissionDetailReport(user: AuthUser, query: ReportDateRange) {
   const admissionWhere = buildAdmissionWhere(user, query);
+  const applicationLeadWhere: Prisma.leadsWhereInput = {
+    AND: [
+      { deleted_at: null },
+      getLeadScopeWhere(user),
+      applicationStageLeadWhere(),
+      ...(query.institutionProgramId ? [{ institution_program_id: query.institutionProgramId }] : []),
+      ...dateWhere("created_at", query),
+    ],
+  };
   const scopedLeadWhere = {
     deleted_at: null,
     ...getLeadScopeWhere(user),
@@ -268,7 +280,7 @@ export async function getAdmissionDetailReport(user: AuthUser, query: ReportDate
     tuitionStatusGroups,
     recentApplications,
   ] = await prisma.$transaction([
-    prisma.admission_profiles.count({ where: admissionWhere }),
+    prisma.leads.count({ where: applicationLeadWhere }),
     prisma.admission_profiles.count({ where: { AND: [admissionWhere, { students: { isNot: null } }] } }),
     prisma.admission_profiles.aggregate({ where: admissionWhere, _sum: { monthly_revenue: true } }),
     prisma.admission_documents.count({
@@ -566,7 +578,7 @@ function marketingWhere(user: CampaignViewer, query: ReportDateRange) {
 function buildAdmissionWhere(user: AuthUser, query: ReportDateRange): AdmissionWhere {
   return {
     AND: [
-      { leads: { is: { deleted_at: null, ...getLeadScopeWhere(user) } } },
+      { leads: { is: { deleted_at: null, ...getLeadScopeWhere(user), ...applicationStageLeadWhere() } } },
       ...(query.institutionProgramId ? [{ institution_program_id: query.institutionProgramId }] : []),
       ...dateWhere("created_at", query),
     ],
@@ -619,4 +631,11 @@ function normalizeStatusLabel(value: string | null) {
     .filter(Boolean)
     .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
     .join(" ");
+}
+
+function comparePipelineStagePosition(left: number | null, right: number | null, leftName: string, rightName: string) {
+  if (left == null && right != null) return 1;
+  if (left != null && right == null) return -1;
+  if (left != null && right != null && left !== right) return left - right;
+  return leftName.localeCompare(rightName, "vi");
 }

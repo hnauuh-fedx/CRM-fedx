@@ -1,4 +1,4 @@
-import { Router } from "express";
+import { Router, type RequestHandler } from "express";
 import multer from "multer";
 import { z } from "zod";
 
@@ -24,7 +24,7 @@ import {
   updateLead,
 } from "./lead-management.service";
 import { getInstitutionProgramScope } from "../institutions/institution-program-scope";
-import { importLeadsFromWorkbook } from "./lead-import.service";
+import { importLeadsFromWorkbook, InvalidLeadImportFileError } from "./lead-import.service";
 import { getLeadCustomFieldDefinitions, getLeadCustomFields, patchLeadCustomFields } from "./lead-custom-fields.service";
 
 const leadListQuerySchema = z.object({
@@ -160,6 +160,19 @@ const upload = multer({
   storage: multer.memoryStorage(),
   limits: { fileSize: 5 * 1024 * 1024, files: 1 },
 });
+const uploadLeadImport: RequestHandler = (request, response, next) => {
+  upload.single("file")(request, response, (error) => {
+    if (error instanceof multer.MulterError) {
+      response.status(400).json({
+        message: error.code === "LIMIT_FILE_SIZE"
+          ? "File Excel không được vượt quá 5MB."
+          : "Không thể tải file Excel lên. Vui lòng chỉ chọn một file.",
+      });
+      return;
+    }
+    next(error);
+  });
+};
 
 leadsRouter.get(
   "/",
@@ -273,7 +286,7 @@ leadsRouter.post(
   "/import",
   requireAuthentication,
   requireAnyPermission("lead.create"),
-  upload.single("file"),
+  uploadLeadImport,
   async (request, response, next) => {
     try {
       if (!request.file) {
@@ -293,6 +306,10 @@ leadsRouter.post(
 
       response.json(await importLeadsFromWorkbook(request.authUser!, request.file.buffer, getInstitutionProgramScope(request)));
     } catch (error) {
+      if (error instanceof InvalidLeadImportFileError) {
+        response.status(400).json({ message: error.message });
+        return;
+      }
       next(error);
     }
   },

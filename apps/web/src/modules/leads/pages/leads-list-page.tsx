@@ -170,11 +170,13 @@ function LeadImportDialog({
   onImport: (file: File) => void;
 }) {
   const [file, setFile] = useState<File | null>(null);
+  const [fileError, setFileError] = useState<string | null>(null);
 
   return (
     <Dialog onOpenChange={(open) => {
       if (open) {
         setFile(null);
+        setFileError(null);
         onReset();
       }
     }}>
@@ -188,7 +190,7 @@ function LeadImportDialog({
         <DialogHeader>
           <DialogTitle>Import lead từ Excel</DialogTitle>
           <DialogDescription>
-            File cần có các cột tối thiểu: fullName hoặc Họ tên, phone hoặc SĐT, sourceId hoặc mã/tên nguồn lead.
+            Chỉ cần các cột bắt buộc; không cần tạo đủ tất cả trường của form lead.
           </DialogDescription>
         </DialogHeader>
         <form
@@ -198,6 +200,29 @@ function LeadImportDialog({
             if (file) onImport(file);
           }}
         >
+          <div className="grid gap-3 rounded-lg border bg-muted/20 p-4 text-sm">
+            <div>
+              <p className="font-medium">Cột bắt buộc</p>
+              <p className="mt-1 text-muted-foreground">
+                Dùng đúng tên cột: <code className="font-medium text-foreground">fullName</code>,{" "}
+                <code className="font-medium text-foreground">phone</code> và{" "}
+                <code className="font-medium text-foreground">sourceName</code> hoặc{" "}
+                <code className="font-medium text-foreground">sourceId</code>.
+              </p>
+            </div>
+            <div>
+              <p className="font-medium">Chương trình tuyển sinh</p>
+              <p className="mt-1 text-muted-foreground">
+                Hệ thống dùng chương trình đang làm việc. Nếu chưa chọn chương trình, file cần thêm
+                <code className="ml-1 font-medium text-foreground">institutionProgramId</code>,{" "}
+                <code className="font-medium text-foreground">programCode</code> hoặc{" "}
+                <code className="font-medium text-foreground">programName</code>.
+              </p>
+            </div>
+            <p className="text-muted-foreground">
+              Các cột như email, pipelineStageId, note, gender và dateOfBirth là tùy chọn, có thể bỏ hoàn toàn.
+            </p>
+          </div>
           <div className="grid gap-2">
             <FieldLabel htmlFor="lead-import-file">File Excel</FieldLabel>
             <Input
@@ -205,11 +230,19 @@ function LeadImportDialog({
               type="file"
               accept=".xlsx,.xls"
               disabled={isPending}
-              onChange={(event) => setFile(event.target.files?.[0] ?? null)}
+              aria-describedby="lead-import-help"
+              aria-invalid={Boolean(fileError)}
+              onChange={(event) => {
+                const selectedFile = event.target.files?.[0] ?? null;
+                const validationMessage = validateLeadImportFile(selectedFile);
+                setFileError(validationMessage);
+                setFile(validationMessage ? null : selectedFile);
+              }}
             />
-            <p className="text-sm text-muted-foreground">
+            <p id="lead-import-help" className="text-sm text-muted-foreground">
               Hỗ trợ tối đa 1.000 dòng và dung lượng 5MB. Các dòng lỗi sẽ được bỏ qua và hiển thị lý do.
             </p>
+            {fileError && <p role="alert" className="text-sm text-destructive">{fileError}</p>}
           </div>
           {error && (
             <p role="alert" className="text-sm text-destructive">
@@ -227,6 +260,13 @@ function LeadImportDialog({
       </DialogContent>
     </Dialog>
   );
+}
+
+function validateLeadImportFile(file: File | null) {
+  if (!file) return null;
+  if (!/\.(xlsx|xls)$/i.test(file.name)) return "Vui lòng chọn file Excel có định dạng .xlsx hoặc .xls.";
+  if (file.size > 5 * 1024 * 1024) return "File Excel không được vượt quá 5MB.";
+  return null;
 }
 
 function LeadImportResultPanel({ result }: { result: LeadImportResult }) {
@@ -451,25 +491,25 @@ export function LeadsListPage() {
                 Thêm ứng viên
               </Button>
             </DialogTrigger>
-            <DialogContent className="max-h-[calc(100dvh-2rem)] overflow-y-auto sm:max-w-[calc(100vw-2rem)] xl:max-w-368">
-              <DialogHeader>
+            <DialogContent className="flex max-h-[calc(100dvh-2rem)] flex-col gap-0 overflow-hidden p-0 sm:max-w-[calc(100vw-2rem)] xl:max-w-368">
+              <DialogHeader className="shrink-0 border-b px-6 py-5 pr-14">
                 <DialogTitle>Thêm thông tin ứng viên</DialogTitle>
                 <DialogDescription>
                   Nhập thông tin cơ bản trước; có thể bổ sung học vấn, hồ sơ tuyển sinh và người thân ngay trong lần tạo.
                 </DialogDescription>
               </DialogHeader>
               {createMutation.isError && (
-                <p role="alert" className="text-sm text-destructive">
+                <p role="alert" className="mx-6 mt-4 text-sm text-destructive">
                   {createMutation.error instanceof ApiError ? createMutation.error.message : "Không thể tạo lead. Vui lòng thử lại."}
                 </p>
               )}
-              {partialCreateLeadId && createMutation.isError && <p className="text-sm text-muted-foreground">Lead đã được tạo nhưng thông tin bổ sung chưa lưu. <Link className="font-medium text-primary underline" to={`/sale/leads/${partialCreateLeadId}`}>Mở lead để lưu lại</Link>.</p>}
+              {partialCreateLeadId && createMutation.isError && <p className="mx-6 mt-2 text-sm text-muted-foreground">Lead đã được tạo nhưng thông tin bổ sung chưa lưu. <Link className="font-medium text-primary underline" to={`/sale/leads/${partialCreateLeadId}`}>Mở lead để lưu lại</Link>.</p>}
               {actionOptionsQuery.isLoading ? (
-                <p role="status" className="text-sm text-muted-foreground">
+                <p role="status" className="px-6 py-5 text-sm text-muted-foreground">
                   Đang tải thông tin tạo lead…
                 </p>
               ) : actionOptionsQuery.isError ? (
-                <p role="alert" className="text-sm text-destructive">
+                <p role="alert" className="px-6 py-5 text-sm text-destructive">
                   Không thể tải nguồn lead. Vui lòng đóng cửa sổ và thử lại.
                 </p>
               ) : (
@@ -486,6 +526,7 @@ export function LeadsListPage() {
                   }}
                   submitLabel="Lưu ứng viên"
                   isPending={createMutation.isPending}
+                  dialogLayout
                   onSubmit={(values) => createMutation.mutate(values)}
                 />
               )}
@@ -607,24 +648,24 @@ function EditLeadDialog({
   return (
     <Dialog open={isOpen} onOpenChange={onOpenChange}>
       <DialogContent
-        className="max-h-[calc(100dvh-2rem)] overflow-y-auto sm:max-w-[calc(100vw-2rem)] xl:max-w-368"
+        className="flex max-h-[calc(100dvh-2rem)] flex-col gap-0 overflow-hidden p-0 sm:max-w-[calc(100vw-2rem)] xl:max-w-368"
         onCloseAutoFocus={onAfterClose}
       >
-        <DialogHeader>
+        <DialogHeader className="shrink-0 border-b px-6 py-5 pr-14">
           <DialogTitle>Chỉnh sửa thông tin ứng viên</DialogTitle>
           <DialogDescription>
             Cập nhật hồ sơ, tiến trình và thông tin tuyển sinh của ứng viên.
           </DialogDescription>
         </DialogHeader>
         {mutationError && (
-          <p role="alert" className="text-sm text-destructive">
+          <p role="alert" className="mx-6 mt-4 text-sm text-destructive">
             {mutationError instanceof ApiError ? mutationError.message : "Không thể lưu thay đổi. Vui lòng thử lại."}
           </p>
         )}
         {status === "loading" ? (
-          <p role="status" className="text-sm text-muted-foreground">Đang tải thông tin ứng viên…</p>
+          <p role="status" className="px-6 py-5 text-sm text-muted-foreground">Đang tải thông tin ứng viên…</p>
         ) : status === "error" || !lead || !options ? (
-          <p role="alert" className="text-sm text-destructive">
+          <p role="alert" className="px-6 py-5 text-sm text-destructive">
             Không thể tải thông tin ứng viên. Vui lòng đóng cửa sổ và thử lại.
           </p>
         ) : (
@@ -634,6 +675,7 @@ function EditLeadDialog({
             leadId={lead.id}
             submitLabel="Lưu thay đổi"
             isPending={isSaving}
+            dialogLayout
             onSubmit={onSubmit}
           />
         )}

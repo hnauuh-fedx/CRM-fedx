@@ -47,7 +47,6 @@ const emptyCampaignForm: CampaignInput = {
   status: "planning",
   startDate: "",
   endDate: "",
-  budget: 0,
   institutionProgramId: "",
 };
 const campaignFormSchema = z.object({
@@ -56,19 +55,13 @@ const campaignFormSchema = z.object({
   status: z.enum(["planning", "active", "paused", "completed"]),
   startDate: z.string(),
   endDate: z.string(),
-  budget: z.number().min(0, "Ngân sách không được âm.").max(1_000_000_000_000, "Ngân sách vượt giới hạn cho phép."),
   institutionProgramId: z.string(),
 }).refine((input) => !input.startDate || !input.endDate || input.endDate >= input.startDate, {
   path: ["endDate"],
   message: "Ngày kết thúc phải từ ngày bắt đầu trở đi.",
 });
-const sortableColumns = new Set<CampaignSortField>(["createdAt", "name", "startDate", "budget"]);
+const sortableColumns = new Set<CampaignSortField>(["createdAt", "name", "startDate"]);
 const dateFormatter = new Intl.DateTimeFormat("vi-VN");
-const currencyFormatter = new Intl.NumberFormat("vi-VN", {
-  style: "currency",
-  currency: "VND",
-  maximumFractionDigits: 0,
-});
 const statusLabels: Record<string, string> = {
   active: "Đang chạy",
   planning: "Lập kế hoạch",
@@ -168,7 +161,7 @@ export function CampaignsListPage() {
         eyebrow="CRM Marketing"
         title="Quản lý chiến dịch"
         scopeLabel={selectedProgram ? `${selectedProgram.institutionName} - ${selectedProgram.name}` : "Phạm vi được cấp"}
-        description="Tạo và theo dõi trạng thái, ngân sách cùng hiệu quả chuyển đổi của từng chiến dịch."
+        description="Tạo và theo dõi trạng thái cùng hiệu quả chuyển đổi của từng chiến dịch."
         actions={canCreate ? (
           <Button type="button" onClick={() => { createMutation.reset(); setDialog({ type: "create" }); }}>
             <Plus aria-hidden="true" />
@@ -206,7 +199,7 @@ export function CampaignsListPage() {
         <DialogContent className="sm:max-w-2xl">
           <DialogHeader>
             <DialogTitle>Tạo chiến dịch</DialogTitle>
-            <DialogDescription>Khai báo thời gian, ngân sách và trạng thái triển khai ban đầu.</DialogDescription>
+            <DialogDescription>Khai báo thời gian và trạng thái triển khai ban đầu.</DialogDescription>
           </DialogHeader>
           <CampaignForm
             entityId={undefined}
@@ -224,7 +217,7 @@ export function CampaignsListPage() {
         <DialogContent className="sm:max-w-2xl">
           <DialogHeader>
             <DialogTitle>Chỉnh sửa chiến dịch</DialogTitle>
-            <DialogDescription>Cập nhật trạng thái thực hiện và ngân sách chiến dịch.</DialogDescription>
+            <DialogDescription>Cập nhật thời gian và trạng thái thực hiện của chiến dịch.</DialogDescription>
           </DialogHeader>
           {editingCampaign && (
             <CampaignForm
@@ -235,7 +228,6 @@ export function CampaignsListPage() {
                 status: (editingCampaign.status as CampaignInput["status"]) ?? "planning",
                 startDate: editingCampaign.startDate?.slice(0, 10) ?? "",
                 endDate: editingCampaign.endDate?.slice(0, 10) ?? "",
-                budget: editingCampaign.budget,
                 institutionProgramId: editingCampaign.institutionProgram?.id ?? selectedProgramId ?? "",
               }}
               options={optionsQuery.data}
@@ -300,18 +292,13 @@ function useCampaignColumns({
         cell: ({ row }) => `${formatDate(row.original.startDate)} - ${formatDate(row.original.endDate)}`,
       },
       {
-        accessorKey: "budget",
-        header: "Ngân sách",
-        cell: ({ row }) => currencyFormatter.format(row.original.budget),
-      },
-      {
         id: "performance",
         header: "Hiệu quả chuyển đổi",
         enableSorting: false,
         cell: ({ row }) => (
           <div className="space-y-1 text-sm">
             <p>{row.original.leadCount} lead / {row.original.applicationCount} hồ sơ / {row.original.enrolledStudentCount} SV</p>
-            <p className="text-muted-foreground">{row.original.conversionRate}% vào hồ sơ · {row.original.leadCount ? currencyFormatter.format(row.original.budget / row.original.leadCount) : "-"} / lead</p>
+            <p className="text-muted-foreground">{row.original.conversionRate}% vào hồ sơ</p>
           </div>
         ),
       },
@@ -512,11 +499,6 @@ function CampaignForm({
           <FieldLabel htmlFor="campaign-form-end">Ngày kết thúc</FieldLabel>
           <Input id="campaign-form-end" type="date" aria-invalid={Boolean(form.formState.errors.endDate)} {...form.register("endDate")} />
           <FieldError errors={[form.formState.errors.endDate]} />
-        </Field>
-        <Field data-invalid={Boolean(form.formState.errors.budget)}>
-          <FieldLabel htmlFor="campaign-form-budget">Ngân sách (VND) *</FieldLabel>
-          <Input id="campaign-form-budget" type="number" min={0} step={1000} inputMode="numeric" aria-invalid={Boolean(form.formState.errors.budget)} {...form.register("budget", { valueAsNumber: true })} />
-          <FieldError errors={[form.formState.errors.budget]} />
         </Field>
         <Field>
           <FieldLabel htmlFor="campaign-form-program">Chương trình</FieldLabel>

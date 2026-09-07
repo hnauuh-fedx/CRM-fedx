@@ -54,7 +54,6 @@ async function verifyUtmAnalytics() {
         name: `UTM ngoài phạm vi ${runId}`,
         type: "digital",
         status: "active",
-        budget: 12000000,
         created_by: director.id,
       },
       select: { id: true },
@@ -94,7 +93,6 @@ async function verifyUtmAnalytics() {
       directorToken,
     );
     assert.equal(campaignAnalytics.status, 200);
-    assert.equal((campaignAnalytics.payload.data as Array<{ costPerLead: number }>)[0].costPerLead, 12000000);
 
     const leadsResponse = await request(
       baseUrl,
@@ -127,7 +125,7 @@ async function verifyUtmAnalytics() {
       directorToken,
     );
     assert.equal((futureRange.payload.summary as { trackingCount: number }).trackingCount, 0);
-    console.log("UTM analytics verified: metrics, campaign cost, drill-down privacy, date filter and scope.");
+    console.log("UTM analytics verified: metrics, drill-down privacy, date filter and scope.");
   } finally {
     await new Promise<void>((resolve) => server.close(() => resolve()));
     if (leadId) {

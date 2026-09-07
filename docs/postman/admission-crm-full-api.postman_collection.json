@@ -1,0 +1,6033 @@
+{
+  "info": {
+    "_postman_id": "d7b7f3dd-8a13-44f6-bc95-66a9f9127a71",
+    "name": "Admission CRM - Full API",
+    "description": "Full collection generated from Admission CRM Express routers. Run Auth/Login first, then Institution Programs/Options. Replace placeholder ids as needed for write requests.",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "auth": {
+    "type": "bearer",
+    "bearer": [
+      {
+        "key": "token",
+        "value": "{{accessToken}}",
+        "type": "string"
+      }
+    ]
+  },
+  "item": [
+    {
+      "name": "Health",
+      "item": [
+        {
+          "name": "Health Check",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/health",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "health"
+              ]
+            },
+            "auth": {
+              "type": "noauth"
+            }
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "Auth",
+      "item": [
+        {
+          "name": "Login",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/auth/login",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "auth",
+                "login"
+              ]
+            },
+            "auth": {
+              "type": "noauth"
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"{{email}}\",\n  \"password\": \"{{password}}\"\n}"
+            }
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Login successful', function () { pm.response.to.have.status(200); });",
+                  "const json = pm.response.json();",
+                  "if (json.accessToken) pm.collectionVariables.set('accessToken', json.accessToken);"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Me",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/auth/me",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "auth",
+                "me"
+              ]
+            }
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "Institution Programs",
+      "item": [
+        {
+          "name": "Options",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/institution-programs/options",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "institution-programs",
+                "options"
+              ]
+            }
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Programs loaded', function () { pm.response.to.have.status(200); });",
+                  "const json = pm.response.json();",
+                  "if (Array.isArray(json.data) && json.data.length) pm.collectionVariables.set('institutionProgramId', json.data[0].id);"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "List Managed Programs",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/institution-programs?page={{page}}&limit={{limit}}&search={{search}}&status={{programStatus}}&institutionId={{institutionId}}&programTypeId={{programTypeId}}&sortBy=name&sortOrder=asc",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "institution-programs"
+              ],
+              "query": [
+                {
+                  "key": "page",
+                  "value": "{{page}}"
+                },
+                {
+                  "key": "limit",
+                  "value": "{{limit}}"
+                },
+                {
+                  "key": "search",
+                  "value": "{{search}}"
+                },
+                {
+                  "key": "status",
+                  "value": "{{programStatus}}"
+                },
+                {
+                  "key": "institutionId",
+                  "value": "{{institutionId}}"
+                },
+                {
+                  "key": "programTypeId",
+                  "value": "{{programTypeId}}"
+                },
+                {
+                  "key": "sortBy",
+                  "value": "name"
+                },
+                {
+                  "key": "sortOrder",
+                  "value": "asc"
+                }
+              ]
+            }
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Request succeeded', function () { pm.expect(pm.response.code).to.be.oneOf([200, 201]); });",
+                  "const json = pm.response.json();",
+                  "const list = Array.isArray(json.data) ? json.data : (Array.isArray(json) ? json : []);",
+                  "if (list.length && list[0].id) pm.collectionVariables.set('institutionProgramId', list[0].id);"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Management Options",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/institution-programs/management-options",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "institution-programs",
+                "management-options"
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Create Program",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/institution-programs",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "institution-programs"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"institutionId\": \"{{institutionId}}\",\n  \"programTypeId\": \"{{programTypeId}}\",\n  \"name\": \"Demo Program\",\n  \"code\": \"DEMO-2026\",\n  \"status\": \"active\"\n}"
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Update Program",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/institution-programs/{{institutionProgramId}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "institution-programs",
+                "{{institutionProgramId}}"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"institutionId\": \"{{institutionId}}\",\n  \"programTypeId\": \"{{programTypeId}}\",\n  \"name\": \"Demo Program\",\n  \"code\": \"DEMO-2026\",\n  \"status\": \"active\"\n}"
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Delete Program",
+          "request": {
+            "method": "DELETE",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/institution-programs/{{institutionProgramId}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "institution-programs",
+                "{{institutionProgramId}}"
+              ]
+            }
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "Dashboard",
+      "item": [
+        {
+          "name": "Director Dashboard",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "X-Institution-Program-Id",
+                "value": "{{institutionProgramId}}",
+                "disabled": false
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/dashboard/director",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "dashboard",
+                "director"
+              ]
+            }
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "Leads",
+      "item": [
+        {
+          "name": "List Leads",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "X-Institution-Program-Id",
+                "value": "{{institutionProgramId}}",
+                "disabled": false
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/leads?page={{page}}&limit={{limit}}&search={{search}}&status={{leadStatus}}&pipelineStageId={{pipelineStageId}}&sourceId={{sourceId}}&institutionProgramId={{institutionProgramId}}&assigneeId={{assigneeId}}&sortBy=createdAt&sortOrder=desc",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "leads"
+              ],
+              "query": [
+                {
+                  "key": "page",
+                  "value": "{{page}}"
+                },
+                {
+                  "key": "limit",
+                  "value": "{{limit}}"
+                },
+                {
+                  "key": "search",
+                  "value": "{{search}}"
+                },
+                {
+                  "key": "status",
+                  "value": "{{leadStatus}}"
+                },
+                {
+                  "key": "pipelineStageId",
+                  "value": "{{pipelineStageId}}"
+                },
+                {
+                  "key": "sourceId",
+                  "value": "{{sourceId}}"
+                },
+                {
+                  "key": "institutionProgramId",
+                  "value": "{{institutionProgramId}}"
+                },
+                {
+                  "key": "assigneeId",
+                  "value": "{{assigneeId}}"
+                },
+                {
+                  "key": "sortBy",
+                  "value": "createdAt"
+                },
+                {
+                  "key": "sortOrder",
+                  "value": "desc"
+                }
+              ]
+            }
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Request succeeded', function () { pm.expect(pm.response.code).to.be.oneOf([200, 201]); });",
+                  "const json = pm.response.json();",
+                  "const list = Array.isArray(json.data) ? json.data : (Array.isArray(json) ? json : []);",
+                  "if (list.length && list[0].id) pm.collectionVariables.set('leadId', list[0].id);"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Lead Filter Options",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "X-Institution-Program-Id",
+                "value": "{{institutionProgramId}}",
+                "disabled": false
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/leads/options",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "leads",
+                "options"
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Lead Action Options",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "X-Institution-Program-Id",
+                "value": "{{institutionProgramId}}",
+                "disabled": false
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/leads/action-options",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "leads",
+                "action-options"
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Lead Custom Field Definitions",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/leads/custom-fields?institutionProgramId={{institutionProgramId}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "leads",
+                "custom-fields"
+              ],
+              "query": [
+                {
+                  "key": "institutionProgramId",
+                  "value": "{{institutionProgramId}}"
+                }
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Create Lead",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "X-Institution-Program-Id",
+                "value": "{{institutionProgramId}}",
+                "disabled": false
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/leads",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "leads"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"fullName\": \"Nguyen Van Test\",\n  \"phone\": \"0901234567\",\n  \"sourceId\": \"{{sourceId}}\",\n  \"pipelineStageId\": \"{{pipelineStageId}}\",\n  \"email\": \"lead.test@example.com\",\n  \"status\": \"new\",\n  \"temperature\": \"warm\",\n  \"note\": \"Created from Postman\",\n  \"institutionProgramId\": \"{{institutionProgramId}}\"\n}"
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Import Leads From Excel",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "X-Institution-Program-Id",
+                "value": "{{institutionProgramId}}",
+                "disabled": false
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/leads/import",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "leads",
+                "import"
+              ]
+            },
+            "body": {
+              "mode": "formdata",
+              "formdata": [
+                {
+                  "key": "file",
+                  "type": "file",
+                  "src": []
+                }
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Update Lead",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "X-Institution-Program-Id",
+                "value": "{{institutionProgramId}}",
+                "disabled": false
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/leads/{{leadId}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "leads",
+                "{{leadId}}"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"fullName\": \"Nguyen Van Test\",\n  \"phone\": \"0901234567\",\n  \"sourceId\": \"{{sourceId}}\",\n  \"pipelineStageId\": \"{{pipelineStageId}}\",\n  \"email\": \"lead.test@example.com\",\n  \"status\": \"new\",\n  \"temperature\": \"warm\",\n  \"note\": \"Created from Postman\",\n  \"institutionProgramId\": \"{{institutionProgramId}}\"\n}"
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Change Lead Stage",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "X-Institution-Program-Id",
+                "value": "{{institutionProgramId}}",
+                "disabled": false
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/leads/{{leadId}}/stage",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "leads",
+                "{{leadId}}",
+                "stage"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"stageId\": \"{{pipelineStageId}}\"\n}"
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Delete Lead",
+          "request": {
+            "method": "DELETE",
+            "header": [
+              {
+                "key": "X-Institution-Program-Id",
+                "value": "{{institutionProgramId}}",
+                "disabled": false
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/leads/{{leadId}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "leads",
+                "{{leadId}}"
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Add Lead Note",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "X-Institution-Program-Id",
+                "value": "{{institutionProgramId}}",
+                "disabled": false
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/leads/{{leadId}}/notes",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "leads",
+                "{{leadId}}",
+                "notes"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"content\": \"Ghi chu test tu Postman\"\n}"
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Attach Lead File Metadata",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "X-Institution-Program-Id",
+                "value": "{{institutionProgramId}}",
+                "disabled": false
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/leads/{{leadId}}/files",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "leads",
+                "{{leadId}}",
+                "files"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"fileName\": \"document.pdf\",\n  \"fileUrl\": \"https://example.com/document.pdf\",\n  \"mimeType\": \"application/pdf\",\n  \"fileSize\": 123456\n}"
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Assign Lead",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "X-Institution-Program-Id",
+                "value": "{{institutionProgramId}}",
+                "disabled": false
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/leads/{{leadId}}/assign",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "leads",
+                "{{leadId}}",
+                "assign"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"assigneeId\": \"{{assigneeId}}\",\n  \"departmentId\": \"{{departmentId}}\"\n}"
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Get Lead Custom Fields",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/leads/{{leadId}}/custom-fields",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "leads",
+                "{{leadId}}",
+                "custom-fields"
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Patch Lead Custom Fields",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/leads/{{leadId}}/custom-fields",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "leads",
+                "{{leadId}}",
+                "custom-fields"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"values\": [\n    {\n      \"fieldId\": \"{{customFieldId}}\",\n      \"value\": \"Test value\"\n    }\n  ]\n}"
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Lead Detail",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "X-Institution-Program-Id",
+                "value": "{{institutionProgramId}}",
+                "disabled": false
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/leads/{{leadId}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "leads",
+                "{{leadId}}"
+              ]
+            }
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "Sale",
+      "item": [
+        {
+          "name": "Sale Options",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "X-Institution-Program-Id",
+                "value": "{{institutionProgramId}}",
+                "disabled": false
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/sale/options",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "sale",
+                "options"
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Lead Assignments",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "X-Institution-Program-Id",
+                "value": "{{institutionProgramId}}",
+                "disabled": false
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/sale/assignments?page={{page}}&limit={{limit}}&search={{search}}&assigneeId={{assigneeId}}&departmentId={{departmentId}}&sortOrder=desc",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "sale",
+                "assignments"
+              ],
+              "query": [
+                {
+                  "key": "page",
+                  "value": "{{page}}"
+                },
+                {
+                  "key": "limit",
+                  "value": "{{limit}}"
+                },
+                {
+                  "key": "search",
+                  "value": "{{search}}"
+                },
+                {
+                  "key": "assigneeId",
+                  "value": "{{assigneeId}}"
+                },
+                {
+                  "key": "departmentId",
+                  "value": "{{departmentId}}"
+                },
+                {
+                  "key": "sortOrder",
+                  "value": "desc"
+                }
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Lead Activities",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "X-Institution-Program-Id",
+                "value": "{{institutionProgramId}}",
+                "disabled": false
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/sale/activities?page={{page}}&limit={{limit}}&search={{search}}&type={{activityType}}&userId={{userId}}&sortOrder=desc",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "sale",
+                "activities"
+              ],
+              "query": [
+                {
+                  "key": "page",
+                  "value": "{{page}}"
+                },
+                {
+                  "key": "limit",
+                  "value": "{{limit}}"
+                },
+                {
+                  "key": "search",
+                  "value": "{{search}}"
+                },
+                {
+                  "key": "type",
+                  "value": "{{activityType}}"
+                },
+                {
+                  "key": "userId",
+                  "value": "{{userId}}"
+                },
+                {
+                  "key": "sortOrder",
+                  "value": "desc"
+                }
+              ]
+            }
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Request succeeded', function () { pm.expect(pm.response.code).to.be.oneOf([200, 201]); });",
+                  "const json = pm.response.json();",
+                  "const list = Array.isArray(json.data) ? json.data : (Array.isArray(json) ? json : []);",
+                  "if (list.length && list[0].id) pm.collectionVariables.set('activityId', list[0].id);"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Create Manual Activity",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "X-Institution-Program-Id",
+                "value": "{{institutionProgramId}}",
+                "disabled": false
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/sale/activities",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "sale",
+                "activities"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"leadId\": \"{{leadId}}\",\n  \"type\": \"call\",\n  \"content\": \"Da goi dien tu Postman\"\n}"
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Update Manual Activity",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "X-Institution-Program-Id",
+                "value": "{{institutionProgramId}}",
+                "disabled": false
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/sale/activities/{{activityId}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "sale",
+                "activities",
+                "{{activityId}}"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"type\": \"call\",\n  \"content\": \"Da cap nhat hoat dong tu Postman\"\n}"
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Reminders",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "X-Institution-Program-Id",
+                "value": "{{institutionProgramId}}",
+                "disabled": false
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/sale/reminders?page={{page}}&limit={{limit}}&search={{search}}&status={{reminderStatus}}&userId={{userId}}&sortOrder=desc",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "sale",
+                "reminders"
+              ],
+              "query": [
+                {
+                  "key": "page",
+                  "value": "{{page}}"
+                },
+                {
+                  "key": "limit",
+                  "value": "{{limit}}"
+                },
+                {
+                  "key": "search",
+                  "value": "{{search}}"
+                },
+                {
+                  "key": "status",
+                  "value": "{{reminderStatus}}"
+                },
+                {
+                  "key": "userId",
+                  "value": "{{userId}}"
+                },
+                {
+                  "key": "sortOrder",
+                  "value": "desc"
+                }
+              ]
+            }
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Request succeeded', function () { pm.expect(pm.response.code).to.be.oneOf([200, 201]); });",
+                  "const json = pm.response.json();",
+                  "const list = Array.isArray(json.data) ? json.data : (Array.isArray(json) ? json : []);",
+                  "if (list.length && list[0].id) pm.collectionVariables.set('reminderId', list[0].id);"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Create Reminder",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "X-Institution-Program-Id",
+                "value": "{{institutionProgramId}}",
+                "disabled": false
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/sale/reminders",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "sale",
+                "reminders"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"leadId\": \"{{leadId}}\",\n  \"title\": \"Nhac viec test\",\n  \"content\": \"Lien he lai lead\",\n  \"remindAt\": \"{{isoDateTime}}\"\n}"
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Update Reminder",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "X-Institution-Program-Id",
+                "value": "{{institutionProgramId}}",
+                "disabled": false
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/sale/reminders/{{reminderId}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "sale",
+                "reminders",
+                "{{reminderId}}"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"title\": \"Nhac viec da cap nhat\",\n  \"content\": \"Noi dung cap nhat\",\n  \"remindAt\": \"{{isoDateTime}}\"\n}"
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Complete Reminder",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              {
+                "key": "X-Institution-Program-Id",
+                "value": "{{institutionProgramId}}",
+                "disabled": false
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/sale/reminders/{{reminderId}}/complete",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "sale",
+                "reminders",
+                "{{reminderId}}",
+                "complete"
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Sale KPI",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "X-Institution-Program-Id",
+                "value": "{{institutionProgramId}}",
+                "disabled": false
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/sale/kpi",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "sale",
+                "kpi"
+              ]
+            }
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "Marketing - Campaigns",
+      "item": [
+        {
+          "name": "List Campaigns",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "X-Institution-Program-Id",
+                "value": "{{institutionProgramId}}",
+                "disabled": false
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/campaigns?page={{page}}&limit={{limit}}&search={{search}}&status={{campaignStatus}}&type={{campaignType}}&institutionProgramId={{institutionProgramId}}&sortBy=createdAt&sortOrder=desc",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "campaigns"
+              ],
+              "query": [
+                {
+                  "key": "page",
+                  "value": "{{page}}"
+                },
+                {
+                  "key": "limit",
+                  "value": "{{limit}}"
+                },
+                {
+                  "key": "search",
+                  "value": "{{search}}"
+                },
+                {
+                  "key": "status",
+                  "value": "{{campaignStatus}}"
+                },
+                {
+                  "key": "type",
+                  "value": "{{campaignType}}"
+                },
+                {
+                  "key": "institutionProgramId",
+                  "value": "{{institutionProgramId}}"
+                },
+                {
+                  "key": "sortBy",
+                  "value": "createdAt"
+                },
+                {
+                  "key": "sortOrder",
+                  "value": "desc"
+                }
+              ]
+            }
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Request succeeded', function () { pm.expect(pm.response.code).to.be.oneOf([200, 201]); });",
+                  "const json = pm.response.json();",
+                  "const list = Array.isArray(json.data) ? json.data : (Array.isArray(json) ? json : []);",
+                  "if (list.length && list[0].id) pm.collectionVariables.set('campaignId', list[0].id);"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Campaign Options",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "X-Institution-Program-Id",
+                "value": "{{institutionProgramId}}",
+                "disabled": false
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/campaigns/options",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "campaigns",
+                "options"
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Create Campaign",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "X-Institution-Program-Id",
+                "value": "{{institutionProgramId}}",
+                "disabled": false
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/campaigns",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "campaigns"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"Demo Campaign\",\n  \"type\": \"digital\",\n  \"status\": \"planning\",\n  \"startDate\": \"2026-08-01\",\n  \"endDate\": \"2026-09-01\",\n  \"institutionProgramId\": \"{{institutionProgramId}}\"\n}"
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Update Campaign",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "X-Institution-Program-Id",
+                "value": "{{institutionProgramId}}",
+                "disabled": false
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/campaigns/{{campaignId}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "campaigns",
+                "{{campaignId}}"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"Demo Campaign\",\n  \"type\": \"digital\",\n  \"status\": \"planning\",\n  \"startDate\": \"2026-08-01\",\n  \"endDate\": \"2026-09-01\",\n  \"institutionProgramId\": \"{{institutionProgramId}}\"\n}"
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Delete Campaign",
+          "request": {
+            "method": "DELETE",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/campaigns/{{campaignId}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "campaigns",
+                "{{campaignId}}"
+              ]
+            }
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "Marketing - References",
+      "item": [
+        {
+          "name": "List Lead Sources",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "X-Institution-Program-Id",
+                "value": "{{institutionProgramId}}",
+                "disabled": false
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/lead-sources?page={{page}}&limit={{limit}}&search={{search}}&type={{sourceType}}&institutionProgramId={{institutionProgramId}}&sortBy=createdAt&sortOrder=desc",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "lead-sources"
+              ],
+              "query": [
+                {
+                  "key": "page",
+                  "value": "{{page}}"
+                },
+                {
+                  "key": "limit",
+                  "value": "{{limit}}"
+                },
+                {
+                  "key": "search",
+                  "value": "{{search}}"
+                },
+                {
+                  "key": "type",
+                  "value": "{{sourceType}}"
+                },
+                {
+                  "key": "institutionProgramId",
+                  "value": "{{institutionProgramId}}"
+                },
+                {
+                  "key": "sortBy",
+                  "value": "createdAt"
+                },
+                {
+                  "key": "sortOrder",
+                  "value": "desc"
+                }
+              ]
+            }
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Request succeeded', function () { pm.expect(pm.response.code).to.be.oneOf([200, 201]); });",
+                  "const json = pm.response.json();",
+                  "const list = Array.isArray(json.data) ? json.data : (Array.isArray(json) ? json : []);",
+                  "if (list.length && list[0].id) pm.collectionVariables.set('sourceId', list[0].id);"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Lead Source Options",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/lead-sources/options",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "lead-sources",
+                "options"
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "List UTM Trackings",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "X-Institution-Program-Id",
+                "value": "{{institutionProgramId}}",
+                "disabled": false
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/utm-trackings?page={{page}}&limit={{limit}}&search={{search}}&source={{utmSource}}&medium={{utmMedium}}&campaignId={{campaignId}}&fromDate={{fromDate}}&toDate={{toDate}}&sortBy=createdAt&sortOrder=desc",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "utm-trackings"
+              ],
+              "query": [
+                {
+                  "key": "page",
+                  "value": "{{page}}"
+                },
+                {
+                  "key": "limit",
+                  "value": "{{limit}}"
+                },
+                {
+                  "key": "search",
+                  "value": "{{search}}"
+                },
+                {
+                  "key": "source",
+                  "value": "{{utmSource}}"
+                },
+                {
+                  "key": "medium",
+                  "value": "{{utmMedium}}"
+                },
+                {
+                  "key": "campaignId",
+                  "value": "{{campaignId}}"
+                },
+                {
+                  "key": "fromDate",
+                  "value": "{{fromDate}}"
+                },
+                {
+                  "key": "toDate",
+                  "value": "{{toDate}}"
+                },
+                {
+                  "key": "sortBy",
+                  "value": "createdAt"
+                },
+                {
+                  "key": "sortOrder",
+                  "value": "desc"
+                }
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "UTM Options",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/utm-trackings/options",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "utm-trackings",
+                "options"
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "UTM Analytics",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "X-Institution-Program-Id",
+                "value": "{{institutionProgramId}}",
+                "disabled": false
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/utm-trackings/analytics?page={{page}}&limit={{limit}}&source={{utmSource}}&medium={{utmMedium}}&campaignId={{campaignId}}&fromDate={{fromDate}}&toDate={{toDate}}&dimension=source",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "utm-trackings",
+                "analytics"
+              ],
+              "query": [
+                {
+                  "key": "page",
+                  "value": "{{page}}"
+                },
+                {
+                  "key": "limit",
+                  "value": "{{limit}}"
+                },
+                {
+                  "key": "source",
+                  "value": "{{utmSource}}"
+                },
+                {
+                  "key": "medium",
+                  "value": "{{utmMedium}}"
+                },
+                {
+                  "key": "campaignId",
+                  "value": "{{campaignId}}"
+                },
+                {
+                  "key": "fromDate",
+                  "value": "{{fromDate}}"
+                },
+                {
+                  "key": "toDate",
+                  "value": "{{toDate}}"
+                },
+                {
+                  "key": "dimension",
+                  "value": "source"
+                }
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "UTM Generated Leads",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "X-Institution-Program-Id",
+                "value": "{{institutionProgramId}}",
+                "disabled": false
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/utm-trackings/leads?page={{page}}&limit={{limit}}&source={{utmSource}}&medium={{utmMedium}}&campaignId={{campaignId}}&fromDate={{fromDate}}&toDate={{toDate}}&groupSource={{utmSource}}&groupMedium={{utmMedium}}&groupCampaign={{campaignName}}&groupCampaignId={{campaignId}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "utm-trackings",
+                "leads"
+              ],
+              "query": [
+                {
+                  "key": "page",
+                  "value": "{{page}}"
+                },
+                {
+                  "key": "limit",
+                  "value": "{{limit}}"
+                },
+                {
+                  "key": "source",
+                  "value": "{{utmSource}}"
+                },
+                {
+                  "key": "medium",
+                  "value": "{{utmMedium}}"
+                },
+                {
+                  "key": "campaignId",
+                  "value": "{{campaignId}}"
+                },
+                {
+                  "key": "fromDate",
+                  "value": "{{fromDate}}"
+                },
+                {
+                  "key": "toDate",
+                  "value": "{{toDate}}"
+                },
+                {
+                  "key": "groupSource",
+                  "value": "{{utmSource}}"
+                },
+                {
+                  "key": "groupMedium",
+                  "value": "{{utmMedium}}"
+                },
+                {
+                  "key": "groupCampaign",
+                  "value": "{{campaignName}}"
+                },
+                {
+                  "key": "groupCampaignId",
+                  "value": "{{campaignId}}"
+                }
+              ]
+            }
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "Marketing - Forms Legacy",
+      "item": [
+        {
+          "name": "List Marketing Forms",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "X-Institution-Program-Id",
+                "value": "{{institutionProgramId}}",
+                "disabled": false
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/marketing-forms?page={{page}}&limit={{limit}}&search={{search}}&status={{formStatus}}&platform={{platform}}&campaignId={{campaignId}}&sortBy=createdAt&sortOrder=desc",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "marketing-forms"
+              ],
+              "query": [
+                {
+                  "key": "page",
+                  "value": "{{page}}"
+                },
+                {
+                  "key": "limit",
+                  "value": "{{limit}}"
+                },
+                {
+                  "key": "search",
+                  "value": "{{search}}"
+                },
+                {
+                  "key": "status",
+                  "value": "{{formStatus}}"
+                },
+                {
+                  "key": "platform",
+                  "value": "{{platform}}"
+                },
+                {
+                  "key": "campaignId",
+                  "value": "{{campaignId}}"
+                },
+                {
+                  "key": "sortBy",
+                  "value": "createdAt"
+                },
+                {
+                  "key": "sortOrder",
+                  "value": "desc"
+                }
+              ]
+            }
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Request succeeded', function () { pm.expect(pm.response.code).to.be.oneOf([200, 201]); });",
+                  "const json = pm.response.json();",
+                  "const list = Array.isArray(json.data) ? json.data : (Array.isArray(json) ? json : []);",
+                  "if (list.length && list[0].id) pm.collectionVariables.set('formId', list[0].id);"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Marketing Form Options",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "X-Institution-Program-Id",
+                "value": "{{institutionProgramId}}",
+                "disabled": false
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/marketing-forms/options",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "marketing-forms",
+                "options"
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Create Marketing Form",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "X-Institution-Program-Id",
+                "value": "{{institutionProgramId}}",
+                "disabled": false
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/marketing-forms",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "marketing-forms"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"Demo Form\",\n  \"platform\": \"website\",\n  \"formCode\": \"DEMO-FORM\",\n  \"campaignId\": \"{{campaignId}}\",\n  \"formType\": \"lead_form\",\n  \"title\": \"Dang ky tu van\",\n  \"description\": \"Form test Postman\",\n  \"submitButtonLabel\": \"Gui dang ky\",\n  \"webhookEnabled\": false,\n  \"status\": \"draft\",\n  \"fields\": [\n    {\n      \"fieldKey\": \"full_name\",\n      \"label\": \"Ho ten\",\n      \"fieldType\": \"text\",\n      \"isRequired\": true,\n      \"options\": [],\n      \"leadField\": \"full_name\",\n      \"sortOrder\": 0,\n      \"isActive\": true\n    },\n    {\n      \"fieldKey\": \"phone\",\n      \"label\": \"So dien thoai\",\n      \"fieldType\": \"text\",\n      \"isRequired\": true,\n      \"options\": [],\n      \"leadField\": \"phone\",\n      \"sortOrder\": 1,\n      \"isActive\": true\n    }\n  ],\n  \"mappings\": [\n    {\n      \"sourceField\": \"full_name\",\n      \"leadField\": \"full_name\",\n      \"isRequired\": true\n    },\n    {\n      \"sourceField\": \"phone\",\n      \"leadField\": \"phone\",\n      \"isRequired\": true\n    }\n  ]\n}"
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Marketing Form Submissions",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/marketing-forms/{{formId}}/submissions?page={{page}}&limit={{limit}}&status={{submissionStatus}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "marketing-forms",
+                "{{formId}}",
+                "submissions"
+              ],
+              "query": [
+                {
+                  "key": "page",
+                  "value": "{{page}}"
+                },
+                {
+                  "key": "limit",
+                  "value": "{{limit}}"
+                },
+                {
+                  "key": "status",
+                  "value": "{{submissionStatus}}"
+                }
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Rotate Marketing Form Secret",
+          "request": {
+            "method": "POST",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/marketing-forms/{{formId}}/rotate-secret",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "marketing-forms",
+                "{{formId}}",
+                "rotate-secret"
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Update Marketing Form",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "X-Institution-Program-Id",
+                "value": "{{institutionProgramId}}",
+                "disabled": false
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/marketing-forms/{{formId}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "marketing-forms",
+                "{{formId}}"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"Demo Form\",\n  \"platform\": \"website\",\n  \"formCode\": \"DEMO-FORM\",\n  \"campaignId\": \"{{campaignId}}\",\n  \"formType\": \"lead_form\",\n  \"title\": \"Dang ky tu van\",\n  \"description\": \"Form test Postman\",\n  \"submitButtonLabel\": \"Gui dang ky\",\n  \"webhookEnabled\": false,\n  \"status\": \"draft\",\n  \"fields\": [\n    {\n      \"fieldKey\": \"full_name\",\n      \"label\": \"Ho ten\",\n      \"fieldType\": \"text\",\n      \"isRequired\": true,\n      \"options\": [],\n      \"leadField\": \"full_name\",\n      \"sortOrder\": 0,\n      \"isActive\": true\n    },\n    {\n      \"fieldKey\": \"phone\",\n      \"label\": \"So dien thoai\",\n      \"fieldType\": \"text\",\n      \"isRequired\": true,\n      \"options\": [],\n      \"leadField\": \"phone\",\n      \"sortOrder\": 1,\n      \"isActive\": true\n    }\n  ],\n  \"mappings\": [\n    {\n      \"sourceField\": \"full_name\",\n      \"leadField\": \"full_name\",\n      \"isRequired\": true\n    },\n    {\n      \"sourceField\": \"phone\",\n      \"leadField\": \"phone\",\n      \"isRequired\": true\n    }\n  ]\n}"
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Delete Marketing Form",
+          "request": {
+            "method": "DELETE",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/marketing-forms/{{formId}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "marketing-forms",
+                "{{formId}}"
+              ]
+            }
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "Forms Builder",
+      "item": [
+        {
+          "name": "List Forms",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "X-Institution-Program-Id",
+                "value": "{{institutionProgramId}}",
+                "disabled": false
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/forms?page={{page}}&limit={{limit}}&search={{search}}&status={{formStatus}}&platform={{platform}}&campaignId={{campaignId}}&sortBy=createdAt&sortOrder=desc",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "forms"
+              ],
+              "query": [
+                {
+                  "key": "page",
+                  "value": "{{page}}"
+                },
+                {
+                  "key": "limit",
+                  "value": "{{limit}}"
+                },
+                {
+                  "key": "search",
+                  "value": "{{search}}"
+                },
+                {
+                  "key": "status",
+                  "value": "{{formStatus}}"
+                },
+                {
+                  "key": "platform",
+                  "value": "{{platform}}"
+                },
+                {
+                  "key": "campaignId",
+                  "value": "{{campaignId}}"
+                },
+                {
+                  "key": "sortBy",
+                  "value": "createdAt"
+                },
+                {
+                  "key": "sortOrder",
+                  "value": "desc"
+                }
+              ]
+            }
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Request succeeded', function () { pm.expect(pm.response.code).to.be.oneOf([200, 201]); });",
+                  "const json = pm.response.json();",
+                  "const list = Array.isArray(json.data) ? json.data : (Array.isArray(json) ? json : []);",
+                  "if (list.length && list[0].id) pm.collectionVariables.set('formId', list[0].id);"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Form Options",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "X-Institution-Program-Id",
+                "value": "{{institutionProgramId}}",
+                "disabled": false
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/forms/options",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "forms",
+                "options"
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Create Form",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "X-Institution-Program-Id",
+                "value": "{{institutionProgramId}}",
+                "disabled": false
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/forms",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "forms"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"Demo Builder Form\",\n  \"slug\": \"demo-builder-form\",\n  \"platform\": \"website\",\n  \"campaignId\": \"{{campaignId}}\",\n  \"sourceId\": \"{{sourceId}}\",\n  \"formType\": \"lead_form\",\n  \"title\": \"Dang ky tu van\",\n  \"submitButtonText\": \"Gui\",\n  \"status\": \"draft\",\n  \"displaySettings\": {},\n  \"duplicateSettings\": {},\n  \"successSettings\": {},\n  \"accessSettings\": {},\n  \"closeSettings\": {},\n  \"advancedSettings\": {},\n  \"fields\": [\n    {\n      \"fieldKey\": \"full_name\",\n      \"label\": \"Ho ten\",\n      \"fieldType\": \"text\",\n      \"required\": true,\n      \"options\": [],\n      \"crmMappingField\": \"full_name\",\n      \"sortOrder\": 0,\n      \"isActive\": true\n    },\n    {\n      \"fieldKey\": \"phone\",\n      \"label\": \"So dien thoai\",\n      \"fieldType\": \"text\",\n      \"required\": true,\n      \"options\": [],\n      \"crmMappingField\": \"phone\",\n      \"sortOrder\": 1,\n      \"isActive\": true\n    }\n  ]\n}"
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Get Form",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/forms/{{formId}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "forms",
+                "{{formId}}"
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Put Form",
+          "request": {
+            "method": "PUT",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "X-Institution-Program-Id",
+                "value": "{{institutionProgramId}}",
+                "disabled": false
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/forms/{{formId}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "forms",
+                "{{formId}}"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"Demo Builder Form\",\n  \"slug\": \"demo-builder-form\",\n  \"platform\": \"website\",\n  \"campaignId\": \"{{campaignId}}\",\n  \"sourceId\": \"{{sourceId}}\",\n  \"formType\": \"lead_form\",\n  \"title\": \"Dang ky tu van\",\n  \"submitButtonText\": \"Gui\",\n  \"status\": \"draft\",\n  \"displaySettings\": {},\n  \"duplicateSettings\": {},\n  \"successSettings\": {},\n  \"accessSettings\": {},\n  \"closeSettings\": {},\n  \"advancedSettings\": {},\n  \"fields\": [\n    {\n      \"fieldKey\": \"full_name\",\n      \"label\": \"Ho ten\",\n      \"fieldType\": \"text\",\n      \"required\": true,\n      \"options\": [],\n      \"crmMappingField\": \"full_name\",\n      \"sortOrder\": 0,\n      \"isActive\": true\n    },\n    {\n      \"fieldKey\": \"phone\",\n      \"label\": \"So dien thoai\",\n      \"fieldType\": \"text\",\n      \"required\": true,\n      \"options\": [],\n      \"crmMappingField\": \"phone\",\n      \"sortOrder\": 1,\n      \"isActive\": true\n    }\n  ]\n}"
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Patch Form",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "X-Institution-Program-Id",
+                "value": "{{institutionProgramId}}",
+                "disabled": false
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/forms/{{formId}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "forms",
+                "{{formId}}"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"Demo Builder Form\",\n  \"slug\": \"demo-builder-form\",\n  \"platform\": \"website\",\n  \"campaignId\": \"{{campaignId}}\",\n  \"sourceId\": \"{{sourceId}}\",\n  \"formType\": \"lead_form\",\n  \"title\": \"Dang ky tu van\",\n  \"submitButtonText\": \"Gui\",\n  \"status\": \"draft\",\n  \"displaySettings\": {},\n  \"duplicateSettings\": {},\n  \"successSettings\": {},\n  \"accessSettings\": {},\n  \"closeSettings\": {},\n  \"advancedSettings\": {},\n  \"fields\": [\n    {\n      \"fieldKey\": \"full_name\",\n      \"label\": \"Ho ten\",\n      \"fieldType\": \"text\",\n      \"required\": true,\n      \"options\": [],\n      \"crmMappingField\": \"full_name\",\n      \"sortOrder\": 0,\n      \"isActive\": true\n    },\n    {\n      \"fieldKey\": \"phone\",\n      \"label\": \"So dien thoai\",\n      \"fieldType\": \"text\",\n      \"required\": true,\n      \"options\": [],\n      \"crmMappingField\": \"phone\",\n      \"sortOrder\": 1,\n      \"isActive\": true\n    }\n  ]\n}"
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Delete Form",
+          "request": {
+            "method": "DELETE",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/forms/{{formId}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "forms",
+                "{{formId}}"
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Publish Form",
+          "request": {
+            "method": "POST",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/forms/{{formId}}/publish",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "forms",
+                "{{formId}}",
+                "publish"
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Duplicate Form",
+          "request": {
+            "method": "POST",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/forms/{{formId}}/duplicate",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "forms",
+                "{{formId}}",
+                "duplicate"
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "List Form Fields",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/forms/{{formId}}/fields",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "forms",
+                "{{formId}}",
+                "fields"
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Create Form Field",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/forms/{{formId}}/fields",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "forms",
+                "{{formId}}",
+                "fields"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"fieldKey\": \"email\",\n  \"label\": \"Email\",\n  \"fieldType\": \"email\",\n  \"required\": false,\n  \"options\": [],\n  \"crmMappingField\": \"email\",\n  \"sortOrder\": 2,\n  \"isActive\": true\n}"
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Reorder Form Fields",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/forms/{{formId}}/fields/reorder",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "forms",
+                "{{formId}}",
+                "fields",
+                "reorder"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"fieldIds\": [\n    \"{{formFieldId}}\"\n  ]\n}"
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Form Submissions",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/forms/{{formId}}/submissions?page={{page}}&limit={{limit}}&status={{submissionStatus}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "forms",
+                "{{formId}}",
+                "submissions"
+              ],
+              "query": [
+                {
+                  "key": "page",
+                  "value": "{{page}}"
+                },
+                {
+                  "key": "limit",
+                  "value": "{{limit}}"
+                },
+                {
+                  "key": "status",
+                  "value": "{{submissionStatus}}"
+                }
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Update Form Field",
+          "request": {
+            "method": "PUT",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/form-fields/{{formFieldId}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "form-fields",
+                "{{formFieldId}}"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"fieldKey\": \"email\",\n  \"label\": \"Email\",\n  \"fieldType\": \"email\",\n  \"required\": false,\n  \"options\": [],\n  \"crmMappingField\": \"email\",\n  \"sortOrder\": 2,\n  \"isActive\": true\n}"
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Delete Form Field",
+          "request": {
+            "method": "DELETE",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/form-fields/{{formFieldId}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "form-fields",
+                "{{formFieldId}}"
+              ]
+            }
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "Public Forms",
+      "item": [
+        {
+          "name": "Get Public Form",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/public/forms/{{publicKey}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "public",
+                "forms",
+                "{{publicKey}}"
+              ]
+            },
+            "auth": {
+              "type": "noauth"
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Submit Public Form",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/public/forms/{{publicKey}}/submit",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "public",
+                "forms",
+                "{{publicKey}}",
+                "submit"
+              ]
+            },
+            "auth": {
+              "type": "noauth"
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"full_name\": \"Nguyen Van Public\",\n  \"phone\": \"0901111222\",\n  \"email\": \"public@example.com\"\n}"
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Submit Public Form Webhook",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "x-webhook-secret",
+                "value": "{{webhookSecret}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/public/webhooks/forms/{{publicKey}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "public",
+                "webhooks",
+                "forms",
+                "{{publicKey}}"
+              ]
+            },
+            "auth": {
+              "type": "noauth"
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"full_name\": \"Nguyen Van Public\",\n  \"phone\": \"0901111222\",\n  \"email\": \"public@example.com\"\n}"
+            }
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "Admissions",
+      "item": [
+        {
+          "name": "List Admissions",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "X-Institution-Program-Id",
+                "value": "{{institutionProgramId}}",
+                "disabled": false
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/admissions?page={{page}}&limit={{limit}}&search={{search}}&statusId={{admissionStatusId}}&institutionProgramId={{institutionProgramId}}&majorId={{majorId}}&sortBy=createdAt&sortOrder=desc",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "admissions"
+              ],
+              "query": [
+                {
+                  "key": "page",
+                  "value": "{{page}}"
+                },
+                {
+                  "key": "limit",
+                  "value": "{{limit}}"
+                },
+                {
+                  "key": "search",
+                  "value": "{{search}}"
+                },
+                {
+                  "key": "statusId",
+                  "value": "{{admissionStatusId}}"
+                },
+                {
+                  "key": "institutionProgramId",
+                  "value": "{{institutionProgramId}}"
+                },
+                {
+                  "key": "majorId",
+                  "value": "{{majorId}}"
+                },
+                {
+                  "key": "sortBy",
+                  "value": "createdAt"
+                },
+                {
+                  "key": "sortOrder",
+                  "value": "desc"
+                }
+              ]
+            }
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Request succeeded', function () { pm.expect(pm.response.code).to.be.oneOf([200, 201]); });",
+                  "const json = pm.response.json();",
+                  "const list = Array.isArray(json.data) ? json.data : (Array.isArray(json) ? json : []);",
+                  "if (list.length && list[0].id) pm.collectionVariables.set('admissionId', list[0].id);"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Admission Options",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "X-Institution-Program-Id",
+                "value": "{{institutionProgramId}}",
+                "disabled": false
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/admissions/options",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "admissions",
+                "options"
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Admission Action Options",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "X-Institution-Program-Id",
+                "value": "{{institutionProgramId}}",
+                "disabled": false
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/admissions/action-options",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "admissions",
+                "action-options"
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Create Admission Profile",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "X-Institution-Program-Id",
+                "value": "{{institutionProgramId}}",
+                "disabled": false
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/admissions",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "admissions"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"leadId\": \"{{leadId}}\",\n  \"institutionProgramId\": \"{{institutionProgramId}}\",\n  \"majorId\": \"{{majorId}}\",\n  \"admissionStatusId\": \"{{admissionStatusId}}\",\n  \"trainingType\": \"Chinh quy\",\n  \"applicationReceivedDate\": \"2026-08-01\",\n  \"feeStatus\": \"pending\",\n  \"tuitionStatus\": \"pending\"\n}"
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Update Admission Profile",
+          "request": {
+            "method": "PUT",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "X-Institution-Program-Id",
+                "value": "{{institutionProgramId}}",
+                "disabled": false
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/admissions/{{admissionId}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "admissions",
+                "{{admissionId}}"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"leadId\": \"{{leadId}}\",\n  \"institutionProgramId\": \"{{institutionProgramId}}\",\n  \"majorId\": \"{{majorId}}\",\n  \"admissionStatusId\": \"{{admissionStatusId}}\",\n  \"trainingType\": \"Chinh quy\",\n  \"applicationReceivedDate\": \"2026-08-01\",\n  \"feeStatus\": \"pending\",\n  \"tuitionStatus\": \"pending\"\n}"
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Approve Admission",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "X-Institution-Program-Id",
+                "value": "{{institutionProgramId}}",
+                "disabled": false
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/admissions/{{admissionId}}/approve",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "admissions",
+                "{{admissionId}}",
+                "approve"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"statusId\": \"{{admissionStatusId}}\"\n}"
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Change Admission Status",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "X-Institution-Program-Id",
+                "value": "{{institutionProgramId}}",
+                "disabled": false
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/admissions/{{admissionId}}/status",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "admissions",
+                "{{admissionId}}",
+                "status"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"statusId\": \"{{admissionStatusId}}\"\n}"
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Convert Admission To Student",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "X-Institution-Program-Id",
+                "value": "{{institutionProgramId}}",
+                "disabled": false
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/admissions/{{admissionId}}/convert-to-student",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "admissions",
+                "{{admissionId}}",
+                "convert-to-student"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"classId\": \"{{classId}}\"\n}"
+            }
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "Admission Documents",
+      "item": [
+        {
+          "name": "List Documents",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "X-Institution-Program-Id",
+                "value": "{{institutionProgramId}}",
+                "disabled": false
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/admissions/documents?page={{page}}&limit={{limit}}&search={{search}}&status={{documentStatus}}&type={{documentType}}&sortBy=uploadedAt&sortOrder=desc",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "admissions",
+                "documents"
+              ],
+              "query": [
+                {
+                  "key": "page",
+                  "value": "{{page}}"
+                },
+                {
+                  "key": "limit",
+                  "value": "{{limit}}"
+                },
+                {
+                  "key": "search",
+                  "value": "{{search}}"
+                },
+                {
+                  "key": "status",
+                  "value": "{{documentStatus}}"
+                },
+                {
+                  "key": "type",
+                  "value": "{{documentType}}"
+                },
+                {
+                  "key": "sortBy",
+                  "value": "uploadedAt"
+                },
+                {
+                  "key": "sortOrder",
+                  "value": "desc"
+                }
+              ]
+            }
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Request succeeded', function () { pm.expect(pm.response.code).to.be.oneOf([200, 201]); });",
+                  "const json = pm.response.json();",
+                  "const list = Array.isArray(json.data) ? json.data : (Array.isArray(json) ? json : []);",
+                  "if (list.length && list[0].id) pm.collectionVariables.set('admissionDocumentId', list[0].id);"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Document Options",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "X-Institution-Program-Id",
+                "value": "{{institutionProgramId}}",
+                "disabled": false
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/admissions/documents/options",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "admissions",
+                "documents",
+                "options"
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Document Action Options",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "X-Institution-Program-Id",
+                "value": "{{institutionProgramId}}",
+                "disabled": false
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/admissions/documents/action-options",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "admissions",
+                "documents",
+                "action-options"
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Upload Document Metadata",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "X-Institution-Program-Id",
+                "value": "{{institutionProgramId}}",
+                "disabled": false
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/admissions/documents",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "admissions",
+                "documents"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"leadId\": \"{{leadId}}\",\n  \"documentType\": \"hoc_ba\",\n  \"fileName\": \"hoc-ba.pdf\",\n  \"fileUrl\": \"https://example.com/hoc-ba.pdf\",\n  \"mimeType\": \"application/pdf\",\n  \"fileSize\": 123456\n}"
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Update Document Status",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "X-Institution-Program-Id",
+                "value": "{{institutionProgramId}}",
+                "disabled": false
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/admissions/documents/{{admissionDocumentId}}/status",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "admissions",
+                "documents",
+                "{{admissionDocumentId}}",
+                "status"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"status\": \"approved\",\n  \"note\": \"Da kiem tra\"\n}"
+            }
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "Admission Statuses And Fees",
+      "item": [
+        {
+          "name": "List Statuses",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/admissions/statuses?page={{page}}&limit={{limit}}&search={{search}}&sortBy=createdAt&sortOrder=desc",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "admissions",
+                "statuses"
+              ],
+              "query": [
+                {
+                  "key": "page",
+                  "value": "{{page}}"
+                },
+                {
+                  "key": "limit",
+                  "value": "{{limit}}"
+                },
+                {
+                  "key": "search",
+                  "value": "{{search}}"
+                },
+                {
+                  "key": "sortBy",
+                  "value": "createdAt"
+                },
+                {
+                  "key": "sortOrder",
+                  "value": "desc"
+                }
+              ]
+            }
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Request succeeded', function () { pm.expect(pm.response.code).to.be.oneOf([200, 201]); });",
+                  "const json = pm.response.json();",
+                  "const list = Array.isArray(json.data) ? json.data : (Array.isArray(json) ? json : []);",
+                  "if (list.length && list[0].id) pm.collectionVariables.set('admissionStatusId', list[0].id);"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Status Flow",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/admissions/statuses/flow",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "admissions",
+                "statuses",
+                "flow"
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Create Status",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/admissions/statuses",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "admissions",
+                "statuses"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"Demo Status\",\n  \"code\": \"demo_status\",\n  \"color\": \"#2563eb\"\n}"
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Update Status Flow",
+          "request": {
+            "method": "PUT",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/admissions/statuses/flow",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "admissions",
+                "statuses",
+                "flow"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"fromStatusId\": \"{{admissionStatusId}}\",\n  \"toStatusIds\": [\n    \"{{admissionStatusId}}\"\n  ]\n}"
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Update Status",
+          "request": {
+            "method": "PUT",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/admissions/statuses/{{admissionStatusId}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "admissions",
+                "statuses",
+                "{{admissionStatusId}}"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"Demo Status\",\n  \"code\": \"demo_status\",\n  \"color\": \"#2563eb\"\n}"
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Delete Status",
+          "request": {
+            "method": "DELETE",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/admissions/statuses/{{admissionStatusId}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "admissions",
+                "statuses",
+                "{{admissionStatusId}}"
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "List Fees",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "X-Institution-Program-Id",
+                "value": "{{institutionProgramId}}",
+                "disabled": false
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/admissions/fees?page={{page}}&limit={{limit}}&search={{search}}&status={{feeStatus}}&sortBy=createdAt&sortOrder=desc",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "admissions",
+                "fees"
+              ],
+              "query": [
+                {
+                  "key": "page",
+                  "value": "{{page}}"
+                },
+                {
+                  "key": "limit",
+                  "value": "{{limit}}"
+                },
+                {
+                  "key": "search",
+                  "value": "{{search}}"
+                },
+                {
+                  "key": "status",
+                  "value": "{{feeStatus}}"
+                },
+                {
+                  "key": "sortBy",
+                  "value": "createdAt"
+                },
+                {
+                  "key": "sortOrder",
+                  "value": "desc"
+                }
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Fee Options",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "X-Institution-Program-Id",
+                "value": "{{institutionProgramId}}",
+                "disabled": false
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/admissions/fees/options",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "admissions",
+                "fees",
+                "options"
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Fee History",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "X-Institution-Program-Id",
+                "value": "{{institutionProgramId}}",
+                "disabled": false
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/admissions/fees/{{admissionId}}/history",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "admissions",
+                "fees",
+                "{{admissionId}}",
+                "history"
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Update Fee Payment",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "X-Institution-Program-Id",
+                "value": "{{institutionProgramId}}",
+                "disabled": false
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/admissions/fees/{{admissionId}}/payment",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "admissions",
+                "fees",
+                "{{admissionId}}",
+                "payment"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"feeStatus\": \"paid\",\n  \"tuitionStatus\": \"pending\",\n  \"monthlyRevenue\": \"1000000\",\n  \"paymentAmount\": \"1000000\",\n  \"paymentMethod\": \"cash\",\n  \"paidAt\": \"2026-08-01\",\n  \"note\": \"Thanh toan test\"\n}"
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Confirm Debt",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "X-Institution-Program-Id",
+                "value": "{{institutionProgramId}}",
+                "disabled": false
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/admissions/fees/{{admissionId}}/debt-confirmation",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "admissions",
+                "fees",
+                "{{admissionId}}",
+                "debt-confirmation"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"debtStatus\": \"confirmed\",\n  \"note\": \"Xac nhan cong no test\"\n}"
+            }
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "Majors",
+      "item": [
+        {
+          "name": "List Majors",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "X-Institution-Program-Id",
+                "value": "{{institutionProgramId}}",
+                "disabled": false
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/majors?page={{page}}&limit={{limit}}&search={{search}}&sortBy=createdAt&sortOrder=desc",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "majors"
+              ],
+              "query": [
+                {
+                  "key": "page",
+                  "value": "{{page}}"
+                },
+                {
+                  "key": "limit",
+                  "value": "{{limit}}"
+                },
+                {
+                  "key": "search",
+                  "value": "{{search}}"
+                },
+                {
+                  "key": "sortBy",
+                  "value": "createdAt"
+                },
+                {
+                  "key": "sortOrder",
+                  "value": "desc"
+                }
+              ]
+            }
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Request succeeded', function () { pm.expect(pm.response.code).to.be.oneOf([200, 201]); });",
+                  "const json = pm.response.json();",
+                  "const list = Array.isArray(json.data) ? json.data : (Array.isArray(json) ? json : []);",
+                  "if (list.length && list[0].id) pm.collectionVariables.set('majorId', list[0].id);"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Major Options",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "X-Institution-Program-Id",
+                "value": "{{institutionProgramId}}",
+                "disabled": false
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/majors/options",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "majors",
+                "options"
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Create Major",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "X-Institution-Program-Id",
+                "value": "{{institutionProgramId}}",
+                "disabled": false
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/majors",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "majors"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"Demo Major\",\n  \"code\": \"DEMO-MAJOR\",\n  \"facultyId\": \"{{facultyId}}\"\n}"
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Update Major",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "X-Institution-Program-Id",
+                "value": "{{institutionProgramId}}",
+                "disabled": false
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/majors/{{majorId}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "majors",
+                "{{majorId}}"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"Demo Major\",\n  \"code\": \"DEMO-MAJOR\",\n  \"facultyId\": \"{{facultyId}}\"\n}"
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Delete Major",
+          "request": {
+            "method": "DELETE",
+            "header": [
+              {
+                "key": "X-Institution-Program-Id",
+                "value": "{{institutionProgramId}}",
+                "disabled": false
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/majors/{{majorId}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "majors",
+                "{{majorId}}"
+              ]
+            }
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "Students",
+      "item": [
+        {
+          "name": "List Students",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "X-Institution-Program-Id",
+                "value": "{{institutionProgramId}}",
+                "disabled": false
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/students?page={{page}}&limit={{limit}}&search={{search}}&status={{studentStatus}}&institutionProgramId={{institutionProgramId}}&majorId={{majorId}}&facultyId={{facultyId}}&classId={{classId}}&sortBy=enrolledAt&sortOrder=desc",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "students"
+              ],
+              "query": [
+                {
+                  "key": "page",
+                  "value": "{{page}}"
+                },
+                {
+                  "key": "limit",
+                  "value": "{{limit}}"
+                },
+                {
+                  "key": "search",
+                  "value": "{{search}}"
+                },
+                {
+                  "key": "status",
+                  "value": "{{studentStatus}}"
+                },
+                {
+                  "key": "institutionProgramId",
+                  "value": "{{institutionProgramId}}"
+                },
+                {
+                  "key": "majorId",
+                  "value": "{{majorId}}"
+                },
+                {
+                  "key": "facultyId",
+                  "value": "{{facultyId}}"
+                },
+                {
+                  "key": "classId",
+                  "value": "{{classId}}"
+                },
+                {
+                  "key": "sortBy",
+                  "value": "enrolledAt"
+                },
+                {
+                  "key": "sortOrder",
+                  "value": "desc"
+                }
+              ]
+            }
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Request succeeded', function () { pm.expect(pm.response.code).to.be.oneOf([200, 201]); });",
+                  "const json = pm.response.json();",
+                  "const list = Array.isArray(json.data) ? json.data : (Array.isArray(json) ? json : []);",
+                  "if (list.length && list[0].id) pm.collectionVariables.set('studentId', list[0].id);"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Student Options",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "X-Institution-Program-Id",
+                "value": "{{institutionProgramId}}",
+                "disabled": false
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/students/options",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "students",
+                "options"
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "List Student Services",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "X-Institution-Program-Id",
+                "value": "{{institutionProgramId}}",
+                "disabled": false
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/students/services?page={{page}}&limit={{limit}}&search={{search}}&type={{serviceType}}&status={{serviceStatus}}&studentId={{studentId}}&sortBy=createdAt&sortOrder=desc",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "students",
+                "services"
+              ],
+              "query": [
+                {
+                  "key": "page",
+                  "value": "{{page}}"
+                },
+                {
+                  "key": "limit",
+                  "value": "{{limit}}"
+                },
+                {
+                  "key": "search",
+                  "value": "{{search}}"
+                },
+                {
+                  "key": "type",
+                  "value": "{{serviceType}}"
+                },
+                {
+                  "key": "status",
+                  "value": "{{serviceStatus}}"
+                },
+                {
+                  "key": "studentId",
+                  "value": "{{studentId}}"
+                },
+                {
+                  "key": "sortBy",
+                  "value": "createdAt"
+                },
+                {
+                  "key": "sortOrder",
+                  "value": "desc"
+                }
+              ]
+            }
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Request succeeded', function () { pm.expect(pm.response.code).to.be.oneOf([200, 201]); });",
+                  "const json = pm.response.json();",
+                  "const list = Array.isArray(json.data) ? json.data : (Array.isArray(json) ? json : []);",
+                  "if (list.length && list[0].id) pm.collectionVariables.set('studentServiceId', list[0].id);"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Create Student Service",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "X-Institution-Program-Id",
+                "value": "{{institutionProgramId}}",
+                "disabled": false
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/students/services",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "students",
+                "services"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"studentId\": \"{{studentId}}\",\n  \"type\": \"support\",\n  \"content\": \"Yeu cau ho tro tu Postman\",\n  \"handledBy\": \"{{userId}}\",\n  \"status\": \"open\"\n}"
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Student Service Options",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "X-Institution-Program-Id",
+                "value": "{{institutionProgramId}}",
+                "disabled": false
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/students/services/options",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "students",
+                "services",
+                "options"
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Update Student Service",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "X-Institution-Program-Id",
+                "value": "{{institutionProgramId}}",
+                "disabled": false
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/students/services/{{studentServiceId}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "students",
+                "services",
+                "{{studentServiceId}}"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"type\": \"support\",\n  \"content\": \"Da cap nhat yeu cau\",\n  \"handledBy\": \"{{userId}}\",\n  \"status\": \"resolved\"\n}"
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Support History",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "X-Institution-Program-Id",
+                "value": "{{institutionProgramId}}",
+                "disabled": false
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/students/support-history?page={{page}}&limit={{limit}}&search={{search}}&type={{serviceType}}&status={{serviceStatus}}&studentId={{studentId}}&sortBy=createdAt&sortOrder=desc",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "students",
+                "support-history"
+              ],
+              "query": [
+                {
+                  "key": "page",
+                  "value": "{{page}}"
+                },
+                {
+                  "key": "limit",
+                  "value": "{{limit}}"
+                },
+                {
+                  "key": "search",
+                  "value": "{{search}}"
+                },
+                {
+                  "key": "type",
+                  "value": "{{serviceType}}"
+                },
+                {
+                  "key": "status",
+                  "value": "{{serviceStatus}}"
+                },
+                {
+                  "key": "studentId",
+                  "value": "{{studentId}}"
+                },
+                {
+                  "key": "sortBy",
+                  "value": "createdAt"
+                },
+                {
+                  "key": "sortOrder",
+                  "value": "desc"
+                }
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Student Detail",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "X-Institution-Program-Id",
+                "value": "{{institutionProgramId}}",
+                "disabled": false
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/students/{{studentId}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "students",
+                "{{studentId}}"
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Update Student",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "X-Institution-Program-Id",
+                "value": "{{institutionProgramId}}",
+                "disabled": false
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/students/{{studentId}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "students",
+                "{{studentId}}"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"status\": \"active\",\n  \"facultyId\": \"{{facultyId}}\",\n  \"classId\": \"{{classId}}\"\n}"
+            }
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "Reports",
+      "item": [
+        {
+          "name": "Overview Report",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "X-Institution-Program-Id",
+                "value": "{{institutionProgramId}}",
+                "disabled": false
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/reports/overview?institutionProgramId={{institutionProgramId}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "reports",
+                "overview"
+              ],
+              "query": [
+                {
+                  "key": "institutionProgramId",
+                  "value": "{{institutionProgramId}}"
+                }
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Overview Report Options",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/reports/overview/options",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "reports",
+                "overview",
+                "options"
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Marketing Detail Report",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "X-Institution-Program-Id",
+                "value": "{{institutionProgramId}}",
+                "disabled": false
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/reports/marketing-detail?institutionProgramId={{institutionProgramId}}&fromDate={{fromDate}}&toDate={{toDate}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "reports",
+                "marketing-detail"
+              ],
+              "query": [
+                {
+                  "key": "institutionProgramId",
+                  "value": "{{institutionProgramId}}"
+                },
+                {
+                  "key": "fromDate",
+                  "value": "{{fromDate}}"
+                },
+                {
+                  "key": "toDate",
+                  "value": "{{toDate}}"
+                }
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Sale Detail Report",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "X-Institution-Program-Id",
+                "value": "{{institutionProgramId}}",
+                "disabled": false
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/reports/sale-detail?institutionProgramId={{institutionProgramId}}&fromDate={{fromDate}}&toDate={{toDate}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "reports",
+                "sale-detail"
+              ],
+              "query": [
+                {
+                  "key": "institutionProgramId",
+                  "value": "{{institutionProgramId}}"
+                },
+                {
+                  "key": "fromDate",
+                  "value": "{{fromDate}}"
+                },
+                {
+                  "key": "toDate",
+                  "value": "{{toDate}}"
+                }
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Admission Detail Report",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "X-Institution-Program-Id",
+                "value": "{{institutionProgramId}}",
+                "disabled": false
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/reports/admission-detail?institutionProgramId={{institutionProgramId}}&fromDate={{fromDate}}&toDate={{toDate}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "reports",
+                "admission-detail"
+              ],
+              "query": [
+                {
+                  "key": "institutionProgramId",
+                  "value": "{{institutionProgramId}}"
+                },
+                {
+                  "key": "fromDate",
+                  "value": "{{fromDate}}"
+                },
+                {
+                  "key": "toDate",
+                  "value": "{{toDate}}"
+                }
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Student Detail Report",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "X-Institution-Program-Id",
+                "value": "{{institutionProgramId}}",
+                "disabled": false
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/reports/student-detail?institutionProgramId={{institutionProgramId}}&fromDate={{fromDate}}&toDate={{toDate}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "reports",
+                "student-detail"
+              ],
+              "query": [
+                {
+                  "key": "institutionProgramId",
+                  "value": "{{institutionProgramId}}"
+                },
+                {
+                  "key": "fromDate",
+                  "value": "{{fromDate}}"
+                },
+                {
+                  "key": "toDate",
+                  "value": "{{toDate}}"
+                }
+              ]
+            }
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "Notifications",
+      "item": [
+        {
+          "name": "My Notifications",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/notifications?page={{page}}&limit={{limit}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "notifications"
+              ],
+              "query": [
+                {
+                  "key": "page",
+                  "value": "{{page}}"
+                },
+                {
+                  "key": "limit",
+                  "value": "{{limit}}"
+                }
+              ]
+            }
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Request succeeded', function () { pm.expect(pm.response.code).to.be.oneOf([200, 201]); });",
+                  "const json = pm.response.json();",
+                  "const list = Array.isArray(json.data) ? json.data : (Array.isArray(json) ? json : []);",
+                  "if (list.length && list[0].id) pm.collectionVariables.set('notificationId', list[0].id);"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Mark Notification Read",
+          "request": {
+            "method": "PATCH",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/notifications/{{notificationId}}/read",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "notifications",
+                "{{notificationId}}",
+                "read"
+              ]
+            }
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "Audit Logs",
+      "item": [
+        {
+          "name": "List Audit Logs",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/audit-logs?page={{page}}&limit={{limit}}&search={{search}}&action={{auditAction}}&entityType={{entityType}}&userId={{userId}}&fromDate={{fromDate}}&toDate={{toDate}}&sortBy=createdAt&sortOrder=desc",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "audit-logs"
+              ],
+              "query": [
+                {
+                  "key": "page",
+                  "value": "{{page}}"
+                },
+                {
+                  "key": "limit",
+                  "value": "{{limit}}"
+                },
+                {
+                  "key": "search",
+                  "value": "{{search}}"
+                },
+                {
+                  "key": "action",
+                  "value": "{{auditAction}}"
+                },
+                {
+                  "key": "entityType",
+                  "value": "{{entityType}}"
+                },
+                {
+                  "key": "userId",
+                  "value": "{{userId}}"
+                },
+                {
+                  "key": "fromDate",
+                  "value": "{{fromDate}}"
+                },
+                {
+                  "key": "toDate",
+                  "value": "{{toDate}}"
+                },
+                {
+                  "key": "sortBy",
+                  "value": "createdAt"
+                },
+                {
+                  "key": "sortOrder",
+                  "value": "desc"
+                }
+              ]
+            }
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Request succeeded', function () { pm.expect(pm.response.code).to.be.oneOf([200, 201]); });",
+                  "const json = pm.response.json();",
+                  "const list = Array.isArray(json.data) ? json.data : (Array.isArray(json) ? json : []);",
+                  "if (list.length && list[0].id) pm.collectionVariables.set('auditLogId', list[0].id);"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Audit Log Options",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/audit-logs/options",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "audit-logs",
+                "options"
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Audit Log Detail",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/audit-logs/{{auditLogId}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "audit-logs",
+                "{{auditLogId}}"
+              ]
+            }
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "Management - Users Roles Permissions",
+      "item": [
+        {
+          "name": "List Users",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/users?page={{page}}&limit={{limit}}&search={{search}}&status={{userStatus}}&roleId={{roleId}}&departmentId={{departmentId}}&sortBy=createdAt&sortOrder=desc",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "users"
+              ],
+              "query": [
+                {
+                  "key": "page",
+                  "value": "{{page}}"
+                },
+                {
+                  "key": "limit",
+                  "value": "{{limit}}"
+                },
+                {
+                  "key": "search",
+                  "value": "{{search}}"
+                },
+                {
+                  "key": "status",
+                  "value": "{{userStatus}}"
+                },
+                {
+                  "key": "roleId",
+                  "value": "{{roleId}}"
+                },
+                {
+                  "key": "departmentId",
+                  "value": "{{departmentId}}"
+                },
+                {
+                  "key": "sortBy",
+                  "value": "createdAt"
+                },
+                {
+                  "key": "sortOrder",
+                  "value": "desc"
+                }
+              ]
+            }
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Request succeeded', function () { pm.expect(pm.response.code).to.be.oneOf([200, 201]); });",
+                  "const json = pm.response.json();",
+                  "const list = Array.isArray(json.data) ? json.data : (Array.isArray(json) ? json : []);",
+                  "if (list.length && list[0].id) pm.collectionVariables.set('userId', list[0].id);"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "User Options",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/users/options",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "users",
+                "options"
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Create User",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/users",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "users"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"fullName\": \"Demo User\",\n  \"email\": \"demo.user@example.test\",\n  \"phone\": \"0900000000\",\n  \"status\": \"active\",\n  \"password\": \"password123\",\n  \"roleIds\": [\n    \"{{roleId}}\"\n  ],\n  \"departmentIds\": [\n    \"{{departmentId}}\"\n  ],\n  \"accessScope\": \"DEPARTMENT\"\n}"
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Update User",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/users/{{userId}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "users",
+                "{{userId}}"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"fullName\": \"Demo User\",\n  \"email\": \"demo.user@example.test\",\n  \"phone\": \"0900000000\",\n  \"status\": \"active\",\n  \"password\": \"password123\",\n  \"roleIds\": [\n    \"{{roleId}}\"\n  ],\n  \"departmentIds\": [\n    \"{{departmentId}}\"\n  ],\n  \"accessScope\": \"DEPARTMENT\"\n}"
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "List Roles",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/roles",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "roles"
+              ]
+            }
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Request succeeded', function () { pm.expect(pm.response.code).to.be.oneOf([200, 201]); });",
+                  "const json = pm.response.json();",
+                  "const list = Array.isArray(json.data) ? json.data : (Array.isArray(json) ? json : []);",
+                  "if (list.length && list[0].id) pm.collectionVariables.set('roleId', list[0].id);"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Role Options",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/roles/options",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "roles",
+                "options"
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Access Scopes",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/roles/scopes",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "roles",
+                "scopes"
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Create Role",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/roles",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "roles"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"Demo Role\",\n  \"code\": \"DEMO_ROLE\",\n  \"description\": \"Created from Postman\",\n  \"scopeCode\": \"DEPARTMENT\",\n  \"permissionIds\": [\n    \"{{permissionId}}\"\n  ]\n}"
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Update Role",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/roles/{{roleId}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "roles",
+                "{{roleId}}"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"Demo Role\",\n  \"code\": \"DEMO_ROLE\",\n  \"description\": \"Created from Postman\",\n  \"scopeCode\": \"DEPARTMENT\",\n  \"permissionIds\": [\n    \"{{permissionId}}\"\n  ]\n}"
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Delete Role",
+          "request": {
+            "method": "DELETE",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/roles/{{roleId}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "roles",
+                "{{roleId}}"
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Update Access Scope",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/roles/scopes/{{scopeCode}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "roles",
+                "scopes",
+                "{{scopeCode}}"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"Department\",\n  \"description\": \"Department scope\",\n  \"isActive\": true\n}"
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "List Permissions",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/permissions?page={{page}}&limit={{limit}}&search={{search}}&module={{permissionModule}}&status={{permissionStatus}}&sortBy=code&sortOrder=asc",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "permissions"
+              ],
+              "query": [
+                {
+                  "key": "page",
+                  "value": "{{page}}"
+                },
+                {
+                  "key": "limit",
+                  "value": "{{limit}}"
+                },
+                {
+                  "key": "search",
+                  "value": "{{search}}"
+                },
+                {
+                  "key": "module",
+                  "value": "{{permissionModule}}"
+                },
+                {
+                  "key": "status",
+                  "value": "{{permissionStatus}}"
+                },
+                {
+                  "key": "sortBy",
+                  "value": "code"
+                },
+                {
+                  "key": "sortOrder",
+                  "value": "asc"
+                }
+              ]
+            }
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Request succeeded', function () { pm.expect(pm.response.code).to.be.oneOf([200, 201]); });",
+                  "const json = pm.response.json();",
+                  "const list = Array.isArray(json.data) ? json.data : (Array.isArray(json) ? json : []);",
+                  "if (list.length && list[0].id) pm.collectionVariables.set('permissionId', list[0].id);"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Permission Options",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/permissions/options",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "permissions",
+                "options"
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Create Permission",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/permissions",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "permissions"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"code\": \"demo.permission\",\n  \"name\": \"Demo Permission\",\n  \"module\": \"demo\",\n  \"description\": \"Created from Postman\",\n  \"isActive\": true\n}"
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Update Permission",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/permissions/{{permissionId}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "permissions",
+                "{{permissionId}}"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"code\": \"demo.permission\",\n  \"name\": \"Demo Permission\",\n  \"module\": \"demo\",\n  \"description\": \"Created from Postman\",\n  \"isActive\": true\n}"
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Delete Permission",
+          "request": {
+            "method": "DELETE",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/permissions/{{permissionId}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "permissions",
+                "{{permissionId}}"
+              ]
+            }
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "Management - Departments Pipelines System",
+      "item": [
+        {
+          "name": "List Departments",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/departments?page={{page}}&limit={{limit}}&search={{search}}&sortBy=name&sortOrder=asc",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "departments"
+              ],
+              "query": [
+                {
+                  "key": "page",
+                  "value": "{{page}}"
+                },
+                {
+                  "key": "limit",
+                  "value": "{{limit}}"
+                },
+                {
+                  "key": "search",
+                  "value": "{{search}}"
+                },
+                {
+                  "key": "sortBy",
+                  "value": "name"
+                },
+                {
+                  "key": "sortOrder",
+                  "value": "asc"
+                }
+              ]
+            }
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Request succeeded', function () { pm.expect(pm.response.code).to.be.oneOf([200, 201]); });",
+                  "const json = pm.response.json();",
+                  "const list = Array.isArray(json.data) ? json.data : (Array.isArray(json) ? json : []);",
+                  "if (list.length && list[0].id) pm.collectionVariables.set('departmentId', list[0].id);"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Department Options",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/departments/options",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "departments",
+                "options"
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Create Department",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/departments",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "departments"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"Demo Department\",\n  \"code\": \"DEMO-DEPT\",\n  \"managerId\": \"{{userId}}\",\n  \"memberIds\": [\n    \"{{userId}}\"\n  ]\n}"
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Update Department",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/departments/{{departmentId}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "departments",
+                "{{departmentId}}"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"Demo Department\",\n  \"code\": \"DEMO-DEPT\",\n  \"managerId\": \"{{userId}}\",\n  \"memberIds\": [\n    \"{{userId}}\"\n  ]\n}"
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Delete Department",
+          "request": {
+            "method": "DELETE",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/departments/{{departmentId}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "departments",
+                "{{departmentId}}"
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "List Pipelines",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/pipelines?page={{page}}&limit={{limit}}&search={{search}}&module={{pipelineModule}}&sortBy=name&sortOrder=asc",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "pipelines"
+              ],
+              "query": [
+                {
+                  "key": "page",
+                  "value": "{{page}}"
+                },
+                {
+                  "key": "limit",
+                  "value": "{{limit}}"
+                },
+                {
+                  "key": "search",
+                  "value": "{{search}}"
+                },
+                {
+                  "key": "module",
+                  "value": "{{pipelineModule}}"
+                },
+                {
+                  "key": "sortBy",
+                  "value": "name"
+                },
+                {
+                  "key": "sortOrder",
+                  "value": "asc"
+                }
+              ]
+            }
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Request succeeded', function () { pm.expect(pm.response.code).to.be.oneOf([200, 201]); });",
+                  "const json = pm.response.json();",
+                  "const list = Array.isArray(json.data) ? json.data : (Array.isArray(json) ? json : []);",
+                  "if (list.length && list[0].id) pm.collectionVariables.set('pipelineId', list[0].id);"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Pipeline Options",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/pipelines/options",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "pipelines",
+                "options"
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Create Pipeline",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/pipelines",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "pipelines"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"Demo Pipeline\",\n  \"module\": \"lead\"\n}"
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Update Pipeline",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/pipelines/{{pipelineId}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "pipelines",
+                "{{pipelineId}}"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"Demo Pipeline\",\n  \"module\": \"lead\"\n}"
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Delete Pipeline",
+          "request": {
+            "method": "DELETE",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/pipelines/{{pipelineId}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "pipelines",
+                "{{pipelineId}}"
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Create Pipeline Stage",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/pipelines/{{pipelineId}}/stages",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "pipelines",
+                "{{pipelineId}}",
+                "stages"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"Demo Stage\",\n  \"position\": 1,\n  \"color\": \"#2563eb\",\n  \"isFinal\": false\n}"
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Update Pipeline Stage",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/pipelines/{{pipelineId}}/stages/{{pipelineStageId}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "pipelines",
+                "{{pipelineId}}",
+                "stages",
+                "{{pipelineStageId}}"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"Demo Stage\",\n  \"position\": 1,\n  \"color\": \"#2563eb\",\n  \"isFinal\": false\n}"
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Delete Pipeline Stage",
+          "request": {
+            "method": "DELETE",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/pipelines/{{pipelineId}}/stages/{{pipelineStageId}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "pipelines",
+                "{{pipelineId}}",
+                "stages",
+                "{{pipelineStageId}}"
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "System Dashboard",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/system",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "system"
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Upsert Setting",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/system/settings",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "system",
+                "settings"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"key\": \"demo.setting\",\n  \"value\": \"demo\",\n  \"type\": \"string\"\n}"
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Delete Setting",
+          "request": {
+            "method": "DELETE",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/system/settings/{{settingId}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "system",
+                "settings",
+                "{{settingId}}"
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Create SLA Rule",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/system/sla-rules",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "system",
+                "sla-rules"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"Demo SLA\",\n  \"module\": \"lead\",\n  \"durationMinutes\": 60,\n  \"action\": \"notify\",\n  \"isActive\": true\n}"
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Update SLA Rule",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/system/sla-rules/{{slaRuleId}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "system",
+                "sla-rules",
+                "{{slaRuleId}}"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"Demo SLA\",\n  \"module\": \"lead\",\n  \"durationMinutes\": 60,\n  \"action\": \"notify\",\n  \"isActive\": true\n}"
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Delete SLA Rule",
+          "request": {
+            "method": "DELETE",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/system/sla-rules/{{slaRuleId}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "system",
+                "sla-rules",
+                "{{slaRuleId}}"
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Create Export Setting",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/system/export-settings",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "system",
+                "export-settings"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"Demo Export\",\n  \"reportType\": \"overview\",\n  \"filters\": {},\n  \"isActive\": true\n}"
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Update Export Setting",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/system/export-settings/{{reportConfigId}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "system",
+                "export-settings",
+                "{{reportConfigId}}"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"Demo Export\",\n  \"reportType\": \"overview\",\n  \"filters\": {},\n  \"isActive\": true\n}"
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Delete Export Setting",
+          "request": {
+            "method": "DELETE",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/system/export-settings/{{reportConfigId}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "system",
+                "export-settings",
+                "{{reportConfigId}}"
+              ]
+            }
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "Custom Fields",
+      "item": [
+        {
+          "name": "List Custom Fields",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/custom-fields?entityType={{customFieldEntityType}}&scopeType={{customFieldScopeType}}&programId={{institutionProgramId}}&includeArchived=false",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "custom-fields"
+              ],
+              "query": [
+                {
+                  "key": "entityType",
+                  "value": "{{customFieldEntityType}}"
+                },
+                {
+                  "key": "scopeType",
+                  "value": "{{customFieldScopeType}}"
+                },
+                {
+                  "key": "programId",
+                  "value": "{{institutionProgramId}}"
+                },
+                {
+                  "key": "includeArchived",
+                  "value": "false"
+                }
+              ]
+            }
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Request succeeded', function () { pm.expect(pm.response.code).to.be.oneOf([200, 201]); });",
+                  "const json = pm.response.json();",
+                  "const list = Array.isArray(json.data) ? json.data : (Array.isArray(json) ? json : []);",
+                  "if (list.length && list[0].id) pm.collectionVariables.set('customFieldId', list[0].id);"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Reorder Custom Fields",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/custom-fields/reorder",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "custom-fields",
+                "reorder"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"fieldIds\": [\n    \"{{customFieldId}}\"\n  ]\n}"
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Custom Fields By Entity",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/custom-fields/entity/{{customFieldEntityType}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "custom-fields",
+                "entity",
+                "{{customFieldEntityType}}"
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Create Custom Field",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/custom-fields",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "custom-fields"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"fieldKey\": \"demo_field\",\n  \"fieldLabel\": \"Demo Field\",\n  \"description\": \"Created from Postman\",\n  \"fieldType\": \"TEXT\",\n  \"entityType\": \"LEAD\",\n  \"scopeType\": \"PROGRAM\",\n  \"programId\": \"{{institutionProgramId}}\",\n  \"isRequired\": false,\n  \"isSearchable\": false,\n  \"isFilterable\": false,\n  \"isSensitive\": false,\n  \"displayOrder\": 0\n}"
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Set Custom Field Status",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/custom-fields/{{customFieldId}}/status",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "custom-fields",
+                "{{customFieldId}}",
+                "status"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"status\": \"deactivate\"\n}"
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Get Custom Field",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/custom-fields/{{customFieldId}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "custom-fields",
+                "{{customFieldId}}"
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Update Custom Field",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/custom-fields/{{customFieldId}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "custom-fields",
+                "{{customFieldId}}"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"fieldLabel\": \"Demo Field Updated\",\n  \"description\": \"Updated from Postman\",\n  \"isRequired\": false,\n  \"isSearchable\": false,\n  \"isFilterable\": false,\n  \"isSensitive\": false,\n  \"displayOrder\": 1\n}"
+            }
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "Automations",
+      "item": [
+        {
+          "name": "List Automations",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/automations?page={{page}}&limit={{limit}}&search={{search}}&isActive={{automationIsActive}}&triggerType={{triggerType}}&institutionProgramId={{institutionProgramId}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "automations"
+              ],
+              "query": [
+                {
+                  "key": "page",
+                  "value": "{{page}}"
+                },
+                {
+                  "key": "limit",
+                  "value": "{{limit}}"
+                },
+                {
+                  "key": "search",
+                  "value": "{{search}}"
+                },
+                {
+                  "key": "isActive",
+                  "value": "{{automationIsActive}}"
+                },
+                {
+                  "key": "triggerType",
+                  "value": "{{triggerType}}"
+                },
+                {
+                  "key": "institutionProgramId",
+                  "value": "{{institutionProgramId}}"
+                }
+              ]
+            }
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Request succeeded', function () { pm.expect(pm.response.code).to.be.oneOf([200, 201]); });",
+                  "const json = pm.response.json();",
+                  "const list = Array.isArray(json.data) ? json.data : (Array.isArray(json) ? json : []);",
+                  "if (list.length && list[0].id) pm.collectionVariables.set('automationId', list[0].id);"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Automation Options",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/automations/options",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "automations",
+                "options"
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Get Automation",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/automations/{{automationId}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "automations",
+                "{{automationId}}"
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Create Automation",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/automations",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "automations"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"Demo Automation\",\n  \"description\": \"Created from Postman\",\n  \"triggerType\": \"lead_created\",\n  \"graphData\": {\n    \"nodes\": [],\n    \"edges\": []\n  },\n  \"institutionProgramId\": \"{{institutionProgramId}}\"\n}"
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Update Automation",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/automations/{{automationId}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "automations",
+                "{{automationId}}"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"Demo Automation Updated\",\n  \"description\": \"Updated from Postman\",\n  \"triggerType\": \"lead_created\",\n  \"graphData\": {\n    \"nodes\": [],\n    \"edges\": []\n  },\n  \"isActive\": false,\n  \"institutionProgramId\": \"{{institutionProgramId}}\"\n}"
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Toggle Automation",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/automations/{{automationId}}/toggle",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "automations",
+                "{{automationId}}",
+                "toggle"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"isActive\": false\n}"
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Delete Automation",
+          "request": {
+            "method": "DELETE",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/automations/{{automationId}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "automations",
+                "{{automationId}}"
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Automation Logs",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/automations/{{automationId}}/logs?page={{page}}&limit={{limit}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "automations",
+                "{{automationId}}",
+                "logs"
+              ],
+              "query": [
+                {
+                  "key": "page",
+                  "value": "{{page}}"
+                },
+                {
+                  "key": "limit",
+                  "value": "{{limit}}"
+                }
+              ]
+            }
+          },
+          "response": []
+        }
+      ]
+    }
+  ],
+  "variable": [
+    {
+      "key": "baseUrl",
+      "value": "http://localhost:3000/api",
+      "type": "string"
+    },
+    {
+      "key": "email",
+      "value": "director@example.test",
+      "type": "string"
+    },
+    {
+      "key": "password",
+      "value": "password",
+      "type": "string"
+    },
+    {
+      "key": "accessToken",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "page",
+      "value": "1",
+      "type": "string"
+    },
+    {
+      "key": "limit",
+      "value": "20",
+      "type": "string"
+    },
+    {
+      "key": "search",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "institutionProgramId",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "leadId",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "sourceId",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "pipelineId",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "pipelineStageId",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "assigneeId",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "departmentId",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "userId",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "roleId",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "permissionId",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "campaignId",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "formId",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "formFieldId",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "publicKey",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "webhookSecret",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "admissionId",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "admissionStatusId",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "admissionDocumentId",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "majorId",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "facultyId",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "classId",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "studentId",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "studentServiceId",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "notificationId",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "auditLogId",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "customFieldId",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "automationId",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "activityId",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "reminderId",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "settingId",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "slaRuleId",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "reportConfigId",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "institutionId",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "programTypeId",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "fromDate",
+      "value": "2026-07-01",
+      "type": "string"
+    },
+    {
+      "key": "toDate",
+      "value": "2026-07-29",
+      "type": "string"
+    },
+    {
+      "key": "isoDateTime",
+      "value": "2026-08-01T09:00:00+07:00",
+      "type": "string"
+    },
+    {
+      "key": "scopeCode",
+      "value": "DEPARTMENT",
+      "type": "string"
+    },
+    {
+      "key": "customFieldEntityType",
+      "value": "LEAD",
+      "type": "string"
+    },
+    {
+      "key": "customFieldScopeType",
+      "value": "PROGRAM",
+      "type": "string"
+    },
+    {
+      "key": "leadStatus",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "campaignStatus",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "campaignType",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "sourceType",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "utmSource",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "utmMedium",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "campaignName",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "formStatus",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "platform",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "submissionStatus",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "documentStatus",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "documentType",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "feeStatus",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "studentStatus",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "serviceType",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "serviceStatus",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "auditAction",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "entityType",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "userStatus",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "programStatus",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "permissionModule",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "permissionStatus",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "pipelineModule",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "activityType",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "reminderStatus",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "automationIsActive",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "triggerType",
+      "value": "",
+      "type": "string"
+    }
+  ]
+}

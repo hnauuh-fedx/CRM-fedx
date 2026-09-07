@@ -1,11 +1,15 @@
 import { prisma } from "../../database/prisma";
+import { applicationStageLeadWhere } from "../leads/pipeline-stage-semantics";
 
 export async function getDirectorDashboard(institutionProgramId?: string) {
   const activeLeadWhere = {
     deleted_at: null,
     ...(institutionProgramId ? { institution_program_id: institutionProgramId } : {}),
   };
-  const admissionWhere = institutionProgramId ? { institution_program_id: institutionProgramId } : {};
+  const admissionWhere = {
+    leads: { is: { ...activeLeadWhere, ...applicationStageLeadWhere() } },
+  };
+  const applicationLeadWhere = { ...activeLeadWhere, ...applicationStageLeadWhere() };
   const studentWhere = institutionProgramId ? { institution_program_id: institutionProgramId } : {};
   const [
     totalLeads,
@@ -19,7 +23,7 @@ export async function getDirectorDashboard(institutionProgramId?: string) {
     admissionStatusGroups,
   ] = await prisma.$transaction([
     prisma.leads.count({ where: activeLeadWhere }),
-    prisma.admission_profiles.count({ where: admissionWhere }),
+    prisma.leads.count({ where: applicationLeadWhere }),
     prisma.students.count({ where: studentWhere }),
     prisma.admission_profiles.aggregate({ where: admissionWhere, _sum: { monthly_revenue: true } }),
     prisma.lead_sources.findMany({
@@ -70,7 +74,7 @@ export async function getDirectorDashboard(institutionProgramId?: string) {
       where: {
         id: { in: stageGroups.flatMap((group) => (group.pipeline_stage_id ? [group.pipeline_stage_id] : [])) },
       },
-      select: { id: true, name: true },
+      select: { id: true, name: true, position: true },
     }),
     prisma.users.findMany({
       where: {
@@ -99,7 +103,7 @@ export async function getDirectorDashboard(institutionProgramId?: string) {
       select: { id: true, name: true },
     }),
   ]);
-  const stageNames = new Map(stages.map((stage) => [stage.id, stage.name]));
+  const stagesById = new Map(stages.map((stage) => [stage.id, stage]));
   const departmentNames = new Map(
     departments.map((department) => [department.id, department.name]),
   );
@@ -121,13 +125,17 @@ export async function getDirectorDashboard(institutionProgramId?: string) {
     leadsBySource: sources
       .filter((source) => source._count.leads > 0)
       .map((source) => ({ id: source.id, name: source.name, total: source._count.leads })),
-    leadsByStage: stageGroups.map((group) => ({
-      id: group.pipeline_stage_id,
-      name: group.pipeline_stage_id
-        ? (stageNames.get(group.pipeline_stage_id) ?? "Chưa xác định")
-        : "Chưa có giai đoạn",
-      total: group._count._all,
-    })),
+    leadsByStage: stageGroups
+      .map((group) => ({
+        id: group.pipeline_stage_id,
+        name: group.pipeline_stage_id
+          ? (stagesById.get(group.pipeline_stage_id)?.name ?? "Chưa xác định")
+          : "Chưa có giai đoạn",
+        position: group.pipeline_stage_id ? stagesById.get(group.pipeline_stage_id)?.position ?? null : null,
+        total: group._count._all,
+      }))
+      .sort((left, right) => comparePipelineStagePosition(left.position, right.position, left.name, right.name))
+      .map(({ position: _position, ...stage }) => stage),
     leadsByDepartment: departmentGroups.map((group) => ({
       id: group.department_id!,
       name: departmentNames.get(group.department_id!) ?? "Chưa xác định",
@@ -146,4 +154,11 @@ export async function getDirectorDashboard(institutionProgramId?: string) {
       total: group._count._all,
     })),
   };
+}
+
+function comparePipelineStagePosition(left: number | null, right: number | null, leftName: string, rightName: string) {
+  if (left == null && right != null) return 1;
+  if (left != null && right == null) return -1;
+  if (left != null && right != null && left !== right) return left - right;
+  return leftName.localeCompare(rightName, "vi");
 }

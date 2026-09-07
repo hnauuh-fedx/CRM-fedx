@@ -2,6 +2,11 @@ import { prisma } from "./prisma";
 
 const directorEmail = "director@tvu.edu.vn";
 const directorPermissions = [
+  { code: "report.personal.view", name: "Xem báo cáo KPI cá nhân", module: "report" },
+  { code: "report.personal.create", name: "Tạo báo cáo KPI cá nhân", module: "report" },
+  { code: "report.personal.update", name: "Cập nhật báo cáo KPI cá nhân", module: "report" },
+  { code: "report.personal.share", name: "Chia sẻ báo cáo KPI cá nhân", module: "report" },
+  { code: "report.personal.export", name: "Xuất báo cáo KPI cá nhân", module: "report" },
   { code: "dashboard.view_all", name: "Xem dashboard điều hành", module: "dashboard" },
   { code: "report.view_all", name: "Xem toàn bộ báo cáo", module: "report" },
   { code: "lead.view_all", name: "Xem toàn bộ lead", module: "lead" },

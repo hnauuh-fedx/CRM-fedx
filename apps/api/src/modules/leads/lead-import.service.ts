@@ -23,7 +23,6 @@ export type LeadImportResult = {
 
 type ReferenceMaps = {
   sourcesById: Map<string, string>;
-  sourcesByCode: Map<string, string>;
   sourcesByName: Map<string, string>;
   stagesById: Map<string, string>;
   stagesByName: Map<string, string>;
@@ -39,7 +38,7 @@ type ReferenceMaps = {
 };
 
 const maxRows = 1000;
-const headerAliases: Record<string, keyof LeadInput | "sourceCode" | "sourceName" | "stageName" | "programCode" | "programName" | "majorCode" | "majorName" | "admissionStatusCode" | "admissionStatusName"> = {
+const headerAliases: Record<string, keyof LeadInput | "sourceName" | "stageName" | "programCode" | "programName" | "majorCode" | "majorName" | "admissionStatusCode" | "admissionStatusName"> = {
   fullname: "fullName",
   hoten: "fullName",
   hovaten: "fullName",
@@ -51,8 +50,6 @@ const headerAliases: Record<string, keyof LeadInput | "sourceCode" | "sourceName
   email: "email",
   sourceid: "sourceId",
   nguonid: "sourceId",
-  sourcecode: "sourceCode",
-  manguon: "sourceCode",
   sourcename: "sourceName",
   nguonlead: "sourceName",
   pipeline_stage_id: "pipelineStageId",
@@ -131,8 +128,11 @@ const headerAliases: Record<string, keyof LeadInput | "sourceCode" | "sourceName
   tags: "tags",
 };
 
+export class InvalidLeadImportFileError extends Error {}
+
 export async function importLeadsFromWorkbook(user: AuthUser, file: Buffer, scopedInstitutionProgramId?: string): Promise<LeadImportResult> {
-  const rows = readRows(file);
+  const { headers, rows } = readRows(file);
+  validateRequiredHeaders(headers, Boolean(scopedInstitutionProgramId));
   const referenceMaps = await getReferenceMaps(scopedInstitutionProgramId);
   const errors: LeadImportError[] = [];
   let importedRows = 0;
@@ -168,19 +168,48 @@ export async function importLeadsFromWorkbook(user: AuthUser, file: Buffer, scop
 }
 
 function readRows(file: Buffer) {
-  const workbook = XLSX.read(file, { type: "buffer", cellDates: true });
+  let workbook: XLSX.WorkBook;
+  try {
+    workbook = XLSX.read(file, { type: "buffer", cellDates: true });
+  } catch {
+    throw new InvalidLeadImportFileError("Không thể đọc file Excel. Vui lòng kiểm tra định dạng .xlsx hoặc .xls.");
+  }
   const sheetName = workbook.SheetNames[0];
-  if (!sheetName) return [];
+  if (!sheetName) throw new InvalidLeadImportFileError("File Excel không có trang dữ liệu.");
   const worksheet = workbook.Sheets[sheetName];
+  const rawRows = XLSX.utils.sheet_to_json<unknown[]>(worksheet, { header: 1, defval: "", blankrows: false });
+  const headers = (rawRows[0] ?? []).map((value) => String(value).trim()).filter(Boolean);
   const rows = XLSX.utils.sheet_to_json<ImportRow>(worksheet, { defval: "" });
-  return rows.slice(0, maxRows);
+  if (headers.length === 0) throw new InvalidLeadImportFileError("File Excel chưa có hàng tiêu đề.");
+  if (rows.length === 0) throw new InvalidLeadImportFileError("File Excel chưa có dòng dữ liệu lead.");
+  return { headers, rows: rows.slice(0, maxRows) };
+}
+
+function validateRequiredHeaders(headers: string[], hasScopedInstitutionProgram: boolean) {
+  const mappedHeaders = new Set(headers.flatMap((header) => {
+    const field = headerAliases[normalizeHeader(header)];
+    return field ? [field] : [];
+  }));
+  const missing: string[] = [];
+  if (!mappedHeaders.has("fullName")) missing.push("fullName");
+  if (!mappedHeaders.has("phone")) missing.push("phone");
+  if (!mappedHeaders.has("sourceId") && !mappedHeaders.has("sourceName")) missing.push("sourceId hoặc sourceName");
+  if (!hasScopedInstitutionProgram
+    && !mappedHeaders.has("institutionProgramId")
+    && !mappedHeaders.has("programCode")
+    && !mappedHeaders.has("programName")) {
+    missing.push("institutionProgramId, programCode hoặc programName");
+  }
+  if (missing.length > 0) {
+    throw new InvalidLeadImportFileError(`Thiếu cột bắt buộc: ${missing.join(", ")}. Các cột khác là tùy chọn.`);
+  }
 }
 
 async function getReferenceMaps(scopedInstitutionProgramId?: string): Promise<ReferenceMaps> {
   const [sources, stages, programs, majors, admissionStatuses] = await prisma.$transaction([
     prisma.lead_sources.findMany({
       where: scopedInstitutionProgramId ? { OR: [{ institution_program_id: scopedInstitutionProgramId }, { institution_program_id: null }] } : undefined,
-      select: { id: true, code: true, name: true },
+      select: { id: true, name: true },
     }),
     prisma.pipeline_stages.findMany({ select: { id: true, name: true } }),
     prisma.institution_programs.findMany({
@@ -196,7 +225,6 @@ async function getReferenceMaps(scopedInstitutionProgramId?: string): Promise<Re
 
   return {
     sourcesById: mapBy(sources, "id"),
-    sourcesByCode: mapBy(sources, "code"),
     sourcesByName: mapBy(sources, "name"),
     stagesById: mapBy(stages, "id"),
     stagesByName: mapBy(stages, "name"),
@@ -234,9 +262,9 @@ function mapRow(row: ImportRow) {
 
 function normalizeInput(mapped: Record<string, string>, references: ReferenceMaps, scopedInstitutionProgramId?: string) {
   const fullName = asText(mapped.fullName);
-  const phone = asText(mapped.phone)?.replace(/\D/g, "");
+  const phoneDigits = asText(mapped.phone)?.replace(/\D/g, "");
+  const phone = phoneDigits?.length === 9 ? `0${phoneDigits}` : phoneDigits;
   const sourceId = resolveReference(mapped.sourceId, references.sourcesById)
-    ?? resolveReference(mapped.sourceCode, references.sourcesByCode)
     ?? resolveReference(mapped.sourceName, references.sourcesByName);
   const pipelineStageId = resolveReference(mapped.pipelineStageId, references.stagesById)
     ?? resolveReference(mapped.stageName, references.stagesByName)
@@ -257,7 +285,8 @@ function normalizeInput(mapped: Record<string, string>, references: ReferenceMap
 
   if (!fullName || fullName.length < 2) return { ok: false as const, message: "Thiếu họ tên hoặc họ tên quá ngắn." };
   if (!phone || !/^\d{10}$/.test(phone)) return { ok: false as const, message: "Số điện thoại phải gồm đúng 10 chữ số." };
-  if (!sourceId) return { ok: false as const, message: "Không tìm thấy nguồn lead. Dùng sourceId, mã nguồn hoặc tên nguồn hợp lệ." };
+  if (!sourceId) return { ok: false as const, message: "Không tìm thấy nguồn lead. Dùng sourceId hoặc sourceName hợp lệ." };
+  if (!institutionProgramId) return { ok: false as const, message: "Không tìm thấy chương trình tuyển sinh. Hãy chọn chương trình đang làm việc hoặc thêm cột chương trình hợp lệ." };
 
   const input: LeadInput = {
     fullName,
