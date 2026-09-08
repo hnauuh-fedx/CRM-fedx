@@ -20,6 +20,7 @@ const roleBodySchema = z.object({
   description: z.string().trim().max(1000).optional().or(z.literal("")).transform((value) => value || undefined),
   scopeCode: scopeCodeSchema,
   permissionIds: z.array(z.uuid()).default([]),
+  programIds: z.array(z.uuid()).min(1),
 });
 const scopeBodySchema = z.object({
   name: z.string().trim().min(2).max(150),
@@ -34,6 +35,8 @@ rolesRouter.use(requireAuthentication, requireAnyPermission("role.manage"));
 function resultMessage(reason: string) {
   if (reason === "code_exists") return "Mã vai trò đã tồn tại.";
   if (reason === "permission_not_found") return "Có quyền chức năng đã chọn không tồn tại.";
+  if (reason === "program_required") return "Vai trò phải được gán ít nhất một chương trình.";
+  if (reason === "program_not_found") return "Có chương trình đã chọn không tồn tại hoặc không còn hoạt động.";
   if (reason === "scope_not_supported") return "Scope truy cập không được hỗ trợ.";
   if (reason === "scope_inactive") return "Scope truy cập đang tắt, không thể gán cho vai trò.";
   if (reason === "role_in_use") return "Không thể xóa vai trò đang được gán cho người dùng.";

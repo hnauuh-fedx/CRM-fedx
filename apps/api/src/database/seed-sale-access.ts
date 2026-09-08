@@ -11,6 +11,12 @@ const roleDefinitions = {
     name: "Quản lý Sale",
     description: "Quản lý lead và phân công theo phạm vi phòng ban.",
     permissions: [
+      { code: "report.sale.view_department", name: "Xem báo cáo Sale theo phòng ban", module: "report" },
+      { code: "report.personal.view", name: "Xem báo cáo KPI cá nhân", module: "report" },
+      { code: "report.personal.create", name: "Tạo báo cáo KPI cá nhân", module: "report" },
+      { code: "report.personal.update", name: "Cập nhật báo cáo KPI cá nhân", module: "report" },
+      { code: "report.personal.share", name: "Chia sẻ báo cáo KPI cá nhân", module: "report" },
+      { code: "report.personal.export", name: "Xuất báo cáo KPI cá nhân", module: "report" },
       { code: "lead.view_department", name: "Xem lead trong phòng ban", module: "lead" },
       { code: "lead.create", name: "Tạo lead", module: "lead" },
       { code: "lead.assign", name: "Phân công lead", module: "lead" },
@@ -35,6 +41,12 @@ const roleDefinitions = {
     name: "Telesale",
     description: "Chăm sóc các lead được phân công.",
     permissions: [
+      { code: "report.sale.view_assigned", name: "Xem báo cáo Sale được phân công", module: "report" },
+      { code: "report.personal.view", name: "Xem báo cáo KPI cá nhân", module: "report" },
+      { code: "report.personal.create", name: "Tạo báo cáo KPI cá nhân", module: "report" },
+      { code: "report.personal.update", name: "Cập nhật báo cáo KPI cá nhân", module: "report" },
+      { code: "report.personal.share", name: "Chia sẻ báo cáo KPI cá nhân", module: "report" },
+      { code: "report.personal.export", name: "Xuất báo cáo KPI cá nhân", module: "report" },
       { code: "lead.view_assigned", name: "Xem lead được phân công", module: "lead" },
       { code: "lead.update_assigned", name: "Cập nhật lead được phân công", module: "lead" },
       { code: "lead_note.create", name: "Thêm ghi chú lead", module: "lead" },
@@ -79,6 +91,14 @@ async function seedSaleAccess() {
           role_id: role.id,
           permission_id: permission.id,
         })),
+        skipDuplicates: true,
+      });
+      const programs = await transaction.institution_programs.findMany({
+        where: { status: "active", institutions: { is: { status: "active" } } },
+        select: { id: true },
+      });
+      await transaction.role_institution_programs.createMany({
+        data: programs.map((program) => ({ role_id: role.id, institution_program_id: program.id })),
         skipDuplicates: true,
       });
       grantedPermissions += grants.count;

@@ -127,6 +127,11 @@ const ids = {
 
 const permissionDefinitions = {
   DIRECTOR: [
+    ["report.personal.view", "Xem báo cáo KPI cá nhân", "report"],
+    ["report.personal.create", "Tạo báo cáo KPI cá nhân", "report"],
+    ["report.personal.update", "Cập nhật báo cáo KPI cá nhân", "report"],
+    ["report.personal.share", "Chia sẻ báo cáo KPI cá nhân", "report"],
+    ["report.personal.export", "Xuất báo cáo KPI cá nhân", "report"],
     ["dashboard.view_all", "Xem dashboard điều hành", "dashboard"],
     ["report.view_all", "Xem toàn bộ báo cáo", "report"],
     ["lead.view_all", "Xem toàn bộ lead", "lead"],
@@ -174,6 +179,12 @@ const permissionDefinitions = {
     ["audit.view", "Xem audit log", "system"],
   ],
   SALE_MANAGER: [
+    ["report.sale.view_department", "Xem báo cáo Sale theo phòng ban", "report"],
+    ["report.personal.view", "Xem báo cáo KPI cá nhân", "report"],
+    ["report.personal.create", "Tạo báo cáo KPI cá nhân", "report"],
+    ["report.personal.update", "Cập nhật báo cáo KPI cá nhân", "report"],
+    ["report.personal.share", "Chia sẻ báo cáo KPI cá nhân", "report"],
+    ["report.personal.export", "Xuất báo cáo KPI cá nhân", "report"],
     ["lead.view_department", "Xem lead trong phòng ban", "lead"],
     ["lead.sensitive.view", "Xem dữ liệu nhạy cảm của lead", "lead"],
     ["lead.create", "Tạo lead", "lead"],
@@ -195,6 +206,12 @@ const permissionDefinitions = {
     ["custom_field.manage_groups", "Quản lý nhóm trường dữ liệu", "custom_field"],
   ],
   TELESALE: [
+    ["report.sale.view_assigned", "Xem báo cáo Sale được phân công", "report"],
+    ["report.personal.view", "Xem báo cáo KPI cá nhân", "report"],
+    ["report.personal.create", "Tạo báo cáo KPI cá nhân", "report"],
+    ["report.personal.update", "Cập nhật báo cáo KPI cá nhân", "report"],
+    ["report.personal.share", "Chia sẻ báo cáo KPI cá nhân", "report"],
+    ["report.personal.export", "Xuất báo cáo KPI cá nhân", "report"],
     ["lead.view_assigned", "Xem lead được phân công", "lead"],
     ["lead.sensitive.view", "Xem dữ liệu nhạy cảm của lead", "lead"],
     ["lead.update_assigned", "Cập nhật lead được phân công", "lead"],
@@ -207,6 +224,12 @@ const permissionDefinitions = {
     ["file.upload", "Đính kèm tệp cho lead", "lead"],
   ],
   MARKETING_MANAGER: [
+    ["report.marketing.view", "Xem báo cáo Marketing", "report"],
+    ["report.personal.view", "Xem báo cáo KPI cá nhân", "report"],
+    ["report.personal.create", "Tạo báo cáo KPI cá nhân", "report"],
+    ["report.personal.update", "Cập nhật báo cáo KPI cá nhân", "report"],
+    ["report.personal.share", "Chia sẻ báo cáo KPI cá nhân", "report"],
+    ["report.personal.export", "Xuất báo cáo KPI cá nhân", "report"],
     ["campaign.view", "Xem chiến dịch phòng Marketing", "marketing"],
     ["campaign.create", "Tạo chiến dịch", "marketing"],
     ["campaign.update", "Cập nhật chiến dịch phòng Marketing", "marketing"],
@@ -216,6 +239,12 @@ const permissionDefinitions = {
     ["marketing_form.manage", "Quản lý biểu mẫu Marketing", "marketing"],
   ],
   STUDENT_SERVICE: [
+    ["report.student.view", "Xem báo cáo Sinh viên theo phạm vi", "report"],
+    ["report.personal.view", "Xem báo cáo KPI cá nhân", "report"],
+    ["report.personal.create", "Tạo báo cáo KPI cá nhân", "report"],
+    ["report.personal.update", "Cập nhật báo cáo KPI cá nhân", "report"],
+    ["report.personal.share", "Chia sẻ báo cáo KPI cá nhân", "report"],
+    ["report.personal.export", "Xuất báo cáo KPI cá nhân", "report"],
     ["student.view", "Xem sinh vien theo pham vi", "student"],
     ["student.update", "Cap nhat sinh vien theo pham vi", "student"],
     ["student_service.view", "Xem dich vu sinh vien", "student"],
@@ -352,6 +381,19 @@ async function seedBusinessData(principals: Awaited<ReturnType<typeof seedAccess
     prisma.institution_programs.upsert({ where: { code: "TVU-CQ-2026" }, update: { institution_id: institutions[0].id, program_type_id: programTypes[0].id, name: "Chinh quy 2026", status: "active" }, create: { id: ids.institutionPrograms[0], code: "TVU-CQ-2026", institution_id: institutions[0].id, program_type_id: programTypes[0].id, name: "Chinh quy 2026", status: "active" } }),
     prisma.institution_programs.upsert({ where: { code: "TVU-LI-VLVH-2026" }, update: { institution_id: institutions[1].id, program_type_id: programTypes[1].id, name: "Lien ket VLVH 2026", status: "active" }, create: { id: ids.institutionPrograms[1], code: "TVU-LI-VLVH-2026", institution_id: institutions[1].id, program_type_id: programTypes[1].id, name: "Lien ket VLVH 2026", status: "active" } }),
   ]);
+  const demoRoles = await prisma.roles.findMany({
+    where: { code: { in: ["DIRECTOR", "SALE_MANAGER", "TELESALE", "MARKETING_MANAGER", "STUDENT_SERVICE"] } },
+    select: { id: true },
+  });
+  await prisma.role_institution_programs.createMany({
+    data: demoRoles.flatMap((role) =>
+      institutionPrograms.map((program) => ({
+        role_id: role.id,
+        institution_program_id: program.id,
+      })),
+    ),
+    skipDuplicates: true,
+  });
   const pipeline = await prisma.pipelines.upsert({
     where: { id: ids.pipeline },
     update: { name: "Tiến trình tuyển sinh 2026", module: "sale" },
@@ -409,13 +451,13 @@ async function seedBusinessData(principals: Awaited<ReturnType<typeof seedAccess
   const campaigns = await Promise.all([
     prisma.campaigns.upsert({
       where: { id: ids.campaigns[0] },
-      update: { name: "Tuyển sinh đại học 2026", institution_program_id: institutionPrograms[0].id, type: "digital", start_date: days(-60), end_date: days(60), budget: 150000000, status: "active", created_by: marketing.id },
-      create: { id: ids.campaigns[0], name: "Tuyển sinh đại học 2026", institution_program_id: institutionPrograms[0].id, type: "digital", start_date: days(-60), end_date: days(60), budget: 150000000, status: "active", created_by: marketing.id },
+      update: { name: "Tuyển sinh đại học 2026", institution_program_id: institutionPrograms[0].id, type: "digital", start_date: days(-60), end_date: days(60), status: "active", created_by: marketing.id },
+      create: { id: ids.campaigns[0], name: "Tuyển sinh đại học 2026", institution_program_id: institutionPrograms[0].id, type: "digital", start_date: days(-60), end_date: days(60), status: "active", created_by: marketing.id },
     }),
     prisma.campaigns.upsert({
       where: { id: ids.campaigns[1] },
-      update: { name: "Ngày hội hướng nghiệp", institution_program_id: institutionPrograms[1].id, type: "event", start_date: days(-30), end_date: days(-10), budget: 45000000, status: "completed", created_by: marketing.id },
-      create: { id: ids.campaigns[1], name: "Ngày hội hướng nghiệp", institution_program_id: institutionPrograms[1].id, type: "event", start_date: days(-30), end_date: days(-10), budget: 45000000, status: "completed", created_by: marketing.id },
+      update: { name: "Ngày hội hướng nghiệp", institution_program_id: institutionPrograms[1].id, type: "event", start_date: days(-30), end_date: days(-10), status: "completed", created_by: marketing.id },
+      create: { id: ids.campaigns[1], name: "Ngày hội hướng nghiệp", institution_program_id: institutionPrograms[1].id, type: "event", start_date: days(-30), end_date: days(-10), status: "completed", created_by: marketing.id },
     }),
   ]);
 

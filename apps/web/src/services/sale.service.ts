@@ -2,6 +2,7 @@ import type {
   ActivityFilters,
   ActivityListResponse,
   AssignmentFilters,
+  AssignmentStatus,
   AssignmentListResponse,
   ReminderFilters,
   ReminderListResponse,
@@ -27,7 +28,7 @@ export function getSaleFilterOptions(accessToken: string) {
   return apiRequest<SaleFilterOptions>("/sale/options", {}, accessToken);
 }
 
-export function getLeadAssignments(params: ListParams<AssignmentFilters>, accessToken: string) {
+export function getLeadAssignments(params: ListParams<AssignmentFilters> & { status: AssignmentStatus }, accessToken: string) {
   return apiRequest<AssignmentListResponse>(`/sale/assignments?${toQuery(params)}`, {}, accessToken);
 }
 

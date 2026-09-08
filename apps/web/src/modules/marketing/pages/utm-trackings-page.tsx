@@ -44,7 +44,6 @@ const emptyFilters: UtmTrackingFilters = { search: "", source: "", medium: "", c
 const sortableColumns = new Set<UtmTrackingSortField>(["createdAt", "source", "medium"]);
 const dateFormatter = new Intl.DateTimeFormat("vi-VN");
 const integerFormatter = new Intl.NumberFormat("vi-VN");
-const currencyFormatter = new Intl.NumberFormat("vi-VN", { style: "currency", currency: "VND", maximumFractionDigits: 0 });
 
 type AnalysisState = {
   dimension: UtmAnalyticsDimension;
@@ -331,7 +330,6 @@ function Analytics(props: {
                   <TableHead>Hồ sơ</TableHead>
                   <TableHead>Sinh viên</TableHead>
                   <TableHead>Tỷ lệ vào hồ sơ</TableHead>
-                  <TableHead>Chi phí / lead</TableHead>
                   <TableHead className="px-5 text-right">Chi tiết</TableHead>
                 </TableRow>
               </TableHeader>
@@ -344,7 +342,6 @@ function Analytics(props: {
                     <TableCell className="tabular-nums">{integerFormatter.format(group.applicationCount)}</TableCell>
                     <TableCell className="tabular-nums">{integerFormatter.format(group.enrolledStudentCount)}</TableCell>
                     <TableCell className="tabular-nums">{group.conversionRate}%</TableCell>
-                    <TableCell className="tabular-nums">{group.costPerLead === null ? "-" : currencyFormatter.format(group.costPerLead)}</TableCell>
                     <TableCell className="px-5 text-right">
                       <Button type="button" size="sm" variant="outline" disabled={group.leadCount === 0} onClick={() => onSelect(group)}>
                         Xem lead

@@ -120,7 +120,6 @@ model campaigns {
   type                   String?               @db.VarChar(100)
   start_date             DateTime?             @db.Date
   end_date               DateTime?             @db.Date
-  budget                 Decimal?              @default(0) @db.Decimal(15, 2)
   status                 String?               @default("active") @db.VarChar(50)
   created_by             String?               @db.Uuid
   created_at             DateTime?             @default(now()) @db.Timestamp(6)
@@ -277,26 +276,29 @@ model program_types {
 }
 
 model institution_programs {
-  id                 String               @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
-  institution_id     String               @db.Uuid
-  program_type_id    String               @db.Uuid
-  name               String               @db.VarChar(255)
-  code               String               @unique @db.VarChar(100)
-  status             String?              @default("active") @db.VarChar(50)
-  created_at         DateTime?            @default(now()) @db.Timestamp(6)
-  updated_at         DateTime?            @default(now()) @db.Timestamp(6)
-  institutions       institutions         @relation(fields: [institution_id], references: [id], onDelete: NoAction, onUpdate: NoAction)
-  program_types      program_types        @relation(fields: [program_type_id], references: [id], onDelete: NoAction, onUpdate: NoAction)
-  admission_profiles admission_profiles[]
-  automation_rules   automation_rules[]
-  campaigns          campaigns[]
-  custom_fields      custom_fields[]
-  kpi_targets        kpi_targets[]
-  lead_sources       lead_sources[]
-  leads              leads[]
-  report_configs     report_configs[]
-  students           students[]
-  majors             majors[]
+  id                        String                      @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  institution_id            String                      @db.Uuid
+  program_type_id           String                      @db.Uuid
+  name                      String                      @db.VarChar(255)
+  code                      String                      @unique @db.VarChar(100)
+  status                    String?                     @default("active") @db.VarChar(50)
+  created_at                DateTime?                   @default(now()) @db.Timestamp(6)
+  updated_at                DateTime?                   @default(now()) @db.Timestamp(6)
+  institutions              institutions                @relation(fields: [institution_id], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  program_types             program_types               @relation(fields: [program_type_id], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  admission_profiles        admission_profiles[]
+  automation_rules          automation_rules[]
+  campaigns                 campaigns[]
+  custom_fields             custom_fields[]
+  kpi_targets               kpi_targets[]
+  lead_sources              lead_sources[]
+  leads                     leads[]
+  report_configs            report_configs[]
+  personal_dashboard_widgets personal_dashboard_widgets[]
+  personal_dashboard_settings personal_dashboard_settings[]
+  role_institution_programs role_institution_programs[]
+  students                  students[]
+  majors                    majors[]
 
   @@unique([institution_id, program_type_id, name])
   @@index([institution_id, status, name], map: "idx_institution_programs_institution_status")
@@ -392,6 +394,8 @@ model lead_status_histories {
   pipeline_stages_lead_status_histories_from_stage_idTopipeline_stages pipeline_stages? @relation("lead_status_histories_from_stage_idTopipeline_stages", fields: [from_stage_id], references: [id], onDelete: NoAction, onUpdate: NoAction)
   leads                                                                leads?           @relation(fields: [lead_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
   pipeline_stages_lead_status_histories_to_stage_idTopipeline_stages   pipeline_stages? @relation("lead_status_histories_to_stage_idTopipeline_stages", fields: [to_stage_id], references: [id], onDelete: NoAction, onUpdate: NoAction)
+
+  @@index([lead_id, to_stage_id, changed_at], map: "idx_lead_status_histories_lead_stage_time")
 }
 
 model leads {
@@ -731,14 +735,28 @@ model role_permissions {
 }
 
 model roles {
-  id                 String              @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
-  name               String              @db.VarChar(100)
-  code               String              @unique @db.VarChar(100)
-  description        String?
-  created_at         DateTime?           @default(now()) @db.Timestamp(6)
-  role_access_scopes role_access_scopes?
-  role_permissions   role_permissions[]
-  user_roles         user_roles[]
+  id                        String                      @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  name                      String                      @db.VarChar(100)
+  code                      String                      @unique @db.VarChar(100)
+  description               String?
+  created_at                DateTime?                   @default(now()) @db.Timestamp(6)
+  role_access_scopes        role_access_scopes?
+  role_institution_programs role_institution_programs[]
+  role_permissions          role_permissions[]
+  user_roles                user_roles[]
+}
+
+model role_institution_programs {
+  id                     String               @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  role_id                String               @db.Uuid
+  institution_program_id String               @db.Uuid
+  created_at             DateTime?            @default(now()) @db.Timestamp(6)
+  roles                  roles                @relation(fields: [role_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  institution_programs   institution_programs @relation(fields: [institution_program_id], references: [id], onDelete: Restrict, onUpdate: NoAction)
+
+  @@unique([role_id, institution_program_id])
+  @@index([institution_program_id, role_id], map: "idx_role_institution_programs_program_role")
+  @@index([role_id], map: "idx_role_institution_programs_role_id")
 }
 
 model role_access_scopes {
@@ -916,13 +934,68 @@ model users {
   user_access_scopes                                   user_access_scopes?
   user_departments                                     user_departments[]
   user_roles                                           user_roles[]
-  custom_fields_created_by                             custom_fields[]             @relation("custom_fields_created_by")
-  custom_fields_updated_by                             custom_fields[]             @relation("custom_fields_updated_by")
-  custom_field_groups_created_by                       custom_field_groups[]       @relation("custom_field_groups_created_by")
-  custom_field_groups_updated_by                       custom_field_groups[]       @relation("custom_field_groups_updated_by")
+  custom_fields_created_by                             custom_fields[]                  @relation("custom_fields_created_by")
+  custom_fields_updated_by                             custom_fields[]                  @relation("custom_fields_updated_by")
+  custom_field_groups_created_by                       custom_field_groups[]            @relation("custom_field_groups_created_by")
+  custom_field_groups_updated_by                       custom_field_groups[]            @relation("custom_field_groups_updated_by")
+  personal_reports                                     personal_reports[]
+  personal_dashboard_widgets                           personal_dashboard_widgets[]
+  personal_dashboard_settings                          personal_dashboard_settings[]
 
   @@index([email], map: "idx_users_email")
   @@index([status], map: "idx_users_status")
+}
+
+model personal_reports {
+  id                     String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  owner_id               String    @db.Uuid
+  institution_program_id String?   @db.Uuid
+  name                   String    @db.VarChar(255)
+  module                 String    @db.VarChar(30)
+  metric_keys            Json
+  breakdown_key          String?   @db.VarChar(80)
+  chart_type             String    @default("BAR") @db.VarChar(30)
+  filters                Json
+  is_shared              Boolean   @default(false)
+  archived_at            DateTime? @db.Timestamp(6)
+  created_at             DateTime  @default(now()) @db.Timestamp(6)
+  updated_at             DateTime  @default(now()) @db.Timestamp(6)
+  users                  users     @relation(fields: [owner_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  personal_dashboard_widgets personal_dashboard_widgets[]
+
+  @@index([owner_id, archived_at, updated_at], map: "idx_personal_reports_owner_active")
+  @@index([is_shared, archived_at, updated_at], map: "idx_personal_reports_shared_active")
+  @@index([institution_program_id, module], map: "idx_personal_reports_program_module")
+}
+
+model personal_dashboard_widgets {
+  id                     String               @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  user_id                String               @db.Uuid
+  institution_program_id String               @db.Uuid
+  personal_report_id     String               @db.Uuid
+  display_order          Int
+  created_at             DateTime             @default(now()) @db.Timestamp(6)
+  updated_at             DateTime             @default(now()) @db.Timestamp(6)
+  users                  users                @relation(fields: [user_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  institution_programs   institution_programs @relation(fields: [institution_program_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  personal_reports       personal_reports     @relation(fields: [personal_report_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+
+  @@unique([user_id, institution_program_id, personal_report_id], map: "uq_personal_dashboard_widget_report")
+  @@index([user_id, institution_program_id, display_order], map: "idx_personal_dashboard_widget_order")
+}
+
+model personal_dashboard_settings {
+  id                     String               @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  user_id                String               @db.Uuid
+  institution_program_id String               @db.Uuid
+  column_count           Int                  @default(4)
+  kpi_widgets            Json
+  created_at             DateTime             @default(now()) @db.Timestamp(6)
+  updated_at             DateTime             @default(now()) @db.Timestamp(6)
+  users                  users                @relation(fields: [user_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  institution_programs   institution_programs @relation(fields: [institution_program_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+
+  @@unique([user_id, institution_program_id], map: "uq_personal_dashboard_settings_user_program")
 }
 
 model user_access_scopes {

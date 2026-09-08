@@ -1,4 +1,4 @@
-export type CampaignSortField = "createdAt" | "name" | "startDate" | "budget";
+export type CampaignSortField = "createdAt" | "name" | "startDate";
 
 export type CampaignListFilters = {
   search: string;
@@ -13,7 +13,6 @@ export type CampaignListItem = {
   status: string | null;
   startDate: string | null;
   endDate: string | null;
-  budget: number;
   createdAt: string | null;
   creator: { id: string; fullName: string } | null;
   institutionProgram: { id: string; name: string; institutionName: string } | null;
@@ -44,7 +43,6 @@ export type CampaignInput = {
   status: "planning" | "active" | "paused" | "completed";
   startDate: string;
   endDate: string;
-  budget: number;
   institutionProgramId: string;
   customFieldValues?: Record<string, LeadCustomFieldValue>;
 };

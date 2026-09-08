@@ -29,6 +29,7 @@ const pagingSchema = {
 };
 const assignmentQuerySchema = z.object({
   ...pagingSchema,
+  status: z.enum(["assigned", "unassigned"]).default("assigned"),
   assigneeId: z.uuid().optional().or(z.literal("")).transform((value) => value || undefined),
   departmentId: z.uuid().optional().or(z.literal("")).transform((value) => value || undefined),
 });
@@ -72,14 +73,14 @@ saleOverviewRouter.get("/options", requireAnyPermission(...leadListPermissions),
   }
 });
 
-saleOverviewRouter.get("/assignments", requireAnyPermission("lead.view_all"), async (request, response, next) => {
+saleOverviewRouter.get("/assignments", requireAnyPermission("lead.assign", "lead.reassign"), async (request, response, next) => {
   try {
     const parsed = assignmentQuerySchema.safeParse(request.query);
     if (!parsed.success) {
       response.status(400).json({ message: "Tham số danh sách phân công không hợp lệ." });
       return;
     }
-    response.json(await listLeadAssignments({ ...parsed.data, institutionProgramId: getInstitutionProgramScope(request) }));
+    response.json(await listLeadAssignments(request.authUser!, { ...parsed.data, institutionProgramId: getInstitutionProgramScope(request) }));
   } catch (error) {
     next(error);
   }

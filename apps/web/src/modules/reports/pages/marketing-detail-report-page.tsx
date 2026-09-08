@@ -1,28 +1,22 @@
-import { useMemo, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
-import { ClipboardList, FileText, Megaphone, MousePointerClick, Target, TrendingUp, Wallet } from "lucide-react";
+import { ClipboardList, FileText, Megaphone, MousePointerClick, Target, TrendingUp } from "lucide-react";
 
 import { BreakdownCard, MetricCard } from "@/components/shared/dashboard-cards";
 import { EmptyState } from "@/components/shared/data-states";
 import { ErrorState } from "@/components/shared/error-state";
 import { PageHeader } from "@/components/shared/page-header";
-import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { DateRangeFilter } from "@/components/ui/date-range-filter";
-import { Label } from "@/components/ui/label";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { useAuth } from "@/modules/auth/auth-context";
+import { DetailReportTimeFilter, useDetailReportTimeFilter } from "@/modules/reports/components/detail-report-time-filter";
 import { getMarketingDetailReport } from "@/services/report.service";
 
 const integerFormatter = new Intl.NumberFormat("vi-VN");
-const currencyFormatter = new Intl.NumberFormat("vi-VN", { style: "currency", currency: "VND", maximumFractionDigits: 0 });
 
 export function MarketingDetailReportPage() {
   const auth = useAuth();
-  const initialFilters = useMemo(() => defaultDateRange(), []);
-  const [draftFilters, setDraftFilters] = useState(initialFilters);
-  const [filters, setFilters] = useState(initialFilters);
+  const { draftTimeFilter, setDraftTimeFilter, filters, applyTimeFilter } = useDetailReportTimeFilter();
   const reportQuery = useQuery({
     queryKey: ["reports", "marketing-detail", filters],
     queryFn: () => getMarketingDetailReport(filters, auth.accessToken!),
@@ -36,15 +30,7 @@ export function MarketingDetailReportPage() {
         scopeLabel="Theo quyền truy cập"
         description="Theo dõi hiệu quả chiến dịch, nguồn UTM, biểu mẫu và chuyển đổi từ lead sang hồ sơ."
       />
-      <ReportFilters
-        filters={draftFilters}
-        onChange={(key, value) => setDraftFilters((current) => ({ ...current, [key]: value }))}
-        onApply={() => setFilters(draftFilters)}
-        onReset={() => {
-          setDraftFilters(defaultDateRange());
-          setFilters(defaultDateRange());
-        }}
-      />
+      <DetailReportTimeFilter value={draftTimeFilter} onChange={setDraftTimeFilter} onApply={applyTimeFilter} />
       {reportQuery.isLoading ? (
         <ReportSkeleton />
       ) : reportQuery.isError || !reportQuery.data ? (
@@ -61,7 +47,6 @@ export function MarketingDetailReportPage() {
             <MetricCard label="Biểu mẫu" value={integerFormatter.format(reportQuery.data.summary.formCount)} icon={FileText} />
             <MetricCard label="Hồ sơ tuyển sinh" value={integerFormatter.format(reportQuery.data.summary.applicationCount)} icon={ClipboardList} />
             <MetricCard label="Sinh viên nhập học" value={integerFormatter.format(reportQuery.data.summary.enrolledStudentCount)} icon={TrendingUp} />
-            <MetricCard label="Ngân sách" value={currencyFormatter.format(reportQuery.data.summary.totalBudget)} icon={Wallet} />
           </div>
           <div className="grid gap-6 xl:grid-cols-[minmax(0,2fr)_minmax(320px,1fr)]">
             <TopCampaignsTable campaigns={reportQuery.data.topCampaigns} />
@@ -73,38 +58,7 @@ export function MarketingDetailReportPage() {
   );
 }
 
-function ReportFilters({ filters, onChange, onApply, onReset }: {
-  filters: { fromDate: string; toDate: string };
-  onChange: (key: "fromDate" | "toDate", value: string) => void;
-  onApply: () => void;
-  onReset: () => void;
-}) {
-  return (
-    <Card className="border-border/70 shadow-xs">
-      <CardContent className="pt-6">
-        <form className="flex flex-wrap items-end gap-4" onSubmit={(event) => { event.preventDefault(); onApply(); }}>
-          <div className="grid gap-2 w-full sm:w-auto">
-            <Label>Thời gian</Label>
-            <DateRangeFilter 
-              fromDate={filters.fromDate} 
-              toDate={filters.toDate} 
-              onChange={(from, to) => {
-                onChange("fromDate", from);
-                onChange("toDate", to);
-              }} 
-            />
-          </div>
-          <div className="flex items-end gap-2">
-            <Button type="submit">Áp dụng</Button>
-            <Button type="button" variant="outline" onClick={onReset}>Tháng này</Button>
-          </div>
-        </form>
-      </CardContent>
-    </Card>
-  );
-}
-
-function TopCampaignsTable({ campaigns }: { campaigns: Array<{ id: string | null; name: string; type: string | null; status: string | null; budget: number; leadCount: number; applicationCount: number; enrolledStudentCount: number; conversionRate: number; costPerLead: number | null }> }) {
+function TopCampaignsTable({ campaigns }: { campaigns: Array<{ id: string | null; name: string; type: string | null; status: string | null; leadCount: number; applicationCount: number; enrolledStudentCount: number; conversionRate: number }> }) {
   return (
     <Card className="gap-0 overflow-hidden border-border/70 py-0 shadow-xs">
       <CardHeader className="border-b py-5">
@@ -122,7 +76,6 @@ function TopCampaignsTable({ campaigns }: { campaigns: Array<{ id: string | null
                 <TableHead>Hồ sơ</TableHead>
                 <TableHead>Sinh viên</TableHead>
                 <TableHead>Tỷ lệ</TableHead>
-                <TableHead className="px-5">CPL</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
@@ -136,7 +89,6 @@ function TopCampaignsTable({ campaigns }: { campaigns: Array<{ id: string | null
                   <TableCell className="tabular-nums">{integerFormatter.format(campaign.applicationCount)}</TableCell>
                   <TableCell className="tabular-nums">{integerFormatter.format(campaign.enrolledStudentCount)}</TableCell>
                   <TableCell className="tabular-nums">{campaign.conversionRate}%</TableCell>
-                  <TableCell className="px-5 tabular-nums">{campaign.costPerLead === null ? "-" : currencyFormatter.format(campaign.costPerLead)}</TableCell>
                 </TableRow>
               ))}
             </TableBody>
@@ -156,17 +108,4 @@ function ReportSkeleton() {
       <Skeleton className="h-80" />
     </output>
   );
-}
-
-function defaultDateRange() {
-  const now = new Date();
-  const firstDay = new Date(now.getFullYear(), now.getMonth(), 1);
-  return { fromDate: toDateInput(firstDay), toDate: toDateInput(now) };
-}
-
-function toDateInput(date: Date) {
-  const year = date.getFullYear();
-  const month = String(date.getMonth() + 1).padStart(2, "0");
-  const day = String(date.getDate()).padStart(2, "0");
-  return `${year}-${month}-${day}`;
 }

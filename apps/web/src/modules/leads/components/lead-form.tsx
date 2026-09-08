@@ -1,12 +1,13 @@
-import { useEffect, useMemo, useRef, useState, type CSSProperties, type HTMLAttributes, type HTMLInputTypeAttribute, type ReactNode } from "react";
+import { useEffect, useMemo, useRef, useState, type CSSProperties, type FormEvent, type HTMLAttributes, type HTMLInputTypeAttribute, type ReactNode } from "react";
 import { useQuery } from "@tanstack/react-query";
-import { useForm, type Control, type FieldErrors, type UseFormRegister } from "react-hook-form";
+import { useForm, type Control, type FieldErrors, type UseFormRegister, type UseFormReturn } from "react-hook-form";
 
 import { Button } from "@/components/ui/button";
 import { Field, FieldDescription, FieldError, FieldGroup, FieldLabel } from "@/components/ui/field";
 import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectGroup, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
+import { cn } from "@/lib/utils";
 import { useInstitutionProgram } from "@/modules/institutions/institution-program-context";
 import { useAuth } from "@/modules/auth/auth-context";
 import { getLeadCustomFieldDefinitions, getLeadCustomFields } from "@/services/lead.service";
@@ -14,13 +15,6 @@ import { DynamicFieldRenderer } from "./dynamic-field-renderer";
 import { leadFormSchema } from "../lead.schema";
 import type { LeadActionOptions, LeadCustomField, LeadCustomFieldValue, LeadFormInput } from "../lead.types";
 
-const statusOptions = [
-  { value: "new", label: "Mới" },
-  { value: "contacted", label: "Đã liên hệ" },
-  { value: "qualified", label: "Tiềm năng" },
-  { value: "converted", label: "Đã chuyển đổi" },
-  { value: "lost", label: "Không phù hợp" },
-];
 const genderOptions = [
   { value: "__empty__", label: "Chưa xác định" },
   { value: "male", label: "Nam" },
@@ -32,15 +26,17 @@ const compactNumberFormatter = new Intl.NumberFormat("vi-VN", { notation: "compa
 
 type LeadFormProps = {
   defaultValues: LeadFormInput;
-  options: Pick<LeadActionOptions, "sources" | "stages" | "institutionPrograms" | "majors" | "admissionStatuses" | "tags">;
+  options: Pick<LeadActionOptions, "sources" | "stages" | "telesales" | "institutionPrograms" | "majors" | "admissionStatuses" | "tags">;
   leadId?: string;
   submitLabel: string;
   isPending: boolean;
   onSubmit: (values: LeadFormInput) => void;
+  dialogLayout?: boolean;
 };
 
-export function LeadForm({ defaultValues, options, leadId, submitLabel, isPending, onSubmit }: LeadFormProps) {
+export function LeadForm({ defaultValues, options, leadId, submitLabel, isPending, onSubmit, dialogLayout = false }: LeadFormProps) {
   const auth = useAuth();
+  const canManageAssignment = !leadId || auth.can("lead.assign") || auth.can("lead.reassign");
   const { selectedProgramId } = useInstitutionProgram();
   const form = useForm<LeadFormInput>({
     defaultValues: {
@@ -56,6 +52,7 @@ export function LeadForm({ defaultValues, options, leadId, submitLabel, isPendin
     enabled: Boolean(auth.accessToken && (leadId || programId)),
   });
   const customFields = useMemo(() => customFieldsQuery.data?.fields ?? [], [customFieldsQuery.data?.fields]);
+  const { formRef, handleFormSubmit } = useLeadFormSubmission(form, customFields, onSubmit);
   const customFieldsByGroup = useMemo(() => {
     const grouped = new Map<string, LeadCustomField[]>();
     for (const field of customFields) grouped.set(field.group.key, [...(grouped.get(field.group.key) ?? []), field]);
@@ -66,9 +63,33 @@ export function LeadForm({ defaultValues, options, leadId, submitLabel, isPendin
     for (const field of customFields) if (!field.group.isSystem) groups.set(field.group.id, field.group);
     return [...groups.values()].sort((left, right) => left.displayOrder - right.displayOrder);
   }, [customFields]);
+  const stageById = useMemo(() => new Map(options.stages.map((stage) => [stage.id, stage])), [options.stages]);
+  const syncStageFields = (stageId: string) => {
+    const stage = stageById.get(stageId);
+    form.setValue("pipelineStageId", stageId, { shouldDirty: true, shouldValidate: true });
+    form.setValue("status", stage?.name ?? "", { shouldDirty: true, shouldValidate: true });
+  };
   const previousCustomFieldIds = useRef<string[]>([]);
   const [hiddenCustomValueWarning, setHiddenCustomValueWarning] = useState(false);
   useEffect(() => form.reset({ ...defaultValues, institutionProgramId: defaultValues.institutionProgramId || selectedProgramId || "" }), [defaultValues, form, selectedProgramId]);
+  useEffect(() => {
+    const stageId = form.getValues("pipelineStageId");
+    const stage = stageById.get(stageId);
+    if (stage && form.getValues("status") !== stage.name) {
+      form.setValue("status", stage.name, { shouldDirty: false, shouldValidate: false });
+    }
+  }, [form, stageById]);
+  useEffect(() => {
+    const subscription = form.watch((values, { name }) => {
+      if (!name || name.startsWith("customFieldValues.") || !form.getFieldState(name as keyof LeadFormInput).error) return;
+
+      const parsed = leadFormSchema.safeParse(values);
+      const fieldStillInvalid = !parsed.success && parsed.error.issues.some((issue) => issue.path[0] === name);
+      if (!fieldStillInvalid) form.clearErrors(name as keyof LeadFormInput);
+    });
+
+    return () => subscription.unsubscribe();
+  }, [form]);
   useEffect(() => {
     for (const field of customFields) {
       const path = `customFieldValues.${field.id}` as const;
@@ -81,28 +102,17 @@ export function LeadForm({ defaultValues, options, leadId, submitLabel, isPendin
 
   return (
     <form
-      className="flex flex-col gap-6"
-      onSubmit={form.handleSubmit((values) => {
-        const parsed = leadFormSchema.safeParse(values);
-        if (!parsed.success) {
-          parsed.error.issues.forEach((issue) => {
-            const field = issue.path[0] as keyof LeadFormInput;
-            form.setError(field, { message: issue.message });
-          });
-          return;
-        }
-        const customFieldValues: Record<string, LeadCustomFieldValue> = {};
-        for (const field of customFields) {
-          if (field.canView && field.canEdit && form.getFieldState(`customFieldValues.${field.id}`).isDirty) customFieldValues[field.id] = values.customFieldValues[field.id] ?? null;
-        }
-        onSubmit({ ...parsed.data, customFieldValues });
-      })}
+      ref={formRef}
+      className={cn("flex flex-col", dialogLayout ? "min-h-0 flex-1 gap-0" : "gap-6")}
+      noValidate
+      onSubmit={(event) => void handleFormSubmit(event)}
     >
+      <div className={cn("flex flex-col gap-6", dialogLayout && "min-h-0 flex-1 overflow-y-auto px-6 py-5")}>
       <FormSection title="Tiến trình" description="Chọn bước xử lý hiện tại của học viên. Mỗi lần thay đổi sẽ được lưu vào lịch sử và nhật ký hệ thống.">
         <LeadProgressSelector
           value={form.watch("pipelineStageId")}
           stages={options.stages}
-          onChange={(value) => form.setValue("pipelineStageId", value, { shouldDirty: true })}
+          onChange={syncStageFields}
           clearLabel="Chưa chọn tiến trình"
           singleRowDesktop
         />
@@ -235,11 +245,30 @@ export function LeadForm({ defaultValues, options, leadId, submitLabel, isPendin
 
       <FormSection title="Chăm sóc và phân loại" description="Thông tin phục vụ telesale, marketing và phân loại ứng viên.">
         <FieldGroup className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
+          {canManageAssignment && (
+            <Field>
+              <FieldLabel htmlFor="lead-assignee">Sale phụ trách</FieldLabel>
+              <Select value={form.watch("assigneeId") || "__empty__"} onValueChange={(value) => form.setValue("assigneeId", value === "__empty__" ? "" : value)}>
+                <SelectTrigger id="lead-assignee" className="w-full"><SelectValue placeholder="Chọn Sale phụ trách" /></SelectTrigger>
+                <SelectContent>
+                  <SelectGroup>
+                    <SelectItem value="__empty__">Chưa phân công</SelectItem>
+                    {options.telesales.map((telesale) => <SelectItem key={telesale.id} value={telesale.id}>{telesale.fullName}</SelectItem>)}
+                  </SelectGroup>
+                </SelectContent>
+              </Select>
+            </Field>
+          )}
           <Field>
             <FieldLabel htmlFor="lead-status-input">Quy trình Telesale</FieldLabel>
-            <Select value={form.watch("status")} onValueChange={(value) => form.setValue("status", value)}>
-              <SelectTrigger id="lead-status-input" className="w-full"><SelectValue /></SelectTrigger>
-              <SelectContent><SelectGroup>{statusOptions.map((option) => <SelectItem key={option.value} value={option.value}>{option.label}</SelectItem>)}</SelectGroup></SelectContent>
+            <Select value={form.watch("pipelineStageId") || "__empty__"} onValueChange={(value) => syncStageFields(value === "__empty__" ? "" : value)}>
+              <SelectTrigger id="lead-status-input" className="w-full"><SelectValue placeholder="Chọn quy trình telesale" /></SelectTrigger>
+              <SelectContent>
+                <SelectGroup>
+                  <SelectItem value="__empty__">Chưa chọn tiến trình</SelectItem>
+                  {options.stages.map((stage) => <SelectItem key={stage.id} value={stage.id}>{stage.name}</SelectItem>)}
+                </SelectGroup>
+              </SelectContent>
             </Select>
           </Field>
           <TextField name="temperature" id="lead-temperature" label="Mức độ quan tâm" register={form.register} errors={form.formState.errors} />
@@ -273,11 +302,61 @@ export function LeadForm({ defaultValues, options, leadId, submitLabel, isPendin
           <CustomFieldInputs fields={customFields.filter((field) => field.group.id === group.id)} control={form.control} isPending={isPending} />
         </FormSection>
       ))}
-      <div className="flex justify-end">
+      </div>
+      <div className={cn("flex shrink-0 justify-end", dialogLayout && "border-t bg-background px-6 py-4")}>
         <Button type="submit" disabled={isPending}>{isPending ? "Đang lưu..." : submitLabel}</Button>
       </div>
     </form>
   );
+}
+
+function useLeadFormSubmission(
+  form: UseFormReturn<LeadFormInput>,
+  customFields: LeadCustomField[],
+  onSubmit: (values: LeadFormInput) => void,
+) {
+  const formRef = useRef<HTMLFormElement>(null);
+
+  const focusFirstInvalidField = () => {
+    window.requestAnimationFrame(() => {
+      const invalidField = formRef.current?.querySelector<HTMLElement>('[aria-invalid="true"]');
+      if (!invalidField) return;
+      invalidField.scrollIntoView({
+        behavior: window.matchMedia("(prefers-reduced-motion: reduce)").matches ? "auto" : "smooth",
+        block: "center",
+      });
+      if (!invalidField.matches(":disabled")) invalidField.focus({ preventScroll: true });
+    });
+  };
+
+  const handleFormSubmit = async (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    form.clearErrors();
+    const values = form.getValues();
+    const parsed = leadFormSchema.safeParse(values);
+    if (!parsed.success) {
+      parsed.error.issues.forEach((issue) => {
+        const field = issue.path[0] as keyof LeadFormInput;
+        form.setError(field, { message: issue.message });
+      });
+    }
+
+    const customFieldsAreValid = await form.trigger("customFieldValues", { shouldFocus: false });
+    if (!parsed.success || !customFieldsAreValid) {
+      focusFirstInvalidField();
+      return;
+    }
+
+    const customFieldValues: Record<string, LeadCustomFieldValue> = {};
+    for (const field of customFields) {
+      if (field.canView && field.canEdit && form.getFieldState(`customFieldValues.${field.id}`).isDirty) {
+        customFieldValues[field.id] = values.customFieldValues[field.id] ?? null;
+      }
+    }
+    onSubmit({ ...parsed.data, customFieldValues });
+  };
+
+  return { formRef, handleFormSubmit };
 }
 
 function CustomFieldInputs({ fields, control, isPending, emptyLabel }: { fields: LeadCustomField[]; control: Control<LeadFormInput>; isPending: boolean; emptyLabel?: string }) {

@@ -213,6 +213,7 @@ export type LeadFormInput = {
   fullName: string;
   phone: string;
   sourceId: string;
+  assigneeId: string;
   pipelineStageId: string;
   email: string;
   gender: string;
@@ -283,6 +284,7 @@ export type LeadActionOptions = {
   sources: Array<{ id: string; name: string }>;
   stages: Array<{ id: string; name: string; color: string | null; pipelineId: string | null; pipelineName: string | null }>;
   assignees: Array<{ id: string; fullName: string }>;
+  telesales: Array<{ id: string; fullName: string }>;
   departments: Array<{ id: string; name: string }>;
   institutionPrograms: Array<{ id: string; name: string; code: string; institutionName: string; programTypeName: string }>;
   majors: Array<{ id: string; name: string; code: string | null; facultyName: string | null }>;

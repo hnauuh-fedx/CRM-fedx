@@ -1,5 +1,6 @@
 import { prisma } from "../../database/prisma";
 import { Prisma } from "../../generated/prisma/client";
+import { APPLICATION_PIPELINE_STAGE_LIKE } from "../leads/pipeline-stage-semantics";
 import type { AuthUser } from "../auth/auth.types";
 
 export type CampaignListQuery = {
@@ -9,7 +10,7 @@ export type CampaignListQuery = {
   status?: string;
   type?: string;
   institutionProgramId?: string;
-  sortBy: "createdAt" | "name" | "startDate" | "budget";
+  sortBy: "createdAt" | "name" | "startDate";
   sortOrder: "asc" | "desc";
 };
 
@@ -19,7 +20,6 @@ const campaignSortFields = {
   createdAt: "created_at",
   name: "name",
   startDate: "start_date",
-  budget: "budget",
 } as const;
 
 export function getCampaignVisibilityWhere(user: CampaignViewer) {
@@ -74,7 +74,6 @@ export async function listCampaigns(user: CampaignViewer, query: CampaignListQue
         status: true,
         start_date: true,
         end_date: true,
-        budget: true,
         created_at: true,
         users: { select: { id: true, full_name: true } },
         institution_programs: { select: { id: true, name: true, institutions: { select: { name: true } } } },
@@ -97,7 +96,6 @@ export async function listCampaigns(user: CampaignViewer, query: CampaignListQue
       status: campaign.status,
       startDate: campaign.start_date?.toISOString() ?? null,
       endDate: campaign.end_date?.toISOString() ?? null,
-      budget: Number(campaign.budget?.toString() ?? 0),
       createdAt: campaign.created_at?.toISOString() ?? null,
       creator: campaign.users
         ? { id: campaign.users.id, fullName: campaign.users.full_name }
@@ -181,10 +179,11 @@ async function getCampaignPerformance(campaignIds: string[]) {
     SELECT
       tracking.campaign_id AS "campaignId",
       COUNT(DISTINCT tracking.lead_id)::int AS "leadCount",
-      COUNT(DISTINCT application.lead_id)::int AS "applicationCount",
+      COUNT(DISTINCT CASE WHEN application_stage.id IS NOT NULL THEN tracking.lead_id END)::int AS "applicationCount",
       COUNT(DISTINCT student.lead_id)::int AS "enrolledStudentCount"
     FROM utm_trackings tracking
-    LEFT JOIN admission_profiles application ON application.lead_id = tracking.lead_id
+    LEFT JOIN leads application_lead ON application_lead.id = tracking.lead_id AND application_lead.deleted_at IS NULL
+    LEFT JOIN pipeline_stages application_stage ON application_stage.id = application_lead.pipeline_stage_id AND application_stage.name ILIKE ${APPLICATION_PIPELINE_STAGE_LIKE}
     LEFT JOIN students student ON student.lead_id = tracking.lead_id
     WHERE tracking.campaign_id IN (${Prisma.join(campaignIds)})
       AND tracking.lead_id IS NOT NULL

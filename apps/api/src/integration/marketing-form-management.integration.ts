@@ -141,7 +141,7 @@ async function verifyMarketingFormManagement() {
       select: { id: true },
     });
     const outsideCampaign = await prisma.campaigns.create({
-      data: { name: `Campaign form ngoài scope ${runId}`, type: "digital", status: "active", budget: 0, created_by: director.id },
+      data: { name: `Campaign form ngoài scope ${runId}`, type: "digital", status: "active", created_by: director.id },
       select: { id: true },
     });
     outsideCampaignId = outsideCampaign.id;

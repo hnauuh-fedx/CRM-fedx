@@ -67,7 +67,6 @@ async function verifyMarketingCampaignManagement() {
         institution_program_id: program.id,
         type: "digital",
         status: "planning",
-        budget: 0,
         created_by: director.id,
       },
       select: { id: true },
@@ -119,7 +118,6 @@ async function verifyMarketingCampaignManagement() {
         status: "planning",
         startDate: "2026-06-01",
         endDate: "2026-06-30",
-        budget: 50000000,
         institutionProgramId: program.id,
       },
     });
@@ -136,7 +134,6 @@ async function verifyMarketingCampaignManagement() {
           status: "active",
           startDate: "2026-06-01",
           endDate: "2026-07-30",
-          budget: 60000000,
           institutionProgramId: program.id,
         },
       })).status,
@@ -159,7 +156,6 @@ async function verifyMarketingCampaignManagement() {
         status: "planning",
         startDate: "2026-06-01",
         endDate: "2026-06-30",
-        budget: 25000000,
         institutionProgramId: program.id,
       },
     });
@@ -176,7 +172,6 @@ async function verifyMarketingCampaignManagement() {
         status: "active",
         startDate: "2026-06-01",
         endDate: "2026-07-15",
-        budget: 30000000,
         institutionProgramId: program.id,
       },
     });

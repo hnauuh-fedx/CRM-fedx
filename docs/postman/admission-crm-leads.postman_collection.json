@@ -1,0 +1,383 @@
+{
+  "info": {
+    "_postman_id": "9a63836f-6fb8-4f70-a26b-bd061843d9e1",
+    "name": "Admission CRM - Leads API",
+    "description": "Postman collection for testing Admission CRM lead list APIs. Run Login first, then Institution Program Options, then Lead List.",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "item": [
+    {
+      "name": "Auth - Login",
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test('Login successful', function () {",
+              "  pm.response.to.have.status(200);",
+              "});",
+              "",
+              "const json = pm.response.json();",
+              "if (json.accessToken) {",
+              "  pm.collectionVariables.set('accessToken', json.accessToken);",
+              "}",
+              "if (json.user && Array.isArray(json.user.permissions)) {",
+              "  console.log('Permissions:', json.user.permissions.join(', '));",
+              "}"
+            ]
+          }
+        }
+      ],
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"email\": \"{{email}}\",\n  \"password\": \"{{password}}\"\n}"
+        },
+        "url": {
+          "raw": "{{baseUrl}}/auth/login",
+          "host": [
+            "{{baseUrl}}"
+          ],
+          "path": [
+            "auth",
+            "login"
+          ]
+        },
+        "description": "Use a user that has one of these permissions: lead.view_all, lead.view_department, or lead.view_assigned."
+      },
+      "response": []
+    },
+    {
+      "name": "Institution Programs - Options",
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test('Institution program options loaded', function () {",
+              "  pm.response.to.have.status(200);",
+              "});",
+              "",
+              "const json = pm.response.json();",
+              "if (Array.isArray(json.data) && json.data.length > 0) {",
+              "  pm.collectionVariables.set('institutionProgramId', json.data[0].id);",
+              "  console.log('Selected institutionProgramId:', json.data[0].id);",
+              "}"
+            ]
+          }
+        }
+      ],
+      "request": {
+        "auth": {
+          "type": "bearer",
+          "bearer": [
+            {
+              "key": "token",
+              "value": "{{accessToken}}",
+              "type": "string"
+            }
+          ]
+        },
+        "method": "GET",
+        "header": [],
+        "url": {
+          "raw": "{{baseUrl}}/institution-programs/options",
+          "host": [
+            "{{baseUrl}}"
+          ],
+          "path": [
+            "institution-programs",
+            "options"
+          ]
+        },
+        "description": "Loads active institution programs and stores the first id into collection variable institutionProgramId."
+      },
+      "response": []
+    },
+    {
+      "name": "Leads - List",
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test('Lead list loaded', function () {",
+              "  pm.response.to.have.status(200);",
+              "});",
+              "",
+              "const json = pm.response.json();",
+              "if (Array.isArray(json.data) && json.data.length > 0) {",
+              "  pm.collectionVariables.set('leadId', json.data[0].id);",
+              "  console.log('Stored leadId:', json.data[0].id);",
+              "}",
+              "if (json.pagination) {",
+              "  console.log('Pagination:', json.pagination);",
+              "}"
+            ]
+          }
+        }
+      ],
+      "request": {
+        "auth": {
+          "type": "bearer",
+          "bearer": [
+            {
+              "key": "token",
+              "value": "{{accessToken}}",
+              "type": "string"
+            }
+          ]
+        },
+        "method": "GET",
+        "header": [
+          {
+            "key": "X-Institution-Program-Id",
+            "value": "{{institutionProgramId}}",
+            "description": "Optional. Remove or disable this header to test without the selected program scope."
+          }
+        ],
+        "url": {
+          "raw": "{{baseUrl}}/leads?page={{page}}&limit={{limit}}&search={{search}}&status={{status}}&pipelineStageId={{pipelineStageId}}&sourceId={{sourceId}}&assigneeId={{assigneeId}}&sortBy={{sortBy}}&sortOrder={{sortOrder}}",
+          "host": [
+            "{{baseUrl}}"
+          ],
+          "path": [
+            "leads"
+          ],
+          "query": [
+            {
+              "key": "page",
+              "value": "{{page}}"
+            },
+            {
+              "key": "limit",
+              "value": "{{limit}}"
+            },
+            {
+              "key": "search",
+              "value": "{{search}}"
+            },
+            {
+              "key": "status",
+              "value": "{{status}}"
+            },
+            {
+              "key": "pipelineStageId",
+              "value": "{{pipelineStageId}}"
+            },
+            {
+              "key": "sourceId",
+              "value": "{{sourceId}}"
+            },
+            {
+              "key": "assigneeId",
+              "value": "{{assigneeId}}"
+            },
+            {
+              "key": "sortBy",
+              "value": "{{sortBy}}"
+            },
+            {
+              "key": "sortOrder",
+              "value": "{{sortOrder}}"
+            }
+          ]
+        },
+        "description": "Main lead list API: GET /api/leads. Requires lead.view_all, lead.view_department, or lead.view_assigned."
+      },
+      "response": []
+    },
+    {
+      "name": "Leads - Filter Options",
+      "request": {
+        "auth": {
+          "type": "bearer",
+          "bearer": [
+            {
+              "key": "token",
+              "value": "{{accessToken}}",
+              "type": "string"
+            }
+          ]
+        },
+        "method": "GET",
+        "header": [
+          {
+            "key": "X-Institution-Program-Id",
+            "value": "{{institutionProgramId}}",
+            "description": "Optional selected program scope."
+          }
+        ],
+        "url": {
+          "raw": "{{baseUrl}}/leads/options",
+          "host": [
+            "{{baseUrl}}"
+          ],
+          "path": [
+            "leads",
+            "options"
+          ]
+        },
+        "description": "Returns filter options for the visible lead scope: sources, programs, assignees, statuses, stages, totalLeads."
+      },
+      "response": []
+    },
+    {
+      "name": "Leads - Action Options",
+      "request": {
+        "auth": {
+          "type": "bearer",
+          "bearer": [
+            {
+              "key": "token",
+              "value": "{{accessToken}}",
+              "type": "string"
+            }
+          ]
+        },
+        "method": "GET",
+        "header": [
+          {
+            "key": "X-Institution-Program-Id",
+            "value": "{{institutionProgramId}}",
+            "description": "Optional selected program scope."
+          }
+        ],
+        "url": {
+          "raw": "{{baseUrl}}/leads/action-options",
+          "host": [
+            "{{baseUrl}}"
+          ],
+          "path": [
+            "leads",
+            "action-options"
+          ]
+        },
+        "description": "Returns options used by lead create/update actions."
+      },
+      "response": []
+    },
+    {
+      "name": "Leads - Detail",
+      "request": {
+        "auth": {
+          "type": "bearer",
+          "bearer": [
+            {
+              "key": "token",
+              "value": "{{accessToken}}",
+              "type": "string"
+            }
+          ]
+        },
+        "method": "GET",
+        "header": [
+          {
+            "key": "X-Institution-Program-Id",
+            "value": "{{institutionProgramId}}",
+            "description": "Optional selected program scope."
+          }
+        ],
+        "url": {
+          "raw": "{{baseUrl}}/leads/{{leadId}}",
+          "host": [
+            "{{baseUrl}}"
+          ],
+          "path": [
+            "leads",
+            "{{leadId}}"
+          ]
+        },
+        "description": "Gets one lead by id. The Leads - List request stores the first returned id into leadId."
+      },
+      "response": []
+    }
+  ],
+  "variable": [
+    {
+      "key": "baseUrl",
+      "value": "http://localhost:3000/api",
+      "type": "string"
+    },
+    {
+      "key": "email",
+      "value": "director@example.test",
+      "type": "string"
+    },
+    {
+      "key": "password",
+      "value": "password",
+      "type": "string"
+    },
+    {
+      "key": "accessToken",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "institutionProgramId",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "leadId",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "page",
+      "value": "1",
+      "type": "string"
+    },
+    {
+      "key": "limit",
+      "value": "20",
+      "type": "string"
+    },
+    {
+      "key": "search",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "status",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "pipelineStageId",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "sourceId",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "assigneeId",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "sortBy",
+      "value": "createdAt",
+      "type": "string"
+    },
+    {
+      "key": "sortOrder",
+      "value": "desc",
+      "type": "string"
+    }
+  ]
+}

@@ -10,6 +10,7 @@ export type RoleInput = {
   description?: string;
   scopeCode: AccessScopeCode;
   permissionIds: string[];
+  programIds: string[];
 };
 
 export type ScopeInput = {
@@ -83,6 +84,13 @@ export async function listRoles() {
       description: true,
       created_at: true,
       role_permissions: { select: { permissions: { select: { id: true, code: true, name: true, module: true, description: true, is_active: true } } } },
+      role_institution_programs: {
+        select: {
+          institution_programs: {
+            select: { id: true, code: true, name: true, institutions: { select: { name: true } } },
+          },
+        },
+      },
       _count: { select: { user_roles: true } },
     },
     orderBy: [{ code: "asc" }],
@@ -98,6 +106,12 @@ export async function listRoles() {
       scopeCode: scopeMap.get(role.id) ?? defaultScopeForRole(role.code),
       userCount: role._count.user_roles,
       permissions: role.role_permissions.flatMap((grant) => grant.permissions ? [{ ...grant.permissions, isActive: grant.permissions.is_active ?? true }] : []),
+      programs: role.role_institution_programs.map((grant) => ({
+        id: grant.institution_programs.id,
+        code: grant.institution_programs.code,
+        name: grant.institution_programs.name,
+        institutionName: grant.institution_programs.institutions.name,
+      })),
       createdAt: role.created_at?.toISOString() ?? null,
     })),
   };
@@ -105,15 +119,29 @@ export async function listRoles() {
 
 export async function getRoleManagementOptions() {
   await ensureAccessScopeCatalog();
-  const [permissions, scopes] = await Promise.all([
+  const [permissions, scopes, programs] = await Promise.all([
     prisma.permissions.findMany({
       where: { is_active: true },
       select: { id: true, code: true, name: true, module: true, description: true },
       orderBy: [{ module: "asc" }, { code: "asc" }],
     }),
     listAccessScopes(),
+    prisma.institution_programs.findMany({
+      where: { status: "active", institutions: { is: { status: "active" } } },
+      select: { id: true, code: true, name: true, institutions: { select: { name: true } } },
+      orderBy: [{ institutions: { name: "asc" } }, { name: "asc" }],
+    }),
   ]);
-  return { permissions, scopes: scopes.data };
+  return {
+    permissions,
+    scopes: scopes.data,
+    programs: programs.map((program) => ({
+      id: program.id,
+      code: program.code,
+      name: program.name,
+      institutionName: program.institutions.name,
+    })),
+  };
 }
 
 export async function listAccessScopes() {
@@ -158,6 +186,12 @@ export async function createRole(actor: AuthUser, input: RoleInput, ipAddress?: 
         data: validation.permissionIds.map((permissionId) => ({ role_id: role.id, permission_id: permissionId })),
       });
     }
+    await tx.role_institution_programs.createMany({
+      data: validation.programIds.map((institutionProgramId) => ({
+        role_id: role.id,
+        institution_program_id: institutionProgramId,
+      })),
+    });
     await tx.$executeRaw(Prisma.sql`
       INSERT INTO role_access_scopes (role_id, scope_code)
       VALUES (${role.id}::uuid, ${input.scopeCode})
@@ -169,7 +203,7 @@ export async function createRole(actor: AuthUser, input: RoleInput, ipAddress?: 
         entity_id: role.id,
         action: "create",
         ip_address: ipAddress,
-        new_data: { code, name: input.name.trim(), description: input.description?.trim() || null, scopeCode: input.scopeCode, permissionIds: validation.permissionIds },
+        new_data: { code, name: input.name.trim(), description: input.description?.trim() || null, scopeCode: input.scopeCode, permissionIds: validation.permissionIds, programIds: validation.programIds },
       },
     });
     return { ok: true as const, data: { id: role.id } };
@@ -182,7 +216,14 @@ export async function updateRole(actor: AuthUser, roleId: string, input: RoleInp
   const code = normalizeRoleCode(input.code);
   const existing = await prisma.roles.findUnique({
     where: { id: roleId },
-    select: { id: true, code: true, name: true, description: true, role_permissions: { select: { permission_id: true } } },
+    select: {
+      id: true,
+      code: true,
+      name: true,
+      description: true,
+      role_permissions: { select: { permission_id: true } },
+      role_institution_programs: { select: { institution_program_id: true } },
+    },
   });
   if (!existing) return { ok: false as const, reason: "role_not_found" as const };
   if (await prisma.roles.findFirst({ where: { code, id: { not: roleId } }, select: { id: true } })) {
@@ -201,6 +242,13 @@ export async function updateRole(actor: AuthUser, roleId: string, input: RoleInp
         data: validation.permissionIds.map((permissionId) => ({ role_id: roleId, permission_id: permissionId })),
       });
     }
+    await tx.role_institution_programs.deleteMany({ where: { role_id: roleId } });
+    await tx.role_institution_programs.createMany({
+      data: validation.programIds.map((institutionProgramId) => ({
+        role_id: roleId,
+        institution_program_id: institutionProgramId,
+      })),
+    });
     await tx.$executeRaw(Prisma.sql`
       INSERT INTO role_access_scopes (role_id, scope_code)
       VALUES (${roleId}::uuid, ${input.scopeCode})
@@ -220,8 +268,9 @@ export async function updateRole(actor: AuthUser, roleId: string, input: RoleInp
           description: existing.description,
           scopeCode: oldScope,
           permissionIds: existing.role_permissions.flatMap((grant) => grant.permission_id ? [grant.permission_id] : []),
+          programIds: existing.role_institution_programs.map((grant) => grant.institution_program_id),
         },
-        new_data: { code, name: input.name.trim(), description: input.description?.trim() || null, scopeCode: input.scopeCode, permissionIds: validation.permissionIds },
+        new_data: { code, name: input.name.trim(), description: input.description?.trim() || null, scopeCode: input.scopeCode, permissionIds: validation.permissionIds, programIds: validation.programIds },
       },
     });
     return { ok: true as const, data: { id: roleId } };
@@ -282,6 +331,7 @@ export async function updateAccessScope(actor: AuthUser, code: AccessScopeCode, 
 async function validateRoleInput(input: RoleInput) {
   await ensureAccessScopeCatalog();
   const permissionIds = unique(input.permissionIds);
+  const programIds = unique(input.programIds);
   if (!supportedScopes.includes(input.scopeCode)) return { ok: false as const, reason: "scope_not_supported" as const };
   const activeScopes = await listAccessScopes();
   if (!activeScopes.data.some((scope) => scope.code === input.scopeCode && scope.isActive)) {
@@ -289,7 +339,12 @@ async function validateRoleInput(input: RoleInput) {
   }
   const permissionCount = await prisma.permissions.count({ where: { id: { in: permissionIds } } });
   if (permissionCount !== permissionIds.length) return { ok: false as const, reason: "permission_not_found" as const };
-  return { ok: true as const, permissionIds };
+  if (programIds.length === 0) return { ok: false as const, reason: "program_required" as const };
+  const programCount = await prisma.institution_programs.count({
+    where: { id: { in: programIds }, status: "active", institutions: { is: { status: "active" } } },
+  });
+  if (programCount !== programIds.length) return { ok: false as const, reason: "program_not_found" as const };
+  return { ok: true as const, permissionIds, programIds };
 }
 
 function defaultScopeForRole(roleCode: string): AccessScopeCode {

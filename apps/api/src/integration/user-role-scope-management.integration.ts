@@ -29,6 +29,7 @@ let managerRoleId: string | null = null;
 let limitedRoleId: string | null = null;
 let managedRoleId: string | null = null;
 let departmentId: string | null = null;
+let programId: string | null = null;
 let originalOwnedOnlyScope: { name: string; description: string | null; isActive: boolean } | null = null;
 const createdPermissionIds: string[] = [];
 
@@ -63,6 +64,13 @@ async function preparePrincipal() {
   await cleanupStaleFixtures();
   await ensureAccessScopes();
   const permissionIds = await ensurePermissions(["user.manage", "role.manage", "department.manage"]);
+  const program = await prisma.institution_programs.findFirst({
+    where: { status: "active", institutions: { is: { status: "active" } } },
+    select: { id: true },
+    orderBy: { created_at: "asc" },
+  });
+  assert.ok(program, "An active institution program is required for role access integration tests.");
+  programId = program.id;
 
   const managerRole = await prisma.roles.create({
     data: {
@@ -79,6 +87,9 @@ async function preparePrincipal() {
   await prisma.role_access_scopes.create({
     data: { role_id: managerRole.id, scope_code: "ALL" },
   });
+  await prisma.role_institution_programs.create({
+    data: { role_id: managerRole.id, institution_program_id: program.id },
+  });
 
   const limitedRole = await prisma.roles.create({
     data: {
@@ -91,6 +102,9 @@ async function preparePrincipal() {
   limitedRoleId = limitedRole.id;
   await prisma.role_access_scopes.create({
     data: { role_id: limitedRole.id, scope_code: "READ_ONLY" },
+  });
+  await prisma.role_institution_programs.create({
+    data: { role_id: limitedRole.id, institution_program_id: program.id },
   });
 
   const [managerUser, limitedUser] = await Promise.all([
@@ -253,8 +267,9 @@ async function verifyUserRoleScopeManagement() {
 
   const managerLogin = await login(baseUrl, managerEmail, managerPassword);
   const managerToken = managerLogin.accessToken as string;
-  const managerUser = managerLogin.user as { accessScope: AccessScope; permissions: string[] };
+  const managerUser = managerLogin.user as { accessScope: AccessScope; permissions: string[]; institutionProgramIds: string[] };
   assert.equal(managerUser.accessScope, "ALL");
+  assert.deepEqual(managerUser.institutionProgramIds, [programId]);
   assert.ok(managerUser.permissions.includes("user.manage"));
   assert.ok(managerUser.permissions.includes("role.manage"));
 
@@ -277,9 +292,11 @@ async function verifyUserRoleScopeManagement() {
   const roleOptions = await request(baseUrl, "/roles/options", { token: managerToken });
   assert.equal(roleOptions.status, 200);
   const rolePermissions = roleOptions.payload.permissions as Array<{ id: string; code: string }>;
+  const rolePrograms = roleOptions.payload.programs as Array<{ id: string }>;
   const leadViewDepartment = rolePermissions.find((permission) => permission.code === "lead.view_department");
   const reportView = rolePermissions.find((permission) => permission.code === "report.view");
   assert.ok(leadViewDepartment, "Missing lead.view_department permission option.");
+  assert.ok(rolePrograms.some((program) => program.id === programId), "Missing assigned institution program option.");
 
   assert.equal(
     (await request(baseUrl, "/roles", {
@@ -291,6 +308,7 @@ async function verifyUserRoleScopeManagement() {
         description: "Should be rejected because OWNED_ONLY is inactive.",
         scopeCode: "OWNED_ONLY",
         permissionIds: [leadViewDepartment.id],
+        programIds: [programId],
       },
     })).status,
     400,
@@ -309,6 +327,22 @@ async function verifyUserRoleScopeManagement() {
     200,
   );
 
+  assert.equal(
+    (await request(baseUrl, "/roles", {
+      token: managerToken,
+      method: "POST",
+      body: {
+        name: "Role without program",
+        code: `${roleCode}_NO_PROGRAM`,
+        scopeCode: "DEPARTMENT",
+        permissionIds: [],
+        programIds: [],
+      },
+    })).status,
+    400,
+    "A role must have at least one institution program.",
+  );
+
   const createRole = await request(baseUrl, "/roles", {
     token: managerToken,
     method: "POST",
@@ -318,6 +352,7 @@ async function verifyUserRoleScopeManagement() {
       description: "Created by integration test.",
       scopeCode: "DEPARTMENT",
       permissionIds: [leadViewDepartment.id],
+      programIds: [programId],
     },
   });
   assert.equal(createRole.status, 201);
@@ -332,6 +367,7 @@ async function verifyUserRoleScopeManagement() {
         code: roleCode,
         scopeCode: "DEPARTMENT",
         permissionIds: [],
+        programIds: [programId],
       },
     })).status,
     409,
@@ -339,11 +375,12 @@ async function verifyUserRoleScopeManagement() {
 
   const rolesResponse = await request(baseUrl, "/roles", { token: managerToken });
   assert.equal(rolesResponse.status, 200);
-  const roles = rolesResponse.payload.data as Array<{ id: string; code: string; scopeCode: AccessScope; permissions: Array<{ code: string }> }>;
+  const roles = rolesResponse.payload.data as Array<{ id: string; code: string; scopeCode: AccessScope; permissions: Array<{ code: string }>; programs: Array<{ id: string }> }>;
   const createdRole = roles.find((role) => role.id === managedRoleId);
   assert.equal(createdRole?.code, roleCode);
   assert.equal(createdRole?.scopeCode, "DEPARTMENT");
   assert.ok(createdRole?.permissions.some((permission) => permission.code === "lead.view_department"));
+  assert.deepEqual(createdRole?.programs.map((program) => program.id), [programId]);
 
   const departmentResponse = await request(baseUrl, "/departments", {
     token: managerToken,
@@ -433,6 +470,7 @@ async function verifyUserRoleScopeManagement() {
       description: "Updated by integration test.",
       scopeCode: "READ_ONLY",
       permissionIds: [reportView.id],
+      programIds: [programId],
     },
   });
   assert.equal(updateRole.status, 200);

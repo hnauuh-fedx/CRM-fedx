@@ -16,7 +16,7 @@ const querySchema = z.object({
   status: z.string().trim().max(50).optional().transform((value) => value || undefined),
   type: z.string().trim().max(100).optional().transform((value) => value || undefined),
   institutionProgramId: z.uuid().optional().or(z.literal("")).transform((value) => value || undefined),
-  sortBy: z.enum(["createdAt", "name", "startDate", "budget"]).default("createdAt"),
+  sortBy: z.enum(["createdAt", "name", "startDate"]).default("createdAt"),
   sortOrder: z.enum(["asc", "desc"]).default("desc"),
 });
 const campaignIdSchema = z.uuid();
@@ -26,7 +26,6 @@ const bodySchema = z.object({
   status: z.enum(["planning", "active", "paused", "completed"]),
   startDate: z.iso.date().optional().or(z.literal("")).transform((value) => value || undefined),
   endDate: z.iso.date().optional().or(z.literal("")).transform((value) => value || undefined),
-  budget: z.number().min(0).max(1_000_000_000_000),
   institutionProgramId: z.uuid().optional().or(z.literal("")).transform((value) => value || undefined),
 }).refine((input) => !input.startDate || !input.endDate || input.endDate >= input.startDate, {
   path: ["endDate"],

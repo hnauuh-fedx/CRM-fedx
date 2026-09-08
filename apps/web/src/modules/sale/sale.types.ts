@@ -5,12 +5,14 @@ export type Pagination = { page: number; limit: number; total: number; totalPage
 
 export type SaleFilterOptions = {
   assignees: Person[];
+  telesales: Person[];
   departments: SimpleRef[];
   activityTypes: string[];
   reminderStatuses: string[];
   leads: LeadRef[];
 };
 
+export type AssignmentStatus = "unassigned" | "assigned";
 export type AssignmentFilters = { search: string; assigneeId: string; departmentId: string };
 export type ActivityFilters = { search: string; type: string; userId: string };
 export type ReminderFilters = { search: string; status: string; userId: string };
@@ -49,7 +51,7 @@ export type ReminderItem = {
 export type AssignmentListResponse = {
   data: AssignmentItem[];
   pagination: Pagination;
-  filters: AssignmentFilters;
+  filters: AssignmentFilters & { status: AssignmentStatus };
   sort: { sortOrder: "asc" | "desc" };
 };
 

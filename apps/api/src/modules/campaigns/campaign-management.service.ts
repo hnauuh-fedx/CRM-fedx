@@ -7,7 +7,6 @@ export type CampaignInput = {
   status: "planning" | "active" | "paused" | "completed";
   startDate?: string;
   endDate?: string;
-  budget: number;
   institutionProgramId?: string;
 };
 
@@ -37,7 +36,6 @@ function toData(input: CampaignInput) {
     status: input.status,
     start_date: input.startDate ? new Date(input.startDate) : null,
     end_date: input.endDate ? new Date(input.endDate) : null,
-    budget: input.budget,
     institution_program_id: input.institutionProgramId ?? null,
   };
 }
@@ -88,7 +86,6 @@ export async function updateCampaign(actor: CampaignActor, campaignId: string, i
         status: true,
         start_date: true,
         end_date: true,
-        budget: true,
         institution_program_id: true,
       },
     });
@@ -121,7 +118,6 @@ export async function deleteCampaign(actor: CampaignActor, campaignId: string, i
         name: true,
         type: true,
         status: true,
-        budget: true,
         _count: { select: { marketing_forms: true, utm_trackings: true } },
       },
     });

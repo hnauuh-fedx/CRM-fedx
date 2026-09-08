@@ -1,11 +1,15 @@
 import { prisma } from "../../database/prisma";
+import { applicationStageLeadWhere } from "../leads/pipeline-stage-semantics";
 
 export async function getOverviewReport(institutionProgramId?: string) {
   const leadWhere = {
     deleted_at: null,
     ...(institutionProgramId ? { institution_program_id: institutionProgramId } : {}),
   };
-  const admissionWhere = institutionProgramId ? { institution_program_id: institutionProgramId } : {};
+  const admissionWhere = {
+    leads: { is: { ...leadWhere, ...applicationStageLeadWhere() } },
+  };
+  const applicationLeadWhere = { ...leadWhere, ...applicationStageLeadWhere() };
   const studentWhere = institutionProgramId ? { institution_program_id: institutionProgramId } : {};
   const [
     totalLeads,
@@ -17,7 +21,7 @@ export async function getOverviewReport(institutionProgramId?: string) {
     majorGroups,
   ] = await prisma.$transaction([
     prisma.leads.count({ where: leadWhere }),
-    prisma.admission_profiles.count({ where: admissionWhere }),
+    prisma.leads.count({ where: applicationLeadWhere }),
     prisma.students.count({ where: studentWhere }),
     prisma.admission_profiles.aggregate({ where: admissionWhere, _sum: { monthly_revenue: true } }),
     prisma.admission_profiles.groupBy({

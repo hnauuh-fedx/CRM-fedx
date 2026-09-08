@@ -2,6 +2,7 @@ import { prisma } from "../../database/prisma";
 import { Prisma } from "../../generated/prisma/client";
 import type { CampaignViewer } from "./campaign-list.service";
 import { getReferenceCampaignVisibility } from "./marketing-reference.service";
+import { APPLICATION_PIPELINE_STAGE_LIKE, APPLICATION_PIPELINE_STAGE_MARKER } from "../leads/pipeline-stage-semantics";
 
 export type UtmAnalyticsDimension = "source" | "campaign" | "utm";
 
@@ -38,7 +39,6 @@ type AnalyticsRow = {
   utmCampaign: string | null;
   campaignId: string | null;
   campaignName: string | null;
-  budget: unknown;
   trackingCount: number | bigint;
   leadCount: number | bigint;
   applicationCount: number | bigint;
@@ -53,11 +53,12 @@ export async function getUtmAnalytics(user: CampaignViewer, query: UtmAnalyticsQ
       SELECT
         COUNT(tracking.id)::int AS "trackingCount",
         COUNT(DISTINCT tracking.lead_id)::int AS "leadCount",
-        COUNT(DISTINCT application.lead_id)::int AS "applicationCount",
+        COUNT(DISTINCT CASE WHEN application_stage.id IS NOT NULL THEN tracking.lead_id END)::int AS "applicationCount",
         COUNT(DISTINCT student.lead_id)::int AS "enrolledStudentCount"
       FROM utm_trackings tracking
       LEFT JOIN campaigns campaign ON campaign.id = tracking.campaign_id
-      LEFT JOIN admission_profiles application ON application.lead_id = tracking.lead_id
+      LEFT JOIN leads application_lead ON application_lead.id = tracking.lead_id AND application_lead.deleted_at IS NULL
+      LEFT JOIN pipeline_stages application_stage ON application_stage.id = application_lead.pipeline_stage_id AND application_stage.name ILIKE ${APPLICATION_PIPELINE_STAGE_LIKE}
       LEFT JOIN students student ON student.lead_id = tracking.lead_id
       WHERE ${where}
     `),
@@ -76,14 +77,10 @@ export async function getUtmAnalytics(user: CampaignViewer, query: UtmAnalyticsQ
         medium: row.medium,
         utmCampaign: row.utmCampaign,
         campaign: row.campaignId ? { id: row.campaignId, name: row.campaignName ?? "-" } : null,
-        budget: Number(row.budget ?? 0),
         ...metrics,
         conversionRate: metrics.leadCount > 0
           ? Number(((metrics.applicationCount / metrics.leadCount) * 100).toFixed(1))
           : 0,
-        costPerLead: query.dimension === "campaign" && metrics.leadCount > 0
-          ? Number(row.budget ?? 0) / metrics.leadCount
-          : null,
       };
     }),
     pagination: {
@@ -145,7 +142,7 @@ export async function listUtmGeneratedLeads(user: CampaignViewer, query: UtmLead
         createdAt: lead.created_at?.toISOString() ?? null,
         sourceName: lead.lead_sources?.name ?? null,
         pipelineStageName: lead.pipeline_stages?.name ?? null,
-        hasApplication: Boolean(lead.admission_profiles),
+        hasApplication: lead.pipeline_stages?.name.toLowerCase().includes(APPLICATION_PIPELINE_STAGE_MARKER.toLowerCase()) ?? false,
         hasStudent: Boolean(lead.students),
         attribution: attribution
           ? {
@@ -177,15 +174,15 @@ function getGroupedRows(query: UtmAnalyticsQuery, where: Prisma.Sql) {
         CASE WHEN campaign.id IS NULL THEN tracking.utm_campaign ELSE NULL END AS "utmCampaign",
         campaign.id AS "campaignId",
         COALESCE(campaign.name, CASE WHEN campaign.id IS NULL THEN tracking.utm_campaign ELSE NULL END, 'Chưa xác định') AS "campaignName",
-        COALESCE(MAX(campaign.budget), 0) AS "budget",
         COUNT(tracking.id)::int AS "trackingCount",
         COUNT(DISTINCT tracking.lead_id)::int AS "leadCount",
-        COUNT(DISTINCT application.lead_id)::int AS "applicationCount",
+        COUNT(DISTINCT CASE WHEN application_stage.id IS NOT NULL THEN tracking.lead_id END)::int AS "applicationCount",
         COUNT(DISTINCT student.lead_id)::int AS "enrolledStudentCount",
         COUNT(*) OVER()::int AS "totalGroups"
       FROM utm_trackings tracking
       LEFT JOIN campaigns campaign ON campaign.id = tracking.campaign_id
-      LEFT JOIN admission_profiles application ON application.lead_id = tracking.lead_id
+      LEFT JOIN leads application_lead ON application_lead.id = tracking.lead_id AND application_lead.deleted_at IS NULL
+      LEFT JOIN pipeline_stages application_stage ON application_stage.id = application_lead.pipeline_stage_id AND application_stage.name ILIKE ${APPLICATION_PIPELINE_STAGE_LIKE}
       LEFT JOIN students student ON student.lead_id = tracking.lead_id
       WHERE ${where}
       GROUP BY campaign.id, campaign.name, CASE WHEN campaign.id IS NULL THEN tracking.utm_campaign ELSE NULL END
@@ -202,15 +199,15 @@ function getGroupedRows(query: UtmAnalyticsQuery, where: Prisma.Sql) {
         tracking.utm_campaign AS "utmCampaign",
         NULL::uuid AS "campaignId",
         NULL::text AS "campaignName",
-        0::numeric AS "budget",
         COUNT(tracking.id)::int AS "trackingCount",
         COUNT(DISTINCT tracking.lead_id)::int AS "leadCount",
-        COUNT(DISTINCT application.lead_id)::int AS "applicationCount",
+        COUNT(DISTINCT CASE WHEN application_stage.id IS NOT NULL THEN tracking.lead_id END)::int AS "applicationCount",
         COUNT(DISTINCT student.lead_id)::int AS "enrolledStudentCount",
         COUNT(*) OVER()::int AS "totalGroups"
       FROM utm_trackings tracking
       LEFT JOIN campaigns campaign ON campaign.id = tracking.campaign_id
-      LEFT JOIN admission_profiles application ON application.lead_id = tracking.lead_id
+      LEFT JOIN leads application_lead ON application_lead.id = tracking.lead_id AND application_lead.deleted_at IS NULL
+      LEFT JOIN pipeline_stages application_stage ON application_stage.id = application_lead.pipeline_stage_id AND application_stage.name ILIKE ${APPLICATION_PIPELINE_STAGE_LIKE}
       LEFT JOIN students student ON student.lead_id = tracking.lead_id
       WHERE ${where}
       GROUP BY tracking.utm_source, tracking.utm_medium, tracking.utm_campaign
@@ -226,15 +223,15 @@ function getGroupedRows(query: UtmAnalyticsQuery, where: Prisma.Sql) {
       NULL::text AS "utmCampaign",
       NULL::uuid AS "campaignId",
       NULL::text AS "campaignName",
-      0::numeric AS "budget",
       COUNT(tracking.id)::int AS "trackingCount",
       COUNT(DISTINCT tracking.lead_id)::int AS "leadCount",
-      COUNT(DISTINCT application.lead_id)::int AS "applicationCount",
+      COUNT(DISTINCT CASE WHEN application_stage.id IS NOT NULL THEN tracking.lead_id END)::int AS "applicationCount",
       COUNT(DISTINCT student.lead_id)::int AS "enrolledStudentCount",
       COUNT(*) OVER()::int AS "totalGroups"
     FROM utm_trackings tracking
     LEFT JOIN campaigns campaign ON campaign.id = tracking.campaign_id
-    LEFT JOIN admission_profiles application ON application.lead_id = tracking.lead_id
+    LEFT JOIN leads application_lead ON application_lead.id = tracking.lead_id AND application_lead.deleted_at IS NULL
+    LEFT JOIN pipeline_stages application_stage ON application_stage.id = application_lead.pipeline_stage_id AND application_stage.name ILIKE ${APPLICATION_PIPELINE_STAGE_LIKE}
     LEFT JOIN students student ON student.lead_id = tracking.lead_id
     WHERE ${where}
     GROUP BY tracking.utm_source

@@ -10,6 +10,10 @@ import { processReminderNotifications, REMINDER_OVERDUE_DELAY_MS } from "../modu
 type JsonRecord = Record<string, unknown>;
 
 const runId = randomUUID().slice(0, 8);
+const phoneSuffix = Number.parseInt(runId, 16).toString().padStart(8, "0").slice(-8);
+const primaryPhone = `09${phoneSuffix}`;
+const assignedOnCreatePhone = `08${phoneSuffix}`;
+const directorCreatedPhone = `07${phoneSuffix}`;
 const testPassword = `LeadTest-${runId}`;
 const testEmails = {
   manager: `integration.sale-manager.${runId}@example.test`,
@@ -17,19 +21,25 @@ const testEmails = {
   outsider: `integration.outsider.${runId}@example.test`,
 };
 const testUserIds: string[] = [];
+const createdLeadIds: string[] = [];
 let leadId: string | null = null;
 let server: ReturnType<typeof app.listen> | null = null;
+let testInstitutionProgramId: string | null = null;
 
 async function request(
   baseUrl: string,
   path: string,
-  options: { token?: string; method?: string; body?: JsonRecord } = {},
+  options: { token?: string; method?: string; body?: JsonRecord; institutionProgramId?: string } = {},
 ) {
   const response = await fetch(`${baseUrl}${path}`, {
     method: options.method ?? "GET",
     headers: {
       "Content-Type": "application/json",
+      Connection: "close",
       ...(options.token ? { Authorization: `Bearer ${options.token}` } : {}),
+      ...(options.institutionProgramId ?? testInstitutionProgramId
+        ? { "x-institution-program-id": options.institutionProgramId ?? testInstitutionProgramId! }
+        : {}),
     },
     body: options.body ? JSON.stringify(options.body) : undefined,
   });
@@ -44,16 +54,24 @@ function requireToken(login: { status: number; payload: JsonRecord }) {
 }
 
 async function preparePrincipals() {
-  const [saleDepartment, managerRole, telesaleRole, source, stages, institutionProgram] = await Promise.all([
+  const [saleDepartment, managerRole, telesaleRole, directorRole, source, stages, institutionProgram] = await Promise.all([
     prisma.departments.findUnique({ where: { code: "SALE" }, select: { id: true } }),
     prisma.roles.findUnique({
       where: { code: "SALE_MANAGER" },
       select: { id: true, role_permissions: { select: { permissions: { select: { code: true } } } } },
     }),
-    prisma.roles.findUnique({
-      where: { code: "TELESALE" },
+    prisma.roles.findFirst({
+      where: {
+        code: { in: ["TELESALE", "TELESALE_TX"] },
+        role_permissions: {
+          some: { permissions: { code: "lead.view_assigned" } },
+          none: { permissions: { code: "lead.view_department" } },
+        },
+      },
       select: { id: true, role_permissions: { select: { permissions: { select: { code: true } } } } },
+      orderBy: { code: "asc" },
     }),
+    prisma.roles.findUnique({ where: { code: "DIRECTOR" }, select: { id: true } }),
     prisma.lead_sources.findFirst({ select: { id: true }, orderBy: { created_at: "asc" } }),
     prisma.pipeline_stages.findMany({ select: { id: true }, orderBy: [{ position: "asc" }, { id: "asc" }], take: 2 }),
     prisma.institution_programs.findFirst({ where: { status: "active" }, select: { id: true }, orderBy: { created_at: "asc" } }),
@@ -62,6 +80,7 @@ async function preparePrincipals() {
   assert.ok(saleDepartment, "Run seed:sale-access before the integration test.");
   assert.ok(managerRole);
   assert.ok(telesaleRole);
+  assert.ok(directorRole);
   assert.ok(source, "A lead source is required to test lead creation.");
   assert.equal(stages.length, 2, "At least two pipeline stages are required.");
   assert.ok(institutionProgram, "An active institution program is required to test lead creation.");
@@ -103,6 +122,16 @@ async function preparePrincipals() {
   const manager = users.find((user) => user.email === testEmails.manager)!;
   const telesale = users.find((user) => user.email === testEmails.telesale)!;
   const outsider = users.find((user) => user.email === testEmails.outsider)!;
+  const directorCreator = await prisma.users.create({
+    data: {
+      email: `integration.director-creator.${runId}@example.test`,
+      password_hash: passwordHash,
+      full_name: "Integration director creator",
+      status: "active",
+    },
+    select: { id: true },
+  });
+  testUserIds.push(directorCreator.id);
 
   await prisma.$transaction([
     prisma.user_roles.createMany({
@@ -110,6 +139,7 @@ async function preparePrincipals() {
         { user_id: manager.id, role_id: managerRole.id },
         { user_id: telesale.id, role_id: telesaleRole.id },
         { user_id: outsider.id, role_id: telesaleRole.id },
+        { user_id: directorCreator.id, role_id: directorRole.id },
       ],
     }),
     prisma.user_departments.createMany({
@@ -126,21 +156,22 @@ async function preparePrincipals() {
     sourceId: source.id,
     stageIds: stages.map((stage) => stage.id),
     institutionProgramId: institutionProgram.id,
+    directorCreatorId: directorCreator.id,
   };
 }
 
 async function cleanup() {
-  if (leadId) {
+  if (createdLeadIds.length > 0) {
     const fileRelations = await prisma.file_relations.findMany({
-      where: { entity_type: "lead", entity_id: leadId },
+      where: { entity_type: "lead", entity_id: { in: createdLeadIds } },
       select: { file_id: true },
     });
     const fileIds = fileRelations.flatMap((relation) => (relation.file_id ? [relation.file_id] : []));
     await prisma.$transaction([
-      prisma.file_relations.deleteMany({ where: { entity_type: "lead", entity_id: leadId } }),
-      prisma.audit_logs.deleteMany({ where: { entity_type: "lead", entity_id: leadId } }),
+      prisma.file_relations.deleteMany({ where: { entity_type: "lead", entity_id: { in: createdLeadIds } } }),
+      prisma.audit_logs.deleteMany({ where: { entity_type: "lead", entity_id: { in: createdLeadIds } } }),
       prisma.notifications.deleteMany({ where: { user_id: { in: testUserIds } } }),
-      prisma.leads.deleteMany({ where: { id: leadId } }),
+      prisma.leads.deleteMany({ where: { id: { in: createdLeadIds } } }),
       prisma.files.deleteMany({ where: { id: { in: fileIds } } }),
     ]);
   }
@@ -157,6 +188,7 @@ async function cleanup() {
 
 async function verifyLeadWorkflow() {
   const fixture = await preparePrincipals();
+  testInstitutionProgramId = fixture.institutionProgramId;
   server = app.listen(0);
   await new Promise<void>((resolve, reject) => {
     server!.once("listening", resolve);
@@ -188,7 +220,7 @@ async function verifyLeadWorkflow() {
     method: "POST",
     body: {
       fullName: `Lead kiểm thử ${runId}`,
-      phone: "0901234567",
+      phone: primaryPhone,
       sourceId: fixture.sourceId,
       institutionProgramId: fixture.institutionProgramId,
       email: `lead.${runId}@example.test`,
@@ -198,6 +230,65 @@ async function verifyLeadWorkflow() {
   assert.equal(createResponse.status, 201);
   assert.equal(typeof createResponse.payload.id, "string");
   leadId = createResponse.payload.id as string;
+  createdLeadIds.push(leadId);
+
+  const unassignedLead = await prisma.leads.findUniqueOrThrow({
+    where: { id: leadId },
+    select: { assigned_to: true, _count: { select: { lead_assignments: true } } },
+  });
+  assert.equal(unassignedLead.assigned_to, null);
+  assert.equal(unassignedLead._count.lead_assignments, 0);
+
+  const directorCreatedLead = await prisma.leads.create({
+    data: {
+      lead_code: `LD-DIRECTOR-${runId}`,
+      full_name: `Lead do Director tạo ${runId}`,
+      phone: directorCreatedPhone,
+      source_id: fixture.sourceId,
+      institution_program_id: fixture.institutionProgramId,
+      owner_id: fixture.directorCreatorId,
+      assigned_to: null,
+      status: "new",
+    },
+    select: { id: true },
+  });
+  createdLeadIds.push(directorCreatedLead.id);
+  assert.equal(
+    (await request(baseUrl, `/leads/${directorCreatedLead.id}`, {
+      token: managerToken,
+      institutionProgramId: fixture.institutionProgramId,
+    })).status,
+    200,
+    "Sale Manager phải xem được lead chưa phân công do Director tạo trong chương trình được cấp.",
+  );
+
+  const actionOptionsResponse = await request(baseUrl, "/leads/action-options", { token: managerToken });
+  assert.equal(actionOptionsResponse.status, 200);
+  const telesales = actionOptionsResponse.payload.telesales as Array<{ id: string }>;
+  assert.ok(telesales.some((user) => user.id === testUserIds[1]));
+  assert.ok(!telesales.some((user) => user.id === testUserIds[0]));
+
+  const assignedOnCreateResponse = await request(baseUrl, "/leads", {
+    token: managerToken,
+    method: "POST",
+    body: {
+      fullName: `Lead có Sale phụ trách ${runId}`,
+      phone: assignedOnCreatePhone,
+      sourceId: fixture.sourceId,
+      institutionProgramId: fixture.institutionProgramId,
+      assigneeId: testUserIds[1],
+      status: "new",
+    },
+  });
+  assert.equal(assignedOnCreateResponse.status, 201);
+  const assignedOnCreateLeadId = assignedOnCreateResponse.payload.id as string;
+  createdLeadIds.push(assignedOnCreateLeadId);
+  const assignedOnCreateLead = await prisma.leads.findUniqueOrThrow({
+    where: { id: assignedOnCreateLeadId },
+    select: { assigned_to: true, _count: { select: { lead_assignments: true } } },
+  });
+  assert.equal(assignedOnCreateLead.assigned_to, testUserIds[1]);
+  assert.equal(assignedOnCreateLead._count.lead_assignments, 1);
 
   assert.equal((await request(baseUrl, `/leads/${leadId}`, { token: managerToken })).status, 200);
   assert.equal((await request(baseUrl, `/leads/${leadId}`, { token: outsiderToken })).status, 404);
@@ -208,7 +299,7 @@ async function verifyLeadWorkflow() {
       method: "PATCH",
       body: {
         fullName: `Lead kiểm thử đã sửa ${runId}`,
-        phone: "0901234567",
+        phone: primaryPhone,
         sourceId: fixture.sourceId,
         status: "contacted",
         email: `lead.${runId}@example.test`,
@@ -370,10 +461,16 @@ async function verifyLeadWorkflow() {
     200,
   );
   assert.equal(
-    (await request(baseUrl, `/leads/${leadId}/assign`, {
+    (await request(baseUrl, `/leads/${leadId}`, {
       token: managerToken,
-      method: "POST",
-      body: { assigneeId: testUserIds[0], departmentId: fixture.saleDepartmentId },
+      method: "PATCH",
+      body: {
+        fullName: `Lead kiểm thử đã sửa ${runId}`,
+        phone: primaryPhone,
+        sourceId: fixture.sourceId,
+        status: "contacted",
+        assigneeId: testUserIds[2],
+      },
     })).status,
     200,
   );
@@ -401,7 +498,7 @@ async function verifyLeadWorkflow() {
   const activityTypes = verification.lead_activities.map((activity) => activity.type);
   assert.equal(verification.full_name, `Lead kiểm thử đã sửa ${runId}`);
   assert.equal(verification.pipeline_stage_id, fixture.stageIds[1]);
-  assert.equal(verification.assigned_to, testUserIds[0]);
+  assert.equal(verification.assigned_to, testUserIds[2]);
   assert.equal(verification.lead_notes.length, 1);
   for (const activity of ["lead_created", "lead_updated", "pipeline_stage_changed", "lead_assigned", "note_created", "file_attached", "meeting", "reminder_created", "reminder_updated", "reminder_completed", "reminder_due", "reminder_overdue"]) {
     assert.ok(activityTypes.includes(activity), `Activity ${activity} was not recorded.`);
@@ -418,7 +515,7 @@ async function verifyLeadWorkflow() {
   assert.equal(activityAuditCount, 2);
   assert.equal(reminderAuditCount, 3);
   assert.equal(fileRelationCount, 1);
-  assert.equal(notificationCount, 2);
+  assert.equal(notificationCount, 3);
   assert.equal(reminderNotificationCount, 2);
 
   console.log("Lead integration verified: create, update, scope denial, pipeline, notes, files, activities, due/overdue reminders, audit and notifications.");
@@ -426,11 +523,12 @@ async function verifyLeadWorkflow() {
 
 verifyLeadWorkflow()
   .catch((error: unknown) => {
-    console.error(error instanceof Error ? error.message : error);
+    console.error(error);
     process.exitCode = 1;
   })
   .finally(async () => {
     if (server) {
+      server.closeAllConnections();
       await new Promise<void>((resolve) => server!.close(() => resolve()));
     }
     await cleanup();

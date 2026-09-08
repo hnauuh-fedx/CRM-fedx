@@ -1,4 +1,4 @@
-import { Router } from "express";
+import { Router, type RequestHandler } from "express";
 import multer from "multer";
 import { z } from "zod";
 
@@ -24,7 +24,7 @@ import {
   updateLead,
 } from "./lead-management.service";
 import { getInstitutionProgramScope } from "../institutions/institution-program-scope";
-import { importLeadsFromWorkbook } from "./lead-import.service";
+import { importLeadsFromWorkbook, InvalidLeadImportFileError } from "./lead-import.service";
 import { getLeadCustomFieldDefinitions, getLeadCustomFields, patchLeadCustomFields } from "./lead-custom-fields.service";
 
 const leadListQuerySchema = z.object({
@@ -55,13 +55,15 @@ const leadBodySchema = z.object({
   fullName: z.string().trim().min(2).max(255),
   phone: requiredPhone,
   sourceId: z.uuid(),
+  assigneeId: z.union([z.uuid(), z.literal(""), z.null()]).optional()
+    .transform((value) => value === "" ? null : value),
   pipelineStageId: z.uuid().optional().or(z.literal("")),
   email: z.email().max(255).optional().or(z.literal("")).transform((value) => value || undefined),
   gender: optionalText(20),
   dateOfBirth: optionalDate,
   cccd: optionalText(30),
   note: optionalText(2000),
-  status: optionalText(50),
+  status: optionalText(150),
   temperature: optionalText(50),
   birthPlace: optionalText(255),
   cccdIssueDate: optionalDate,
@@ -158,6 +160,19 @@ const upload = multer({
   storage: multer.memoryStorage(),
   limits: { fileSize: 5 * 1024 * 1024, files: 1 },
 });
+const uploadLeadImport: RequestHandler = (request, response, next) => {
+  upload.single("file")(request, response, (error) => {
+    if (error instanceof multer.MulterError) {
+      response.status(400).json({
+        message: error.code === "LIMIT_FILE_SIZE"
+          ? "File Excel không được vượt quá 5MB."
+          : "Không thể tải file Excel lên. Vui lòng chỉ chọn một file.",
+      });
+      return;
+    }
+    next(error);
+  });
+};
 
 leadsRouter.get(
   "/",
@@ -198,7 +213,7 @@ leadsRouter.get(
 leadsRouter.get(
   "/action-options",
   requireAuthentication,
-  requireAnyPermission(...leadListPermissions),
+  requireAnyPermission("lead.create", ...leadListPermissions),
   async (request, response, next) => {
     try {
       response.json(await getLeadActionOptions(request.authUser!, getInstitutionProgramScope(request)));
@@ -232,6 +247,8 @@ leadsRouter.post(
             ? "Nguồn lead không tồn tại."
             : result.reason === "stage_not_found"
               ? "Tiến trình đã chọn không tồn tại."
+            : result.reason === "assignee_not_telesale"
+              ? "Sale phụ trách phải là người dùng Telesale đang hoạt động."
             : "Ngành đăng ký hoặc trạng thái hồ sơ không tồn tại.",
         });
         return;
@@ -269,7 +286,7 @@ leadsRouter.post(
   "/import",
   requireAuthentication,
   requireAnyPermission("lead.create"),
-  upload.single("file"),
+  uploadLeadImport,
   async (request, response, next) => {
     try {
       if (!request.file) {
@@ -289,6 +306,10 @@ leadsRouter.post(
 
       response.json(await importLeadsFromWorkbook(request.authUser!, request.file.buffer, getInstitutionProgramScope(request)));
     } catch (error) {
+      if (error instanceof InvalidLeadImportFileError) {
+        response.status(400).json({ message: error.message });
+        return;
+      }
       next(error);
     }
   },
@@ -316,6 +337,10 @@ leadsRouter.patch(
         return;
       }
       if (!result.ok) {
+        if (result.reason === "assignment_forbidden") {
+          response.status(403).json({ message: "Bạn không có quyền thay đổi Sale phụ trách." });
+          return;
+        }
         response.status(result.reason === "phone_already_exists" ? 409 : 400).json({
           message: result.reason === "phone_already_exists"
             ? "Số điện thoại đã tồn tại trong danh sách lead."
@@ -323,6 +348,8 @@ leadsRouter.patch(
             ? "Nguồn lead không tồn tại."
             : result.reason === "stage_not_found"
               ? "Tiến trình đã chọn không tồn tại."
+            : result.reason === "assignee_not_telesale"
+              ? "Sale phụ trách phải là người dùng Telesale đang hoạt động."
             : "Ngành đăng ký hoặc trạng thái hồ sơ không tồn tại.",
         });
         return;
@@ -450,7 +477,7 @@ leadsRouter.post(
         response.status(result.reason === "lead_not_found" ? 404 : 400).json({
           message: result.reason === "lead_not_found"
             ? "Không tìm thấy lead trong phạm vi truy cập."
-            : "Nhân viên phân công không hợp lệ với phòng ban.",
+            : "Sale phụ trách phải là người dùng Telesale đang hoạt động và thuộc phòng ban hợp lệ.",
         });
         return;
       }

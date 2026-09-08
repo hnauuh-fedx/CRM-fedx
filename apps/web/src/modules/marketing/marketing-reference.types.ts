@@ -49,13 +49,11 @@ export type UtmAnalyticsGroup = {
   medium: string | null;
   utmCampaign: string | null;
   campaign: { id: string; name: string } | null;
-  budget: number;
   trackingCount: number;
   leadCount: number;
   applicationCount: number;
   enrolledStudentCount: number;
   conversionRate: number;
-  costPerLead: number | null;
 };
 export type UtmAnalyticsResponse = {
   summary: {

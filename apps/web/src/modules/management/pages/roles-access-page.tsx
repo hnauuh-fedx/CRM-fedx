@@ -11,7 +11,7 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
-import { Field, FieldError, FieldGroup, FieldLabel } from "@/components/ui/field";
+import { Field, FieldDescription, FieldError, FieldGroup, FieldLabel, FieldLegend, FieldSet } from "@/components/ui/field";
 import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
@@ -34,6 +34,7 @@ const emptyRoleForm: RoleInput = {
   description: "",
   scopeCode: "DEPARTMENT",
   permissionIds: [],
+  programIds: [],
 };
 
 const scopeLabels: Record<AccessScopeCode, string> = {
@@ -250,6 +251,7 @@ export function RolesAccessPage() {
                 description: editingRole.description ?? "",
                 scopeCode: editingRole.scopeCode,
                 permissionIds: editingRole.permissions.map((permission) => permission.id),
+                programIds: editingRole.programs.map((program) => program.id),
               }}
               options={optionsQuery.data}
               error={updateMutation.error}
@@ -305,6 +307,7 @@ function RoleForm({ defaultValues, options, error, isPending, onSubmit }: {
 }) {
   const [values, setValues] = useState(defaultValues);
   const [validationError, setValidationError] = useState<string | null>(null);
+  const [programValidationError, setProgramValidationError] = useState<string | null>(null);
   const scopes = options?.scopes.filter((scope) => scope.isActive) ?? [];
   const permissionsByModule = useMemo(() => {
     const groups = new Map<string, NonNullable<typeof options>["permissions"]>();
@@ -324,6 +327,16 @@ function RoleForm({ defaultValues, options, error, isPending, onSubmit }: {
     }));
   }
 
+  function toggleProgram(programId: string) {
+    setProgramValidationError(null);
+    setValues((current) => ({
+      ...current,
+      programIds: current.programIds.includes(programId)
+        ? current.programIds.filter((id) => id !== programId)
+        : [...current.programIds, programId],
+    }));
+  }
+
   return (
     <form
       className="flex flex-col gap-5"
@@ -333,7 +346,13 @@ function RoleForm({ defaultValues, options, error, isPending, onSubmit }: {
           setValidationError("Vui lòng nhập tên và mã vai trò.");
           return;
         }
+        if (values.programIds.length === 0) {
+          setValidationError(null);
+          setProgramValidationError("Vui lòng chọn ít nhất một chương trình cho vai trò.");
+          return;
+        }
         setValidationError(null);
+        setProgramValidationError(null);
         onSubmit(values);
       }}
     >
@@ -362,6 +381,37 @@ function RoleForm({ defaultValues, options, error, isPending, onSubmit }: {
           <Textarea id="role-description" value={values.description} onChange={(event) => setValues((current) => ({ ...current, description: event.target.value }))} />
         </Field>
       </FieldGroup>
+
+      <FieldSet className="rounded-md border p-4" aria-describedby={programValidationError ? "role-program-error" : "role-program-description"}>
+        <FieldLegend variant="label">CHƯƠNG TRÌNH *</FieldLegend>
+        <FieldDescription id="role-program-description">
+          Vai trò chỉ được làm việc với dữ liệu thuộc các chương trình được chọn.
+        </FieldDescription>
+        {options?.programs.length ? (
+          <FieldGroup data-slot="checkbox-group" className="grid gap-2 lg:grid-cols-2">
+            {options.programs.map((program) => {
+              const checkboxId = `role-program-${program.id}`;
+              return (
+                <Field key={program.id} orientation="horizontal" className="min-h-11 rounded-md border px-3 py-2">
+                  <Checkbox
+                    id={checkboxId}
+                    checked={values.programIds.includes(program.id)}
+                    aria-invalid={Boolean(programValidationError)}
+                    onCheckedChange={() => toggleProgram(program.id)}
+                  />
+                  <FieldLabel htmlFor={checkboxId} className="cursor-pointer flex-col items-start gap-1">
+                    <span>{program.institutionName} - {program.name}</span>
+                    <span className="text-xs font-normal text-muted-foreground">{program.code}</span>
+                  </FieldLabel>
+                </Field>
+              );
+            })}
+          </FieldGroup>
+        ) : (
+          <p className="text-sm text-muted-foreground">Không có chương trình đang hoạt động.</p>
+        )}
+        {programValidationError && <FieldError id="role-program-error">{programValidationError}</FieldError>}
+      </FieldSet>
 
       <fieldset className="grid gap-4 rounded-md border p-4">
         <legend className="text-sm font-medium">Chức năng được phép dùng</legend>
