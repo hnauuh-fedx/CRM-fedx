@@ -1,0 +1,24 @@
+flowchart LR
+  TT["TikTok Instant Form"]
+  WH["Public HTTPS webhook\nPOST /api/webhooks/tiktok/leads"]
+  EV[("tiktok_webhook_events\nraw payload + idempotency")]
+  Q["BullMQ job\ntiktok-lead-ingest"]
+  API["TikTok Lead Retrieval API\nfetch canonical lead details"]
+  MAP["TikTok mapper + shared\nlead ingestion service"]
+  DB[("PostgreSQL / Prisma\nleads + attribution")]
+  ASG["Existing assignment mutation\n+ automation engine"]
+  NOTI["notifications table\n+ polling now / realtime later"]
+  SYNC["Scheduled fallback sync\nwatermark per advertiser/form"]
+  DLQ["Failed jobs / replay\noperator-visible sync logs"]
+
+  TT --> WH
+  WH --> EV
+  EV --> Q
+  Q --> API
+  API --> MAP
+  MAP --> DB
+  DB --> ASG
+  ASG --> NOTI
+  SYNC --> API
+  Q -->|"retry exhausted"| DLQ
+  DLQ -->|"manual replay"| Q
