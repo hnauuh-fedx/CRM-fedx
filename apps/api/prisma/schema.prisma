@@ -113,6 +113,84 @@ model automation_jobs {
   created_at   DateTime? @default(now()) @db.Timestamp(6)
 }
 
+model zalo_connections {
+  id                       String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  oa_id                    String    @db.VarChar(100)
+  oa_name                  String?   @db.VarChar(255)
+  app_id                   String    @db.VarChar(100)
+  access_token_encrypted   String
+  refresh_token_encrypted  String
+  access_token_expires_at  DateTime  @db.Timestamp(6)
+  refresh_token_expires_at DateTime? @db.Timestamp(6)
+  next_refresh_at          DateTime  @db.Timestamp(6)
+  last_refresh_at          DateTime? @db.Timestamp(6)
+  last_refresh_error       String?
+  refresh_failure_count    Int       @default(0)
+  token_version            Int       @default(1)
+  status                   String    @default("active") @db.VarChar(50)
+  institution_program_id   String?   @db.Uuid
+  lead_source_id           String    @db.Uuid
+  created_by               String    @db.Uuid
+  created_at               DateTime  @default(now()) @db.Timestamp(6)
+  updated_at               DateTime  @default(now()) @db.Timestamp(6)
+
+  @@unique([app_id, oa_id], map: "uq_zalo_connections_app_oa")
+  @@index([status, next_refresh_at], map: "idx_zalo_connections_refresh_due")
+  @@index([institution_program_id], map: "idx_zalo_connections_program")
+}
+
+model zalo_messages {
+  id                String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  connection_id     String    @db.Uuid
+  zalo_message_id   String    @db.VarChar(150)
+  zalo_user_id      String    @db.VarChar(100)
+  direction         String    @db.VarChar(20)
+  event_name        String    @db.VarChar(100)
+  message_type      String    @db.VarChar(50)
+  message_text      String?
+  sent_at           DateTime  @db.Timestamp(6)
+  raw_payload       Json
+  processing_status String    @default("pending") @db.VarChar(50)
+  processing_error  String?
+  lead_id           String?   @db.Uuid
+  created_at        DateTime  @default(now()) @db.Timestamp(6)
+  processed_at      DateTime? @db.Timestamp(6)
+
+  @@unique([connection_id, zalo_message_id], map: "uq_zalo_messages_connection_message")
+  @@index([connection_id, zalo_user_id, sent_at], map: "idx_zalo_messages_conversation")
+  @@index([processing_status, created_at], map: "idx_zalo_messages_processing")
+}
+
+model zalo_user_profiles {
+  id              String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  connection_id   String    @db.Uuid
+  zalo_user_id    String    @db.VarChar(100)
+  display_name    String?   @db.VarChar(255)
+  last_synced_at  DateTime? @db.Timestamp(6)
+  last_sync_error String?
+  created_at      DateTime  @default(now()) @db.Timestamp(6)
+  updated_at      DateTime  @default(now()) @db.Timestamp(6)
+
+  @@unique([connection_id, zalo_user_id], map: "uq_zalo_user_profiles_connection_user")
+  @@index([connection_id, display_name], map: "idx_zalo_user_profiles_connection_name")
+}
+
+model zalo_lead_extractions {
+  id                String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  connection_id     String   @db.Uuid
+  zalo_user_id      String   @db.VarChar(100)
+  source_message_id String   @db.Uuid
+  extracted_data    Json?
+  confidence        Decimal? @db.Decimal(5, 4)
+  status            String   @db.VarChar(50)
+  lead_id           String?  @db.Uuid
+  error_message     String?
+  created_at        DateTime @default(now()) @db.Timestamp(6)
+
+  @@index([connection_id, zalo_user_id, created_at], map: "idx_zalo_extractions_conversation")
+  @@index([status, created_at], map: "idx_zalo_extractions_status")
+}
+
 model campaigns {
   id                     String                @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
   institution_program_id String?               @db.Uuid

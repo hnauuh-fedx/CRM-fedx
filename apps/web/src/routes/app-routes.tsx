@@ -193,6 +193,11 @@ const PublicMarketingFormPage = lazy(() =>
     default: module.PublicMarketingFormPage,
   })),
 );
+const ConnectionChannelsPage = lazy(() =>
+  import("@/modules/marketing/pages/connection-channels-page").then((module) => ({
+    default: module.ConnectionChannelsPage,
+  })),
+);
 const AuditLogsPage = lazy(() =>
   import("@/modules/audit/pages/audit-logs-page").then((module) => ({
     default: module.AuditLogsPage,
@@ -325,6 +330,9 @@ export function AppRoutes() {
               <Route path="/marketing/form-survey" element={<MarketingFormsPage />} />
               <Route path="/marketing/form-survey/:formId" element={<MarketingFormDetailPage />} />
               <Route path="/marketing/bieu-mau" element={<Navigate to="/marketing/form-survey" replace />} />
+            </Route>
+            <Route element={<ProtectedRoute anyPermissions={["integration.view", "integration.manage"]} />}>
+              <Route path="/marketing/kenh-ket-noi" element={<ConnectionChannelsPage />} />
             </Route>
 
             <Route element={<ProtectedRoute anyPermissions={["audit.view"]} />}>

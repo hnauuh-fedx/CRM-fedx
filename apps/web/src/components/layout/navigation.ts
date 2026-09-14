@@ -24,6 +24,7 @@ import {
   UserPlus,
   UsersRound,
   Workflow,
+  Cable,
   type LucideIcon,
 } from "lucide-react";
 
@@ -170,6 +171,12 @@ const navigationSections: NavigationSection[] = [
         href: "/marketing/form-survey",
         icon: Workflow,
         permissions: ["campaign.view_all", "marketing_form.manage", "marketing_form.create", "marketing_form.update_own"],
+      },
+      {
+        label: "Kênh kết nối",
+        href: "/marketing/kenh-ket-noi",
+        icon: Cable,
+        permissions: ["integration.view", "integration.manage"],
       },
       {
         type: "group",
