@@ -38,6 +38,11 @@ const SystemSettingsPage = lazy(() =>
     default: module.SystemSettingsPage,
   })),
 );
+const WebhooksPage = lazy(() =>
+  import("@/modules/webhooks/pages/webhooks-page").then((module) => ({
+    default: module.WebhooksPage,
+  })),
+);
 const InstitutionProgramsManagementPage = lazy(() =>
   import("@/modules/institutions/pages/institution-programs-management-page").then((module) => ({
     default: module.InstitutionProgramsManagementPage,
@@ -246,6 +251,9 @@ export function AppRoutes() {
             </Route>
             <Route element={<ProtectedRoute anyPermissions={["system.manage"]} />}>
               <Route path="/quan-ly/cau-hinh" element={<SystemSettingsPage />} />
+            </Route>
+            <Route element={<ProtectedRoute anyPermissions={["webhook.view", "webhook.manage"]} />}>
+              <Route path="/quan-ly/tich-hop/webhooks" element={<WebhooksPage />} />
             </Route>
             <Route element={<ProtectedRoute anyPermissions={["institution_program.manage"]} />}>
               <Route path="/quan-ly/chuong-trinh" element={<InstitutionProgramsManagementPage />} />

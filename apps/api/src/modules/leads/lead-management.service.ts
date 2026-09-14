@@ -323,7 +323,11 @@ export async function getLeadActionOptions(user: AuthUser, institutionProgramId?
 export async function createLead(user: AuthUser, input: LeadInput) {
   const result = await prisma.$transaction(async (tx) => {
     const duplicate = await tx.leads.findFirst({
-      where: { phone: input.phone.trim(), deleted_at: null },
+      where: {
+        phone: input.phone.trim(),
+        deleted_at: null,
+        ...(input.institutionProgramId ? { institution_program_id: input.institutionProgramId } : {}),
+      },
       select: { id: true },
     });
     if (duplicate) {
@@ -437,7 +441,12 @@ export async function updateLead(user: AuthUser, leadId: string, input: LeadInpu
 
   const result = await prisma.$transaction(async (tx) => {
     const duplicate = await tx.leads.findFirst({
-      where: { phone: input.phone.trim(), deleted_at: null, id: { not: leadId } },
+      where: {
+        phone: input.phone.trim(),
+        deleted_at: null,
+        id: { not: leadId },
+        ...(input.institutionProgramId ? { institution_program_id: input.institutionProgramId } : {}),
+      },
       select: { id: true },
     });
     if (duplicate) {

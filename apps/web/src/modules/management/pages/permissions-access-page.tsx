@@ -48,6 +48,8 @@ const permissionCodeOptions = [
   { code: "lead.view_department", name: "Xem lead theo phòng ban", module: "lead" },
   { code: "lead.view_assigned", name: "Xem lead được giao", module: "lead" },
   { code: "lead.create", name: "Tạo lead", module: "lead" },
+  { code: "webhook.view", name: "Xem webhook và nhật ký", module: "system" },
+  { code: "webhook.manage", name: "Quản lý webhook", module: "system" },
   { code: "lead.update_all", name: "Cập nhật toàn bộ lead", module: "lead" },
   { code: "lead.update_department", name: "Cập nhật lead theo phòng ban", module: "lead" },
   { code: "lead.update_assigned", name: "Cập nhật lead được giao", module: "lead" },

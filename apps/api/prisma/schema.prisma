@@ -299,6 +299,7 @@ model institution_programs {
   role_institution_programs role_institution_programs[]
   students                  students[]
   majors                    majors[]
+  webhooks                  webhooks[]
 
   @@unique([institution_id, program_type_id, name])
   @@index([institution_id, status, name], map: "idx_institution_programs_institution_status")
@@ -941,9 +942,68 @@ model users {
   personal_reports                                     personal_reports[]
   personal_dashboard_widgets                           personal_dashboard_widgets[]
   personal_dashboard_settings                          personal_dashboard_settings[]
+  webhooks_created_by                                  webhooks[]                    @relation("webhooks_created_by")
 
   @@index([email], map: "idx_users_email")
   @@index([status], map: "idx_users_status")
+}
+
+model webhooks {
+  id                     String                   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  institution_program_id String                   @db.Uuid
+  name                   String                   @db.VarChar(255)
+  target_module          String                   @default("LEAD") @db.VarChar(50)
+  webhook_key            String                   @unique @db.VarChar(100)
+  secret_hash            String
+  status                 String                   @default("ACTIVE") @db.VarChar(30)
+  created_by             String                   @db.Uuid
+  last_received_at       DateTime?                @db.Timestamp(6)
+  created_at             DateTime                 @default(now()) @db.Timestamp(6)
+  updated_at             DateTime                 @default(now()) @db.Timestamp(6)
+  institution_programs   institution_programs     @relation(fields: [institution_program_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  users                  users                    @relation("webhooks_created_by", fields: [created_by], references: [id], onDelete: Restrict, onUpdate: NoAction)
+  field_mappings         webhook_field_mappings[]
+  requests               webhook_requests[]
+
+  @@index([institution_program_id, created_at, id], map: "idx_webhooks_program_created")
+  @@index([institution_program_id, status], map: "idx_webhooks_program_status")
+}
+
+model webhook_field_mappings {
+  id            String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  webhook_id    String   @db.Uuid
+  incoming_key  String   @db.VarChar(150)
+  crm_field     String   @db.VarChar(100)
+  is_required   Boolean  @default(false)
+  default_value String?
+  created_at    DateTime @default(now()) @db.Timestamp(6)
+  updated_at    DateTime @default(now()) @db.Timestamp(6)
+  webhooks      webhooks @relation(fields: [webhook_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+
+  @@unique([webhook_id, incoming_key])
+  @@unique([webhook_id, crm_field])
+  @@index([webhook_id], map: "idx_webhook_field_mappings_webhook")
+}
+
+model webhook_requests {
+  id                 String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  webhook_id         String   @db.Uuid
+  request_id         String   @unique @db.Uuid
+  status             String   @db.VarChar(30)
+  payload            Json
+  mapped_payload     Json?
+  response_code      Int
+  error_code         String?  @db.VarChar(100)
+  error_message      String?
+  record_id          String?  @db.Uuid
+  processing_time_ms Int
+  received_at        DateTime @default(now()) @db.Timestamp(6)
+  processed_at       DateTime @db.Timestamp(6)
+  webhooks           webhooks @relation(fields: [webhook_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+
+  @@index([webhook_id, received_at, id], map: "idx_webhook_requests_webhook_received")
+  @@index([received_at], map: "idx_webhook_requests_received")
+  @@index([record_id], map: "idx_webhook_requests_record")
 }
 
 model personal_reports {

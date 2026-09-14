@@ -31,11 +31,13 @@ import { automationsRouter } from "./modules/automations/automations.router";
 import "./modules/automations/automation-engine.service"; // Initialize BullMQ Worker
 import { usersRouter } from "./modules/users/users.router";
 import { customFieldsRouter } from "./modules/custom-fields/custom-fields.router";
+import { publicWebhookRouter, webhooksAdminRouter } from "./modules/webhooks/webhooks.router";
 
 export const app = express();
 
 app.disable("x-powered-by");
 app.use(cors({ origin: env.WEB_ORIGIN }));
+app.use("/api/webhooks", publicWebhookRouter);
 app.use(express.json({ limit: "1mb" }));
 
 app.get("/api/health", (_request, response) => {
@@ -68,6 +70,7 @@ app.use("/api/automations", automationsRouter);
 app.use("/api/utm-trackings", utmTrackingsRouter);
 app.use("/api/users", usersRouter);
 app.use("/api/custom-fields", customFieldsRouter);
+app.use("/api/settings/webhooks", webhooksAdminRouter);
 
 const errorHandler: ErrorRequestHandler = (error, _request, response, _next) => {
   if (error instanceof InstitutionProgramScopeError) {

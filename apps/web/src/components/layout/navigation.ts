@@ -24,6 +24,7 @@ import {
   UserPlus,
   UsersRound,
   Workflow,
+  Webhook,
   type LucideIcon,
 } from "lucide-react";
 
@@ -352,6 +353,12 @@ const navigationSections: NavigationSection[] = [
         href: "/quan-ly/cau-hinh",
         icon: Settings,
         permissions: ["system.manage"],
+      },
+      {
+        label: "Tích hợp · Webhooks",
+        href: "/quan-ly/tich-hop/webhooks",
+        icon: Webhook,
+        permissions: ["webhook.view", "webhook.manage"],
       },
       {
         label: "Chương trình tuyển sinh",
