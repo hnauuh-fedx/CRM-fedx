@@ -116,7 +116,11 @@ export function testWebhook(
 ) {
   return apiRequest<{
     success: true;
-    data: { record_id: string; request_id: string };
+    data: {
+      record_id?: string;
+      request_id: string;
+      action: "created" | "updated";
+    };
   }>(
     `/settings/webhooks/${id}/test`,
     { method: "POST", body: JSON.stringify({ payload }) },

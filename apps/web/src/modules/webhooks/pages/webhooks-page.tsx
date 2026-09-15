@@ -53,6 +53,7 @@ import {
   SelectContent,
   SelectGroup,
   SelectItem,
+  SelectLabel,
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
@@ -66,6 +67,7 @@ import {
 } from "@/components/ui/table";
 import { Textarea } from "@/components/ui/textarea";
 import { useAuth } from "@/modules/auth/auth-context";
+import { ApiError } from "@/services/api";
 import type {
   WebhookDetail,
   WebhookField,
@@ -122,6 +124,7 @@ const emptyWebhook: WebhookInput = {
   name: "",
   targetModule: "LEAD",
   status: "ACTIVE",
+  duplicatePolicy: "CREATE_NEW",
   mappings: defaultMappings,
 };
 const samplePayload = JSON.stringify(
@@ -139,10 +142,38 @@ function formatDate(value: string | null) {
   return value ? dateFormatter.format(new Date(value)) : "Chưa bao giờ";
 }
 
+const duplicatePolicyLabels = {
+  CREATE_NEW: "Luôn tạo Lead mới",
+  UPDATE_EXISTING: "Cập nhật Lead hiện có",
+  REJECT: "Từ chối nếu trùng",
+} as const;
+
+const webhookActionLabels = {
+  CREATED: "Đã tạo",
+  UPDATED: "Đã cập nhật",
+  REJECTED: "Từ chối do trùng",
+  FAILED: "Thất bại",
+} as const;
+
 function errorMessage(error: unknown) {
   return error instanceof Error
     ? error.message
     : "Không thể thực hiện thao tác.";
+}
+
+function duplicateRecordFromError(error: unknown) {
+  if (
+    !(error instanceof ApiError) ||
+    !error.details ||
+    typeof error.details !== "object"
+  )
+    return null;
+  const detail = error.details as {
+    error?: { code?: string; duplicate_record_id?: string };
+  };
+  return detail.error?.code === "DUPLICATE_RECORD"
+    ? (detail.error.duplicate_record_id ?? null)
+    : null;
 }
 
 export function WebhooksPage() {
@@ -456,6 +487,7 @@ export function WebhooksPage() {
                       name: editor.webhook.name,
                       targetModule: "LEAD",
                       status: editor.webhook.status,
+                      duplicatePolicy: editor.webhook.duplicatePolicy,
                       mappings: editor.webhook.mappings.map(
                         ({
                           incomingKey,
@@ -499,7 +531,8 @@ export function WebhooksPage() {
           <DialogHeader>
             <DialogTitle>Test webhook</DialogTitle>
             <DialogDescription>
-              Payload này chạy cùng pipeline production và sẽ tạo một Lead thật.
+              Payload này chạy cùng pipeline production và áp dụng chính sách dữ
+              liệu trùng thật.
             </DialogDescription>
           </DialogHeader>
           <Field data-invalid={Boolean(testValidation)}>
@@ -513,17 +546,33 @@ export function WebhooksPage() {
             />
             <FieldError>{testValidation}</FieldError>
           </Field>
-          {testMutation.isError && (
+          {testMutation.isError &&
+          duplicateRecordFromError(testMutation.error) ? (
+            <Alert variant="destructive">
+              <FileJson aria-hidden="true" />
+              <AlertTitle>Test bị từ chối</AlertTitle>
+              <AlertDescription>
+                Đã tồn tại Lead trùng:{" "}
+                {duplicateRecordFromError(testMutation.error)}
+              </AlertDescription>
+            </Alert>
+          ) : testMutation.isError ? (
             <p role="alert" className="text-sm text-destructive">
               {errorMessage(testMutation.error)}
             </p>
-          )}
+          ) : null}
           {testMutation.data && (
             <Alert>
               <Check aria-hidden="true" />
-              <AlertTitle>Xử lý thành công</AlertTitle>
+              <AlertTitle>Test thành công</AlertTitle>
               <AlertDescription>
-                Đã tạo Lead: {testMutation.data.data.record_id}
+                Lead đã được{" "}
+                {testMutation.data.data.action === "updated"
+                  ? "cập nhật"
+                  : "tạo"}
+                {testMutation.data.data.record_id
+                  ? `: ${testMutation.data.data.record_id}`
+                  : "."}
               </AlertDescription>
             </Alert>
           )}
@@ -579,6 +628,7 @@ function WebhookDetails({
     id: string;
     receivedAt: string;
     status: string;
+    action: "CREATED" | "UPDATED" | "REJECTED" | "FAILED";
     recordId: string | null;
     responseCode: number;
     processingTimeMs: number;
@@ -645,6 +695,16 @@ function WebhookDetails({
               </Table>
             </div>
           </FieldSet>
+          <Field>
+            <FieldLabel>Xử lý dữ liệu trùng</FieldLabel>
+            <p className="text-sm font-medium">
+              {duplicatePolicyLabels[webhook.duplicatePolicy]}
+            </p>
+            <FieldDescription>
+              Fedx kiểm tra Lead trùng theo số điện thoại trong chương trình
+              này.
+            </FieldDescription>
+          </Field>
           {canManage && (
             <div className="flex flex-wrap gap-2">
               <Button type="button" onClick={onEdit}>
@@ -696,6 +756,7 @@ function WebhookDetails({
                     <TableRow>
                       <TableHead className="px-5">Thời gian</TableHead>
                       <TableHead>Trạng thái</TableHead>
+                      <TableHead>Hành động</TableHead>
                       <TableHead>Lead</TableHead>
                       <TableHead>HTTP</TableHead>
                       <TableHead>Xử lý</TableHead>
@@ -719,6 +780,13 @@ function WebhookDetails({
                             {log.status === "SUCCESS"
                               ? "Thành công"
                               : "Thất bại"}
+                          </Badge>
+                        </TableCell>
+                        <TableCell>
+                          <Badge variant="outline">
+                            {webhookActionLabels[
+                              log.action as keyof typeof webhookActionLabels
+                            ] ?? "Thất bại"}
                           </Badge>
                         </TableCell>
                         <TableCell className="font-mono text-xs">
@@ -821,7 +889,10 @@ function WebhookForm({
               name="status"
               render={({ field }) => (
                 <Select value={field.value} onValueChange={field.onChange}>
-                  <SelectTrigger className="w-full" aria-label="Trạng thái webhook">
+                  <SelectTrigger
+                    className="w-full"
+                    aria-label="Trạng thái webhook"
+                  >
                     <SelectValue />
                   </SelectTrigger>
                   <SelectContent>
@@ -835,6 +906,41 @@ function WebhookForm({
             />
           </Field>
         </div>
+        <Field>
+          <FieldLabel>Xử lý dữ liệu trùng</FieldLabel>
+          <Controller
+            control={form.control}
+            name="duplicatePolicy"
+            render={({ field }) => (
+              <Select value={field.value} onValueChange={field.onChange}>
+                <SelectTrigger
+                  className="w-full"
+                  aria-label="Chính sách xử lý Lead trùng"
+                >
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectGroup>
+                    <SelectItem value="CREATE_NEW">
+                      Luôn tạo Lead mới
+                    </SelectItem>
+                    <SelectItem value="UPDATE_EXISTING">
+                      Cập nhật Lead hiện có
+                    </SelectItem>
+                    <SelectItem value="REJECT">Từ chối nếu trùng</SelectItem>
+                  </SelectGroup>
+                </SelectContent>
+              </Select>
+            )}
+          />
+          <FieldDescription>
+            Fedx sẽ kiểm tra dữ liệu trùng theo quy tắc nhận diện Lead hiện tại
+            trong chương trình này.
+            {form.watch("duplicatePolicy") === "UPDATE_EXISTING"
+              ? " Các trường có trong request sẽ cập nhật Lead hiện có; trường không được gửi sẽ được giữ nguyên."
+              : ""}
+          </FieldDescription>
+        </Field>
       </FieldGroup>
       <FieldSet>
         <div className="flex items-center justify-between gap-4">
@@ -897,17 +1003,35 @@ function WebhookForm({
                   name={`mappings.${index}.crmField`}
                   render={({ field }) => (
                     <Select value={field.value} onValueChange={field.onChange}>
-                      <SelectTrigger className="w-full" aria-label={`Trường CRM cho mapping ${index + 1}`}>
+                      <SelectTrigger
+                        className="w-full"
+                        aria-label={`Trường CRM cho mapping ${index + 1}`}
+                      >
                         <SelectValue />
                       </SelectTrigger>
                       <SelectContent>
                         <SelectGroup>
-                          {fields.map((option) => (
-                            <SelectItem key={option.key} value={option.key}>
-                              {option.label} · {option.type}
-                            </SelectItem>
-                          ))}
+                          <SelectLabel>Trường hệ thống</SelectLabel>
+                          {fields
+                            .filter((option) => option.group === "STANDARD")
+                            .map((option) => (
+                              <SelectItem key={option.key} value={option.key}>
+                                {option.label} · {option.type}
+                              </SelectItem>
+                            ))}
                         </SelectGroup>
+                        {fields.some((option) => option.group === "CUSTOM") && (
+                          <SelectGroup>
+                            <SelectLabel>Trường tùy chỉnh</SelectLabel>
+                            {fields
+                              .filter((option) => option.group === "CUSTOM")
+                              .map((option) => (
+                                <SelectItem key={option.key} value={option.key}>
+                                  {option.label} · {option.type}
+                                </SelectItem>
+                              ))}
+                          </SelectGroup>
+                        )}
                       </SelectContent>
                     </Select>
                   )}
@@ -1093,7 +1217,7 @@ function LogDialog({
         </DialogHeader>
         {log && (
           <div className="grid gap-5">
-            <div className="grid gap-3 sm:grid-cols-4">
+            <div className="grid gap-3 sm:grid-cols-5">
               <div>
                 <p className="text-sm text-muted-foreground">Thời gian nhận</p>
                 <p className="font-medium">{formatDate(log.receivedAt)}</p>
@@ -1101,6 +1225,10 @@ function LogDialog({
               <div>
                 <p className="text-sm text-muted-foreground">Trạng thái</p>
                 <p className="font-medium">{log.status}</p>
+              </div>
+              <div>
+                <p className="text-sm text-muted-foreground">Hành động</p>
+                <p className="font-medium">{webhookActionLabels[log.action]}</p>
               </div>
               <div>
                 <p className="text-sm text-muted-foreground">HTTP response</p>
@@ -1113,6 +1241,14 @@ function LogDialog({
                 </p>
               </div>
             </div>
+            {log.duplicateRecordId && (
+              <Field>
+                <FieldLabel>Lead trùng được phát hiện</FieldLabel>
+                <p className="break-all font-mono text-xs">
+                  {log.duplicateRecordId}
+                </p>
+              </Field>
+            )}
             <FieldSet>
               <FieldLegend>Payload</FieldLegend>
               <JsonBlock value={log.payload} />

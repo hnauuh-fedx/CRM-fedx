@@ -1,11 +1,22 @@
 import type { AuthUser } from "../auth/auth.types";
-import { hasValidAdmissionReferences, saveAdmissionProfile } from "../admissions/admission-profile-write.service";
+import {
+  hasValidAdmissionReferences,
+  saveAdmissionProfile,
+} from "../admissions/admission-profile-write.service";
 import { saveLeadAttributionAndTags } from "../campaigns/lead-attribution.service";
 import { saveCandidateProfile } from "../students/candidate-profile.service";
 import { prisma } from "../../database/prisma";
+import type { Prisma } from "../../generated/prisma/client";
 import { getLeadScopeWhere } from "./lead-list.service";
 import { triggerAutomation } from "../automations/automation-engine.service";
-import { assignVisibleLead, changeVisibleLeadStage } from "./lead-owner-stage-mutations.service";
+import {
+  assignVisibleLead,
+  changeVisibleLeadStage,
+} from "./lead-owner-stage-mutations.service";
+import {
+  saveSaleCustomFieldValues,
+  type SaleCustomFieldInput,
+} from "./sale-custom-fields.service";
 
 export { leadUpdatePermissions } from "./lead-owner-stage-mutations.service";
 
@@ -86,9 +97,20 @@ export type LeadFileInput = {
   fileSize?: number;
 };
 
-async function findVisibleLead(user: AuthUser, leadId: string, institutionProgramId?: string) {
+async function findVisibleLead(
+  user: AuthUser,
+  leadId: string,
+  institutionProgramId?: string,
+) {
   return prisma.leads.findFirst({
-    where: { id: leadId, deleted_at: null, ...getLeadScopeWhere(user), ...(institutionProgramId ? { institution_program_id: institutionProgramId } : {}) },
+    where: {
+      id: leadId,
+      deleted_at: null,
+      ...getLeadScopeWhere(user),
+      ...(institutionProgramId
+        ? { institution_program_id: institutionProgramId }
+        : {}),
+    },
     select: {
       id: true,
       full_name: true,
@@ -127,7 +149,9 @@ function toLeadData(input: LeadInput) {
     date_of_birth: input.dateOfBirth ? new Date(input.dateOfBirth) : null,
     cccd: emptyToNull(input.cccd),
     note: emptyToNull(input.note),
-    ...(input.status !== undefined ? { status: normalizeLeadStatus(input.status) } : {}),
+    ...(input.status !== undefined
+      ? { status: normalizeLeadStatus(input.status) }
+      : {}),
     ...(input.temperature ? { temperature: input.temperature } : {}),
   };
 }
@@ -156,7 +180,11 @@ const assignableSaleWhere = {
       roles: {
         role_permissions: {
           some: { permissions: { code: "lead.view_assigned" } },
-          none: { permissions: { code: { in: ["lead.view_department", "lead.view_all"] } } },
+          none: {
+            permissions: {
+              code: { in: ["lead.view_department", "lead.view_all"] },
+            },
+          },
         },
       },
     },
@@ -174,12 +202,17 @@ async function findActiveAssignableSale(
       status: "active",
       deleted_at: null,
       ...assignableSaleWhere,
-      ...(departmentId ? { user_departments: { some: { department_id: departmentId } } } : {}),
+      ...(departmentId
+        ? { user_departments: { some: { department_id: departmentId } } }
+        : {}),
     },
     select: {
       id: true,
       full_name: true,
-      user_departments: { select: { department_id: true }, orderBy: { id: "asc" } },
+      user_departments: {
+        select: { department_id: true },
+        orderBy: { id: "asc" },
+      },
     },
   });
 }
@@ -190,9 +223,15 @@ function selectAssigneeDepartment(
   requestedDepartmentId?: string,
 ) {
   if (requestedDepartmentId) return requestedDepartmentId;
-  return memberships.find((membership) => membership.department_id && user.departmentIds.includes(membership.department_id))?.department_id
-    ?? memberships[0]?.department_id
-    ?? null;
+  return (
+    memberships.find(
+      (membership) =>
+        membership.department_id &&
+        user.departmentIds.includes(membership.department_id),
+    )?.department_id ??
+    memberships[0]?.department_id ??
+    null
+  );
 }
 
 async function recordStageChange(
@@ -204,14 +243,21 @@ async function recordStageChange(
 ) {
   const toStageId = toStage?.id ?? null;
   await tx.lead_status_histories.create({
-    data: { lead_id: leadId, from_stage_id: fromStageId, to_stage_id: toStageId, changed_by: user.id },
+    data: {
+      lead_id: leadId,
+      from_stage_id: fromStageId,
+      to_stage_id: toStageId,
+      changed_by: user.id,
+    },
   });
   await tx.lead_activities.create({
     data: {
       lead_id: leadId,
       user_id: user.id,
       type: "pipeline_stage_changed",
-      content: toStage ? `Chuyển lead sang tiến trình ${toStage.name}.` : "Bỏ chọn tiến trình của lead.",
+      content: toStage
+        ? `Chuyển lead sang tiến trình ${toStage.name}.`
+        : "Bỏ chọn tiến trình của lead.",
       metadata: { fromStageId, toStageId },
     },
   });
@@ -227,19 +273,46 @@ async function recordStageChange(
   });
 }
 
-export async function getLeadActionOptions(user: AuthUser, institutionProgramId?: string) {
-  const canAssign = user.permissions.includes("lead.assign") || user.permissions.includes("lead.reassign");
-  const canAssignAll = user.accessScope === "ALL" && user.permissions.includes("lead.view_all");
-  const [sources, stages, assignees, telesales, departments, institutionPrograms, majors, admissionStatuses, tags] = await prisma.$transaction([
+export async function getLeadActionOptions(
+  user: AuthUser,
+  institutionProgramId?: string,
+) {
+  const canAssign =
+    user.permissions.includes("lead.assign") ||
+    user.permissions.includes("lead.reassign");
+  const canAssignAll =
+    user.accessScope === "ALL" && user.permissions.includes("lead.view_all");
+  const [
+    sources,
+    stages,
+    assignees,
+    telesales,
+    departments,
+    institutionPrograms,
+    majors,
+    admissionStatuses,
+    tags,
+  ] = await prisma.$transaction([
     prisma.lead_sources.findMany({
       where: institutionProgramId
-        ? { OR: [{ institution_program_id: institutionProgramId }, { institution_program_id: null }] }
+        ? {
+            OR: [
+              { institution_program_id: institutionProgramId },
+              { institution_program_id: null },
+            ],
+          }
         : undefined,
       select: { id: true, name: true },
       orderBy: { name: "asc" },
     }),
     prisma.pipeline_stages.findMany({
-      select: { id: true, name: true, color: true, pipeline_id: true, pipelines: { select: { name: true } } },
+      select: {
+        id: true,
+        name: true,
+        color: true,
+        pipeline_id: true,
+        pipelines: { select: { name: true } },
+      },
       orderBy: [{ position: "asc" }, { name: "asc" }],
     }),
     canAssign
@@ -248,14 +321,21 @@ export async function getLeadActionOptions(user: AuthUser, institutionProgramId?
           select: { id: true, full_name: true },
           orderBy: { full_name: "asc" },
         })
-      : prisma.users.findMany({ where: { id: user.id }, select: { id: true, full_name: true } }),
+      : prisma.users.findMany({
+          where: { id: user.id },
+          select: { id: true, full_name: true },
+        }),
     prisma.users.findMany({
       where: {
         status: "active",
         deleted_at: null,
         ...assignableSaleWhere,
         ...(canAssign && !canAssignAll
-          ? { user_departments: { some: { department_id: { in: user.departmentIds } } } }
+          ? {
+              user_departments: {
+                some: { department_id: { in: user.departmentIds } },
+              },
+            }
           : {}),
       },
       select: { id: true, full_name: true },
@@ -273,21 +353,41 @@ export async function getLeadActionOptions(user: AuthUser, institutionProgramId?
         }),
     prisma.institution_programs.findMany({
       where: { status: "active" },
-      select: { id: true, name: true, code: true, institutions: { select: { name: true } }, program_types: { select: { name: true } } },
+      select: {
+        id: true,
+        name: true,
+        code: true,
+        institutions: { select: { name: true } },
+        program_types: { select: { name: true } },
+      },
       orderBy: [{ institutions: { name: "asc" } }, { name: "asc" }],
     }),
     prisma.majors.findMany({
       where: institutionProgramId
-        ? { OR: [{ institution_program_id: institutionProgramId }, { institution_program_id: null }] }
+        ? {
+            OR: [
+              { institution_program_id: institutionProgramId },
+              { institution_program_id: null },
+            ],
+          }
         : undefined,
-      select: { id: true, name: true, code: true, faculties: { select: { name: true } } },
+      select: {
+        id: true,
+        name: true,
+        code: true,
+        faculties: { select: { name: true } },
+      },
       orderBy: { name: "asc" },
     }),
     prisma.admission_statuses.findMany({
       select: { id: true, name: true },
       orderBy: { name: "asc" },
     }),
-    prisma.tags.findMany({ select: { name: true }, orderBy: { name: "asc" }, take: 200 }),
+    prisma.tags.findMany({
+      select: { name: true },
+      orderBy: { name: "asc" },
+      take: 200,
+    }),
   ]);
 
   return {
@@ -299,8 +399,14 @@ export async function getLeadActionOptions(user: AuthUser, institutionProgramId?
       pipelineId: stage.pipeline_id,
       pipelineName: stage.pipelines?.name ?? null,
     })),
-    assignees: assignees.map((assignee) => ({ id: assignee.id, fullName: assignee.full_name })),
-    telesales: telesales.map((telesale) => ({ id: telesale.id, fullName: telesale.full_name })),
+    assignees: assignees.map((assignee) => ({
+      id: assignee.id,
+      fullName: assignee.full_name,
+    })),
+    telesales: telesales.map((telesale) => ({
+      id: telesale.id,
+      fullName: telesale.full_name,
+    })),
     departments,
     institutionPrograms: institutionPrograms.map((program) => ({
       id: program.id,
@@ -320,120 +426,266 @@ export async function getLeadActionOptions(user: AuthUser, institutionProgramId?
   };
 }
 
-export async function createLead(user: AuthUser, input: LeadInput) {
-  const result = await prisma.$transaction(async (tx) => {
+export async function createLeadInTransaction(
+  tx: Prisma.TransactionClient,
+  user: AuthUser,
+  input: LeadInput,
+  options: { allowDuplicate?: boolean; ipAddress?: string } = {},
+) {
+  if (!options.allowDuplicate) {
     const duplicate = await tx.leads.findFirst({
       where: {
         phone: input.phone.trim(),
         deleted_at: null,
-        ...(input.institutionProgramId ? { institution_program_id: input.institutionProgramId } : {}),
+        ...(input.institutionProgramId
+          ? { institution_program_id: input.institutionProgramId }
+          : {}),
       },
       select: { id: true },
     });
-    if (duplicate) {
+    if (duplicate)
       return { ok: false as const, reason: "phone_already_exists" as const };
-    }
-    const source = await tx.lead_sources.findUnique({ where: { id: input.sourceId }, select: { id: true } });
-    if (!source) {
-      return { ok: false as const, reason: "source_not_found" as const };
-    }
-    if (!await hasValidAdmissionReferences(tx, input)) {
-      return { ok: false as const, reason: "admission_reference_not_found" as const };
-    }
-    const selectedStage = await getSelectedStage(tx, input.pipelineStageId);
-    if (input.pipelineStageId && !selectedStage) {
-      return { ok: false as const, reason: "stage_not_found" as const };
-    }
-    const assignee = input.assigneeId ? await findActiveAssignableSale(tx, input.assigneeId) : null;
-    if (input.assigneeId && !assignee) {
-      return { ok: false as const, reason: "assignee_not_telesale" as const };
-    }
+  }
+  const source = await tx.lead_sources.findUnique({
+    where: { id: input.sourceId },
+    select: { id: true },
+  });
+  if (!source) {
+    return { ok: false as const, reason: "source_not_found" as const };
+  }
+  if (!(await hasValidAdmissionReferences(tx, input))) {
+    return {
+      ok: false as const,
+      reason: "admission_reference_not_found" as const,
+    };
+  }
+  const selectedStage = await getSelectedStage(tx, input.pipelineStageId);
+  if (input.pipelineStageId && !selectedStage) {
+    return { ok: false as const, reason: "stage_not_found" as const };
+  }
+  const assignee = input.assigneeId
+    ? await findActiveAssignableSale(tx, input.assigneeId)
+    : null;
+  if (input.assigneeId && !assignee) {
+    return { ok: false as const, reason: "assignee_not_telesale" as const };
+  }
 
-    const lead = await tx.leads.create({
-      data: {
-        ...toLeadData(input),
-        pipeline_stage_id: selectedStage?.id ?? null,
-        ...(input.pipelineStageId !== undefined ? { status: toStageStatus(selectedStage) } : {}),
-        lead_code: `LD-${Date.now().toString(36).toUpperCase()}`,
-        owner_id: user.id,
-        assigned_to: assignee?.id ?? null,
+  const lead = await tx.leads.create({
+    data: {
+      ...toLeadData(input),
+      pipeline_stage_id: selectedStage?.id ?? null,
+      ...(input.pipelineStageId !== undefined
+        ? { status: toStageStatus(selectedStage) }
+        : {}),
+      lead_code: `LD-${Date.now().toString(36).toUpperCase()}`,
+      owner_id: user.id,
+      assigned_to: assignee?.id ?? null,
+    },
+    select: { id: true },
+  });
+
+  await saveCandidateProfile(tx, lead.id, input);
+  await saveAdmissionProfile(tx, lead.id, input);
+  await saveLeadAttributionAndTags(tx, lead.id, input);
+
+  await tx.lead_activities.create({
+    data: {
+      lead_id: lead.id,
+      user_id: user.id,
+      type: "lead_created",
+      content: "Tạo lead mới.",
+    },
+  });
+  await tx.audit_logs.create({
+    data: {
+      user_id: user.id,
+      entity_type: "lead",
+      entity_id: lead.id,
+      action: "create",
+      ip_address: options.ipAddress,
+      new_data: {
+        fullName: input.fullName,
+        sourceId: input.sourceId,
+        assigneeId: assignee?.id ?? null,
       },
-      select: { id: true },
+    },
+  });
+  if (assignee) {
+    const departmentId = selectAssigneeDepartment(
+      user,
+      assignee.user_departments,
+    );
+    await tx.lead_assignments.create({
+      data: {
+        lead_id: lead.id,
+        assigned_to: assignee.id,
+        assigned_by: user.id,
+        department_id: departmentId,
+        is_main_owner: true,
+      },
     });
-
-    await saveCandidateProfile(tx, lead.id, input);
-    await saveAdmissionProfile(tx, lead.id, input);
-    await saveLeadAttributionAndTags(tx, lead.id, input);
-
     await tx.lead_activities.create({
-      data: { lead_id: lead.id, user_id: user.id, type: "lead_created", content: "Tạo lead mới." },
+      data: {
+        lead_id: lead.id,
+        user_id: user.id,
+        type: "lead_assigned",
+        content: `Phân công lead cho ${assignee.full_name}.`,
+      },
+    });
+    await tx.notifications.create({
+      data: {
+        user_id: assignee.id,
+        title: "Bạn được phân công lead mới",
+        content: `Lead ${input.fullName.trim()} đã được phân công cho bạn.`,
+        type: "lead_assignment",
+      },
     });
     await tx.audit_logs.create({
       data: {
         user_id: user.id,
         entity_type: "lead",
         entity_id: lead.id,
-        action: "create",
-        new_data: { fullName: input.fullName, sourceId: input.sourceId, assigneeId: assignee?.id ?? null },
+        action: "assign",
+        ip_address: options.ipAddress,
+        old_data: { assigneeId: null },
+        new_data: { assigneeId: assignee.id, departmentId },
       },
     });
-    if (assignee) {
-      const departmentId = selectAssigneeDepartment(user, assignee.user_departments);
-      await tx.lead_assignments.create({
-        data: {
-          lead_id: lead.id,
-          assigned_to: assignee.id,
-          assigned_by: user.id,
-          department_id: departmentId,
-          is_main_owner: true,
-        },
-      });
-      await tx.lead_activities.create({
-        data: { lead_id: lead.id, user_id: user.id, type: "lead_assigned", content: `Phân công lead cho ${assignee.full_name}.` },
-      });
-      await tx.notifications.create({
-        data: {
-          user_id: assignee.id,
-          title: "Bạn được phân công lead mới",
-          content: `Lead ${input.fullName.trim()} đã được phân công cho bạn.`,
-          type: "lead_assignment",
-        },
-      });
-      await tx.audit_logs.create({
-        data: {
-          user_id: user.id,
-          entity_type: "lead",
-          entity_id: lead.id,
-          action: "assign",
-          old_data: { assigneeId: null },
-          new_data: { assigneeId: assignee.id, departmentId },
-        },
-      });
-    }
-    if (selectedStage) {
-      await recordStageChange(tx, user, lead.id, null, selectedStage);
-    }
-    return { ok: true as const, data: { id: lead.id, assigneeId: assignee?.id ?? null } };
+  }
+  if (selectedStage) {
+    await recordStageChange(tx, user, lead.id, null, selectedStage);
+  }
+  return {
+    ok: true as const,
+    data: { id: lead.id, assigneeId: assignee?.id ?? null },
+  };
+}
+
+export function triggerLeadCreatedAutomation(
+  user: AuthUser,
+  input: LeadInput,
+  result: { id: string; assigneeId: string | null },
+) {
+  triggerAutomation("lead_created", {
+    leadId: result.id,
+    actorId: user.id,
+    institutionProgramId: input.institutionProgramId ?? undefined,
+  }).catch(console.error);
+  if (result.assigneeId) {
+    triggerAutomation("lead_assigned", {
+      leadId: result.id,
+      actorId: user.id,
+      institutionProgramId: input.institutionProgramId ?? undefined,
+    }).catch(console.error);
+  }
+}
+
+function optionalInboundText(value: string | undefined) {
+  return value?.trim() || null;
+}
+
+export async function updateLeadFromInboundInTransaction(
+  tx: Prisma.TransactionClient,
+  user: AuthUser,
+  leadId: string,
+  institutionProgramId: string,
+  input: LeadInput,
+  providedFields: Set<keyof LeadInput>,
+  customFieldValues: SaleCustomFieldInput[],
+  ipAddress?: string,
+) {
+  const [oldLead, oldStudentProfile, oldAdmissionProfile, oldTracking] = await Promise.all([
+    tx.leads.findUniqueOrThrow({
+      where: { id: leadId },
+      select: { full_name: true, phone: true, email: true, source_id: true, note: true, date_of_birth: true },
+    }),
+    tx.student_profiles.findUnique({ where: { lead_id: leadId }, select: { company_name: true, graduation_year: true } }),
+    tx.admission_profiles.findUnique({ where: { lead_id: leadId }, select: { monthly_revenue: true, decision_signed_date: true } }),
+    tx.utm_trackings.findFirst({ where: { lead_id: leadId }, select: { gclid: true } }),
+  ]);
+  const data: Prisma.leadsUncheckedUpdateInput = { updated_at: new Date() };
+  if (providedFields.has("fullName")) data.full_name = input.fullName.trim();
+  if (providedFields.has("phone")) data.phone = input.phone.trim();
+  if (providedFields.has("email")) data.email = optionalInboundText(input.email);
+  if (providedFields.has("sourceId")) data.source_id = input.sourceId;
+  if (providedFields.has("note")) data.note = optionalInboundText(input.note);
+  if (providedFields.has("dateOfBirth")) data.date_of_birth = input.dateOfBirth ? new Date(input.dateOfBirth) : null;
+  const updatedLead = await tx.leads.update({
+    where: { id: leadId },
+    data,
+    select: { full_name: true, phone: true, email: true, source_id: true, note: true, date_of_birth: true },
   });
 
+  if (providedFields.has("companyName") || providedFields.has("graduationYear")) {
+    const profileData: { updated_at: Date; company_name?: string | null; graduation_year?: number | null } = { updated_at: new Date() };
+    if (providedFields.has("companyName")) profileData.company_name = optionalInboundText(input.companyName);
+    if (providedFields.has("graduationYear")) profileData.graduation_year = input.graduationYear ? Number(input.graduationYear) : null;
+    await tx.student_profiles.upsert({ where: { lead_id: leadId }, create: { lead_id: leadId, ...profileData }, update: profileData });
+  }
+
+  if (providedFields.has("monthlyRevenue") || providedFields.has("decisionSignedDate")) {
+    const admissionData: { updated_at: Date; monthly_revenue?: string; decision_signed_date?: Date | null } = { updated_at: new Date() };
+    if (providedFields.has("monthlyRevenue")) admissionData.monthly_revenue = input.monthlyRevenue ?? "0";
+    if (providedFields.has("decisionSignedDate")) admissionData.decision_signed_date = input.decisionSignedDate ? new Date(input.decisionSignedDate) : null;
+    await tx.admission_profiles.upsert({ where: { lead_id: leadId }, create: { lead_id: leadId, institution_program_id: institutionProgramId, ...admissionData }, update: admissionData });
+  }
+
+  if (providedFields.has("gclid")) {
+    const tracking = await tx.utm_trackings.findFirst({ where: { lead_id: leadId }, select: { id: true } });
+    if (tracking) await tx.utm_trackings.update({ where: { id: tracking.id }, data: { gclid: optionalInboundText(input.gclid) } });
+    else if (input.gclid?.trim()) await tx.utm_trackings.create({ data: { lead_id: leadId, gclid: input.gclid.trim() } });
+  }
+
+  const customResult = await saveSaleCustomFieldValues(tx, user, "LEAD", leadId, institutionProgramId, customFieldValues, ipAddress);
+  if (!customResult.ok) return customResult;
+  const [newStudentProfile, newAdmissionProfile, newTracking] = await Promise.all([
+    tx.student_profiles.findUnique({ where: { lead_id: leadId }, select: { company_name: true, graduation_year: true } }),
+    tx.admission_profiles.findUnique({ where: { lead_id: leadId }, select: { monthly_revenue: true, decision_signed_date: true } }),
+    tx.utm_trackings.findFirst({ where: { lead_id: leadId }, select: { gclid: true } }),
+  ]);
+  await tx.lead_activities.create({ data: { lead_id: leadId, user_id: user.id, type: "lead_updated", content: "Cập nhật Lead từ inbound webhook." } });
+  await tx.audit_logs.create({
+    data: {
+      user_id: user.id,
+      entity_type: "lead",
+      entity_id: leadId,
+      action: "webhook_update",
+      ip_address: ipAddress,
+      old_data: {
+        lead: { ...oldLead, date_of_birth: oldLead.date_of_birth?.toISOString() ?? null },
+        studentProfile: oldStudentProfile,
+        admissionProfile: oldAdmissionProfile ? { ...oldAdmissionProfile, decision_signed_date: oldAdmissionProfile.decision_signed_date?.toISOString() ?? null } : null,
+        tracking: oldTracking,
+      },
+      new_data: {
+        lead: { ...updatedLead, date_of_birth: updatedLead.date_of_birth?.toISOString() ?? null },
+        studentProfile: newStudentProfile,
+        admissionProfile: newAdmissionProfile ? { ...newAdmissionProfile, decision_signed_date: newAdmissionProfile.decision_signed_date?.toISOString() ?? null } : null,
+        tracking: newTracking,
+        customFieldIds: customFieldValues.map((item) => item.fieldId),
+      },
+    },
+  });
+  return { ok: true as const };
+}
+
+export async function createLead(user: AuthUser, input: LeadInput) {
+  const result = await prisma.$transaction((tx) =>
+    createLeadInTransaction(tx, user, input),
+  );
+
   if (result.ok) {
-    triggerAutomation("lead_created", { 
-      leadId: result.data.id, 
-      actorId: user.id,
-      institutionProgramId: input.institutionProgramId ?? undefined 
-    }).catch(console.error);
-    if (result.data.assigneeId) {
-      triggerAutomation("lead_assigned", {
-        leadId: result.data.id,
-        actorId: user.id,
-        institutionProgramId: input.institutionProgramId ?? undefined,
-      }).catch(console.error);
-    }
+    triggerLeadCreatedAutomation(user, input, result.data);
   }
   return result;
 }
 
-export async function updateLead(user: AuthUser, leadId: string, input: LeadInput, institutionProgramId?: string) {
+export async function updateLead(
+  user: AuthUser,
+  leadId: string,
+  input: LeadInput,
+  institutionProgramId?: string,
+) {
   const existing = await findVisibleLead(user, leadId, institutionProgramId);
   if (!existing) {
     return { ok: false as const, reason: "lead_not_found" as const };
@@ -445,19 +697,27 @@ export async function updateLead(user: AuthUser, leadId: string, input: LeadInpu
         phone: input.phone.trim(),
         deleted_at: null,
         id: { not: leadId },
-        ...(input.institutionProgramId ? { institution_program_id: input.institutionProgramId } : {}),
+        ...(input.institutionProgramId
+          ? { institution_program_id: input.institutionProgramId }
+          : {}),
       },
       select: { id: true },
     });
     if (duplicate) {
       return { ok: false as const, reason: "phone_already_exists" as const };
     }
-    const source = await tx.lead_sources.findUnique({ where: { id: input.sourceId }, select: { id: true } });
+    const source = await tx.lead_sources.findUnique({
+      where: { id: input.sourceId },
+      select: { id: true },
+    });
     if (!source) {
       return { ok: false as const, reason: "source_not_found" as const };
     }
-    if (!await hasValidAdmissionReferences(tx, input, leadId)) {
-      return { ok: false as const, reason: "admission_reference_not_found" as const };
+    if (!(await hasValidAdmissionReferences(tx, input, leadId))) {
+      return {
+        ok: false as const,
+        reason: "admission_reference_not_found" as const,
+      };
     }
     const hasStageSelection = input.pipelineStageId !== undefined;
     const selectedStage = await getSelectedStage(tx, input.pipelineStageId);
@@ -465,19 +725,36 @@ export async function updateLead(user: AuthUser, leadId: string, input: LeadInpu
       return { ok: false as const, reason: "stage_not_found" as const };
     }
     const nextStageId = selectedStage?.id ?? null;
-    const assignmentChanged = input.assigneeId !== undefined && input.assigneeId !== existing.assigned_to;
-    if (assignmentChanged && !user.permissions.some((permission) => ["lead.assign", "lead.reassign"].includes(permission))) {
+    const assignmentChanged =
+      input.assigneeId !== undefined &&
+      input.assigneeId !== existing.assigned_to;
+    if (
+      assignmentChanged &&
+      !user.permissions.some((permission) =>
+        ["lead.assign", "lead.reassign"].includes(permission),
+      )
+    ) {
       return { ok: false as const, reason: "assignment_forbidden" as const };
     }
-    const nextAssignee = assignmentChanged && input.assigneeId
-      ? await findActiveAssignableSale(tx, input.assigneeId)
-      : null;
-    const canAssignAll = user.accessScope === "ALL" && user.permissions.includes("lead.view_all");
-    const assigneeInScope = nextAssignee && (
-      canAssignAll
-      || nextAssignee.user_departments.some((membership) => membership.department_id && user.departmentIds.includes(membership.department_id))
-    );
-    if (assignmentChanged && input.assigneeId && (!nextAssignee || !assigneeInScope)) {
+    const nextAssignee =
+      assignmentChanged && input.assigneeId
+        ? await findActiveAssignableSale(tx, input.assigneeId)
+        : null;
+    const canAssignAll =
+      user.accessScope === "ALL" && user.permissions.includes("lead.view_all");
+    const assigneeInScope =
+      nextAssignee &&
+      (canAssignAll ||
+        nextAssignee.user_departments.some(
+          (membership) =>
+            membership.department_id &&
+            user.departmentIds.includes(membership.department_id),
+        ));
+    if (
+      assignmentChanged &&
+      input.assigneeId &&
+      (!nextAssignee || !assigneeInScope)
+    ) {
       return { ok: false as const, reason: "assignee_not_telesale" as const };
     }
 
@@ -495,7 +772,12 @@ export async function updateLead(user: AuthUser, leadId: string, input: LeadInpu
     await saveAdmissionProfile(tx, leadId, input);
     await saveLeadAttributionAndTags(tx, leadId, input);
     await tx.lead_activities.create({
-      data: { lead_id: leadId, user_id: user.id, type: "lead_updated", content: "Cập nhật thông tin lead." },
+      data: {
+        lead_id: leadId,
+        user_id: user.id,
+        type: "lead_updated",
+        content: "Cập nhật thông tin lead.",
+      },
     });
     await tx.audit_logs.create({
       data: {
@@ -508,11 +790,23 @@ export async function updateLead(user: AuthUser, leadId: string, input: LeadInpu
           sourceId: existing.source_id,
           status: existing.status,
         },
-        new_data: { fullName: input.fullName, sourceId: input.sourceId, status: hasStageSelection ? toStageStatus(selectedStage) : input.status ?? existing.status },
+        new_data: {
+          fullName: input.fullName,
+          sourceId: input.sourceId,
+          status: hasStageSelection
+            ? toStageStatus(selectedStage)
+            : (input.status ?? existing.status),
+        },
       },
     });
     if (hasStageSelection && existing.pipeline_stage_id !== nextStageId) {
-      await recordStageChange(tx, user, leadId, existing.pipeline_stage_id, selectedStage);
+      await recordStageChange(
+        tx,
+        user,
+        leadId,
+        existing.pipeline_stage_id,
+        selectedStage,
+      );
     }
     if (assignmentChanged) {
       await tx.lead_assignments.updateMany({
@@ -520,7 +814,10 @@ export async function updateLead(user: AuthUser, leadId: string, input: LeadInpu
         data: { is_main_owner: false },
       });
       if (nextAssignee) {
-        const departmentId = selectAssigneeDepartment(user, nextAssignee.user_departments);
+        const departmentId = selectAssigneeDepartment(
+          user,
+          nextAssignee.user_departments,
+        );
         await tx.lead_assignments.create({
           data: {
             lead_id: leadId,
@@ -531,7 +828,12 @@ export async function updateLead(user: AuthUser, leadId: string, input: LeadInpu
           },
         });
         await tx.lead_activities.create({
-          data: { lead_id: leadId, user_id: user.id, type: "lead_assigned", content: `Phân công lead cho ${nextAssignee.full_name}.` },
+          data: {
+            lead_id: leadId,
+            user_id: user.id,
+            type: "lead_assigned",
+            content: `Phân công lead cho ${nextAssignee.full_name}.`,
+          },
         });
         await tx.notifications.create({
           data: {
@@ -543,7 +845,12 @@ export async function updateLead(user: AuthUser, leadId: string, input: LeadInpu
         });
       } else {
         await tx.lead_activities.create({
-          data: { lead_id: leadId, user_id: user.id, type: "lead_unassigned", content: "Thu hồi Sale phụ trách khỏi lead." },
+          data: {
+            lead_id: leadId,
+            user_id: user.id,
+            type: "lead_unassigned",
+            content: "Thu hồi Sale phụ trách khỏi lead.",
+          },
         });
       }
       await tx.audit_logs.create({
@@ -551,7 +858,11 @@ export async function updateLead(user: AuthUser, leadId: string, input: LeadInpu
           user_id: user.id,
           entity_type: "lead",
           entity_id: leadId,
-          action: nextAssignee ? (existing.assigned_to ? "reassign" : "assign") : "unassign",
+          action: nextAssignee
+            ? existing.assigned_to
+              ? "reassign"
+              : "assign"
+            : "unassign",
           old_data: { assigneeId: existing.assigned_to },
           new_data: { assigneeId: nextAssignee?.id ?? null },
         },
@@ -559,7 +870,14 @@ export async function updateLead(user: AuthUser, leadId: string, input: LeadInpu
     }
     return {
       ok: true as const,
-      data: { id: leadId, assignmentEvent: assignmentChanged ? (nextAssignee ? "lead_assigned" as const : "lead_unassigned" as const) : null },
+      data: {
+        id: leadId,
+        assignmentEvent: assignmentChanged
+          ? nextAssignee
+            ? ("lead_assigned" as const)
+            : ("lead_unassigned" as const)
+          : null,
+      },
     };
   });
 
@@ -573,7 +891,11 @@ export async function updateLead(user: AuthUser, leadId: string, input: LeadInpu
   return result;
 }
 
-export async function deleteLead(user: AuthUser, leadId: string, institutionProgramId?: string) {
+export async function deleteLead(
+  user: AuthUser,
+  leadId: string,
+  institutionProgramId?: string,
+) {
   const lead = await findVisibleLead(user, leadId, institutionProgramId);
   if (!lead) {
     return { ok: false as const, reason: "lead_not_found" as const };
@@ -585,7 +907,12 @@ export async function deleteLead(user: AuthUser, leadId: string, institutionProg
       data: { deleted_at: new Date(), updated_at: new Date() },
     });
     await tx.lead_activities.create({
-      data: { lead_id: leadId, user_id: user.id, type: "lead_deleted", content: "Xóa lead khỏi danh sách hoạt động." },
+      data: {
+        lead_id: leadId,
+        user_id: user.id,
+        type: "lead_deleted",
+        content: "Xóa lead khỏi danh sách hoạt động.",
+      },
     });
     await tx.audit_logs.create({
       data: {
@@ -593,7 +920,11 @@ export async function deleteLead(user: AuthUser, leadId: string, institutionProg
         entity_type: "lead",
         entity_id: leadId,
         action: "delete",
-        old_data: { fullName: lead.full_name, status: lead.status, assigneeId: lead.assigned_to },
+        old_data: {
+          fullName: lead.full_name,
+          status: lead.status,
+          assigneeId: lead.assigned_to,
+        },
         new_data: { deleted: true },
       },
     });
@@ -601,20 +932,35 @@ export async function deleteLead(user: AuthUser, leadId: string, institutionProg
   });
 }
 
-export async function changeLeadStage(user: AuthUser, leadId: string, stageId: string, institutionProgramId?: string) {
-  const result = await changeVisibleLeadStage(user, leadId, stageId, institutionProgramId);
+export async function changeLeadStage(
+  user: AuthUser,
+  leadId: string,
+  stageId: string,
+  institutionProgramId?: string,
+) {
+  const result = await changeVisibleLeadStage(
+    user,
+    leadId,
+    stageId,
+    institutionProgramId,
+  );
 
   if (result.ok && result.data.changed) {
     triggerAutomation("lead_status_changed", {
       leadId: result.data.id,
       actorId: user.id,
-      institutionProgramId: institutionProgramId ?? undefined
+      institutionProgramId: institutionProgramId ?? undefined,
     }).catch(console.error);
   }
   return result;
 }
 
-export async function addLeadNote(user: AuthUser, leadId: string, content: string, institutionProgramId?: string) {
+export async function addLeadNote(
+  user: AuthUser,
+  leadId: string,
+  content: string,
+  institutionProgramId?: string,
+) {
   const lead = await findVisibleLead(user, leadId, institutionProgramId);
   if (!lead) {
     return { ok: false as const, reason: "lead_not_found" as const };
@@ -626,16 +972,32 @@ export async function addLeadNote(user: AuthUser, leadId: string, content: strin
       select: { id: true },
     });
     await tx.lead_activities.create({
-      data: { lead_id: leadId, user_id: user.id, type: "note_created", content: "Thêm ghi chú chăm sóc." },
+      data: {
+        lead_id: leadId,
+        user_id: user.id,
+        type: "note_created",
+        content: "Thêm ghi chú chăm sóc.",
+      },
     });
     await tx.audit_logs.create({
-      data: { user_id: user.id, entity_type: "lead", entity_id: leadId, action: "note_created", new_data: { noteId: note.id } },
+      data: {
+        user_id: user.id,
+        entity_type: "lead",
+        entity_id: leadId,
+        action: "note_created",
+        new_data: { noteId: note.id },
+      },
     });
     return { ok: true as const, data: { id: note.id } };
   });
 }
 
-export async function attachLeadFile(user: AuthUser, leadId: string, input: LeadFileInput, institutionProgramId?: string) {
+export async function attachLeadFile(
+  user: AuthUser,
+  leadId: string,
+  input: LeadFileInput,
+  institutionProgramId?: string,
+) {
   const lead = await findVisibleLead(user, leadId, institutionProgramId);
   if (!lead) {
     return { ok: false as const, reason: "lead_not_found" as const };
@@ -652,12 +1014,25 @@ export async function attachLeadFile(user: AuthUser, leadId: string, input: Lead
       },
       select: { id: true },
     });
-    await tx.file_relations.create({ data: { file_id: file.id, entity_type: "lead", entity_id: leadId } });
+    await tx.file_relations.create({
+      data: { file_id: file.id, entity_type: "lead", entity_id: leadId },
+    });
     await tx.lead_activities.create({
-      data: { lead_id: leadId, user_id: user.id, type: "file_attached", content: `Đính kèm tệp ${input.fileName.trim()}.` },
+      data: {
+        lead_id: leadId,
+        user_id: user.id,
+        type: "file_attached",
+        content: `Đính kèm tệp ${input.fileName.trim()}.`,
+      },
     });
     await tx.audit_logs.create({
-      data: { user_id: user.id, entity_type: "lead", entity_id: leadId, action: "file_attached", new_data: { fileId: file.id } },
+      data: {
+        user_id: user.id,
+        entity_type: "lead",
+        entity_id: leadId,
+        action: "file_attached",
+        new_data: { fileId: file.id },
+      },
     });
     return { ok: true as const, data: { id: file.id } };
   });
@@ -669,13 +1044,18 @@ export async function assignLead(
   input: { assigneeId: string; departmentId?: string },
   institutionProgramId?: string,
 ) {
-  const result = await assignVisibleLead(user, leadId, input, institutionProgramId);
+  const result = await assignVisibleLead(
+    user,
+    leadId,
+    input,
+    institutionProgramId,
+  );
 
   if (result.ok) {
     triggerAutomation("lead_assigned", {
       leadId: result.data.id,
       actorId: user.id,
-      institutionProgramId: institutionProgramId ?? undefined
+      institutionProgramId: institutionProgramId ?? undefined,
     }).catch(console.error);
   }
   return result;

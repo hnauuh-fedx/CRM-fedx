@@ -23,6 +23,7 @@
     "test:integration:custom-fields": "tsx src/integration/custom-field-definition.integration.ts",
     "test:integration:lead-custom-fields": "tsx src/integration/lead-custom-fields.integration.ts",
     "test:integration:webhooks": "tsx src/integration/inbound-webhooks.integration.ts",
+    "maintenance:webhook-logs": "tsx src/maintenance/cleanup-webhook-logs.ts",
     "test:integration:automation": "tsx src/integration/automation-engine.integration.ts",
     "test:automation": "tsx --test src/modules/automations/*.test.ts",
     "test:security:metabase-reporting": "tsx src/integration/metabase-reporting-security.integration.ts",

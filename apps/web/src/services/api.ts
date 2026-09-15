@@ -7,7 +7,8 @@ function authorizedHeaders(accessToken?: string | null) {
   if (accessToken) {
     headers.set("Authorization", `Bearer ${accessToken}`);
     const selectedProgramId = readSelectedInstitutionProgramId();
-    if (selectedProgramId) headers.set("X-Institution-Program-Id", selectedProgramId);
+    if (selectedProgramId)
+      headers.set("X-Institution-Program-Id", selectedProgramId);
   }
   return headers;
 }
@@ -16,6 +17,7 @@ export class ApiError extends Error {
   constructor(
     message: string,
     public readonly status: number,
+    public readonly details?: unknown,
   ) {
     super(message);
   }
@@ -45,7 +47,11 @@ export async function apiRequest<T>(
     message?: string;
   };
   if (!response.ok) {
-    throw new ApiError(payload.message ?? "Không thể kết nối đến máy chủ.", response.status);
+    throw new ApiError(
+      payload.message ?? "Không thể kết nối đến máy chủ.",
+      response.status,
+      payload,
+    );
   }
 
   return payload as T;
@@ -70,23 +76,36 @@ export async function apiFormRequest<T>(
     headers,
     body,
   });
-  const payload = (await response.json().catch(() => ({}))) as { message?: string };
+  const payload = (await response.json().catch(() => ({}))) as {
+    message?: string;
+  };
   if (!response.ok) {
-    throw new ApiError(payload.message ?? "Không thể kết nối đến máy chủ.", response.status);
+    throw new ApiError(
+      payload.message ?? "Không thể kết nối đến máy chủ.",
+      response.status,
+    );
   }
 
   return payload as T;
 }
 
 export async function apiDownload(path: string, accessToken: string) {
-  const response = await fetch(`${apiUrl}${path}`, { headers: authorizedHeaders(accessToken) });
+  const response = await fetch(`${apiUrl}${path}`, {
+    headers: authorizedHeaders(accessToken),
+  });
   if (!response.ok) {
-    const payload = (await response.json().catch(() => ({}))) as { message?: string };
-    throw new ApiError(payload.message ?? "Không thể tải tệp báo cáo.", response.status);
+    const payload = (await response.json().catch(() => ({}))) as {
+      message?: string;
+    };
+    throw new ApiError(
+      payload.message ?? "Không thể tải tệp báo cáo.",
+      response.status,
+    );
   }
   const blob = await response.blob();
   const disposition = response.headers.get("Content-Disposition") ?? "";
-  const fileName = disposition.match(/filename="?([^";]+)"?/i)?.[1] ?? "bao-cao-kpi";
+  const fileName =
+    disposition.match(/filename="?([^";]+)"?/i)?.[1] ?? "bao-cao-kpi";
   const url = URL.createObjectURL(blob);
   const anchor = document.createElement("a");
   anchor.href = url;
