@@ -76,7 +76,7 @@ export async function listLeadAssignments(user: AuthUser, query: AssignmentListQ
     const [items, total] = await prisma.$transaction([
       prisma.leads.findMany({
         where,
-        select: { id: true, lead_code: true, full_name: true, status: true },
+        select: { id: true, lead_code: true, full_name: true },
         orderBy: [{ created_at: query.sortOrder }, { id: "asc" }],
         skip: (query.page - 1) * query.limit,
         take: query.limit,
@@ -89,7 +89,7 @@ export async function listLeadAssignments(user: AuthUser, query: AssignmentListQ
         id: item.id,
         assignedAt: null,
         isMainOwner: false,
-        lead: { id: item.id, leadCode: item.lead_code, fullName: item.full_name, status: item.status },
+        lead: { id: item.id, leadCode: item.lead_code, fullName: item.full_name },
         assignee: null,
         assignedBy: null,
         department: null,
@@ -137,7 +137,7 @@ export async function listLeadAssignments(user: AuthUser, query: AssignmentListQ
         id: true,
         assigned_at: true,
         is_main_owner: true,
-        leads: { select: { id: true, lead_code: true, full_name: true, status: true } },
+        leads: { select: { id: true, lead_code: true, full_name: true } },
         users_lead_assignments_assigned_toTousers: { select: { id: true, full_name: true } },
         users_lead_assignments_assigned_byTousers: { select: { id: true, full_name: true } },
         departments: { select: { id: true, name: true } },
@@ -159,7 +159,6 @@ export async function listLeadAssignments(user: AuthUser, query: AssignmentListQ
             id: item.leads.id,
             leadCode: item.leads.lead_code,
             fullName: item.leads.full_name,
-            status: item.leads.status,
           }
         : null,
       assignee: item.users_lead_assignments_assigned_toTousers

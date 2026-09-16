@@ -149,6 +149,26 @@ const navigationSections: NavigationSection[] = [
     href: "/marketing/chien-dich",
     items: [
       {
+        type: "group",
+        label: "Khách hàng",
+        icon: UsersRound,
+        permissions: ["customer_list.view_all", "customer_list.manage", "lead.view_all", "lead.view_department", "lead.view_assigned"],
+        children: [
+          {
+            label: "Danh sách khách hàng",
+            href: "/marketing/danh-sach-khach-hang",
+            icon: ContactRound,
+            permissions: ["lead.view_all", "lead.view_department", "lead.view_assigned"],
+          },
+          {
+            label: "Quản lý danh sách",
+            href: "/marketing/quan-ly-danh-sach",
+            icon: ListChecks,
+            permissions: ["customer_list.view_all", "customer_list.manage"],
+          },
+        ],
+      },
+      {
         label: "Chiến dịch Marketing",
         href: "/marketing/chien-dich",
         icon: Megaphone,

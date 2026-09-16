@@ -26,7 +26,6 @@ export function getLeads(params: LeadListParams, accessToken: string) {
     sortBy: params.sortBy,
     sortOrder: params.sortOrder,
     search: params.search,
-    status: params.status,
     pipelineStageId: params.pipelineStageId,
     sourceId: params.sourceId,
     assigneeId: params.assigneeId,

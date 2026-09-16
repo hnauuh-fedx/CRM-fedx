@@ -505,7 +505,6 @@ export async function processZaloMessage(messageId: string) {
             source_id: connection.lead_source_id,
             institution_program_id: connection.institution_program_id,
             owner_id: connection.created_by,
-            status: "new",
             note: noteParts.join("\n"),
           },
           select: { id: true },

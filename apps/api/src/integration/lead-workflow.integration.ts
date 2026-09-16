@@ -224,7 +224,6 @@ async function verifyLeadWorkflow() {
       sourceId: fixture.sourceId,
       institutionProgramId: fixture.institutionProgramId,
       email: `lead.${runId}@example.test`,
-      status: "new",
     },
   });
   assert.equal(createResponse.status, 201);
@@ -248,7 +247,6 @@ async function verifyLeadWorkflow() {
       institution_program_id: fixture.institutionProgramId,
       owner_id: fixture.directorCreatorId,
       assigned_to: null,
-      status: "new",
     },
     select: { id: true },
   });
@@ -277,7 +275,6 @@ async function verifyLeadWorkflow() {
       sourceId: fixture.sourceId,
       institutionProgramId: fixture.institutionProgramId,
       assigneeId: testUserIds[1],
-      status: "new",
     },
   });
   assert.equal(assignedOnCreateResponse.status, 201);
@@ -301,7 +298,6 @@ async function verifyLeadWorkflow() {
         fullName: `Lead kiểm thử đã sửa ${runId}`,
         phone: primaryPhone,
         sourceId: fixture.sourceId,
-        status: "contacted",
         email: `lead.${runId}@example.test`,
       },
     })).status,
@@ -329,7 +325,7 @@ async function verifyLeadWorkflow() {
     (await request(baseUrl, `/leads/${leadId}`, {
       token: outsiderToken,
       method: "PATCH",
-      body: { fullName: "Ngoài phạm vi", phone: "0900000000", sourceId: fixture.sourceId, status: "new" },
+      body: { fullName: "Ngoài phạm vi", phone: "0900000000", sourceId: fixture.sourceId },
     })).status,
     404,
   );
@@ -468,7 +464,6 @@ async function verifyLeadWorkflow() {
         fullName: `Lead kiểm thử đã sửa ${runId}`,
         phone: primaryPhone,
         sourceId: fixture.sourceId,
-        status: "contacted",
         assigneeId: testUserIds[2],
       },
     })).status,

@@ -31,12 +31,11 @@ const leadListQuerySchema = z.object({
   page: z.coerce.number().int().min(1).default(1),
   limit: z.coerce.number().int().min(1).max(100).default(20),
   search: z.string().trim().max(100).optional().transform((value) => value || undefined),
-  status: z.string().trim().max(50).optional().transform((value) => value || undefined),
   pipelineStageId: z.uuid().optional().or(z.literal("")).transform((value) => value || undefined),
   sourceId: z.uuid().optional().or(z.literal("")).transform((value) => value || undefined),
   institutionProgramId: z.uuid().optional().or(z.literal("")).transform((value) => value || undefined),
   assigneeId: z.uuid().optional().or(z.literal("")).transform((value) => value || undefined),
-  sortBy: z.enum(["createdAt", "fullName", "leadCode", "status"]).default("createdAt"),
+  sortBy: z.enum(["createdAt", "fullName", "leadCode", "pipelineStage"]).default("createdAt"),
   sortOrder: z.enum(["asc", "desc"]).default("desc"),
 });
 const leadIdSchema = z.uuid();
@@ -63,7 +62,6 @@ const leadBodySchema = z.object({
   dateOfBirth: optionalDate,
   cccd: optionalText(30),
   note: optionalText(2000),
-  status: optionalText(150),
   temperature: optionalText(50),
   birthPlace: optionalText(255),
   cccdIssueDate: optionalDate,

@@ -184,10 +184,15 @@ async function evaluateCondition(node: AutomationNode, context: AutomationContex
   const { field, operator, value } = node.data;
   if (!field || !operator || !context.leadId) return false;
   
-  const lead = await prisma.leads.findUnique({ where: { id: context.leadId } });
+  const lead = await prisma.leads.findUnique({
+    where: { id: context.leadId },
+    select: { source_id: true, pipeline_stage_id: true, assigned_to: true, gender: true },
+  });
   if (!lead) return false;
 
-  const actualValue = (lead as any)[field];
+  const allowedFields = new Set(["source_id", "pipeline_stage_id", "assigned_to", "gender"]);
+  if (!allowedFields.has(field)) return false;
+  const actualValue = lead[field as keyof typeof lead];
   const compareValue = String(value);
   const actualStr = String(actualValue ?? "");
 

@@ -63,22 +63,12 @@ export function LeadForm({ defaultValues, options, leadId, submitLabel, isPendin
     for (const field of customFields) if (!field.group.isSystem) groups.set(field.group.id, field.group);
     return [...groups.values()].sort((left, right) => left.displayOrder - right.displayOrder);
   }, [customFields]);
-  const stageById = useMemo(() => new Map(options.stages.map((stage) => [stage.id, stage])), [options.stages]);
   const syncStageFields = (stageId: string) => {
-    const stage = stageById.get(stageId);
     form.setValue("pipelineStageId", stageId, { shouldDirty: true, shouldValidate: true });
-    form.setValue("status", stage?.name ?? "", { shouldDirty: true, shouldValidate: true });
   };
   const previousCustomFieldIds = useRef<string[]>([]);
   const [hiddenCustomValueWarning, setHiddenCustomValueWarning] = useState(false);
   useEffect(() => form.reset({ ...defaultValues, institutionProgramId: defaultValues.institutionProgramId || selectedProgramId || "" }), [defaultValues, form, selectedProgramId]);
-  useEffect(() => {
-    const stageId = form.getValues("pipelineStageId");
-    const stage = stageById.get(stageId);
-    if (stage && form.getValues("status") !== stage.name) {
-      form.setValue("status", stage.name, { shouldDirty: false, shouldValidate: false });
-    }
-  }, [form, stageById]);
   useEffect(() => {
     const subscription = form.watch((values, { name }) => {
       if (!name || name.startsWith("customFieldValues.") || !form.getFieldState(name as keyof LeadFormInput).error) return;
@@ -260,9 +250,9 @@ export function LeadForm({ defaultValues, options, leadId, submitLabel, isPendin
             </Field>
           )}
           <Field>
-            <FieldLabel htmlFor="lead-status-input">Quy trình Telesale</FieldLabel>
+            <FieldLabel htmlFor="lead-pipeline-stage">Quy trình Telesale</FieldLabel>
             <Select value={form.watch("pipelineStageId") || "__empty__"} onValueChange={(value) => syncStageFields(value === "__empty__" ? "" : value)}>
-              <SelectTrigger id="lead-status-input" className="w-full"><SelectValue placeholder="Chọn quy trình telesale" /></SelectTrigger>
+              <SelectTrigger id="lead-pipeline-stage" className="w-full"><SelectValue placeholder="Chọn quy trình telesale" /></SelectTrigger>
               <SelectContent>
                 <SelectGroup>
                   <SelectItem value="__empty__">Chưa chọn tiến trình</SelectItem>

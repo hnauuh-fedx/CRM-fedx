@@ -408,7 +408,7 @@ function LeadDialog(props: {
                       <p className="font-medium">{lead.fullName}</p>
                       <p className="text-sm text-muted-foreground">{lead.leadCode ?? "Chưa có mã lead"}</p>
                     </TableCell>
-                    <TableCell>{lead.pipelineStageName ?? lead.status ?? "-"}</TableCell>
+                    <TableCell>{lead.pipelineStageName ?? "Chưa chọn tiến trình"}</TableCell>
                     <TableCell>
                       {lead.attribution
                         ? [lead.attribution.source, lead.attribution.medium, lead.attribution.campaign?.name ?? lead.attribution.utmCampaign].filter(Boolean).join(" / ")

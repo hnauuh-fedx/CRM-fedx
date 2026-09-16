@@ -89,7 +89,6 @@ export function NodePropertiesPanel({ selectedNodeId, nodes, onNodeUpdate, onClo
                 <SelectContent>
                   <SelectItem value="source_id">Nguồn (Source)</SelectItem>
                   <SelectItem value="pipeline_stage_id">Giai đoạn (Pipeline Stage)</SelectItem>
-                  <SelectItem value="status">Trạng thái Lead (Status)</SelectItem>
                   <SelectItem value="assigned_to">Người phụ trách (Assignee)</SelectItem>
                   <SelectItem value="gender">Giới tính (Gender)</SelectItem>
                 </SelectContent>
@@ -114,7 +113,7 @@ export function NodePropertiesPanel({ selectedNodeId, nodes, onNodeUpdate, onClo
             <div className="space-y-2">
               <Label className="text-xs">Giá trị so sánh (Value)</Label>
               <Input 
-                placeholder="VD: new, 123..." 
+                placeholder="Nhập giá trị cần so sánh"
                 value={localData.value || ""} 
                 onChange={(e) => handleChange("value", e.target.value)}
               />

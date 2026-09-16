@@ -63,7 +63,6 @@ async function verifyUtmAnalytics() {
       data: {
         full_name: `Lead UTM ${runId}`,
         phone: `090${Date.now().toString().slice(-7)}`,
-        status: "new",
       },
       select: { id: true },
     });

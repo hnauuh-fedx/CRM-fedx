@@ -4,11 +4,12 @@ import {
   flexRender,
   getCoreRowModel,
   type ColumnDef,
+  type RowSelectionState,
   type SortingState,
   type Table as DataTable,
   useReactTable,
 } from "@tanstack/react-table";
-import { ArrowDown, ArrowUp, ArrowUpDown, ChevronLeft, ChevronRight, Eye, FileSpreadsheet, Plus, Search, Upload } from "lucide-react";
+import { ArrowDown, ArrowUp, ArrowUpDown, ChevronDown, ChevronLeft, ChevronRight, Eye, FileSpreadsheet, ListPlus, Plus, Search, Upload } from "lucide-react";
 import { Link, useNavigate } from "react-router-dom";
 
 import { EmptyState } from "@/components/shared/data-states";
@@ -18,13 +19,17 @@ import { PageHeader } from "@/components/shared/page-header";
 import { TableLoadingState } from "@/components/shared/table-loading-state";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { Card, CardAction, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { Checkbox } from "@/components/ui/checkbox";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
+import { DropdownMenu, DropdownMenuContent, DropdownMenuGroup, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { Field, FieldGroup, FieldLabel } from "@/components/ui/field";
 import { Input } from "@/components/ui/input";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { useAuth } from "@/modules/auth/auth-context";
 import { ApiError } from "@/services/api";
+import { addLeadsToCustomerList, createCustomerList, getCustomerListLeads, getCustomerLists } from "@/services/customer-list.service";
 import { createLead, getLead, getLeadActionOptions, getLeadFilterOptions, getLeads, importLeads, updateLead, updateLeadCustomFields } from "@/services/lead.service";
 import { LeadForm, LeadProgressSelector } from "../components/lead-form";
 import { toLeadFormOptions, toLeadFormValues } from "../lead-form.helpers";
@@ -42,14 +47,7 @@ import type {
 } from "../lead.types";
 
 const pageSize = 20;
-const sortableColumns = new Set<LeadSortField>(["createdAt", "fullName", "leadCode", "status"]);
-const statusLabels: Record<string, string> = {
-  new: "Mới",
-  contacted: "Đã liên hệ",
-  qualified: "Tiềm năng",
-  converted: "Đã chuyển đổi",
-  lost: "Không phù hợp",
-};
+const sortableColumns = new Set<LeadSortField>(["createdAt", "fullName", "leadCode", "pipelineStage"]);
 const dateFormatter = new Intl.DateTimeFormat("vi-VN", {
   day: "2-digit",
   month: "2-digit",
@@ -57,7 +55,6 @@ const dateFormatter = new Intl.DateTimeFormat("vi-VN", {
 });
 const emptyFilters: LeadListFilters = {
   search: "",
-  status: "",
   pipelineStageId: "",
   sourceId: "",
   assigneeId: "",
@@ -71,16 +68,8 @@ function formatDate(value: string | null) {
   return dateFormatter.format(new Date(value));
 }
 
-function getStatusLabel(status: string | null) {
-  if (!status) {
-    return "Chưa chọn tiến trình";
-  }
-
-  return statusLabels[status] ?? status;
-}
-
 function getLeadWorkflowLabel(lead: LeadListItem) {
-  return lead.pipelineStage?.name ?? getStatusLabel(lead.status);
+  return lead.pipelineStage?.name ?? "Chưa chọn tiến trình";
 }
 
 const leadInformationFields: Array<{
@@ -88,10 +77,7 @@ const leadInformationFields: Array<{
   label: string;
   format?: (value: string | null) => string;
 }> = [
-  { key: "phone", label: "Số điện thoại" },
   { key: "email", label: "Email" },
-  { key: "gender", label: "Giới tính" },
-  { key: "dateOfBirth", label: "Ngày sinh", format: formatDate },
   { key: "birthPlace", label: "Nơi sinh" },
   { key: "specificAddress", label: "Địa chỉ cụ thể" },
   { key: "cccd", label: "CCCD" },
@@ -130,7 +116,6 @@ const leadInformationFields: Array<{
   { key: "relative2Phone", label: "Điện thoại 2" },
   { key: "relative2Job", label: "Nghề nghiệp 2" },
   { key: "relative2Address", label: "Địa chỉ 2" },
-  { key: "majorName", label: "Ngành đăng ký" },
   { key: "admissionStatusName", label: "Trạng thái hồ sơ" },
   { key: "trainingCode", label: "Mã ĐT" },
   { key: "classCode", label: "Mã lớp" },
@@ -319,11 +304,29 @@ function ImportMetric({ label, value }: { label: string; value: number }) {
   );
 }
 
-export function LeadsListPage() {
+type LeadsListPageProps = {
+  eyebrow?: string;
+  title?: string;
+  description?: string;
+  detailBasePath?: string;
+  customerListId?: string;
+  enableCustomerListAssignment?: boolean;
+  showLeadCreationActions?: boolean;
+};
+
+export function LeadsListPage({
+  eyebrow = "CRM Sale",
+  title = "Danh sách lead",
+  description = "Dữ liệu hiển thị trong phạm vi được phân quyền và phân công cho tài khoản của bạn.",
+  detailBasePath = "/sale/leads",
+  customerListId,
+  enableCustomerListAssignment = false,
+  showLeadCreationActions = true,
+}: LeadsListPageProps = {}) {
   const auth = useAuth();
   const navigate = useNavigate();
   const queryClient = useQueryClient();
-  const canCreate = auth.can("lead.create");
+  const canCreate = showLeadCreationActions && auth.can("lead.create");
   const [partialCreateLeadId, setPartialCreateLeadId] = useState<string | null>(null);
   const canUpdate = ["lead.update_all", "lead.update_department", "lead.update_assigned"].some(auth.can);
   const [{ page, editingLeadId, isEditDialogOpen }, setViewState] = useState<{
@@ -340,20 +343,32 @@ export function LeadsListPage() {
   const [sorting, setSorting] = useState<SortingState>([
     { id: "createdAt", desc: true },
   ]);
+  const [rowSelection, setRowSelection] = useState<RowSelectionState>({});
+  const [assignmentOpen, setAssignmentOpen] = useState(false);
   const primarySort = sorting[0] ?? { id: "createdAt", desc: true };
   const sortBy = sortableColumns.has(primarySort.id as LeadSortField)
     ? (primarySort.id as LeadSortField)
     : "createdAt";
   const sortOrder = primarySort.desc ? "desc" : "asc";
   const leadsQuery = useQuery({
-    queryKey: ["leads", "list", page, pageSize, sortBy, sortOrder, filters],
+    queryKey: customerListId
+      ? ["customer-lists", "leads", customerListId, page, pageSize, sortBy, sortOrder, filters]
+      : ["leads", "list", page, pageSize, sortBy, sortOrder, filters],
     queryFn: () =>
-      getLeads({ page, limit: pageSize, sortBy, sortOrder, ...filters }, auth.accessToken!),
+      customerListId
+        ? getCustomerListLeads(customerListId, { page, limit: pageSize, sortBy, sortOrder, ...filters }, auth.accessToken!)
+        : getLeads({ page, limit: pageSize, sortBy, sortOrder, ...filters }, auth.accessToken!),
     placeholderData: (previousData) => previousData,
   });
   const optionsQuery = useQuery({
     queryKey: ["leads", "options"],
     queryFn: () => getLeadFilterOptions(auth.accessToken!),
+  });
+  const customerListCapabilityQuery = useQuery({
+    queryKey: ["customer-lists", "capabilities"],
+    queryFn: () => getCustomerLists({ page: 1, limit: 1 }, auth.accessToken!),
+    enabled: enableCustomerListAssignment
+      && (auth.can("customer_list.view_all") || auth.can("customer_list.manage")),
   });
   const actionOptionsQuery = useQuery({
     queryKey: ["leads", "action-options"],
@@ -371,7 +386,7 @@ export function LeadsListPage() {
     onSuccess: (createdLead) => {
       setPartialCreateLeadId(null);
       queryClient.invalidateQueries({ queryKey: ["leads"] });
-      navigate(`/sale/leads/${createdLead.id}`);
+      navigate(`${detailBasePath}/${createdLead.id}`);
     },
   });
   const importMutation = useMutation({
@@ -405,29 +420,63 @@ export function LeadsListPage() {
   const columns = useMemo<ColumnDef<LeadListItem>[]>(
     () => [
       {
+        id: "select",
+        header: ({ table }) => (
+          <Checkbox
+            checked={table.getIsAllPageRowsSelected() || (table.getIsSomePageRowsSelected() && "indeterminate")}
+            onCheckedChange={(checked) => table.toggleAllPageRowsSelected(Boolean(checked))}
+            onClick={(event) => event.stopPropagation()}
+            onKeyDown={(event) => event.stopPropagation()}
+            aria-label="Chọn tất cả lead trên trang này"
+          />
+        ),
+        cell: ({ row }) => (
+          <Checkbox
+            checked={row.getIsSelected()}
+            onCheckedChange={(checked) => row.toggleSelected(Boolean(checked))}
+            onClick={(event) => event.stopPropagation()}
+            onKeyDown={(event) => event.stopPropagation()}
+            aria-label={`Chọn lead ${row.original.fullName}`}
+          />
+        ),
+        enableSorting: false,
+      },
+      {
+        id: "view",
+        header: () => <span className="sr-only">Xem chi tiết</span>,
+        cell: ({ row }) => (
+          <Button asChild variant="ghost" size="icon" className="size-9 shrink-0">
+            <Link
+              to={`${detailBasePath}/${row.original.id}`}
+              aria-label={`Xem chi tiết ${row.original.fullName}`}
+              onClick={(event) => event.stopPropagation()}
+              onKeyDown={(event) => event.stopPropagation()}
+            >
+              <Eye aria-hidden="true" />
+            </Link>
+          </Button>
+        ),
+        enableSorting: false,
+      },
+      {
         accessorKey: "fullName",
         header: "Họ và tên",
         cell: ({ row }) => (
-          <div className="flex min-w-56 items-center gap-2">
-            <Button asChild variant="ghost" size="icon" className="size-9 shrink-0">
-              <Link
-                to={`/sale/leads/${row.original.id}`}
-                aria-label={`Xem chi tiết ${row.original.fullName}`}
-                onClick={(event) => event.stopPropagation()}
-                onKeyDown={(event) => event.stopPropagation()}
-              >
-                <Eye aria-hidden="true" />
-              </Link>
-            </Button>
+          <div className="min-w-56">
             <span className="font-medium">{row.original.fullName}</span>
           </div>
         ),
       },
       {
-        id: "pipelineStage",
-        header: "Tiến trình",
+        accessorKey: "phone",
+        header: "Số điện thoại",
         enableSorting: false,
-        cell: ({ row }) => row.original.pipelineStage?.name ?? "-",
+        cell: ({ row }) => <TableValue value={row.original.phone} />,
+      },
+      {
+        id: "pipelineStage",
+        header: "Quy trình Telesale",
+        cell: ({ row }) => <Badge variant="secondary">{getLeadWorkflowLabel(row.original)}</Badge>,
       },
       {
         id: "source",
@@ -436,9 +485,28 @@ export function LeadsListPage() {
         cell: ({ row }) => row.original.source?.name ?? "-",
       },
       {
-        accessorKey: "status",
-        header: "Quy trình Telesale",
-        cell: ({ row }) => <Badge variant="secondary">{getLeadWorkflowLabel(row.original)}</Badge>,
+        id: "assignee",
+        header: "Nhân viên sale",
+        enableSorting: false,
+        cell: ({ row }) => <TableValue value={row.original.assignee?.fullName} />,
+      },
+      {
+        accessorKey: "gender",
+        header: "Giới tính",
+        enableSorting: false,
+        cell: ({ row }) => <TableValue value={row.original.gender} />,
+      },
+      {
+        accessorKey: "dateOfBirth",
+        header: "Ngày sinh",
+        enableSorting: false,
+        cell: ({ row }) => <TableValue value={formatDate(row.original.dateOfBirth)} />,
+      },
+      {
+        accessorKey: "majorName",
+        header: "Ngành đăng ký",
+        enableSorting: false,
+        cell: ({ row }) => <TableValue value={row.original.majorName} />,
       },
       ...leadInformationFields.map(({ key, label, format }) => ({
         id: key,
@@ -449,15 +517,18 @@ export function LeadsListPage() {
         ),
       })),
     ],
-    [],
+    [detailBasePath],
   );
 
   const table = useReactTable({
     data,
     columns,
-    state: { sorting },
+    state: { sorting, rowSelection },
+    getRowId: (row) => row.id,
     manualSorting: true,
     enableMultiSort: false,
+    enableRowSelection: true,
+    onRowSelectionChange: setRowSelection,
     onSortingChange: (updater) => {
       setSorting((current) => {
         const next = typeof updater === "function" ? updater(current) : updater;
@@ -471,10 +542,10 @@ export function LeadsListPage() {
   return (
     <div className="mx-auto flex max-w-400 flex-col gap-6">
       <PageHeader
-        eyebrow="CRM Sale"
-        title="Danh sách lead"
+        eyebrow={eyebrow}
+        title={title}
         scopeLabel="Theo phạm vi truy cập"
-        description="Dữ liệu hiển thị trong phạm vi được phân quyền và phân công cho tài khoản của bạn."
+        description={description}
         actions={canCreate ? (
           <div className="flex flex-wrap items-center gap-2">
           <LeadImportDialog
@@ -503,7 +574,7 @@ export function LeadsListPage() {
                   {createMutation.error instanceof ApiError ? createMutation.error.message : "Không thể tạo lead. Vui lòng thử lại."}
                 </p>
               )}
-              {partialCreateLeadId && createMutation.isError && <p className="mx-6 mt-2 text-sm text-muted-foreground">Lead đã được tạo nhưng thông tin bổ sung chưa lưu. <Link className="font-medium text-primary underline" to={`/sale/leads/${partialCreateLeadId}`}>Mở lead để lưu lại</Link>.</p>}
+              {partialCreateLeadId && createMutation.isError && <p className="mx-6 mt-2 text-sm text-muted-foreground">Lead đã được tạo nhưng thông tin bổ sung chưa lưu. <Link className="font-medium text-primary underline" to={`${detailBasePath}/${partialCreateLeadId}`}>Mở lead để lưu lại</Link>.</p>}
               {actionOptionsQuery.isLoading ? (
                 <p role="status" className="px-6 py-5 text-sm text-muted-foreground">
                   Đang tải thông tin tạo lead…
@@ -590,6 +661,21 @@ export function LeadsListPage() {
         onEditLead={(leadId) => {
           updateMutation.reset();
           setViewState((current) => ({ ...current, editingLeadId: leadId, isEditDialogOpen: true }));
+        }}
+        canAssignToCustomerList={enableCustomerListAssignment && (
+          customerListCapabilityQuery.data?.capabilities.canManage
+          ?? auth.can("customer_list.manage")
+        )}
+        selectedCount={Object.keys(rowSelection).length}
+        onAssignToCustomerList={() => setAssignmentOpen(true)}
+      />
+      <AssignToCustomerListDialog
+        open={assignmentOpen}
+        leadIds={Object.keys(rowSelection)}
+        onOpenChange={setAssignmentOpen}
+        onSuccess={() => {
+          setRowSelection({});
+          queryClient.invalidateQueries({ queryKey: ["customer-lists"] });
         }}
       />
       <EditLeadDialog
@@ -684,6 +770,88 @@ function EditLeadDialog({
   );
 }
 
+function AssignToCustomerListDialog({
+  open,
+  leadIds,
+  onOpenChange,
+  onSuccess,
+}: {
+  open: boolean;
+  leadIds: string[];
+  onOpenChange: (open: boolean) => void;
+  onSuccess: () => void;
+}) {
+  const auth = useAuth();
+  const [selectedListId, setSelectedListId] = useState("");
+  const [isCreating, setIsCreating] = useState(false);
+  const [newListName, setNewListName] = useState("");
+  const listsQuery = useQuery({
+    queryKey: ["customer-lists", "assignment-options"],
+    queryFn: () => getCustomerLists({ page: 1, limit: 100 }, auth.accessToken!),
+    enabled: open,
+  });
+  const assignmentMutation = useMutation({
+    mutationFn: async () => {
+      let listId = selectedListId;
+      if (isCreating) {
+        if (newListName.trim().length < 2) throw new Error("Tên danh sách phải có ít nhất 2 ký tự.");
+        const created = await createCustomerList({ name: newListName.trim() }, auth.accessToken!);
+        listId = created.id;
+      }
+      if (!listId) throw new Error("Vui lòng chọn một danh sách.");
+      return addLeadsToCustomerList(listId, leadIds, auth.accessToken!);
+    },
+    onSuccess: () => {
+      onSuccess();
+      setSelectedListId("");
+      setNewListName("");
+      setIsCreating(false);
+      onOpenChange(false);
+    },
+  });
+  const setOpen = (next: boolean) => {
+    if (next) assignmentMutation.reset();
+    onOpenChange(next);
+  };
+
+  return (
+    <Dialog open={open} onOpenChange={setOpen}>
+      <DialogContent>
+        <DialogHeader>
+          <DialogTitle>Gán Lead vào danh sách</DialogTitle>
+          <DialogDescription>Đã chọn {leadIds.length} Lead. Các Lead đã có trong danh sách sẽ không bị thêm trùng.</DialogDescription>
+        </DialogHeader>
+        {isCreating ? (
+          <FieldGroup>
+            <Field>
+              <FieldLabel htmlFor="new-customer-list-name">Tên danh sách mới</FieldLabel>
+              <Input id="new-customer-list-name" value={newListName} onChange={(event) => setNewListName(event.target.value)} placeholder="Nhập tên danh sách" autoFocus />
+            </Field>
+            <Button type="button" variant="ghost" className="w-fit" onClick={() => setIsCreating(false)}>Chọn danh sách đã có</Button>
+          </FieldGroup>
+        ) : (
+          <FieldGroup>
+            <Field>
+              <FieldLabel htmlFor="customer-list-assignment">Danh sách nhận Lead</FieldLabel>
+              <Select value={selectedListId} onValueChange={setSelectedListId}>
+                <SelectTrigger id="customer-list-assignment" className="w-full"><SelectValue placeholder={listsQuery.isLoading ? "Đang tải danh sách…" : "Chọn danh sách"} /></SelectTrigger>
+                <SelectContent>{(listsQuery.data?.data ?? []).map((item) => <SelectItem key={item.id} value={item.id}>{item.name} ({item.customerCount})</SelectItem>)}</SelectContent>
+              </Select>
+            </Field>
+            <Button type="button" variant="outline" className="w-fit" onClick={() => setIsCreating(true)}><ListPlus aria-hidden="true" />Tạo danh sách mới</Button>
+          </FieldGroup>
+        )}
+        {listsQuery.isError && <p role="alert" className="text-sm text-destructive">Không thể tải các danh sách hiện có.</p>}
+        {assignmentMutation.isError && <p role="alert" className="text-sm text-destructive">{assignmentMutation.error instanceof ApiError ? assignmentMutation.error.message : assignmentMutation.error.message}</p>}
+        <div className="flex justify-end gap-2">
+          <Button type="button" variant="outline" onClick={() => setOpen(false)}>Hủy</Button>
+          <Button type="button" disabled={assignmentMutation.isPending || leadIds.length === 0 || (!isCreating && !selectedListId)} onClick={() => assignmentMutation.mutate()}>{assignmentMutation.isPending ? "Đang gán…" : "Gán vào danh sách"}</Button>
+        </div>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
 type LeadFiltersCardProps = {
   filters: LeadListFilters;
   options?: LeadFilterOptions;
@@ -721,13 +889,13 @@ function LeadFiltersCard({ filters, options, onChange, onApply, onReset }: LeadF
             </div>
           </Field>
           <FilterSelect
-            id="lead-status"
-            label="Trạng thái"
-            value={filters.status}
-            onChange={(value) => onChange("status", value)}
-            options={(options?.statuses ?? []).map((status) => ({
-              value: status,
-              label: getStatusLabel(status),
+            id="lead-pipeline-stage"
+            label="Quy trình"
+            value={filters.pipelineStageId}
+            onChange={(value) => onChange("pipelineStageId", value)}
+            options={(options?.stages ?? []).map((stage) => ({
+              value: stage.id,
+              label: stage.name,
             }))}
           />
           <FilterSelect
@@ -778,6 +946,9 @@ type LeadResultsCardProps = {
   onNext: () => void;
   canEdit: boolean;
   onEditLead: (leadId: string) => void;
+  canAssignToCustomerList: boolean;
+  selectedCount: number;
+  onAssignToCustomerList: () => void;
 };
 
 function LeadResultsCard({
@@ -791,17 +962,40 @@ function LeadResultsCard({
   onNext,
   canEdit,
   onEditLead,
+  canAssignToCustomerList,
+  selectedCount,
+  onAssignToCustomerList,
 }: LeadResultsCardProps) {
   const { isLoading, isError, isFetching } = queryState;
   return (
     <Card className="gap-0 overflow-hidden border-border/70 py-0 shadow-xs">
-      <CardHeader className="gap-1 border-b py-5">
+      <CardHeader className="border-b py-5">
         <CardTitle>Thông tin lead</CardTitle>
         <CardDescription>
           {pagination
             ? `Hiển thị đầy đủ thông tin hồ sơ của ${data.length} trong tổng số ${pagination.total} lead. Kéo ngang để xem thêm trường.`
             : "Đang lấy dữ liệu lead…"}
         </CardDescription>
+        <CardAction>
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <Button type="button" variant="outline">
+                Hành động
+                <ChevronDown data-icon="inline-end" aria-hidden="true" />
+              </Button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="end" className="w-52">
+              <DropdownMenuGroup>
+                <DropdownMenuItem disabled>Gán sale</DropdownMenuItem>
+                <DropdownMenuItem disabled={!canAssignToCustomerList || selectedCount === 0} onSelect={onAssignToCustomerList}>
+                  Gán vào danh sách{selectedCount > 0 ? ` (${selectedCount})` : ""}
+                </DropdownMenuItem>
+                <DropdownMenuItem disabled variant="destructive">Xóa hàng loạt</DropdownMenuItem>
+                <DropdownMenuItem disabled>Cập nhật hàng loạt</DropdownMenuItem>
+              </DropdownMenuGroup>
+            </DropdownMenuContent>
+          </DropdownMenu>
+        </CardAction>
       </CardHeader>
       <CardContent className="p-0">
         {isError ? (
@@ -867,11 +1061,19 @@ function LeadTable({
               {headerGroup.headers.map((header) => {
                 const canSort = header.column.getCanSort();
                 const sortDirection = header.column.getIsSorted();
+                const isSelectColumn = header.column.id === "select";
+                const isViewColumn = header.column.id === "view";
                 return (
                   <TableHead
                     key={header.id}
                     scope="col"
-                    className="px-5 font-medium text-muted-foreground"
+                    className={
+                      isSelectColumn
+                        ? "sticky left-0 z-20 w-12 min-w-12 max-w-12 bg-muted px-4 text-center"
+                        : isViewColumn
+                          ? "sticky left-12 z-20 w-14 min-w-14 max-w-14 border-r bg-muted px-2 text-center"
+                          : "px-5 font-medium text-muted-foreground"
+                    }
                     aria-sort={
                       sortDirection === "asc"
                         ? "ascending"
@@ -909,17 +1111,31 @@ function LeadTable({
           {table.getRowModel().rows.map((row) => (
             <TableRow
               key={row.id}
-              className={canEdit ? "cursor-pointer focus-visible:bg-muted/50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring" : undefined}
+              data-state={row.getIsSelected() ? "selected" : undefined}
+              className={canEdit ? "group cursor-pointer focus-visible:bg-muted/50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring" : "group"}
               tabIndex={canEdit ? 0 : undefined}
               aria-label={canEdit ? `Chỉnh sửa thông tin ${row.original.fullName}` : undefined}
               onClick={canEdit ? () => onEditLead(row.original.id) : undefined}
               onKeyDown={canEdit ? (event) => openLeadWithKeyboard(event, row.original.id) : undefined}
             >
-              {row.getVisibleCells().map((cell) => (
-                <TableCell key={cell.id} className="px-5 py-4">
-                  {flexRender(cell.column.columnDef.cell, cell.getContext())}
-                </TableCell>
-              ))}
+              {row.getVisibleCells().map((cell) => {
+                const isSelectColumn = cell.column.id === "select";
+                const isViewColumn = cell.column.id === "view";
+                return (
+                  <TableCell
+                    key={cell.id}
+                    className={
+                      isSelectColumn
+                        ? "sticky left-0 z-10 w-12 min-w-12 max-w-12 bg-background px-4 py-4 text-center group-hover:bg-muted group-data-[state=selected]:bg-muted"
+                        : isViewColumn
+                          ? "sticky left-12 z-10 w-14 min-w-14 max-w-14 border-r bg-background px-2 py-4 text-center group-hover:bg-muted group-data-[state=selected]:bg-muted"
+                          : "px-5 py-4"
+                    }
+                  >
+                    {flexRender(cell.column.columnDef.cell, cell.getContext())}
+                  </TableCell>
+                );
+              })}
             </TableRow>
           ))}
         </TableBody>

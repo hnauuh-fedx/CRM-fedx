@@ -92,7 +92,7 @@ export type AutomationOptions = {
 
 export const TRIGGER_TYPE_LABELS: Record<string, string> = {
   lead_created: "Lead được tạo mới",
-  lead_status_changed: "Lead đổi giai đoạn pipeline",
+  lead_pipeline_stage_changed: "Lead đổi giai đoạn pipeline",
   lead_assigned: "Lead được phân công",
   lead_unassigned: "Lead bị thu hồi phân công",
   reminder_overdue: "Nhắc việc quá hạn",

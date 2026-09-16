@@ -227,12 +227,12 @@ model custom_field_values {
   updated_at      DateTime?      @default(now()) @db.Timestamp(6)
   custom_fields   custom_fields? @relation(fields: [custom_field_id], references: [id], onDelete: Restrict, onUpdate: NoAction)
 
+  @@unique([custom_field_id, entity_type, entity_id], map: "uq_custom_field_values_field_entity")
   @@index([entity_type, entity_id], map: "idx_custom_field_values_entity")
   @@index([custom_field_id, value_text], map: "idx_custom_field_values_text_lookup")
   @@index([custom_field_id, value_number], map: "idx_custom_field_values_number_lookup")
   @@index([custom_field_id, value_date], map: "idx_custom_field_values_date_lookup")
   @@index([custom_field_id, value_boolean], map: "idx_custom_field_values_boolean_lookup")
-  @@unique([custom_field_id, entity_type, entity_id], map: "uq_custom_field_values_field_entity")
 }
 
 model custom_field_groups {
@@ -354,29 +354,30 @@ model program_types {
 }
 
 model institution_programs {
-  id                        String                      @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
-  institution_id            String                      @db.Uuid
-  program_type_id           String                      @db.Uuid
-  name                      String                      @db.VarChar(255)
-  code                      String                      @unique @db.VarChar(100)
-  status                    String?                     @default("active") @db.VarChar(50)
-  created_at                DateTime?                   @default(now()) @db.Timestamp(6)
-  updated_at                DateTime?                   @default(now()) @db.Timestamp(6)
-  institutions              institutions                @relation(fields: [institution_id], references: [id], onDelete: NoAction, onUpdate: NoAction)
-  program_types             program_types               @relation(fields: [program_type_id], references: [id], onDelete: NoAction, onUpdate: NoAction)
-  admission_profiles        admission_profiles[]
-  automation_rules          automation_rules[]
-  campaigns                 campaigns[]
-  custom_fields             custom_fields[]
-  kpi_targets               kpi_targets[]
-  lead_sources              lead_sources[]
-  leads                     leads[]
-  report_configs            report_configs[]
-  personal_dashboard_widgets personal_dashboard_widgets[]
+  id                          String                        @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  institution_id              String                        @db.Uuid
+  program_type_id             String                        @db.Uuid
+  name                        String                        @db.VarChar(255)
+  code                        String                        @unique @db.VarChar(100)
+  status                      String?                       @default("active") @db.VarChar(50)
+  created_at                  DateTime?                     @default(now()) @db.Timestamp(6)
+  updated_at                  DateTime?                     @default(now()) @db.Timestamp(6)
+  institutions                institutions                  @relation(fields: [institution_id], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  program_types               program_types                 @relation(fields: [program_type_id], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  admission_profiles          admission_profiles[]
+  automation_rules            automation_rules[]
+  campaigns                   campaigns[]
+  customer_lists              customer_lists[]
+  custom_fields               custom_fields[]
+  kpi_targets                 kpi_targets[]
+  lead_sources                lead_sources[]
+  leads                       leads[]
+  report_configs              report_configs[]
+  personal_dashboard_widgets  personal_dashboard_widgets[]
   personal_dashboard_settings personal_dashboard_settings[]
-  role_institution_programs role_institution_programs[]
-  students                  students[]
-  majors                    majors[]
+  role_institution_programs   role_institution_programs[]
+  students                    students[]
+  majors                      majors[]
 
   @@unique([institution_id, program_type_id, name])
   @@index([institution_id, status, name], map: "idx_institution_programs_institution_status")
@@ -491,7 +492,8 @@ model leads {
   pipeline_stage_id              String?                      @db.Uuid
   owner_id                       String?                      @db.Uuid
   assigned_to                    String?                      @db.Uuid
-  status                         String?                      @default("new") @db.VarChar(50)
+  /// Deprecated compatibility column. Application code uses pipeline_stage_id as the workflow source of truth.
+  status                         String?                      @db.VarChar(50)
   lead_score                     Int?                         @default(0)
   temperature                    String?                      @db.VarChar(50)
   note                           String?
@@ -505,6 +507,7 @@ model leads {
   lead_assignments               lead_assignments[]
   lead_notes                     lead_notes[]
   lead_status_histories          lead_status_histories[]
+  customer_list_members          customer_list_members[]
   marketing_form_submissions     marketing_form_submissions[]
   users_leads_assigned_toTousers users?                       @relation("leads_assigned_toTousers", fields: [assigned_to], references: [id], onDelete: NoAction, onUpdate: NoAction)
   users_leads_owner_idTousers    users?                       @relation("leads_owner_idTousers", fields: [owner_id], references: [id], onDelete: NoAction, onUpdate: NoAction)
@@ -531,8 +534,6 @@ model leads {
   @@index([source_id, created_at, id], map: "idx_leads_source_created_page")
   @@index([institution_program_id, created_at, id], map: "idx_leads_program_created_page")
   @@index([major_id, created_at, id], map: "idx_leads_major_created_page")
-  @@index([status], map: "idx_leads_status")
-  @@index([status, created_at, id], map: "idx_leads_status_created_page")
 }
 
 model majors {
@@ -980,29 +981,31 @@ model user_roles {
 }
 
 model users {
-  id                                                   String                  @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
-  email                                                String                  @unique @db.VarChar(255)
+  id                                                   String                        @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  email                                                String                        @unique @db.VarChar(255)
   password_hash                                        String
-  full_name                                            String                  @db.VarChar(255)
-  phone                                                String?                 @db.VarChar(30)
+  full_name                                            String                        @db.VarChar(255)
+  phone                                                String?                       @db.VarChar(30)
   avatar_url                                           String?
-  status                                               String?                 @default("active") @db.VarChar(50)
-  last_login_at                                        DateTime?               @db.Timestamp(6)
-  created_at                                           DateTime?               @default(now()) @db.Timestamp(6)
-  updated_at                                           DateTime?               @default(now()) @db.Timestamp(6)
-  deleted_at                                           DateTime?               @db.Timestamp(6)
+  status                                               String?                       @default("active") @db.VarChar(50)
+  last_login_at                                        DateTime?                     @db.Timestamp(6)
+  created_at                                           DateTime?                     @default(now()) @db.Timestamp(6)
+  updated_at                                           DateTime?                     @default(now()) @db.Timestamp(6)
+  deleted_at                                           DateTime?                     @db.Timestamp(6)
   audit_logs                                           audit_logs[]
   automation_rules                                     automation_rules[]
   campaigns                                            campaigns[]
+  customer_lists                                       customer_lists[]
+  customer_list_members                                customer_list_members[]
   departments                                          departments[]
   files                                                files[]
   lead_activities                                      lead_activities[]
-  lead_assignments_lead_assignments_assigned_byTousers lead_assignments[]      @relation("lead_assignments_assigned_byTousers")
-  lead_assignments_lead_assignments_assigned_toTousers lead_assignments[]      @relation("lead_assignments_assigned_toTousers")
+  lead_assignments_lead_assignments_assigned_byTousers lead_assignments[]            @relation("lead_assignments_assigned_byTousers")
+  lead_assignments_lead_assignments_assigned_toTousers lead_assignments[]            @relation("lead_assignments_assigned_toTousers")
   lead_notes                                           lead_notes[]
   lead_status_histories                                lead_status_histories[]
-  leads_leads_assigned_toTousers                       leads[]                 @relation("leads_assigned_toTousers")
-  leads_leads_owner_idTousers                          leads[]                 @relation("leads_owner_idTousers")
+  leads_leads_assigned_toTousers                       leads[]                       @relation("leads_assigned_toTousers")
+  leads_leads_owner_idTousers                          leads[]                       @relation("leads_owner_idTousers")
   marketing_forms                                      marketing_forms[]
   notifications                                        notifications[]
   reminders                                            reminders[]
@@ -1010,10 +1013,10 @@ model users {
   user_access_scopes                                   user_access_scopes?
   user_departments                                     user_departments[]
   user_roles                                           user_roles[]
-  custom_fields_created_by                             custom_fields[]         @relation("custom_fields_created_by")
-  custom_fields_updated_by                             custom_fields[]         @relation("custom_fields_updated_by")
-  custom_field_groups_created_by                       custom_field_groups[]   @relation("custom_field_groups_created_by")
-  custom_field_groups_updated_by                       custom_field_groups[]   @relation("custom_field_groups_updated_by")
+  custom_fields_created_by                             custom_fields[]               @relation("custom_fields_created_by")
+  custom_fields_updated_by                             custom_fields[]               @relation("custom_fields_updated_by")
+  custom_field_groups_created_by                       custom_field_groups[]         @relation("custom_field_groups_created_by")
+  custom_field_groups_updated_by                       custom_field_groups[]         @relation("custom_field_groups_updated_by")
   personal_reports                                     personal_reports[]
   personal_dashboard_widgets                           personal_dashboard_widgets[]
   personal_dashboard_settings                          personal_dashboard_settings[]
@@ -1022,21 +1025,51 @@ model users {
   @@index([status], map: "idx_users_status")
 }
 
+model customer_lists {
+  id                     String                  @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  institution_program_id String                  @db.Uuid
+  name                   String                  @db.VarChar(255)
+  filter_config          Json?
+  created_by             String                  @db.Uuid
+  created_at             DateTime                @default(now()) @db.Timestamp(6)
+  updated_at             DateTime                @default(now()) @db.Timestamp(6)
+  deleted_at             DateTime?               @db.Timestamp(6)
+  institution_programs   institution_programs    @relation(fields: [institution_program_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  users                  users                   @relation(fields: [created_by], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  customer_list_members  customer_list_members[]
+
+  @@index([institution_program_id, deleted_at, updated_at, id], map: "idx_customer_lists_program_active")
+  @@index([created_by, deleted_at, updated_at, id], map: "idx_customer_lists_creator_active")
+}
+
+model customer_list_members {
+  customer_list_id String         @db.Uuid
+  lead_id          String         @db.Uuid
+  added_by         String         @db.Uuid
+  added_at         DateTime       @default(now()) @db.Timestamp(6)
+  customer_lists   customer_lists @relation(fields: [customer_list_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  leads            leads          @relation(fields: [lead_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  users            users          @relation(fields: [added_by], references: [id], onDelete: NoAction, onUpdate: NoAction)
+
+  @@id([customer_list_id, lead_id])
+  @@index([lead_id, customer_list_id], map: "idx_customer_list_members_lead")
+}
+
 model personal_reports {
-  id                     String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
-  owner_id               String    @db.Uuid
-  institution_program_id String?   @db.Uuid
-  name                   String    @db.VarChar(255)
-  module                 String    @db.VarChar(30)
-  metric_keys            Json
-  breakdown_key          String?   @db.VarChar(80)
-  chart_type             String    @default("BAR") @db.VarChar(30)
-  filters                Json
-  is_shared              Boolean   @default(false)
-  archived_at            DateTime? @db.Timestamp(6)
-  created_at             DateTime  @default(now()) @db.Timestamp(6)
-  updated_at             DateTime  @default(now()) @db.Timestamp(6)
-  users                  users     @relation(fields: [owner_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  id                         String                       @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  owner_id                   String                       @db.Uuid
+  institution_program_id     String?                      @db.Uuid
+  name                       String                       @db.VarChar(255)
+  module                     String                       @db.VarChar(30)
+  metric_keys                Json
+  breakdown_key              String?                      @db.VarChar(80)
+  chart_type                 String                       @default("BAR") @db.VarChar(30)
+  filters                    Json
+  is_shared                  Boolean                      @default(false)
+  archived_at                DateTime?                    @db.Timestamp(6)
+  created_at                 DateTime                     @default(now()) @db.Timestamp(6)
+  updated_at                 DateTime                     @default(now()) @db.Timestamp(6)
+  users                      users                        @relation(fields: [owner_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
   personal_dashboard_widgets personal_dashboard_widgets[]
 
   @@index([owner_id, archived_at, updated_at], map: "idx_personal_reports_owner_active")

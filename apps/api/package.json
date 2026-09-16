@@ -18,6 +18,7 @@
     "test:integration:campaigns": "tsx src/integration/marketing-campaign-management.integration.ts",
     "test:integration:utm": "tsx src/integration/marketing-utm-analytics.integration.ts",
     "test:integration:marketing-forms": "tsx src/integration/marketing-form-management.integration.ts",
+    "test:integration:customer-lists": "tsx src/integration/customer-list-permission.integration.ts",
     "test:integration:access-control": "tsx src/integration/user-role-scope-management.integration.ts",
     "test:integration:custom-fields": "tsx src/integration/custom-field-definition.integration.ts",
     "test:integration:lead-custom-fields": "tsx src/integration/lead-custom-fields.integration.ts",

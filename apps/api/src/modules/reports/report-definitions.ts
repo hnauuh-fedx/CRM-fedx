@@ -37,7 +37,6 @@ export const personalReportDatasetDefinitions = {
       { key: "SOURCE", label: "Nguồn khách hàng", type: "CATEGORY", allowedAsOutput: true, allowedAsFilter: true },
       { key: "ASSIGNEE", label: "Nhân viên phụ trách", type: "CATEGORY", allowedAsOutput: true, allowedAsFilter: true },
       { key: "PIPELINE_STAGE", label: "Giai đoạn pipeline", type: "CATEGORY", allowedAsOutput: true, allowedAsFilter: true },
-      { key: "STATUS", label: "Trạng thái khách hàng", type: "CATEGORY", allowedAsOutput: true, allowedAsFilter: true },
       { key: "CREATED_DATE", label: "Ngày tạo", type: "DATE", allowedAsOutput: true, allowedAsFilter: true },
     ],
   }),

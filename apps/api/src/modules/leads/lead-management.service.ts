@@ -23,7 +23,6 @@ export type LeadInput = {
   dateOfBirth?: string;
   cccd?: string;
   note?: string;
-  status?: string;
   temperature?: string;
   birthPlace?: string;
   cccdIssueDate?: string;
@@ -102,7 +101,6 @@ async function findVisibleLead(user: AuthUser, leadId: string, institutionProgra
       cccd: true,
       note: true,
       source_id: true,
-      status: true,
       temperature: true,
       pipeline_stage_id: true,
       assigned_to: true,
@@ -112,10 +110,6 @@ async function findVisibleLead(user: AuthUser, leadId: string, institutionProgra
 
 function emptyToNull(value?: string) {
   return value?.trim() || null;
-}
-
-function normalizeLeadStatus(value?: string | null) {
-  return value?.trim().slice(0, 50) || null;
 }
 
 function toLeadData(input: LeadInput) {
@@ -130,13 +124,8 @@ function toLeadData(input: LeadInput) {
     date_of_birth: input.dateOfBirth ? new Date(input.dateOfBirth) : null,
     cccd: emptyToNull(input.cccd),
     note: emptyToNull(input.note),
-    ...(input.status !== undefined ? { status: normalizeLeadStatus(input.status) } : {}),
     ...(input.temperature ? { temperature: input.temperature } : {}),
   };
-}
-
-function toStageStatus(stage: { name: string } | null) {
-  return normalizeLeadStatus(stage?.name);
 }
 
 async function getSelectedStage(
@@ -352,7 +341,6 @@ export async function createLead(user: AuthUser, input: LeadInput) {
       data: {
         ...toLeadData(input),
         pipeline_stage_id: selectedStage?.id ?? null,
-        ...(input.pipelineStageId !== undefined ? { status: toStageStatus(selectedStage) } : {}),
         lead_code: `LD-${Date.now().toString(36).toUpperCase()}`,
         owner_id: user.id,
         assigned_to: assignee?.id ?? null,
@@ -478,7 +466,6 @@ export async function updateLead(user: AuthUser, leadId: string, input: LeadInpu
       data: {
         ...toLeadData(input),
         ...(hasStageSelection ? { pipeline_stage_id: nextStageId } : {}),
-        ...(hasStageSelection ? { status: toStageStatus(selectedStage) } : {}),
         ...(assignmentChanged ? { assigned_to: nextAssignee?.id ?? null } : {}),
         updated_at: new Date(),
       },
@@ -498,9 +485,9 @@ export async function updateLead(user: AuthUser, leadId: string, input: LeadInpu
         old_data: {
           fullName: existing.full_name,
           sourceId: existing.source_id,
-          status: existing.status,
+          pipelineStageId: existing.pipeline_stage_id,
         },
-        new_data: { fullName: input.fullName, sourceId: input.sourceId, status: hasStageSelection ? toStageStatus(selectedStage) : input.status ?? existing.status },
+        new_data: { fullName: input.fullName, sourceId: input.sourceId, pipelineStageId: hasStageSelection ? nextStageId : existing.pipeline_stage_id },
       },
     });
     if (hasStageSelection && existing.pipeline_stage_id !== nextStageId) {
@@ -584,7 +571,7 @@ export async function deleteLead(user: AuthUser, leadId: string, institutionProg
         entity_type: "lead",
         entity_id: leadId,
         action: "delete",
-        old_data: { fullName: lead.full_name, status: lead.status, assigneeId: lead.assigned_to },
+        old_data: { fullName: lead.full_name, pipelineStageId: lead.pipeline_stage_id, assigneeId: lead.assigned_to },
         new_data: { deleted: true },
       },
     });
@@ -603,14 +590,9 @@ export async function changeLeadStage(user: AuthUser, leadId: string, stageId: s
     if (!stage) {
       return { ok: false as const, reason: "stage_not_found" as const };
     }
-    if (lead.pipeline_stage_id === stageId) {
-      if (lead.status !== toStageStatus(stage)) {
-        await tx.leads.update({ where: { id: leadId }, data: { status: toStageStatus(stage), updated_at: new Date() } });
-      }
-      return { ok: true as const, data: { id: leadId, pipelineStageId: stageId } };
-    }
+    if (lead.pipeline_stage_id === stageId) return { ok: true as const, data: { id: leadId, pipelineStageId: stageId } };
 
-    await tx.leads.update({ where: { id: leadId }, data: { pipeline_stage_id: stageId, status: toStageStatus(stage), updated_at: new Date() } });
+    await tx.leads.update({ where: { id: leadId }, data: { pipeline_stage_id: stageId, updated_at: new Date() } });
     await tx.lead_status_histories.create({
       data: { lead_id: leadId, from_stage_id: lead.pipeline_stage_id, to_stage_id: stageId, changed_by: user.id },
     });
@@ -630,14 +612,14 @@ export async function changeLeadStage(user: AuthUser, leadId: string, stageId: s
         entity_id: leadId,
         action: "pipeline_stage_changed",
         old_data: { pipelineStageId: lead.pipeline_stage_id },
-        new_data: { pipelineStageId: stageId, status: toStageStatus(stage) },
+        new_data: { pipelineStageId: stageId, pipelineStageName: stage.name },
       },
     });
     return { ok: true as const, data: { id: leadId, pipelineStageId: stageId } };
   });
 
   if (result.ok) {
-    triggerAutomation("lead_status_changed", {
+    triggerAutomation("lead_pipeline_stage_changed", {
       leadId: result.data.id,
       institutionProgramId: institutionProgramId ?? undefined
     }).catch(console.error);

@@ -70,7 +70,6 @@ export type UtmGeneratedLead = {
   id: string;
   leadCode: string | null;
   fullName: string;
-  status: string | null;
   createdAt: string | null;
   sourceName: string | null;
   pipelineStageName: string | null;

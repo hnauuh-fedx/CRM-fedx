@@ -28,6 +28,8 @@ const directorPermissions = [
   { code: "campaign.update", name: "Cập nhật toàn bộ chiến dịch", module: "marketing" },
   { code: "campaign.delete", name: "Xóa chiến dịch", module: "marketing" },
   { code: "marketing_form.manage", name: "Quản lý biểu mẫu Marketing", module: "marketing" },
+  { code: "customer_list.view_all", name: "Xem mọi danh sách khách hàng", module: "marketing" },
+  { code: "customer_list.manage", name: "Quản lý danh sách khách hàng", module: "marketing" },
   { code: "admission.view_all", name: "Xem toàn bộ hồ sơ tuyển sinh", module: "admission" },
   { code: "admission.view", name: "Xem hồ sơ tuyển sinh", module: "admission" },
   { code: "admission.update", name: "Cập nhật hồ sơ tuyển sinh", module: "admission" },

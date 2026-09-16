@@ -64,18 +64,16 @@ export type LeadListItem = {
   tags: string;
   note: string | null;
   temperature: string | null;
-  status: string | null;
   source: { id: string; name: string } | null;
   pipelineStage: { id: string; name: string; color: string | null } | null;
   assignee: { id: string; fullName: string } | null;
   createdAt: string | null;
 };
 
-export type LeadSortField = "createdAt" | "fullName" | "leadCode" | "status";
+export type LeadSortField = "createdAt" | "fullName" | "leadCode" | "pipelineStage";
 
 export type LeadListFilters = {
   search: string;
-  status: string;
   pipelineStageId: string;
   sourceId: string;
   assigneeId: string;
@@ -100,8 +98,8 @@ export type LeadFilterOptions = {
   sources: Array<{ id: string; name: string }>;
   institutionPrograms: Array<{ id: string; name: string; institutionName: string }>;
   assignees: Array<{ id: string; fullName: string }>;
-  statuses: string[];
   stages: Array<{ id: string; name: string; color: string | null; count: number }>;
+  majors: Array<{ id: string; name: string }>;
   totalLeads: number;
 };
 
@@ -220,7 +218,6 @@ export type LeadFormInput = {
   dateOfBirth: string;
   cccd: string;
   note: string;
-  status: string;
   temperature: string;
   birthPlace: string;
   cccdIssueDate: string;

@@ -1,6 +1,6 @@
 export type Person = { id: string; fullName: string };
 export type SimpleRef = { id: string; name: string };
-export type LeadRef = { id: string; leadCode: string | null; fullName: string; status?: string | null };
+export type LeadRef = { id: string; leadCode: string | null; fullName: string };
 export type Pagination = { page: number; limit: number; total: number; totalPages: number };
 
 export type SaleFilterOptions = {
