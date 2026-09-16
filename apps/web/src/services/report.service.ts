@@ -5,8 +5,6 @@ import type {
   OverviewReportResponse,
   SaleDetailReportResponse,
   StudentDetailReportResponse,
-  MetabaseDashboard,
-  MetabaseGuestToken,
   PersonalReport,
   PersonalReportDefinition,
   PersonalReportDatasetDefinition,
@@ -106,12 +104,4 @@ export function getPersonalDashboard(accessToken: string) {
 
 export function exportPersonalReport(id: string, format: "csv" | "xlsx", accessToken: string) {
   return apiDownload(`/reports/personal/${id}/export?format=${format}`, accessToken);
-}
-
-export function getMetabaseDashboards(accessToken: string) {
-  return apiRequest<{ items: MetabaseDashboard[] }>("/reports/metabase/dashboards", {}, accessToken);
-}
-
-export function getMetabaseGuestToken(dashboardKey: MetabaseDashboard["key"], accessToken: string) {
-  return apiRequest<MetabaseGuestToken>("/reports/metabase/guest-token", { method: "POST", body: JSON.stringify({ dashboardKey }) }, accessToken);
 }

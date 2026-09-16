@@ -154,9 +154,6 @@ export type PersonalDashboardResponse = {
   kpiConfig: DashboardKpiWidgetInput[];
   kpiWidgets: DashboardKpiWidgetResult[];
 } & Omit<PersonalDashboardConfig, "kpiWidgets">;
-export type MetabaseDashboard = { key: "sale-pipeline"; name: string; description: string };
-export type MetabaseGuestToken = { token: string; expiresAt: number; instanceUrl: string; dashboardKey: string };
-
 export type ReportBreakdownWithMeta = ReportBreakdownItem & {
   color?: string | null;
   facultyName?: string | null;

@@ -158,9 +158,9 @@ const PersonalReportsPage = lazy(() =>
     default: module.PersonalReportsPage,
   })),
 );
-const MetabaseDashboardPage = lazy(() =>
-  import("@/modules/reports/pages/metabase-dashboard-page").then((module) => ({
-    default: module.MetabaseDashboardPage,
+const StatisticsDashboardPage = lazy(() =>
+  import("@/modules/reports/pages/statistics-dashboard-page").then((module) => ({
+    default: module.StatisticsDashboardPage,
   })),
 );
 const CampaignsListPage = lazy(() =>
@@ -305,7 +305,7 @@ export function AppRoutes() {
               <Route path="/bao-cao/sale" element={<SaleDetailReportPage />} />
             </Route>
             <Route element={<ProtectedRoute anyPermissions={["report.personal.view"]} />}>
-              <Route path="/bao-cao/dashboard" element={<MetabaseDashboardPage />} />
+              <Route path="/bao-cao/dashboard" element={<StatisticsDashboardPage />} />
             </Route>
             <Route element={<ProtectedRoute anyPermissions={["report.view_all", "report.admission.view", "admission.view_all", "admission.view"]} />}>
               <Route path="/bao-cao/tuyen-sinh" element={<AdmissionDetailReportPage />} />

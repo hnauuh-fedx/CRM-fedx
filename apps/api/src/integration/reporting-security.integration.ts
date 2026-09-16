@@ -1,11 +1,7 @@
 import assert from "node:assert/strict";
-import jwt from "jsonwebtoken";
 
 process.env.DATABASE_URL ??= "postgresql://test:test@localhost:5432/test";
 process.env.JWT_SECRET ??= "test-jwt-secret-that-is-longer-than-thirty-two-characters";
-process.env.METABASE_PUBLIC_URL = "http://localhost:3001";
-process.env.METABASE_EMBEDDING_SECRET = "test-metabase-secret-that-is-longer-than-thirty-two-characters";
-process.env.METABASE_DASHBOARD_SALE_PIPELINE_ID = "42";
 
 type AuthUser = import("../modules/auth/auth.types").AuthUser;
 
@@ -22,28 +18,13 @@ const baseUser: AuthUser = {
 };
 
 async function main() {
-  const { createMetabaseGuestToken, resolveMetabaseScopeKeys } = await import("../modules/reports/metabase-embed.service.js");
   const { resolvePersonalReportDateRange, validatePersonalReportInput } = await import("../modules/reports/personal-report.service.js");
+  const { resolveReportingScopeKeys } = await import("../modules/reports/reporting-scope.js");
 
-  assert.deepEqual(resolveMetabaseScopeKeys(baseUser), [`ASSIGNED:${baseUser.id}`]);
-  assert.deepEqual(resolveMetabaseScopeKeys({ ...baseUser, accessScope: "OWNED_ONLY" }), [`OWNED:${baseUser.id}`]);
-  assert.deepEqual(resolveMetabaseScopeKeys({ ...baseUser, accessScope: "DEPARTMENT" }), [`DEPARTMENT:${baseUser.departmentIds[0]}`]);
-  assert.deepEqual(resolveMetabaseScopeKeys({ ...baseUser, accessScope: "ALL", permissions: [...baseUser.permissions, "report.view_all"] }), ["ALL"]);
-
-  const issued = createMetabaseGuestToken(baseUser, "sale-pipeline", baseUser.institutionProgramIds[0]);
-  assert.equal(issued.ok, true);
-  if (issued.ok) {
-    const payload = jwt.verify(issued.data.token, process.env.METABASE_EMBEDDING_SECRET!) as jwt.JwtPayload;
-    assert.deepEqual(payload.resource, { dashboard: 42 });
-    assert.deepEqual(payload.params, {
-      scope_key: [`ASSIGNED:${baseUser.id}`],
-      institution_program_id: [baseUser.institutionProgramIds[0]],
-    });
-    assert.ok(Number(payload.exp) - Math.floor(Date.now() / 1000) <= 300);
-  }
-
-  const noReportPermission = { ...baseUser, permissions: ["lead.view_assigned"] };
-  assert.equal(createMetabaseGuestToken(noReportPermission, "sale-pipeline", baseUser.institutionProgramIds[0]).ok, false);
+  assert.deepEqual(resolveReportingScopeKeys(baseUser), [`ASSIGNED:${baseUser.id}`]);
+  assert.deepEqual(resolveReportingScopeKeys({ ...baseUser, accessScope: "OWNED_ONLY" }), [`OWNED:${baseUser.id}`]);
+  assert.deepEqual(resolveReportingScopeKeys({ ...baseUser, accessScope: "DEPARTMENT" }), [`DEPARTMENT:${baseUser.departmentIds[0]}`]);
+  assert.deepEqual(resolveReportingScopeKeys({ ...baseUser, accessScope: "ALL", permissions: [...baseUser.permissions, "report.view_all"] }), ["ALL"]);
   assert.equal(validatePersonalReportInput(baseUser, { name: "KPI cá nhân", module: "SALE", metricKeys: ["totalLeads"], chartType: "KPI" }).ok, true);
   assert.equal(validatePersonalReportInput(baseUser, { name: "KPI không hợp lệ", module: "SALE", metricKeys: ["phone"], chartType: "TABLE" }).ok, false);
   assert.equal(validatePersonalReportInput(baseUser, { name: "KPI trái module", module: "MARKETING", metricKeys: ["leadCount"], chartType: "TABLE" }).ok, false);
@@ -81,7 +62,7 @@ async function main() {
   assert.equal(validatePersonalReportInput(baseUser, { ...validSingle, conditions: [{ fieldKey: "PHONE", operator: "EQUALS", value: "0123456789" }] }).ok, false);
   assert.equal(validatePersonalReportInput(baseUser, { ...validSingle, conditions: [{ fieldKey: "SOURCE", operator: "EQUALS", value: "Facebook" }] }).ok, true);
 
-  console.log("Metabase/reporting security checks passed.");
+  console.log("Reporting security checks passed.");
 }
 
 void main();
