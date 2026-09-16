@@ -6,6 +6,7 @@ import type {
   WebhookLog,
   WebhookLogDetail,
   WebhookStatus,
+  WebhookRequestStatus,
   WebhookSummary,
 } from "@/modules/webhooks/webhook.types";
 import { apiRequest } from "./api";
@@ -93,10 +94,28 @@ export function regenerateWebhookSecret(id: string, accessToken: string) {
   );
 }
 
-export function getWebhookLogs(id: string, page: number, accessToken: string) {
+export function getWebhookLogs(
+  id: string,
+  page: number,
+  accessToken: string,
+  filters: { status?: WebhookRequestStatus; requestId?: string; from?: string; to?: string } = {},
+) {
+  const query = new URLSearchParams({ page: String(page), limit: "20" });
+  if (filters.status) query.set("status", filters.status);
+  if (filters.requestId) query.set("requestId", filters.requestId);
+  if (filters.from) query.set("from", filters.from);
+  if (filters.to) query.set("to", filters.to);
   return apiRequest<Paginated<WebhookLog>>(
-    `/settings/webhooks/${id}/logs?page=${page}&limit=20`,
+    `/settings/webhooks/${id}/logs?${query.toString()}`,
     {},
+    accessToken,
+  );
+}
+
+export function reprocessWebhookRequest(id: string, logId: string, accessToken: string) {
+  return apiRequest<{ requestId: string; status: "QUEUED" }>(
+    `/settings/webhooks/${id}/logs/${logId}/reprocess`,
+    { method: "POST" },
     accessToken,
   );
 }

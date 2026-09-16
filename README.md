@@ -21,6 +21,9 @@ npm run dev
 
 - Web: `http://localhost:5173`
 - API: `http://localhost:3000/api`
+- Webhook worker: BullMQ worker using `REDIS_URL`
+
+Start PostgreSQL and Redis first with `docker compose up -d`. Inbound webhooks return `202 Accepted` after durable persistence and queue acceptance; background Lead processing runs in the webhook worker.
 
 Development login accounts currently use password `123456`:
 

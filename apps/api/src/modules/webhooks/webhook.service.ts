@@ -18,8 +18,8 @@ import {
   type WebhookProcessResult,
 } from "./webhook.types";
 
-type JsonObject = Record<string, unknown>;
-type FieldMetadata = {
+export type JsonObject = Record<string, unknown>;
+export type FieldMetadata = {
   key: string;
   label: string;
   type: WebhookFieldType;
@@ -28,7 +28,7 @@ type FieldMetadata = {
   customFieldId?: string;
   options?: string[];
 };
-type ProcessWebhookRecord = {
+export type ProcessWebhookRecord = {
   id: string;
   institution_program_id: string;
   created_by: string;
@@ -127,7 +127,7 @@ function sanitizeJson(value: unknown): unknown {
   );
 }
 
-function toJson(value: unknown): Prisma.InputJsonValue {
+export function toJson(value: unknown): Prisma.InputJsonValue {
   return sanitizeJson(value) as Prisma.InputJsonValue;
 }
 
@@ -143,7 +143,7 @@ function toWebhookFieldType(fieldType: string): WebhookFieldType {
   return "string";
 }
 
-async function getAllowedFieldMetadata(
+export async function getAllowedFieldMetadata(
   programId: string,
 ): Promise<FieldMetadata[]> {
   const customFields = await prisma.custom_fields.findMany({
@@ -450,14 +450,19 @@ export async function setWebhookStatus(
 export async function listWebhookLogs(
   programId: string,
   webhookId: string,
-  query: { page: number; limit: number },
+  query: { page: number; limit: number; status?: string; requestId?: string; from?: Date; to?: Date },
 ) {
   const webhook = await prisma.webhooks.findFirst({
     where: { id: webhookId, institution_program_id: programId },
     select: { id: true },
   });
   if (!webhook) return null;
-  const where = { webhook_id: webhookId };
+  const where: Prisma.webhook_requestsWhereInput = {
+    webhook_id: webhookId,
+    ...(query.status ? { status: query.status } : {}),
+    ...(query.requestId ? { request_id: query.requestId } : {}),
+    ...(query.from || query.to ? { received_at: { ...(query.from ? { gte: query.from } : {}), ...(query.to ? { lte: query.to } : {}) } } : {}),
+  };
   const [items, total] = await prisma.$transaction([
     prisma.webhook_requests.findMany({
       where,
@@ -479,8 +484,12 @@ export async function listWebhookLogs(
       recordId: item.record_id,
       duplicateRecordId: item.duplicate_record_id,
       processingTimeMs: item.processing_time_ms,
+      attemptCount: item.cycle_attempt_count,
+      maxAttempts: item.max_attempts,
+      lastAttemptAt: formatDate(item.last_attempt_at),
+      nextRetryAt: formatDate(item.next_retry_at),
       receivedAt: item.received_at.toISOString(),
-      processedAt: item.processed_at.toISOString(),
+      processedAt: formatDate(item.processed_at),
     })),
     pagination: {
       page: query.page,
@@ -502,6 +511,7 @@ export async function getWebhookLog(
       webhook_id: webhookId,
       webhooks: { institution_program_id: programId },
     },
+    include: { attempts: { orderBy: [{ attempt_number: "asc" }] } },
   });
   if (!item) return null;
   return {
@@ -517,12 +527,32 @@ export async function getWebhookLog(
     recordId: item.record_id,
     duplicateRecordId: item.duplicate_record_id,
     processingTimeMs: item.processing_time_ms,
+    attemptCount: item.cycle_attempt_count,
+    totalAttemptCount: item.attempt_count,
+    maxAttempts: item.max_attempts,
+    lastAttemptAt: formatDate(item.last_attempt_at),
+    nextRetryAt: formatDate(item.next_retry_at),
+    processingStartedAt: formatDate(item.processing_started_at),
+    completedAt: formatDate(item.completed_at),
+    deadLetteredAt: formatDate(item.dead_lettered_at),
+    reprocessedCount: item.reprocessed_count,
+    attempts: item.attempts.map((attempt) => ({
+      id: attempt.id,
+      attemptNumber: attempt.attempt_number,
+      status: attempt.status,
+      errorCode: attempt.error_code,
+      errorMessage: attempt.error_message,
+      errorCategory: attempt.error_category,
+      startedAt: attempt.started_at.toISOString(),
+      finishedAt: formatDate(attempt.finished_at),
+      durationMs: attempt.duration_ms,
+    })),
     receivedAt: item.received_at.toISOString(),
-    processedAt: item.processed_at.toISOString(),
+    processedAt: formatDate(item.processed_at),
   };
 }
 
-class ProcessFailure extends Error {
+export class ProcessFailure extends Error {
   constructor(
     public readonly code: WebhookErrorCode,
     message: string,
@@ -634,7 +664,7 @@ async function resolveSource(programId: string, value: unknown) {
   return source.id;
 }
 
-async function mapPayload(
+export async function mapWebhookPayload(
   programId: string,
   payload: JsonObject,
   mappings: Array<{
@@ -643,8 +673,9 @@ async function mapPayload(
     is_required: boolean;
     default_value: string | null;
   }>,
+  metadataOverride?: FieldMetadata[],
 ) {
-  const metadata = await getAllowedFieldMetadata(programId);
+  const metadata = metadataOverride ?? await getAllowedFieldMetadata(programId);
   const metadataByKey = new Map(metadata.map((field) => [field.key, field]));
   const mapped: JsonObject = {};
   const leadValues: JsonObject = {};
@@ -902,7 +933,7 @@ async function processWebhookRecord(
         "Payload phải là một JSON object hợp lệ.",
         400,
       );
-    const mapping = await mapPayload(
+    const mapping = await mapWebhookPayload(
       webhook.institution_program_id,
       safePayload,
       webhook.field_mappings,
@@ -1010,7 +1041,7 @@ async function processWebhookRecord(
       await prisma.webhook_requests.update({
         where: { request_id: requestId },
         data: {
-          status: "SUCCESS",
+          status: "SUCCEEDED",
           action: result.action,
           mapped_payload: toJson(mapping.mapped),
           response_code: 200,
@@ -1018,6 +1049,7 @@ async function processWebhookRecord(
           duplicate_record_id: result.action === "UPDATED" ? result.recordId : null,
           processing_time_ms: processingTimeMs,
           processed_at: processedAt,
+          completed_at: processedAt,
         },
       });
     } catch (error) {

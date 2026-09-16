@@ -10,6 +10,7 @@ import {
   Plus,
   Power,
   RefreshCw,
+  RotateCcw,
   Send,
   Trash2,
   Webhook,
@@ -72,7 +73,9 @@ import type {
   WebhookDetail,
   WebhookField,
   WebhookInput,
+  WebhookLog,
   WebhookLogDetail,
+  WebhookRequestStatus,
   WebhookSummary,
 } from "../webhook.types";
 import {
@@ -85,6 +88,7 @@ import {
   getWebhookMetadata,
   getWebhooks,
   regenerateWebhookSecret,
+  reprocessWebhookRequest,
   testWebhook,
   updateWebhook,
   updateWebhookStatus,
@@ -155,6 +159,24 @@ const webhookActionLabels = {
   FAILED: "Thất bại",
 } as const;
 
+const webhookRequestStatusLabels: Record<WebhookRequestStatus, string> = {
+  RECEIVED: "Đã nhận",
+  QUEUED: "Đang chờ",
+  PROCESSING: "Đang xử lý",
+  RETRYING: "Đang thử lại",
+  SUCCEEDED: "Thành công",
+  FAILED: "Thất bại",
+  DEAD_LETTER: "Cần xử lý thủ công",
+  QUEUE_FAILED: "Lỗi hàng đợi",
+};
+
+function webhookStatusVariant(status: WebhookRequestStatus) {
+  if (status === "SUCCEEDED") return "default" as const;
+  if (["FAILED", "DEAD_LETTER", "QUEUE_FAILED"].includes(status)) return "destructive" as const;
+  if (["PROCESSING", "RETRYING"].includes(status)) return "secondary" as const;
+  return "outline" as const;
+}
+
 function errorMessage(error: unknown) {
   return error instanceof Error
     ? error.message
@@ -183,6 +205,10 @@ export function WebhooksPage() {
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [page, setPage] = useState(1);
   const [logPage, setLogPage] = useState(1);
+  const [logStatus, setLogStatus] = useState<"ALL" | WebhookRequestStatus>("ALL");
+  const [logRequestId, setLogRequestId] = useState("");
+  const [logFrom, setLogFrom] = useState("");
+  const [logTo, setLogTo] = useState("");
   const [editor, setEditor] = useState<
     { mode: "create" } | { mode: "edit"; webhook: WebhookDetail } | null
   >(null);
@@ -192,6 +218,7 @@ export function WebhooksPage() {
     webhook: WebhookSummary;
   } | null>(null);
   const [selectedLog, setSelectedLog] = useState<WebhookLogDetail | null>(null);
+  const [reprocessTarget, setReprocessTarget] = useState<WebhookLogDetail | null>(null);
   const [testOpen, setTestOpen] = useState(false);
   const [testJson, setTestJson] = useState(samplePayload);
   const [testValidation, setTestValidation] = useState("");
@@ -210,8 +237,13 @@ export function WebhooksPage() {
     enabled: Boolean(selectedId),
   });
   const logsQuery = useQuery({
-    queryKey: ["webhooks", selectedId, "logs", logPage],
-    queryFn: () => getWebhookLogs(selectedId!, logPage, auth.accessToken!),
+    queryKey: ["webhooks", selectedId, "logs", logPage, logStatus, logRequestId, logFrom, logTo],
+    queryFn: () => getWebhookLogs(selectedId!, logPage, auth.accessToken!, {
+      ...(logStatus !== "ALL" ? { status: logStatus } : {}),
+      ...(logRequestId.trim() ? { requestId: logRequestId.trim() } : {}),
+      ...(logFrom ? { from: new Date(`${logFrom}T00:00:00`).toISOString() } : {}),
+      ...(logTo ? { to: new Date(`${logTo}T23:59:59.999`).toISOString() } : {}),
+    }),
     enabled: Boolean(selectedId),
   });
 
@@ -226,7 +258,7 @@ export function WebhooksPage() {
         ? updateWebhook(editor.webhook.id, input, auth.accessToken!)
         : createWebhook(input, auth.accessToken!),
     onSuccess: (result) => {
-      if ("secret" in result) setSecret(result.secret);
+      if ("secret" in result && typeof result.secret === "string") setSecret(result.secret);
       void refresh(result.id);
     },
   });
@@ -250,9 +282,10 @@ export function WebhooksPage() {
   });
   const regenerateMutation = useMutation({
     mutationFn: (id: string) => regenerateWebhookSecret(id, auth.accessToken!),
-    onSuccess: (result) => {
+    onSuccess: (result, id) => {
       setConfirm(null);
       setSecret(result.secret);
+      void refresh(id);
     },
   });
   const logMutation = useMutation({
@@ -267,6 +300,14 @@ export function WebhooksPage() {
       void queryClient.invalidateQueries({
         queryKey: ["webhooks", selectedId, "logs"],
       });
+    },
+  });
+  const reprocessMutation = useMutation({
+    mutationFn: (log: WebhookLogDetail) => reprocessWebhookRequest(selectedId!, log.id, auth.accessToken!),
+    onSuccess: () => {
+      setReprocessTarget(null);
+      setSelectedLog(null);
+      void queryClient.invalidateQueries({ queryKey: ["webhooks", selectedId, "logs"] });
     },
   });
 
@@ -355,6 +396,10 @@ export function WebhooksPage() {
                             onClick={() => {
                               setSelectedId(item.id);
                               setLogPage(1);
+                              setLogStatus("ALL");
+                              setLogRequestId("");
+                              setLogFrom("");
+                              setLogTo("");
                             }}
                           >
                             <Eye aria-hidden="true" />
@@ -436,6 +481,14 @@ export function WebhooksPage() {
             logsError={logsQuery.isError}
             logPage={logPage}
             logTotalPages={logsQuery.data?.pagination.totalPages ?? 1}
+            logStatus={logStatus}
+            logRequestId={logRequestId}
+            logFrom={logFrom}
+            logTo={logTo}
+            onLogStatus={(value) => { setLogStatus(value); setLogPage(1); }}
+            onLogRequestId={(value) => { setLogRequestId(value); setLogPage(1); }}
+            onLogFrom={(value) => { setLogFrom(value); setLogPage(1); }}
+            onLogTo={(value) => { setLogTo(value); setLogPage(1); }}
             onLogPage={setLogPage}
             onReloadLogs={() => void logsQuery.refetch()}
             onEdit={() => setEditor({ mode: "edit", webhook: detail })}
@@ -525,7 +578,19 @@ export function WebhooksPage() {
             : confirm && regenerateMutation.mutate(confirm.webhook.id)
         }
       />
-      <LogDialog log={selectedLog} onClose={() => setSelectedLog(null)} />
+      <LogDialog
+        log={selectedLog}
+        canReprocess={canManage && Boolean(selectedLog && ["FAILED", "DEAD_LETTER", "QUEUE_FAILED"].includes(selectedLog.status))}
+        onReprocess={() => selectedLog && setReprocessTarget(selectedLog)}
+        onClose={() => setSelectedLog(null)}
+      />
+      <ReprocessDialog
+        log={reprocessTarget}
+        pending={reprocessMutation.isPending}
+        error={reprocessMutation.error}
+        onClose={() => setReprocessTarget(null)}
+        onConfirm={() => reprocessTarget && reprocessMutation.mutate(reprocessTarget)}
+      />
       <Dialog open={testOpen} onOpenChange={setTestOpen}>
         <DialogContent className="sm:max-w-2xl">
           <DialogHeader>
@@ -614,6 +679,14 @@ function WebhookDetails({
   logsError,
   logPage,
   logTotalPages,
+  logStatus,
+  logRequestId,
+  logFrom,
+  logTo,
+  onLogStatus,
+  onLogRequestId,
+  onLogFrom,
+  onLogTo,
   onLogPage,
   onReloadLogs,
   onEdit,
@@ -624,19 +697,19 @@ function WebhookDetails({
 }: {
   webhook: WebhookDetail;
   canManage: boolean;
-  logs: Array<{
-    id: string;
-    receivedAt: string;
-    status: string;
-    action: "CREATED" | "UPDATED" | "REJECTED" | "FAILED";
-    recordId: string | null;
-    responseCode: number;
-    processingTimeMs: number;
-  }>;
+  logs: WebhookLog[];
   logsLoading: boolean;
   logsError: boolean;
   logPage: number;
   logTotalPages: number;
+  logStatus: "ALL" | WebhookRequestStatus;
+  logRequestId: string;
+  logFrom: string;
+  logTo: string;
+  onLogStatus: (status: "ALL" | WebhookRequestStatus) => void;
+  onLogRequestId: (value: string) => void;
+  onLogFrom: (value: string) => void;
+  onLogTo: (value: string) => void;
   onLogPage: (page: number) => void;
   onReloadLogs: () => void;
   onEdit: () => void;
@@ -733,6 +806,32 @@ function WebhookDetails({
           <CardDescription>
             Payload đã được che các khóa nhạy cảm trước khi lưu.
           </CardDescription>
+          <div className="grid gap-3 pt-2 sm:grid-cols-2 xl:grid-cols-4">
+            <Field>
+              <FieldLabel>Trạng thái</FieldLabel>
+              <Select value={logStatus} onValueChange={(value) => onLogStatus(value as "ALL" | WebhookRequestStatus)}>
+                <SelectTrigger className="w-full" aria-label="Lọc trạng thái request"><SelectValue /></SelectTrigger>
+                <SelectContent>
+                  <SelectGroup>
+                    <SelectItem value="ALL">Tất cả</SelectItem>
+                    {Object.entries(webhookRequestStatusLabels).map(([value, label]) => <SelectItem key={value} value={value}>{label}</SelectItem>)}
+                  </SelectGroup>
+                </SelectContent>
+              </Select>
+            </Field>
+            <Field>
+              <FieldLabel htmlFor="webhook-request-id-filter">Request ID</FieldLabel>
+              <Input id="webhook-request-id-filter" defaultValue={logRequestId} onBlur={(event) => onLogRequestId(event.target.value)} placeholder="UUID request" />
+            </Field>
+            <Field>
+              <FieldLabel htmlFor="webhook-log-from">Từ ngày</FieldLabel>
+              <Input id="webhook-log-from" type="date" value={logFrom} onChange={(event) => onLogFrom(event.target.value)} />
+            </Field>
+            <Field>
+              <FieldLabel htmlFor="webhook-log-to">Đến ngày</FieldLabel>
+              <Input id="webhook-log-to" type="date" value={logTo} onChange={(event) => onLogTo(event.target.value)} />
+            </Field>
+          </div>
         </CardHeader>
         <CardContent className="p-0">
           {logsError ? (
@@ -759,6 +858,7 @@ function WebhookDetails({
                       <TableHead>Hành động</TableHead>
                       <TableHead>Lead</TableHead>
                       <TableHead>HTTP</TableHead>
+                      <TableHead>Lần thử</TableHead>
                       <TableHead>Xử lý</TableHead>
                       <TableHead />
                     </TableRow>
@@ -772,14 +872,10 @@ function WebhookDetails({
                         <TableCell>
                           <Badge
                             variant={
-                              log.status === "SUCCESS"
-                                ? "default"
-                                : "destructive"
+                              webhookStatusVariant(log.status as WebhookRequestStatus)
                             }
                           >
-                            {log.status === "SUCCESS"
-                              ? "Thành công"
-                              : "Thất bại"}
+                            {webhookRequestStatusLabels[log.status as WebhookRequestStatus] ?? log.status}
                           </Badge>
                         </TableCell>
                         <TableCell>
@@ -793,6 +889,7 @@ function WebhookDetails({
                           {log.recordId ?? "—"}
                         </TableCell>
                         <TableCell>{log.responseCode}</TableCell>
+                        <TableCell>{log.attemptCount}/{log.maxAttempts}</TableCell>
                         <TableCell>{log.processingTimeMs} ms</TableCell>
                         <TableCell>
                           <Button
@@ -1203,9 +1300,13 @@ function JsonBlock({ value }: { value: unknown }) {
 }
 function LogDialog({
   log,
+  canReprocess,
+  onReprocess,
   onClose,
 }: {
   log: WebhookLogDetail | null;
+  canReprocess: boolean;
+  onReprocess: () => void;
   onClose: () => void;
 }) {
   return (
@@ -1224,7 +1325,7 @@ function LogDialog({
               </div>
               <div>
                 <p className="text-sm text-muted-foreground">Trạng thái</p>
-                <p className="font-medium">{log.status}</p>
+                <Badge variant={webhookStatusVariant(log.status)}>{webhookRequestStatusLabels[log.status]}</Badge>
               </div>
               <div>
                 <p className="text-sm text-muted-foreground">Hành động</p>
@@ -1232,7 +1333,7 @@ function LogDialog({
               </div>
               <div>
                 <p className="text-sm text-muted-foreground">HTTP response</p>
-                <p className="font-medium">{log.responseCode}</p>
+                <p className="font-medium">{log.responseCode ?? "—"}</p>
               </div>
               <div>
                 <p className="text-sm text-muted-foreground">Lead ID</p>
@@ -1241,6 +1342,30 @@ function LogDialog({
                 </p>
               </div>
             </div>
+            <FieldSet>
+              <FieldLegend>Lịch sử xử lý</FieldLegend>
+              <div className="flex flex-col gap-3">
+                <div className="flex items-center justify-between gap-3 rounded-md border p-3">
+                  <div>
+                    <p className="font-medium">Đã nhận</p>
+                    <p className="text-sm text-muted-foreground">{formatDate(log.receivedAt)}</p>
+                  </div>
+                  <Badge variant="outline">Request</Badge>
+                </div>
+                {log.attempts.map((attempt) => (
+                  <div key={attempt.id} className="flex items-start justify-between gap-3 rounded-md border p-3">
+                    <div className="flex flex-col gap-1">
+                      <p className="font-medium">Lần thử {attempt.attemptNumber} · {attempt.status}</p>
+                      <p className="text-sm text-muted-foreground">
+                        {formatDate(attempt.startedAt)}{attempt.durationMs != null ? ` · ${attempt.durationMs} ms` : ""}
+                      </p>
+                      {attempt.errorMessage && <p className="text-sm text-destructive">{attempt.errorMessage}</p>}
+                    </div>
+                    {attempt.errorCategory && <Badge variant="outline">{attempt.errorCategory}</Badge>}
+                  </div>
+                ))}
+              </div>
+            </FieldSet>
             {log.duplicateRecordId && (
               <Field>
                 <FieldLabel>Lead trùng được phát hiện</FieldLabel>
@@ -1264,8 +1389,51 @@ function LogDialog({
                 <AlertDescription>{log.errorMessage}</AlertDescription>
               </Alert>
             )}
+            {canReprocess && (
+              <DialogFooter>
+                <Button type="button" onClick={onReprocess}>
+                  <RotateCcw data-icon="inline-start" aria-hidden="true" />
+                  Xử lý lại
+                </Button>
+              </DialogFooter>
+            )}
           </div>
         )}
+      </DialogContent>
+    </Dialog>
+  );
+}
+
+function ReprocessDialog({
+  log,
+  pending,
+  error,
+  onClose,
+  onConfirm,
+}: {
+  log: WebhookLogDetail | null;
+  pending: boolean;
+  error: Error | null;
+  onClose: () => void;
+  onConfirm: () => void;
+}) {
+  return (
+    <Dialog open={Boolean(log)} onOpenChange={(open) => !open && onClose()}>
+      <DialogContent>
+        <DialogHeader>
+          <DialogTitle>Xử lý lại request</DialogTitle>
+          <DialogDescription>
+            Yêu cầu này sẽ được đưa trở lại hàng đợi. Payload gốc và cấu hình webhook hiện tại sẽ được sử dụng.
+          </DialogDescription>
+        </DialogHeader>
+        {log && <p className="break-all font-mono text-sm">{log.requestId}</p>}
+        {error && <p role="alert" className="text-sm text-destructive">{errorMessage(error)}</p>}
+        <DialogFooter showCloseButton>
+          <Button type="button" disabled={pending} onClick={onConfirm}>
+            <RotateCcw data-icon="inline-start" aria-hidden="true" />
+            {pending ? "Đang đưa vào hàng đợi..." : "Xử lý lại"}
+          </Button>
+        </DialogFooter>
       </DialogContent>
     </Dialog>
   );

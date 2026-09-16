@@ -21,6 +21,7 @@ let institutionId: string | null = null;
 let programTypeId: string | null = null;
 let server: Server | null = null;
 let assertions = 0;
+let processQueuedWebhook: ((requestId: string) => Promise<unknown>) | null = null;
 
 function equal(actual: unknown, expected: unknown, message: string) {
   assertions += 1;
@@ -55,9 +56,43 @@ async function api(
     },
     body: options.body === undefined ? undefined : JSON.stringify(options.body),
   });
+  const payload = (await response.json().catch(() => ({}))) as JsonRecord;
+  if (
+    processQueuedWebhook &&
+    path.startsWith("/webhooks/") &&
+    response.status === 202 &&
+    typeof payload.data?.request_id === "string"
+  ) {
+    await processQueuedWebhook(payload.data.request_id);
+    const persisted = await prisma.webhook_requests.findUniqueOrThrow({
+      where: { request_id: payload.data.request_id },
+    });
+    return persisted.status === "SUCCEEDED"
+      ? {
+          status: 200,
+          payload: {
+            success: true,
+            data: {
+              request_id: persisted.request_id,
+              record_id: persisted.record_id,
+              action: persisted.action === "UPDATED" ? "updated" : "created",
+            },
+          },
+        }
+      : {
+          status: persisted.response_code ?? 422,
+          payload: {
+            success: false,
+            error: {
+              code: persisted.error_code,
+              message: persisted.error_message,
+            },
+          },
+        };
+  }
   return {
     status: response.status,
-    payload: (await response.json().catch(() => ({}))) as JsonRecord,
+    payload,
   };
 }
 
@@ -228,6 +263,25 @@ async function main() {
   const { createWebhookRateLimiter } = await import(
     "../modules/webhooks/webhooks.router.js"
   );
+  const { setPublicWebhookRateLimiterForTests } = await import(
+    "../modules/webhooks/webhooks.router.js"
+  );
+  const { createMemoryWebhookRateLimiter } = await import(
+    "../modules/webhooks/webhook-rate-limit.service.js"
+  );
+  const { setWebhookQueueAdapterForTests } = await import(
+    "../modules/webhooks/webhook-queue.service.js"
+  );
+  const { processInboundWebhookRequest } = await import(
+    "../modules/webhooks/webhook-v2.service.js"
+  );
+  setPublicWebhookRateLimiterForTests(createMemoryWebhookRateLimiter(10_000));
+  setWebhookQueueAdapterForTests({
+    async add(requestId: string) { return { id: `test-${requestId}` }; },
+    async has() { return false; },
+    async counts() { return {}; },
+  });
+  processQueuedWebhook = processInboundWebhookRequest;
   const institution = await prisma.institutions.create({
     data: { code: `WH_INST_${runId}`, name: "Webhook Institution" },
     select: { id: true },
@@ -1232,7 +1286,7 @@ async function main() {
   });
   equal(logs.status, 200, "Quyền view phải xem được logs.");
   check(
-    logs.payload.data.some((item: JsonRecord) => item.status === "SUCCESS"),
+    logs.payload.data.some((item: JsonRecord) => item.status === "SUCCEEDED"),
     "Phải ghi log success.",
   );
   check(

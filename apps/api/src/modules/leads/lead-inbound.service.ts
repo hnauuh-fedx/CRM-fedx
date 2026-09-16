@@ -9,6 +9,8 @@ import {
   type LeadInput,
 } from "./lead-management.service";
 
+type TransactionClient = Parameters<Parameters<typeof prisma.$transaction>[0]>[0];
+
 export type InboundLeadDuplicatePolicy =
   | "CREATE_NEW"
   | "UPDATE_EXISTING"
@@ -26,6 +28,11 @@ type MutationInput = {
   canCreate: boolean;
   ipAddress?: string;
   enforceActorScope?: boolean;
+  beforeMutation?: (tx: TransactionClient) => Promise<boolean>;
+  onCompleted?: (
+    tx: TransactionClient,
+    result: Extract<MutationResult, { ok: true }>,
+  ) => Promise<void>;
 };
 
 type MutationResult =
@@ -49,7 +56,8 @@ type MutationResult =
         | "create_failed"
         | "custom_field_invalid"
         | "missing_create_fields"
-        | "duplicate_forbidden";
+        | "duplicate_forbidden"
+        | "superseded";
     };
 
 class InboundMutationFailure extends Error {
@@ -64,6 +72,13 @@ export async function applyInboundLeadMutation(
   let result: Exclude<MutationResult, { reason: "custom_field_invalid" }>;
   try {
     result = await prisma.$transaction(async (tx) => {
+      if (input.beforeMutation && !(await input.beforeMutation(tx))) {
+        return {
+          ok: false as const,
+          action: "REJECTED" as const,
+          reason: "superseded" as const,
+        };
+      }
       if (input.duplicatePolicy !== "CREATE_NEW") {
         const lockKey = `inbound-lead:${input.institutionProgramId}:${input.leadInput.phone.trim()}`;
         await tx.$queryRaw`SELECT pg_advisory_xact_lock(hashtextextended(${lockKey}, 0)) IS NULL AS locked`;
@@ -117,12 +132,14 @@ export async function applyInboundLeadMutation(
         );
         if (!updated.ok)
           throw new InboundMutationFailure("custom_field_invalid");
-        return {
+        const completed = {
           ok: true as const,
           action: "UPDATED" as const,
           recordId: duplicate.id,
           duplicateRecordId: duplicate.id,
         };
+        await input.onCompleted?.(tx, completed);
+        return completed;
       }
 
       if (!input.canCreate) {
@@ -155,12 +172,14 @@ export async function applyInboundLeadMutation(
       );
       if (!customResult.ok)
         throw new InboundMutationFailure("custom_field_invalid");
-      return {
+      const completed = {
         ok: true as const,
         action: "CREATED" as const,
         recordId: created.data.id,
         created: created.data,
       };
+      await input.onCompleted?.(tx, completed);
+      return completed;
     });
   } catch (error) {
     if (error instanceof InboundMutationFailure) {

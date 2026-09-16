@@ -24,17 +24,25 @@ import {
   listWebhookLogs,
   listWebhooks,
   logRejectedInboundWebhook,
-  processInboundWebhook,
   regenerateWebhookSecret,
   setWebhookStatus,
   testWebhook,
   updateWebhook,
 } from "./webhook.service";
+import { ingestInboundWebhook } from "./webhook-v2.service";
+import { createRedisWebhookRateLimiter } from "./webhook-rate-limit.service";
+import { getWebhookOperationalStatus, reprocessWebhookRequest } from "./webhook-operations.service";
 
 const idSchema = z.uuid();
 const listQuerySchema = z.object({
   page: z.coerce.number().int().min(1).default(1),
   limit: z.coerce.number().int().min(1).max(100).default(20),
+});
+const logListQuerySchema = listQuerySchema.extend({
+  status: z.enum(["RECEIVED", "QUEUED", "PROCESSING", "RETRYING", "SUCCEEDED", "FAILED", "DEAD_LETTER", "QUEUE_FAILED"]).optional(),
+  requestId: z.uuid().optional(),
+  from: z.coerce.date().optional(),
+  to: z.coerce.date().optional(),
 });
 const mappingSchema = z.object({
   incomingKey: z
@@ -163,6 +171,38 @@ webhooksAdminRouter.post(
 );
 
 webhooksAdminRouter.get(
+  "/operations",
+  requireAnyPermission("webhook.view", "webhook.manage"),
+  async (request, response, next) => {
+    try {
+      response.json(await getWebhookOperationalStatus(requireProgramId(request)));
+    } catch (error) {
+      next(error);
+    }
+  },
+);
+
+webhooksAdminRouter.post(
+  "/:id/logs/:logId/reprocess",
+  requireAnyPermission("webhook.manage"),
+  async (request, response, next) => {
+    try {
+      const ids = z.object({ id: idSchema, logId: idSchema }).safeParse(request.params);
+      if (!ids.success) return void response.status(400).json({ message: "Mã yêu cầu không hợp lệ." });
+      const result = await reprocessWebhookRequest(request.authUser!, requireProgramId(request), ids.data.id, ids.data.logId, request.ip);
+      if (!result.ok) {
+        if (result.reason === "not_found") return void response.status(404).json({ message: "Không tìm thấy yêu cầu webhook." });
+        if (result.reason === "invalid_status") return void response.status(409).json({ message: "Chỉ có thể xử lý lại yêu cầu thất bại hoặc Dead Letter." });
+        return void response.status(503).json({ message: "Yêu cầu đã được lưu nhưng hàng đợi đang không khả dụng." });
+      }
+      response.status(202).json({ requestId: result.requestId, status: result.status });
+    } catch (error) {
+      next(error);
+    }
+  },
+);
+
+webhooksAdminRouter.get(
   "/:id/logs/:logId",
   requireAnyPermission("webhook.view", "webhook.manage"),
   async (request, response, next) => {
@@ -196,7 +236,7 @@ webhooksAdminRouter.get(
   async (request, response, next) => {
     try {
       const id = idSchema.safeParse(request.params.id);
-      const query = listQuerySchema.safeParse(request.query);
+      const query = logListQuerySchema.safeParse(request.query);
       if (!id.success || !query.success)
         return void response
           .status(400)
@@ -411,7 +451,12 @@ export function createWebhookRateLimiter(limit = 300, windowMs = 60_000) {
     return current.count > limit;
   };
 }
-const exceedsRateLimit = createWebhookRateLimiter();
+
+let distributedRateLimiter = createRedisWebhookRateLimiter();
+
+export function setPublicWebhookRateLimiterForTests(limiter: typeof distributedRateLimiter) {
+  distributedRateLimiter = limiter;
+}
 
 export const publicWebhookRouter = Router();
 publicWebhookRouter.use(
@@ -459,20 +504,25 @@ publicWebhookRouter.post("/:webhookKey", async (request, response, next) => {
     } catch {
       payload = null;
     }
-    const result = await processInboundWebhook(
+    const idempotencyKey = z.string().trim().min(1).max(255).safeParse(request.header("idempotency-key"));
+    if (request.header("idempotency-key") && !idempotencyKey.success) {
+      return void response.status(400).json({ success: false, error: { code: "INVALID_IDEMPOTENCY_KEY", message: "Idempotency-Key không hợp lệ." } });
+    }
+    const result = await ingestInboundWebhook(
       key.data,
       request.header("x-webhook-secret"),
       payload,
-      exceedsRateLimit,
+      idempotencyKey.success ? idempotencyKey.data : undefined,
+      distributedRateLimiter,
       request.ip,
     );
+    if (!result.ok && result.retryAfterSeconds) response.setHeader("Retry-After", String(result.retryAfterSeconds));
     if (result.ok) {
       response.status(result.status).json({ success: true, data: result.data });
     } else {
-      const { duplicate_record_id: _hidden, ...publicError } = result.error;
       response
         .status(result.status)
-        .json({ success: false, error: publicError });
+        .json({ success: false, error: result.error });
     }
   } catch (error) {
     next(error);

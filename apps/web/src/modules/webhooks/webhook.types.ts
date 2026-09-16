@@ -4,6 +4,15 @@ export type WebhookDuplicatePolicy =
   | "UPDATE_EXISTING"
   | "REJECT";
 export type WebhookAction = "CREATED" | "UPDATED" | "REJECTED" | "FAILED";
+export type WebhookRequestStatus =
+  | "RECEIVED"
+  | "QUEUED"
+  | "PROCESSING"
+  | "RETRYING"
+  | "SUCCEEDED"
+  | "FAILED"
+  | "DEAD_LETTER"
+  | "QUEUE_FAILED";
 
 export type WebhookMapping = {
   id?: string;
@@ -57,19 +66,39 @@ export type WebhookField = {
 export type WebhookLog = {
   id: string;
   requestId: string;
-  status: "SUCCESS" | "FAILED";
+  status: WebhookRequestStatus;
   action: WebhookAction;
-  responseCode: number;
+  responseCode: number | null;
   errorCode: string | null;
   errorMessage: string | null;
   recordId: string | null;
   duplicateRecordId: string | null;
   processingTimeMs: number;
+  attemptCount: number;
+  maxAttempts: number;
+  lastAttemptAt: string | null;
+  nextRetryAt: string | null;
   receivedAt: string;
-  processedAt: string;
+  processedAt: string | null;
 };
 
 export type WebhookLogDetail = WebhookLog & {
   payload: unknown;
   mappedPayload: unknown;
+  totalAttemptCount: number;
+  processingStartedAt: string | null;
+  completedAt: string | null;
+  deadLetteredAt: string | null;
+  reprocessedCount: number;
+  attempts: Array<{
+    id: string;
+    attemptNumber: number;
+    status: string;
+    errorCode: string | null;
+    errorMessage: string | null;
+    errorCategory: string | null;
+    startedAt: string;
+    finishedAt: string | null;
+    durationMs: number | null;
+  }>;
 };
