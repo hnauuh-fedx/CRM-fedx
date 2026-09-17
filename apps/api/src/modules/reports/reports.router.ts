@@ -14,7 +14,6 @@ import {
   getStudentDetailReport,
 } from "./report-detail.service";
 import { getInstitutionProgramScope } from "../institutions/institution-program-scope";
-import { createMetabaseGuestToken, getMetabaseDashboardCatalog } from "./metabase-embed.service";
 import {
   archivePersonalReport,
   createPersonalReport,
@@ -101,20 +100,6 @@ function sendPersonalReportValidationError(response: Response, reason: string) {
       : "Cấu hình bảng thống kê không hợp lệ hoặc khoảng thời gian quá lớn.",
   });
 }
-
-reportsRouter.get("/metabase/dashboards", requireAuthentication, async (request, response) => {
-  response.json({ items: getMetabaseDashboardCatalog(request.authUser!) });
-});
-
-reportsRouter.post("/metabase/guest-token", requireAuthentication, async (request, response) => {
-  const parsed = z.object({ dashboardKey: z.literal("sale-pipeline") }).safeParse(request.body);
-  if (!parsed.success) return response.status(400).json({ message: "Dashboard báo cáo không hợp lệ." });
-  const institutionProgramId = getInstitutionProgramScope(request);
-  if (!institutionProgramId) return response.status(400).json({ message: "Vui lòng chọn chương trình tuyển sinh trước khi mở dashboard." });
-  const result = createMetabaseGuestToken(request.authUser!, parsed.data.dashboardKey, institutionProgramId);
-  if (!result.ok) return response.status(result.reason === "unavailable" ? 503 : 403).json({ message: result.reason === "unavailable" ? "Metabase chưa được cấu hình trên máy chủ." : "Bạn không có quyền mở dashboard này." });
-  return response.json(result.data);
-});
 
 reportsRouter.get("/personal/options", requireAuthentication, requireAnyPermission("report.personal.view"), async (request, response) => {
   response.json(getPersonalReportOptions(request.authUser!));

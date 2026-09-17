@@ -1,5 +1,6 @@
 import cors from "cors";
 import express, { type ErrorRequestHandler } from "express";
+import path from "node:path";
 
 import { env } from "./config/env";
 import { authRouter } from "./modules/auth/auth.router";
@@ -32,13 +33,26 @@ import "./modules/automations/automation-engine.service"; // Initialize BullMQ W
 import { usersRouter } from "./modules/users/users.router";
 import { customFieldsRouter } from "./modules/custom-fields/custom-fields.router";
 import { publicWebhookRouter, webhooksAdminRouter } from "./modules/webhooks/webhooks.router";
+import { zaloRouter } from "./modules/integrations/zalo/zalo.router";
+import "./modules/integrations/zalo/zalo-worker.service";
 
 export const app = express();
+const publicDirectory = path.resolve(__dirname, "../public");
 
 app.disable("x-powered-by");
 app.use(cors({ origin: env.WEB_ORIGIN }));
 app.use("/api/webhooks", publicWebhookRouter);
-app.use(express.json({ limit: "1mb" }));
+app.use(express.static(publicDirectory, {
+  dotfiles: "ignore",
+  fallthrough: true,
+  index: false,
+}));
+app.use(express.json({
+  limit: "1mb",
+  verify: (request, _response, buffer) => {
+    (request as typeof request & { rawBody?: string }).rawBody = buffer.toString("utf8");
+  },
+}));
 
 app.get("/api/health", (_request, response) => {
   response.json({ status: "ok" });
@@ -71,6 +85,7 @@ app.use("/api/utm-trackings", utmTrackingsRouter);
 app.use("/api/users", usersRouter);
 app.use("/api/custom-fields", customFieldsRouter);
 app.use("/api/settings/webhooks", webhooksAdminRouter);
+app.use("/api/integrations/zalo", zaloRouter);
 
 const errorHandler: ErrorRequestHandler = (error, _request, response, _next) => {
   if (error instanceof InstitutionProgramScopeError) {

@@ -10,7 +10,6 @@
     "seed:director-access": "tsx src/database/seed-director-access.ts",
     "seed:sale-access": "tsx src/database/seed-sale-access.ts",
     "seed:sensitive-permissions": "tsx src/database/seed-sensitive-permissions.ts",
-    "metabase:setup-readonly": "tsx src/database/setup-metabase-readonly.ts",
     "test:integration:leads": "tsx src/integration/lead-workflow.integration.ts",
     "test:integration:lead-import": "tsx src/integration/lead-import-minimal.integration.ts",
     "test:integration:director-leads": "tsx src/integration/director-lead-crud.integration.ts",
@@ -29,7 +28,7 @@
     "test:integration:webhooks-v2": "tsx src/integration/inbound-webhooks-v2.integration.ts",
     "test:integration:automation": "tsx src/integration/automation-engine.integration.ts",
     "test:automation": "tsx --test src/modules/automations/*.test.ts",
-    "test:security:metabase-reporting": "tsx src/integration/metabase-reporting-security.integration.ts",
+    "test:security:reporting": "tsx src/integration/reporting-security.integration.ts",
     "test:integration:reporting-pivot": "tsx src/integration/personal-report-pivot.integration.ts",
     "test:integration:personal-dashboard": "tsx src/integration/personal-dashboard.integration.ts"
   },

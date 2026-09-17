@@ -10,7 +10,7 @@ import {
   type PersonalReportFilterCondition,
   type PersonalReportModule,
 } from "./report-definitions";
-import { resolveMetabaseScopeKeys } from "./metabase-embed.service";
+import { resolveReportingScopeKeys } from "./reporting-scope";
 import {
   conditionSql,
   datasetFrom,
@@ -166,7 +166,7 @@ async function validateDashboardCustomization(user: AuthUser, customization: Per
 
 async function executeKpiWidget(user: AuthUser, institutionProgramId: string, widget: DashboardKpiWidgetInput, stages: PipelineStageOption[]) {
   const dataset = personalReportDatasetDefinitions[widget.datasetKey];
-  const scopeKeys = resolveMetabaseScopeKeys(user);
+  const scopeKeys = resolveReportingScopeKeys(user);
   if (!dataset || !canUseReportModule(user, dataset.module) || scopeKeys.length === 0 || !validateConditions(dataset, widget.conditions)) return unavailableWidget(widget);
   if (widget.type === "TREND" && widget.conditions.some((condition) => dataset.filterFields.find((field) => field.key === condition.fieldKey)?.type === "DATE")) return unavailableWidget(widget);
   if (widget.type === "CONVERSION") return executeConversionWidget(widget, institutionProgramId, scopeKeys, stages);

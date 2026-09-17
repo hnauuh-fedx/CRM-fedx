@@ -27,7 +27,7 @@ const gridClasses: Record<number, string> = {
   5: "grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 2xl:grid-cols-5",
 };
 
-export function MetabaseDashboardPage() {
+export function StatisticsDashboardPage() {
   const auth = useAuth();
   const queryClient = useQueryClient();
   const { selectedProgramId } = useInstitutionProgram();

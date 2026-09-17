@@ -21,7 +21,7 @@ import {
   type PersonalReportSingleDisplay,
   type PersonalReportTimePreset,
 } from "./report-definitions";
-import { resolveMetabaseScopeKeys } from "./metabase-embed.service";
+import { resolveReportingScopeKeys } from "./reporting-scope";
 
 export type PersonalReportInput = {
   name: string;
@@ -415,7 +415,7 @@ export async function getPersonalReportFilterValues(user: AuthUser, datasetKey: 
   const field = dataset?.filterFields.find((item) => item.key === fieldKey);
   if (!dataset || dataset.module && !canUseReportModule(user, dataset.module) || !field || field.type !== "CATEGORY") return null;
   if (!user.institutionProgramIds.includes(institutionProgramId)) return null;
-  const scopeKeys = resolveMetabaseScopeKeys(user);
+  const scopeKeys = resolveReportingScopeKeys(user);
   if (scopeKeys.length === 0) return [];
   const expression = rawFieldExpression(datasetKey, fieldKey);
   const orderBy = datasetKey === "LEADS" && fieldKey === "PIPELINE_STAGE"
@@ -437,7 +437,7 @@ async function executeDatasetSingleReport(user: AuthUser, stored: NonNullable<Aw
   if (dataset.module !== stored.module || !canUseReportModule(user, dataset.module)) return null;
   const dimension = dataset.singleDimensions.find((item) => item.key === filters.singleDimensionKey);
   if (!dimension || !validateConditions(dataset, filters.conditions ?? []) || !filters.singleDisplay) return null;
-  const scopeKeys = resolveMetabaseScopeKeys(user);
+  const scopeKeys = resolveReportingScopeKeys(user);
   const institutionProgramId = stored.institution_program_id ?? user.institutionProgramIds[0];
   if (!institutionProgramId || scopeKeys.length === 0) return null;
   const granularity = filters.dateGranularity ?? "DAY";
@@ -470,7 +470,7 @@ async function executeDatasetPivotReport(user: AuthUser, stored: NonNullable<Awa
   const rowField = dataset.fields.find((item) => item.key === filters.rowDimensionKey);
   const columnField = dataset.fields.find((item) => item.key === filters.columnDimensionKey);
   if (!rowField || !columnField || !validateConditions(dataset, filters.conditions ?? [])) return null;
-  const scopeKeys = resolveMetabaseScopeKeys(user);
+  const scopeKeys = resolveReportingScopeKeys(user);
   const institutionProgramId = stored.institution_program_id ?? user.institutionProgramIds[0];
   if (!institutionProgramId || scopeKeys.length === 0) return null;
   const granularity = filters.dateGranularity ?? "DAY";
@@ -537,7 +537,7 @@ async function executeLeadSingleReport(user: AuthUser, stored: NonNullable<Await
   const dimension = dataset.singleDimensions.find((item) => item.key === filters.singleDimensionKey);
   if (!dimension || (filters.singleDisplay !== "TABLE" && filters.singleDisplay !== "LINE")) return null;
   const range = resolvePersonalReportDateRange(filters);
-  const scopeKeys = resolveMetabaseScopeKeys(user);
+  const scopeKeys = resolveReportingScopeKeys(user);
   const institutionProgramId = stored.institution_program_id ?? user.institutionProgramIds[0];
   if (!range || scopeKeys.length === 0 || !institutionProgramId) return null;
 
@@ -591,7 +591,7 @@ async function executeLeadPivotReport(user: AuthUser, stored: NonNullable<Awaite
 
   const range = resolvePersonalReportDateRange(filters);
   if (!range) return null;
-  const scopeKeys = resolveMetabaseScopeKeys(user);
+  const scopeKeys = resolveReportingScopeKeys(user);
   if (scopeKeys.length === 0) return null;
   const institutionProgramId = stored.institution_program_id ?? user.institutionProgramIds[0];
   if (!institutionProgramId) return null;
