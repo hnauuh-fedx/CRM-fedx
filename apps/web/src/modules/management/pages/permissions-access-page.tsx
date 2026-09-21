@@ -3,6 +3,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { ChevronLeft, ChevronRight, Pencil, Plus, Search, ShieldCheck, Trash2 } from "lucide-react";
 
 import { EmptyState } from "@/components/shared/data-states";
+import { AutoFilterActions } from "@/components/shared/auto-filter-actions";
 import { ErrorState } from "@/components/shared/error-state";
 import { PageHeader } from "@/components/shared/page-header";
 import { TableLoadingState } from "@/components/shared/table-loading-state";
@@ -222,10 +223,7 @@ export function PermissionsAccessPage() {
                 </SelectContent>
               </Select>
             </Field>
-            <Button type="submit">Áp dụng</Button>
-            <Button type="button" variant="outline" onClick={() => { setFilters(emptyFilters); setAppliedFilters(emptyFilters); setPage(1); }}>
-              Xóa lọc
-            </Button>
+            <AutoFilterActions snapshot={filters} onApply={() => { setAppliedFilters({ ...filters, search: filters.search.trim() }); setPage(1); }} onReset={() => { setFilters(emptyFilters); setAppliedFilters(emptyFilters); setPage(1); }} />
           </form>
         </CardContent>
       </Card>

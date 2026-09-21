@@ -28,6 +28,14 @@ export function createCustomerList(input: { name: string; filters?: CustomerList
   );
 }
 
+export function updateCustomerList(id: string, input: { name: string; filters?: CustomerListFilterConfig }, accessToken: string) {
+  return apiRequest<CustomerListItem>(
+    `/customer-lists/${id}`,
+    { method: "PATCH", body: JSON.stringify(input) },
+    accessToken,
+  );
+}
+
 export function addLeadsToCustomerList(id: string, leadIds: string[], accessToken: string) {
   return apiRequest<{ id: string; addedCount: number }>(
     `/customer-lists/${id}/leads`,

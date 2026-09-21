@@ -3,6 +3,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { ArrowDown, ArrowUp, ArrowUpDown, CheckCircle2, ChevronLeft, ChevronRight, FileUp, Search, XCircle } from "lucide-react";
 
 import { EmptyState } from "@/components/shared/data-states";
+import { AutoFilterActions } from "@/components/shared/auto-filter-actions";
 import { ErrorState } from "@/components/shared/error-state";
 import { FilterSelect } from "@/components/shared/filter-select";
 import { PageHeader } from "@/components/shared/page-header";
@@ -232,10 +233,7 @@ export function AdmissionDocumentsPage() {
               </Field>
               <FilterSelect id="admission-document-status" label="Trạng thái" value={state.status} onChange={(value) => dispatch({ type: "setStatus", value })} options={statusOptions.map((status) => ({ value: status, label: statusLabels[normalizeStatus(status)] ?? status }))} />
               <FilterSelect id="admission-document-type" label="Loại tài liệu" value={state.type} onChange={(value) => dispatch({ type: "setType", value })} options={typeOptions.map((type) => ({ value: type, label: type }))} />
-              <div className="flex items-end gap-2">
-                <Button type="submit">Áp dụng</Button>
-                <Button type="button" variant="outline" onClick={() => dispatch({ type: "resetFilters" })}>Xóa lọc</Button>
-              </div>
+              <AutoFilterActions snapshot={{ search: state.search, status: state.status, type: state.type }} onApply={() => dispatch({ type: "applyFilters" })} onReset={() => dispatch({ type: "resetFilters" })} />
             </FieldGroup>
           </form>
         </CardContent>

@@ -1,4 +1,4 @@
-import { useMemo, useState, type KeyboardEvent } from "react";
+import { useEffect, useMemo, useState, type KeyboardEvent } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   flexRender,
@@ -21,16 +21,18 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardAction, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Checkbox } from "@/components/ui/checkbox";
-import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
+import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuGroup, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
-import { Field, FieldGroup, FieldLabel } from "@/components/ui/field";
+import { Field, FieldDescription, FieldError, FieldGroup, FieldLabel } from "@/components/ui/field";
 import { Input } from "@/components/ui/input";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Select, SelectContent, SelectGroup, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Spinner } from "@/components/ui/spinner";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { useAuth } from "@/modules/auth/auth-context";
+import { cn } from "@/lib/utils";
 import { ApiError } from "@/services/api";
 import { addLeadsToCustomerList, createCustomerList, getCustomerListLeads, getCustomerLists } from "@/services/customer-list.service";
-import { createLead, getLead, getLeadActionOptions, getLeadFilterOptions, getLeads, importLeads, updateLead, updateLeadCustomFields } from "@/services/lead.service";
+import { assignLeads, createLead, deleteLeads, getLead, getLeadActionOptions, getLeadFilterOptions, getLeads, importLeads, updateLead, updateLeadCustomFields } from "@/services/lead.service";
 import { LeadForm, LeadProgressSelector } from "../components/lead-form";
 import { toLeadFormOptions, toLeadFormValues } from "../lead-form.helpers";
 import { emptyLeadForm } from "../lead.schema";
@@ -329,6 +331,9 @@ export function LeadsListPage({
   const canCreate = showLeadCreationActions && auth.can("lead.create");
   const [partialCreateLeadId, setPartialCreateLeadId] = useState<string | null>(null);
   const canUpdate = ["lead.update_all", "lead.update_department", "lead.update_assigned"].some(auth.can);
+  const canDelete = auth.can("lead.delete");
+  const isSaleList = !enableCustomerListAssignment;
+  const canAssignSale = isSaleList && (auth.can("lead.assign") || auth.can("lead.reassign"));
   const [{ page, editingLeadId, isEditDialogOpen }, setViewState] = useState<{
     page: number;
     editingLeadId: string | null;
@@ -340,11 +345,21 @@ export function LeadsListPage({
   });
   const [draftFilters, setDraftFilters] = useState<LeadListFilters>(emptyFilters);
   const [filters, setFilters] = useState<LeadListFilters>(emptyFilters);
+  useEffect(() => {
+    if (draftFilters.search === filters.search) return;
+    const timeout = window.setTimeout(() => {
+      setFilters((current) => ({ ...current, search: draftFilters.search }));
+      setViewState((current) => ({ ...current, page: 1 }));
+    }, 300);
+    return () => window.clearTimeout(timeout);
+  }, [draftFilters.search, filters.search]);
   const [sorting, setSorting] = useState<SortingState>([
     { id: "createdAt", desc: true },
   ]);
   const [rowSelection, setRowSelection] = useState<RowSelectionState>({});
   const [assignmentOpen, setAssignmentOpen] = useState(false);
+  const [saleAssignmentOpen, setSaleAssignmentOpen] = useState(false);
+  const [bulkDeleteOpen, setBulkDeleteOpen] = useState(false);
   const primarySort = sorting[0] ?? { id: "createdAt", desc: true };
   const sortBy = sortableColumns.has(primarySort.id as LeadSortField)
     ? (primarySort.id as LeadSortField)
@@ -373,7 +388,7 @@ export function LeadsListPage({
   const actionOptionsQuery = useQuery({
     queryKey: ["leads", "action-options"],
     queryFn: () => getLeadActionOptions(auth.accessToken!),
-    enabled: canCreate || canUpdate,
+    enabled: canCreate || canUpdate || canAssignSale,
   });
   const createMutation = useMutation({
     mutationFn: async (input: LeadFormInput) => {
@@ -540,7 +555,7 @@ export function LeadsListPage({
   });
 
   return (
-    <div className="mx-auto flex max-w-400 flex-col gap-6">
+    <div className="mx-auto flex w-full min-w-0 max-w-400 flex-col gap-6">
       <PageHeader
         eyebrow={eyebrow}
         title={title}
@@ -631,12 +646,12 @@ export function LeadsListPage({
       <LeadFiltersCard
         filters={draftFilters}
         options={optionsQuery.data}
-        onChange={(field, value) =>
-          setDraftFilters((current) => ({ ...current, [field]: value }))
-        }
-        onApply={() => {
-          setFilters(draftFilters);
-          setViewState((current) => ({ ...current, page: 1 }));
+        onChange={(field, value) => {
+          setDraftFilters((current) => ({ ...current, [field]: value }));
+          if (field !== "search") {
+            setFilters((current) => ({ ...current, [field]: value }));
+            setViewState((current) => ({ ...current, page: 1 }));
+          }
         }}
         onReset={() => {
           setDraftFilters(emptyFilters);
@@ -668,6 +683,12 @@ export function LeadsListPage({
         )}
         selectedCount={Object.keys(rowSelection).length}
         onAssignToCustomerList={() => setAssignmentOpen(true)}
+        showSaleActions={isSaleList}
+        canAssignSale={canAssignSale}
+        onAssignSale={() => setSaleAssignmentOpen(true)}
+        canDelete={canDelete}
+        onDelete={() => setBulkDeleteOpen(true)}
+        onClearSelection={() => setRowSelection({})}
       />
       <AssignToCustomerListDialog
         open={assignmentOpen}
@@ -675,6 +696,30 @@ export function LeadsListPage({
         onOpenChange={setAssignmentOpen}
         onSuccess={() => {
           setRowSelection({});
+          queryClient.invalidateQueries({ queryKey: ["customer-lists"] });
+        }}
+      />
+      <AssignSaleDialog
+        open={saleAssignmentOpen}
+        leadIds={Object.keys(rowSelection)}
+        telesales={actionOptionsQuery.data?.telesales ?? []}
+        optionsLoading={actionOptionsQuery.isLoading}
+        optionsError={actionOptionsQuery.isError}
+        onOpenChange={setSaleAssignmentOpen}
+        onSuccess={() => {
+          setRowSelection({});
+          queryClient.invalidateQueries({ queryKey: ["leads"] });
+          queryClient.invalidateQueries({ queryKey: ["sale"] });
+        }}
+      />
+      <BulkDeleteLeadsDialog
+        open={bulkDeleteOpen}
+        leadIds={Object.keys(rowSelection)}
+        onOpenChange={setBulkDeleteOpen}
+        onSuccess={() => {
+          setRowSelection({});
+          queryClient.invalidateQueries({ queryKey: ["leads"] });
+          queryClient.invalidateQueries({ queryKey: ["sale"] });
           queryClient.invalidateQueries({ queryKey: ["customer-lists"] });
         }}
       />
@@ -770,6 +815,187 @@ function EditLeadDialog({
   );
 }
 
+function AssignSaleDialog({
+  open,
+  leadIds,
+  telesales,
+  optionsLoading,
+  optionsError,
+  onOpenChange,
+  onSuccess,
+}: {
+  open: boolean;
+  leadIds: string[];
+  telesales: Array<{ id: string; fullName: string }>;
+  optionsLoading: boolean;
+  optionsError: boolean;
+  onOpenChange: (open: boolean) => void;
+  onSuccess: () => void;
+}) {
+  const auth = useAuth();
+  const [assigneeId, setAssigneeId] = useState("");
+  const assignmentMutation = useMutation({
+    mutationFn: () => assignLeads(leadIds, assigneeId, auth.accessToken!),
+    onSuccess: () => {
+      onSuccess();
+      setAssigneeId("");
+      onOpenChange(false);
+    },
+  });
+  const setOpen = (next: boolean) => {
+    if (assignmentMutation.isPending) return;
+    if (next) assignmentMutation.reset();
+    else setAssigneeId("");
+    onOpenChange(next);
+  };
+
+  return (
+    <Dialog open={open} onOpenChange={setOpen}>
+      <DialogContent>
+        <DialogHeader>
+          <DialogTitle>Gán nhân viên sale</DialogTitle>
+          <DialogDescription>
+            Chọn nhân viên sale phụ trách cho {leadIds.length} lead đang được chọn.
+          </DialogDescription>
+        </DialogHeader>
+        <FieldGroup>
+          <Field data-invalid={assignmentMutation.isError}>
+            <FieldLabel htmlFor="bulk-lead-assignee">Nhân viên sale</FieldLabel>
+            <Select value={assigneeId} onValueChange={setAssigneeId} disabled={optionsLoading || assignmentMutation.isPending}>
+              <SelectTrigger id="bulk-lead-assignee" className="w-full" aria-invalid={assignmentMutation.isError}>
+                <SelectValue placeholder={optionsLoading ? "Đang tải nhân viên sale…" : "Chọn nhân viên sale"} />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectGroup>
+                  {telesales.map((telesale) => (
+                    <SelectItem key={telesale.id} value={telesale.id}>{telesale.fullName}</SelectItem>
+                  ))}
+                </SelectGroup>
+              </SelectContent>
+            </Select>
+          </Field>
+          {optionsError && (
+            <p role="alert" className="text-sm text-destructive">Không thể tải danh sách nhân viên sale. Vui lòng đóng cửa sổ và thử lại.</p>
+          )}
+          {!optionsLoading && !optionsError && telesales.length === 0 && (
+            <p role="status" className="text-sm text-muted-foreground">Không có nhân viên sale phù hợp trong phạm vi phân công của bạn.</p>
+          )}
+          {assignmentMutation.isError && (
+            <p role="alert" className="text-sm text-destructive">
+              {assignmentMutation.error instanceof ApiError
+                ? assignmentMutation.error.message
+                : "Không thể gán nhân viên sale. Vui lòng thử lại."}
+            </p>
+          )}
+        </FieldGroup>
+        <DialogFooter>
+          <Button type="button" variant="outline" disabled={assignmentMutation.isPending} onClick={() => setOpen(false)}>Hủy</Button>
+          <Button
+            type="button"
+            disabled={!assigneeId || leadIds.length === 0 || optionsLoading || optionsError || assignmentMutation.isPending}
+            onClick={() => assignmentMutation.mutate()}
+          >
+            {assignmentMutation.isPending && <Spinner data-icon="inline-start" aria-hidden="true" />}
+            {assignmentMutation.isPending ? "Đang gán…" : "Xác nhận gán sale"}
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
+function BulkDeleteLeadsDialog({
+  open,
+  leadIds,
+  onOpenChange,
+  onSuccess,
+}: {
+  open: boolean;
+  leadIds: string[];
+  onOpenChange: (open: boolean) => void;
+  onSuccess: () => void;
+}) {
+  const auth = useAuth();
+  const [confirmationValue, setConfirmationValue] = useState("");
+  const requiredConfirmation = `Xác nhận xóa ${leadIds.length} lead`;
+  const hasConfirmationError = confirmationValue.length > 0 && confirmationValue !== requiredConfirmation;
+  const deleteMutation = useMutation({
+    mutationFn: () => deleteLeads(leadIds, auth.accessToken!),
+    onSuccess: () => {
+      onSuccess();
+      setConfirmationValue("");
+      onOpenChange(false);
+    },
+  });
+  const setOpen = (next: boolean) => {
+    if (deleteMutation.isPending) return;
+    if (next) deleteMutation.reset();
+    else setConfirmationValue("");
+    onOpenChange(next);
+  };
+
+  return (
+    <Dialog open={open} onOpenChange={setOpen}>
+      <DialogContent>
+        <DialogHeader>
+          <DialogTitle>Xóa hàng loạt</DialogTitle>
+          <DialogDescription>
+            Bạn đang chuẩn bị xóa {leadIds.length} lead. Thao tác này sẽ đưa các lead ra khỏi danh sách hoạt động.
+          </DialogDescription>
+        </DialogHeader>
+        <form
+          className="flex flex-col gap-6"
+          onSubmit={(event) => {
+            event.preventDefault();
+            if (confirmationValue === requiredConfirmation) deleteMutation.mutate();
+          }}
+        >
+          <FieldGroup>
+            <Field data-invalid={hasConfirmationError || deleteMutation.isError}>
+              <FieldLabel htmlFor="bulk-delete-confirmation">Nhập nội dung xác nhận</FieldLabel>
+              <FieldDescription>
+                Nhập chính xác: <span className="font-semibold text-foreground">{requiredConfirmation}</span>
+              </FieldDescription>
+              <Input
+                id="bulk-delete-confirmation"
+                value={confirmationValue}
+                onChange={(event) => setConfirmationValue(event.target.value)}
+                placeholder={requiredConfirmation}
+                autoComplete="off"
+                spellCheck={false}
+                disabled={deleteMutation.isPending}
+                aria-invalid={hasConfirmationError || deleteMutation.isError}
+                autoFocus
+              />
+              {hasConfirmationError && <FieldError>Nội dung xác nhận chưa chính xác.</FieldError>}
+              {deleteMutation.isError && (
+                <FieldError>
+                  {deleteMutation.error instanceof ApiError
+                    ? deleteMutation.error.message
+                    : "Không thể xóa các lead đã chọn. Vui lòng thử lại."}
+                </FieldError>
+              )}
+            </Field>
+          </FieldGroup>
+          <DialogFooter>
+            <Button type="button" variant="outline" disabled={deleteMutation.isPending} onClick={() => setOpen(false)}>
+              Hủy
+            </Button>
+            <Button
+              type="submit"
+              variant="destructive"
+              disabled={leadIds.length === 0 || confirmationValue !== requiredConfirmation || deleteMutation.isPending}
+            >
+              {deleteMutation.isPending && <Spinner data-icon="inline-start" aria-hidden="true" />}
+              {deleteMutation.isPending ? "Đang xóa…" : `Xóa ${leadIds.length} lead`}
+            </Button>
+          </DialogFooter>
+        </form>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
 function AssignToCustomerListDialog({
   open,
   leadIds,
@@ -856,32 +1082,26 @@ type LeadFiltersCardProps = {
   filters: LeadListFilters;
   options?: LeadFilterOptions;
   onChange: (field: keyof LeadListFilters, value: string) => void;
-  onApply: () => void;
   onReset: () => void;
 };
 
-function LeadFiltersCard({ filters, options, onChange, onApply, onReset }: LeadFiltersCardProps) {
+function LeadFiltersCard({ filters, options, onChange, onReset }: LeadFiltersCardProps) {
+  const hasActiveFilters = Object.values(filters).some(Boolean);
   return (
-    <Card className="gap-4 border-border/70 py-5 shadow-xs">
+    <Card className={cn("gap-4 border-border/70 py-5 shadow-xs", hasActiveFilters && "border-primary/30 bg-primary/5")}>
       <CardHeader className="gap-1 px-5">
-        <CardTitle>Bộ lọc</CardTitle>
+        <CardTitle className="flex flex-wrap items-center gap-2">Bộ lọc {hasActiveFilters && <Badge variant="secondary">Đang lọc</Badge>}</CardTitle>
         <CardDescription>Tìm theo mã hoặc họ tên; lọc danh sách trong phạm vi được xem.</CardDescription>
       </CardHeader>
       <CardContent className="px-5">
-        <form
-          onSubmit={(event) => {
-            event.preventDefault();
-            onApply();
-          }}
-        >
-          <FieldGroup className="grid gap-4 lg:grid-cols-[minmax(220px,2fr)_repeat(3,minmax(150px,1fr))_auto]">
+        <FieldGroup className="grid gap-4 lg:grid-cols-[minmax(220px,2fr)_repeat(3,minmax(150px,1fr))_auto]">
           <Field className="gap-2">
             <FieldLabel htmlFor="lead-search">Tìm kiếm</FieldLabel>
             <div className="relative">
               <Search className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground" aria-hidden="true" />
               <Input
                 id="lead-search"
-                className="pl-9"
+                className={cn("pl-9", filters.search && "border-primary/40 bg-primary/5")}
                 value={filters.search}
                 placeholder="Nhập mã lead hoặc họ tên"
                 onChange={(event) => onChange("search", event.target.value)}
@@ -892,6 +1112,7 @@ function LeadFiltersCard({ filters, options, onChange, onApply, onReset }: LeadF
             id="lead-pipeline-stage"
             label="Quy trình"
             value={filters.pipelineStageId}
+            active={Boolean(filters.pipelineStageId)}
             onChange={(value) => onChange("pipelineStageId", value)}
             options={(options?.stages ?? []).map((stage) => ({
               value: stage.id,
@@ -902,6 +1123,7 @@ function LeadFiltersCard({ filters, options, onChange, onApply, onReset }: LeadF
             id="lead-source"
             label="Nguồn lead"
             value={filters.sourceId}
+            active={Boolean(filters.sourceId)}
             onChange={(value) => onChange("sourceId", value)}
             options={(options?.sources ?? []).map((source) => ({
               value: source.id,
@@ -912,6 +1134,7 @@ function LeadFiltersCard({ filters, options, onChange, onApply, onReset }: LeadF
             id="lead-assignee"
             label="Nhân viên"
             value={filters.assigneeId}
+            active={Boolean(filters.assigneeId)}
             onChange={(value) => onChange("assigneeId", value)}
             options={(options?.assignees ?? []).map((assignee) => ({
               value: assignee.id,
@@ -919,13 +1142,11 @@ function LeadFiltersCard({ filters, options, onChange, onApply, onReset }: LeadF
             }))}
           />
           <div className="flex items-end gap-2">
-            <Button type="submit">Áp dụng</Button>
             <Button type="button" variant="outline" onClick={onReset}>
               Xóa lọc
             </Button>
           </div>
-          </FieldGroup>
-        </form>
+        </FieldGroup>
       </CardContent>
     </Card>
   );
@@ -949,7 +1170,77 @@ type LeadResultsCardProps = {
   canAssignToCustomerList: boolean;
   selectedCount: number;
   onAssignToCustomerList: () => void;
+  showSaleActions: boolean;
+  canAssignSale: boolean;
+  onAssignSale: () => void;
+  canDelete: boolean;
+  onDelete: () => void;
+  onClearSelection: () => void;
 };
+
+type LeadBulkActionsMenuProps = Pick<
+  LeadResultsCardProps,
+  | "canAssignToCustomerList"
+  | "selectedCount"
+  | "onAssignToCustomerList"
+  | "showSaleActions"
+  | "canAssignSale"
+  | "onAssignSale"
+  | "canDelete"
+  | "onDelete"
+  | "onClearSelection"
+>;
+
+function LeadBulkActionsMenu({
+  canAssignToCustomerList,
+  selectedCount,
+  onAssignToCustomerList,
+  showSaleActions,
+  canAssignSale,
+  onAssignSale,
+  canDelete,
+  onDelete,
+  onClearSelection,
+}: LeadBulkActionsMenuProps) {
+  const selectionLabel = selectedCount > 0 ? ` (${selectedCount})` : "";
+  const hasNoSelection = selectedCount === 0;
+
+  return (
+    <DropdownMenu>
+      <DropdownMenuTrigger asChild>
+        <Button type="button" variant="outline">
+          Hành động
+          <ChevronDown data-icon="inline-end" aria-hidden="true" />
+        </Button>
+      </DropdownMenuTrigger>
+      <DropdownMenuContent align="end" className="w-52">
+        <DropdownMenuGroup>
+          {canAssignSale && (
+            <DropdownMenuItem disabled={hasNoSelection} onSelect={onAssignSale}>
+              Gán sale{selectionLabel}
+            </DropdownMenuItem>
+          )}
+          {canAssignToCustomerList && (
+            <DropdownMenuItem disabled={hasNoSelection} onSelect={onAssignToCustomerList}>
+              Gán vào danh sách{selectionLabel}
+            </DropdownMenuItem>
+          )}
+          {canDelete && (
+            <DropdownMenuItem disabled={hasNoSelection} variant="destructive" onSelect={onDelete}>
+              Xóa hàng loạt{selectionLabel}
+            </DropdownMenuItem>
+          )}
+          <DropdownMenuItem disabled>Cập nhật hàng loạt</DropdownMenuItem>
+          {showSaleActions && (
+            <DropdownMenuItem disabled={hasNoSelection} onSelect={onClearSelection}>
+              Hủy chọn{selectionLabel}
+            </DropdownMenuItem>
+          )}
+        </DropdownMenuGroup>
+      </DropdownMenuContent>
+    </DropdownMenu>
+  );
+}
 
 function LeadResultsCard({
   table,
@@ -965,6 +1256,12 @@ function LeadResultsCard({
   canAssignToCustomerList,
   selectedCount,
   onAssignToCustomerList,
+  showSaleActions,
+  canAssignSale,
+  onAssignSale,
+  canDelete,
+  onDelete,
+  onClearSelection,
 }: LeadResultsCardProps) {
   const { isLoading, isError, isFetching } = queryState;
   return (
@@ -977,24 +1274,17 @@ function LeadResultsCard({
             : "Đang lấy dữ liệu lead…"}
         </CardDescription>
         <CardAction>
-          <DropdownMenu>
-            <DropdownMenuTrigger asChild>
-              <Button type="button" variant="outline">
-                Hành động
-                <ChevronDown data-icon="inline-end" aria-hidden="true" />
-              </Button>
-            </DropdownMenuTrigger>
-            <DropdownMenuContent align="end" className="w-52">
-              <DropdownMenuGroup>
-                <DropdownMenuItem disabled>Gán sale</DropdownMenuItem>
-                <DropdownMenuItem disabled={!canAssignToCustomerList || selectedCount === 0} onSelect={onAssignToCustomerList}>
-                  Gán vào danh sách{selectedCount > 0 ? ` (${selectedCount})` : ""}
-                </DropdownMenuItem>
-                <DropdownMenuItem disabled variant="destructive">Xóa hàng loạt</DropdownMenuItem>
-                <DropdownMenuItem disabled>Cập nhật hàng loạt</DropdownMenuItem>
-              </DropdownMenuGroup>
-            </DropdownMenuContent>
-          </DropdownMenu>
+          <LeadBulkActionsMenu
+            canAssignToCustomerList={canAssignToCustomerList}
+            selectedCount={selectedCount}
+            onAssignToCustomerList={onAssignToCustomerList}
+            showSaleActions={showSaleActions}
+            canAssignSale={canAssignSale}
+            onAssignSale={onAssignSale}
+            canDelete={canDelete}
+            onDelete={onDelete}
+            onClearSelection={onClearSelection}
+          />
         </CardAction>
       </CardHeader>
       <CardContent className="p-0">

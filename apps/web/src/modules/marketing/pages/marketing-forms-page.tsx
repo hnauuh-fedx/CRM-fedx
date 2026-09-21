@@ -14,6 +14,7 @@ import { useFieldArray, useForm } from "react-hook-form";
 import { z } from "zod";
 
 import { EmptyState } from "@/components/shared/data-states";
+import { AutoFilterActions } from "@/components/shared/auto-filter-actions";
 import { ErrorState } from "@/components/shared/error-state";
 import { FilterSelect } from "@/components/shared/filter-select";
 import { PageHeader } from "@/components/shared/page-header";
@@ -1789,7 +1790,7 @@ function Filters({ filters, options, onChange, onApply, onReset }: {
             <FilterSelect id="marketing-form-status" label="Trạng thái" value={filters.status} onChange={(value) => onChange("status", value)} options={(options?.statuses ?? []).map((status) => ({ value: status, label: displayStatus(status) }))} />
             <FilterSelect id="marketing-form-platform" label="Nền tảng" value={filters.platform} onChange={(value) => onChange("platform", value)} options={(options?.platforms ?? []).map((platform) => ({ value: platform, label: platform }))} />
             <FilterSelect id="marketing-form-campaign" label="Chiến dịch" value={filters.campaignId} onChange={(value) => onChange("campaignId", value)} options={(options?.campaigns ?? []).map((campaign) => ({ value: campaign.id, label: campaign.name }))} />
-            <div className="flex items-end gap-2"><Button type="submit">Áp dụng</Button><Button type="button" variant="outline" onClick={onReset}>Xóa lọc</Button></div>
+            <AutoFilterActions snapshot={filters} onApply={onApply} onReset={onReset} />
           </FieldGroup>
         </form>
       </CardContent>

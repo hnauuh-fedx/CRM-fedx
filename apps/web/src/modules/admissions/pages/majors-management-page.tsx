@@ -5,6 +5,7 @@ import { ChevronLeft, ChevronRight, Pencil, Plus, Search, Trash2 } from "lucide-
 import { z } from "zod";
 
 import { EmptyState } from "@/components/shared/data-states";
+import { AutoFilterActions } from "@/components/shared/auto-filter-actions";
 import { ErrorState } from "@/components/shared/error-state";
 import { PageHeader } from "@/components/shared/page-header";
 import { TableLoadingState } from "@/components/shared/table-loading-state";
@@ -133,10 +134,7 @@ export function MajorsManagementPage() {
                 <Input id="major-management-search" className="pl-9" value={search} onChange={(event) => setSearch(event.target.value)} placeholder="Nhập tên hoặc mã ngành" />
               </div>
             </Field>
-            <Button type="submit">Áp dụng</Button>
-            <Button type="button" variant="outline" onClick={() => { setSearch(""); setAppliedSearch(""); setPage(1); }}>
-              Xóa lọc
-            </Button>
+            <AutoFilterActions snapshot={{ search }} onApply={() => { setAppliedSearch(search.trim()); setPage(1); }} onReset={() => { setSearch(""); setAppliedSearch(""); setPage(1); }} />
           </form>
         </CardContent>
       </Card>

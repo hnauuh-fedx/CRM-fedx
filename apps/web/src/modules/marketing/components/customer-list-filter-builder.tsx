@@ -126,7 +126,7 @@ export function CustomerListFilterBuilder({ form, options }: { form: UseFormRetu
   return (
     <FieldSet className="rounded-lg border bg-muted/25 p-4">
       <FieldLegend>Bộ lọc tự động (không bắt buộc)</FieldLegend>
-      <FieldDescription>Chọn trường dữ liệu và điều kiện tương ứng. Không thêm điều kiện để tạo danh sách trống.</FieldDescription>
+      <FieldDescription>Chọn trường dữ liệu và điều kiện tương ứng. Không có điều kiện sẽ chuyển danh sách sang chế độ tĩnh.</FieldDescription>
       {conditions.fields.length > 1 && <Field className="max-w-xs"><FieldLabel htmlFor="customer-list-combinator">Cách kết hợp điều kiện</FieldLabel><Select value={form.watch("filters.combinator")} onValueChange={(value) => form.setValue("filters.combinator", value as "AND" | "OR")}><SelectTrigger id="customer-list-combinator" className="w-full"><SelectValue /></SelectTrigger><SelectContent><SelectGroup><SelectItem value="AND">Thỏa mãn tất cả (VÀ)</SelectItem><SelectItem value="OR">Thỏa mãn ít nhất một (HOẶC)</SelectItem></SelectGroup></SelectContent></Select></Field>}
       <FieldGroup className="gap-3">
         {conditions.fields.map((item, index) => {

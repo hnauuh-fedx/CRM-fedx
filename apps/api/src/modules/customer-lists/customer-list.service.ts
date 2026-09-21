@@ -1,4 +1,4 @@
-import type { Prisma } from "../../generated/prisma/client";
+import { Prisma } from "../../generated/prisma/client";
 
 import { prisma } from "../../database/prisma";
 import type { AuthUser } from "../auth/auth.types";
@@ -22,6 +22,21 @@ type CustomerListRecord = {
   created_at: Date;
   updated_at: Date;
 };
+
+function filtersAreEqual(left: CustomerListFilterConfig, right: CustomerListFilterConfig) {
+  const signatures = (config: CustomerListFilterConfig) => config.conditions
+    .map((condition) => JSON.stringify({
+      field: condition.field,
+      operator: condition.operator,
+      value: condition.value ?? null,
+      from: condition.from ?? null,
+      to: condition.to ?? null,
+      relativeRange: condition.relativeRange ?? null,
+    }))
+    .sort();
+  return left.combinator === right.combinator
+    && JSON.stringify(signatures(left)) === JSON.stringify(signatures(right));
+}
 
 function membershipWhere(listId: string, filters: CustomerListFilterConfig): Prisma.leadsWhereInput {
   const dynamic = customerListDynamicWhere(filters);
@@ -97,6 +112,47 @@ async function filterReferencesAreVisible(user: AuthUser, config: CustomerListFi
     && assigneeCount === assigneeIds.length && majorCount === majorIds.length;
 }
 
+async function materializeDynamicMembers(
+  user: AuthUser,
+  list: CustomerListRecord,
+  filters: CustomerListFilterConfig,
+) {
+  const dynamicWhere = customerListDynamicWhere(filters);
+  if (!dynamicWhere) return 0;
+
+  const batchSize = 1_000;
+  let cursor: string | undefined;
+  let materializedCount = 0;
+
+  while (true) {
+    const leads = await prisma.leads.findMany({
+      where: {
+        AND: [
+          { deleted_at: null },
+          { institution_program_id: list.institution_program_id },
+          getLeadScopeWhere(user),
+          dynamicWhere,
+        ],
+      },
+      select: { id: true },
+      orderBy: { id: "asc" },
+      take: batchSize,
+      ...(cursor ? { cursor: { id: cursor }, skip: 1 } : {}),
+    });
+    if (leads.length === 0) break;
+
+    const result = await prisma.customer_list_members.createMany({
+      data: leads.map((lead) => ({ customer_list_id: list.id, lead_id: lead.id, added_by: user.id })),
+      skipDuplicates: true,
+    });
+    materializedCount += result.count;
+    cursor = leads.at(-1)!.id;
+    if (leads.length < batchSize) break;
+  }
+
+  return materializedCount;
+}
+
 export async function listCustomerLists(
   user: AuthUser,
   input: { page: number; limit: number; search?: string; institutionProgramId: string },
@@ -169,6 +225,67 @@ export async function createCustomerList(
     return list;
   });
   return { ok: true as const, data: await serializeList(user, created) };
+}
+
+export async function updateCustomerList(
+  user: AuthUser,
+  id: string,
+  input: { name: string; filters?: CustomerListFilterConfig; institutionProgramId: string },
+  ipAddress?: string,
+) {
+  const existing = await findAccessibleList(user, id, input.institutionProgramId);
+  if (!existing) return { ok: false as const, reason: "not_found" as const };
+
+  const duplicate = await prisma.customer_lists.findFirst({
+    where: {
+      id: { not: id },
+      institution_program_id: input.institutionProgramId,
+      deleted_at: null,
+      name: { equals: input.name, mode: "insensitive" },
+    },
+    select: { id: true },
+  });
+  if (duplicate) return { ok: false as const, reason: "duplicate_name" as const };
+
+  const previousFilters = normalizeCustomerListFilterConfig(existing.filter_config);
+  const filters = normalizeCustomerListFilterConfig(input.filters);
+  if (!(await filterReferencesAreVisible(user, filters, input.institutionProgramId))) {
+    return { ok: false as const, reason: "invalid_filter" as const };
+  }
+
+  const removesDynamicFilter = hasCustomerListFilters(previousFilters) && !hasCustomerListFilters(filters);
+  const replacesFilter = hasCustomerListFilters(filters) && !filtersAreEqual(previousFilters, filters);
+  const materializedLeadCount = removesDynamicFilter
+    ? await materializeDynamicMembers(user, existing, previousFilters)
+    : 0;
+
+  const updated = await prisma.$transaction(async (tx) => {
+    const clearedMemberCount = replacesFilter
+      ? (await tx.customer_list_members.deleteMany({ where: { customer_list_id: id } })).count
+      : 0;
+    const list = await tx.customer_lists.update({
+      where: { id },
+      data: {
+        name: input.name,
+        filter_config: hasCustomerListFilters(filters) ? filters : Prisma.DbNull,
+        updated_at: new Date(),
+      },
+    });
+    await tx.audit_logs.create({
+      data: {
+        user_id: user.id,
+        entity_type: "customer_list",
+        entity_id: id,
+        action: "update",
+        ip_address: ipAddress,
+        old_data: { name: existing.name, filters: previousFilters },
+        new_data: { name: input.name, filters, materializedLeadCount, clearedMemberCount },
+      },
+    });
+    return list;
+  });
+
+  return { ok: true as const, data: await serializeList(user, updated) };
 }
 
 export async function listCustomerListLeads(

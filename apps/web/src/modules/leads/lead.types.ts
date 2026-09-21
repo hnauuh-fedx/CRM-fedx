@@ -103,6 +103,24 @@ export type LeadFilterOptions = {
   totalLeads: number;
 };
 
+export type DuplicateLeadField = "fullName" | "phone" | "email";
+
+export type DuplicateLeadResponse = {
+  data: Array<{
+    key: string;
+    count: number;
+    leads: Array<{
+      id: string;
+      leadCode: string | null;
+      fullName: string;
+      phone: string | null;
+      email: string | null;
+      createdAt: string | null;
+    }>;
+  }>;
+  pagination: { page: number; limit: number; total: number; totalPages: number };
+};
+
 export type LeadDetail = LeadListItem & {
   phone: string | null;
   email: string | null;

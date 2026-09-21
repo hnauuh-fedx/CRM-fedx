@@ -4,6 +4,7 @@ import { ChevronLeft, ChevronRight, Pencil, Plus, Search, UsersRound } from "luc
 import { z } from "zod";
 
 import { EmptyState } from "@/components/shared/data-states";
+import { AutoFilterActions } from "@/components/shared/auto-filter-actions";
 import { ErrorState } from "@/components/shared/error-state";
 import { PageHeader } from "@/components/shared/page-header";
 import { TableLoadingState } from "@/components/shared/table-loading-state";
@@ -148,10 +149,7 @@ export function UsersAccessPage() {
             ]} />
             <FilterSelect label="Vai trò" value={filters.roleId} onValueChange={(roleId) => setFilters((value) => ({ ...value, roleId }))} options={(optionsQuery.data?.roles ?? []).map((role) => ({ value: role.id, label: `${role.name} (${role.code})` }))} />
             <FilterSelect label="Phòng ban" value={filters.departmentId} onValueChange={(departmentId) => setFilters((value) => ({ ...value, departmentId }))} options={(optionsQuery.data?.departments ?? []).map((department) => ({ value: department.id, label: department.name }))} />
-            <Button type="submit">Áp dụng</Button>
-            <Button type="button" variant="outline" onClick={() => { setFilters(emptyFilters); setAppliedFilters(emptyFilters); setPage(1); }}>
-              Xóa lọc
-            </Button>
+            <AutoFilterActions snapshot={filters} onApply={() => { setAppliedFilters({ ...filters, search: filters.search.trim() }); setPage(1); }} onReset={() => { setFilters(emptyFilters); setAppliedFilters(emptyFilters); setPage(1); }} />
           </form>
         </CardContent>
       </Card>

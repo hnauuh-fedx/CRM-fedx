@@ -11,6 +11,8 @@
     "seed:sale-access": "tsx src/database/seed-sale-access.ts",
     "seed:sensitive-permissions": "tsx src/database/seed-sensitive-permissions.ts",
     "test:integration:leads": "tsx src/integration/lead-workflow.integration.ts",
+    "test:integration:lead-bulk-assignment": "tsx src/integration/lead-bulk-assignment.integration.ts",
+    "test:integration:lead-bulk-delete": "tsx src/integration/lead-bulk-delete.integration.ts",
     "test:integration:lead-import": "tsx src/integration/lead-import-minimal.integration.ts",
     "test:integration:director-leads": "tsx src/integration/director-lead-crud.integration.ts",
     "test:integration:demo-data": "tsx src/integration/demo-data.integration.ts",

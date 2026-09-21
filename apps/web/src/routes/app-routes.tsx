@@ -208,6 +208,11 @@ const CustomerListDetailPage = lazy(() =>
     default: module.CustomerListDetailPage,
   })),
 );
+const DuplicateLeadsPage = lazy(() =>
+  import("@/modules/marketing/pages/duplicate-leads-page").then((module) => ({
+    default: module.DuplicateLeadsPage,
+  })),
+);
 const AuditLogsPage = lazy(() =>
   import("@/modules/audit/pages/audit-logs-page").then((module) => ({
     default: module.AuditLogsPage,
@@ -353,6 +358,7 @@ export function AppRoutes() {
                   />
                 }
               />
+              <Route path="/marketing/check-trung-data" element={<DuplicateLeadsPage />} />
               <Route element={<ProtectedRoute anyPermissions={["customer_list.view_all", "customer_list.manage"]} />}>
                 <Route path="/marketing/quan-ly-danh-sach" element={<CustomerListManagementPage />} />
                 <Route path="/marketing/quan-ly-danh-sach/:customerListId" element={<CustomerListDetailPage />} />

@@ -3,6 +3,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { ArrowDown, ArrowUp, ArrowUpDown, ChevronLeft, ChevronRight, Pencil, Plus, Search, Trash2 } from "lucide-react";
 
 import { EmptyState } from "@/components/shared/data-states";
+import { AutoFilterActions } from "@/components/shared/auto-filter-actions";
 import { ErrorState } from "@/components/shared/error-state";
 import { PageHeader } from "@/components/shared/page-header";
 import { TableLoadingState } from "@/components/shared/table-loading-state";
@@ -178,10 +179,7 @@ export function AdmissionStatusesPage() {
                   <Input id="admission-status-search" className="pl-9" placeholder="Nhập tên hoặc mã trạng thái" value={state.search} onChange={(event) => dispatch({ type: "setSearch", value: event.target.value })} />
                 </div>
               </Field>
-              <div className="flex items-end gap-2">
-                <Button type="submit">Áp dụng</Button>
-                <Button type="button" variant="outline" onClick={() => dispatch({ type: "resetFilters" })}>Xóa lọc</Button>
-              </div>
+              <AutoFilterActions snapshot={{ search: state.search }} onApply={() => dispatch({ type: "applyFilters" })} onReset={() => dispatch({ type: "resetFilters" })} />
             </FieldGroup>
           </form>
         </CardContent>

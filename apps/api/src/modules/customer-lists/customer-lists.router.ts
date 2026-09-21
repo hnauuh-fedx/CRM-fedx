@@ -12,6 +12,7 @@ import {
   getCustomerList,
   listCustomerListLeads,
   listCustomerLists,
+  updateCustomerList,
 } from "./customer-list.service";
 import {
   customerListFilterFields,
@@ -106,6 +107,35 @@ customerListsRouter.get("/:id", requireAnyPermission(...customerListViewPermissi
     const result = await getCustomerList(request.authUser!, id.data, programId(request));
     if (!result) return void response.status(404).json({ message: "Không tìm thấy danh sách khách hàng." });
     response.json(result);
+  } catch (error) { next(error); }
+});
+
+customerListsRouter.patch("/:id", requireAnyPermission("customer_list.manage"), async (request, response, next) => {
+  try {
+    const id = idSchema.safeParse(request.params.id);
+    const parsed = createSchema.safeParse(request.body);
+    if (!id.success || !parsed.success) {
+      return void response.status(400).json({
+        message: "Thông tin cập nhật danh sách không hợp lệ.",
+        ...(!parsed.success ? { issues: parsed.error.issues } : {}),
+      });
+    }
+    const result = await updateCustomerList(
+      request.authUser!,
+      id.data,
+      { ...parsed.data, institutionProgramId: programId(request) },
+      request.ip,
+    );
+    if (!result.ok) {
+      const message = result.reason === "not_found"
+        ? "Không tìm thấy danh sách khách hàng."
+        : result.reason === "duplicate_name"
+          ? "Tên danh sách đã tồn tại trong chương trình này."
+          : "Bộ lọc có giá trị không tồn tại hoặc nằm ngoài phạm vi bạn được xem.";
+      const status = result.reason === "not_found" ? 404 : result.reason === "duplicate_name" ? 409 : 400;
+      return void response.status(status).json({ message });
+    }
+    response.json(result.data);
   } catch (error) { next(error); }
 });
 

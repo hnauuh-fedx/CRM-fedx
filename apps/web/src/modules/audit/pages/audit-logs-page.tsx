@@ -11,6 +11,7 @@ import {
 import { ArrowDown, ArrowUp, ArrowUpDown, ChevronLeft, ChevronRight, Eye, Search } from "lucide-react";
 
 import { EmptyState } from "@/components/shared/data-states";
+import { AutoFilterActions } from "@/components/shared/auto-filter-actions";
 import { ErrorState } from "@/components/shared/error-state";
 import { FilterSelect } from "@/components/shared/filter-select";
 import { PageHeader } from "@/components/shared/page-header";
@@ -262,10 +263,7 @@ function AuditLogFilters({ filters, options, onChange, onApply, onReset }: Filte
               <FieldLabel htmlFor="audit-to-date">Đến thời điểm</FieldLabel>
               <Input id="audit-to-date" type="datetime-local" value={filters.toDate} onChange={(event) => onChange("toDate", event.target.value)} />
             </Field>
-            <div className="flex items-end gap-2">
-              <Button type="submit">Áp dụng</Button>
-              <Button type="button" variant="outline" onClick={onReset}>Xóa lọc</Button>
-            </div>
+            <AutoFilterActions snapshot={filters} onApply={onApply} onReset={onReset} />
           </FieldGroup>
         </form>
       </CardContent>

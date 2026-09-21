@@ -6,14 +6,14 @@ export type Pagination = { page: number; limit: number; total: number; totalPage
 export type SaleFilterOptions = {
   assignees: Person[];
   telesales: Person[];
-  departments: SimpleRef[];
+  sources: SimpleRef[];
   activityTypes: string[];
   reminderStatuses: string[];
   leads: LeadRef[];
 };
 
 export type AssignmentStatus = "unassigned" | "assigned";
-export type AssignmentFilters = { search: string; assigneeId: string; departmentId: string };
+export type AssignmentFilters = { search: string; assigneeId: string; sourceId: string };
 export type ActivityFilters = { search: string; type: string; userId: string };
 export type ReminderFilters = { search: string; status: string; userId: string };
 
@@ -22,9 +22,9 @@ export type AssignmentItem = {
   assignedAt: string | null;
   isMainOwner: boolean;
   lead: LeadRef | null;
+  source: SimpleRef | null;
   assignee: Person | null;
   assignedBy: Person | null;
-  department: SimpleRef | null;
 };
 
 export type ActivityItem = {
