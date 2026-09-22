@@ -133,6 +133,7 @@ export async function listLeads(user: AuthUser, query: LeadListQuery) {
             name: true,
           },
         },
+        lead_origins: { select: { id: true, name: true } },
         pipeline_stages: {
           select: {
             id: true,
@@ -313,6 +314,9 @@ export async function listLeads(user: AuthUser, query: LeadListQuery) {
         source: lead.lead_sources
           ? { id: lead.lead_sources.id, name: lead.lead_sources.name }
           : null,
+        origin: lead.lead_origins
+          ? { id: lead.lead_origins.id, name: lead.lead_origins.name }
+          : null,
         pipelineStage: lead.pipeline_stages
           ? {
               id: lead.pipeline_stages.id,
@@ -418,6 +422,33 @@ export async function getLeadFilterOptions(user: AuthUser, institutionProgramId?
   };
 }
 
+const auditFieldLabels: Record<string, string> = {
+  fullName: "Họ và tên",
+  sourceId: "Nguồn học viên",
+  status: "Trạng thái",
+  assigneeId: "Nhân viên phụ trách",
+  departmentId: "Phòng ban",
+  pipelineStageId: "Tiến trình",
+};
+
+function describeLeadChange(action: string, newData: unknown) {
+  if (action === "create") return "Tạo Lead mới";
+  if (action === "source_received") return "Ghi nhận một lần phát sinh nguồn mới";
+  if (action === "assign") return "Phân công nhân viên phụ trách";
+  if (action === "reassign") return "Thay đổi nhân viên phụ trách";
+  if (action === "unassign") return "Thu hồi nhân viên phụ trách";
+  if (action === "pipeline_stage_changed") return "Thay đổi tiến trình Lead";
+  if (action === "webhook_update") return "Webhook cập nhật dữ liệu Lead";
+  if (action === "note_created") return "Thêm ghi chú chăm sóc";
+  if (action === "file_attached") return "Đính kèm tệp vào Lead";
+  if (action === "delete") return "Xóa Lead";
+  if (action === "update" && newData && typeof newData === "object" && !Array.isArray(newData)) {
+    const fields = Object.keys(newData as Record<string, unknown>).map((key) => auditFieldLabels[key] ?? key);
+    return fields.length > 0 ? `Cập nhật: ${fields.join(", ")}` : "Cập nhật thông tin Lead";
+  }
+  return "Cập nhật dữ liệu Lead";
+}
+
 export async function getLeadDetail(user: AuthUser, leadId: string, institutionProgramId?: string) {
   const canViewSensitive = canViewSensitiveLeadData(user);
   const lead = await prisma.leads.findFirst({
@@ -444,6 +475,18 @@ export async function getLeadDetail(user: AuthUser, leadId: string, institutionP
       updated_at: true,
       institution_programs: { select: { id: true, name: true, institutions: { select: { name: true } } } },
       lead_sources: { select: { id: true, name: true } },
+      lead_origins: { select: { id: true, name: true } },
+      lead_source_occurrences: {
+        orderBy: [{ received_at: "desc" }, { id: "desc" }],
+        take: 100,
+        select: {
+          id: true,
+          source_name: true,
+          note: true,
+          received_at: true,
+          lead_origins: { select: { id: true, name: true } },
+        },
+      },
       pipeline_stages: { select: { id: true, name: true, color: true } },
       users_leads_assigned_toTousers: { select: { id: true, full_name: true } },
       users_leads_owner_idTousers: { select: { id: true, full_name: true } },
@@ -557,7 +600,7 @@ export async function getLeadDetail(user: AuthUser, leadId: string, institutionP
   if (!lead) {
     return null;
   }
-  const [relatedFiles, relatedTags] = await prisma.$transaction([
+  const [relatedFiles, relatedTags, recentChanges] = await prisma.$transaction([
     prisma.file_relations.findMany({
       where: { entity_type: "lead", entity_id: leadId },
       select: {
@@ -582,6 +625,18 @@ export async function getLeadDetail(user: AuthUser, leadId: string, institutionP
       select: { tags: { select: { name: true } } },
       orderBy: { created_at: "asc" },
       take: 20,
+    }),
+    prisma.audit_logs.findMany({
+      where: { entity_type: "lead", entity_id: leadId },
+      select: {
+        id: true,
+        action: true,
+        new_data: true,
+        created_at: true,
+        users: { select: { id: true, full_name: true } },
+      },
+      orderBy: [{ created_at: "desc" }, { id: "desc" }],
+      take: 50,
     }),
   ]);
   const profile = lead.student_profiles;
@@ -611,6 +666,16 @@ export async function getLeadDetail(user: AuthUser, leadId: string, institutionP
     source: lead.lead_sources
       ? { id: lead.lead_sources.id, name: lead.lead_sources.name }
       : null,
+    origin: lead.lead_origins
+      ? { id: lead.lead_origins.id, name: lead.lead_origins.name }
+      : null,
+    sourceOccurrences: lead.lead_source_occurrences.map((occurrence) => ({
+      id: occurrence.id,
+      sourceGroup: { id: occurrence.lead_origins.id, name: occurrence.lead_origins.name },
+      sourceName: occurrence.source_name,
+      note: occurrence.note,
+      receivedAt: occurrence.received_at.toISOString(),
+    })),
     institutionProgram: lead.institution_programs
       ? { id: lead.institution_programs.id, name: lead.institution_programs.name, institutionName: lead.institution_programs.institutions.name }
       : null,
@@ -722,6 +787,13 @@ export async function getLeadDetail(user: AuthUser, leadId: string, institutionP
       content: activity.content,
       createdAt: activity.created_at?.toISOString() ?? null,
       actor: activity.users ? { id: activity.users.id, fullName: activity.users.full_name } : null,
+    })),
+    recentChanges: recentChanges.map((change) => ({
+      id: change.id,
+      action: change.action,
+      description: describeLeadChange(change.action, change.new_data),
+      createdAt: change.created_at?.toISOString() ?? null,
+      actor: change.users ? { id: change.users.id, fullName: change.users.full_name } : null,
     })),
     files: relatedFiles.flatMap((relation) =>
       relation.files

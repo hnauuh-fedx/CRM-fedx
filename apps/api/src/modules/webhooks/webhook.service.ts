@@ -30,6 +30,7 @@ export type FieldMetadata = {
 };
 export type ProcessWebhookRecord = {
   id: string;
+  name: string;
   institution_program_id: string;
   created_by: string;
   secret_hash: string;
@@ -638,30 +639,36 @@ function convertFieldValue(value: unknown, metadata: FieldMetadata) {
   );
 }
 
-async function resolveSource(programId: string, value: unknown) {
-  const sourceValue = String(value).trim();
-  const isId = /^[0-9a-f-]{36}$/i.test(sourceValue);
-  const source = await prisma.lead_sources.findFirst({
-    where: {
-      institution_program_id: programId,
-      OR: isId
-        ? [{ id: sourceValue }]
-        : [
-            { name: { equals: sourceValue, mode: "insensitive" } },
-            { name: { contains: sourceValue, mode: "insensitive" } },
-          ],
-    },
-    orderBy: [{ created_at: "asc" }, { id: "asc" }],
-    select: { id: true },
-  });
-  if (!source)
-    throw new ProcessFailure(
-      "INVALID_FIELD_VALUE",
-      "Nguồn lead không tồn tại trong chương trình này.",
-      400,
-      "source",
-    );
-  return source.id;
+function formatSourceGroup(value: string) {
+  const normalized = value.trim().toLowerCase();
+  const knownGroups: Array<[RegExp, string]> = [
+    [/facebook|(^|[._-])fb([._-]|$)/, "Facebook"],
+    [/instagram/, "Instagram"],
+    [/google|googleads|googleadservices/, "Google"],
+    [/tiktok/, "TikTok"],
+    [/youtube|youtu\.be/, "YouTube"],
+    [/zalo/, "Zalo"],
+  ];
+  return knownGroups.find(([pattern]) => pattern.test(normalized))?.[1];
+}
+
+function humanizeSourceGroup(value: string) {
+  return formatSourceGroup(value) ?? value
+    .trim()
+    .replace(/[_-]+/g, " ")
+    .replace(/\b\p{L}/gu, (letter) => letter.toLocaleUpperCase("vi"));
+}
+
+function sourceGroupFromUrl(value: string) {
+  const trimmed = value.trim();
+  try {
+    const url = new URL(/^https?:\/\//i.test(trimmed) ? trimmed : `https://${trimmed}`);
+    const campaignSource = url.searchParams.get("utm_source") ?? url.searchParams.get("source");
+    if (campaignSource) return humanizeSourceGroup(campaignSource);
+    return formatSourceGroup(trimmed) ?? url.hostname.replace(/^www\./i, "");
+  } catch {
+    return formatSourceGroup(trimmed) ?? trimmed;
+  }
 }
 
 export async function mapWebhookPayload(
@@ -718,14 +725,35 @@ export async function mapWebhookPayload(
       providedFields.add(mapping.crm_field as keyof LeadInput);
     }
   }
+  let sourceName: string | undefined;
+  let sourceGroupUrl: string | undefined;
+  let originName: string | undefined;
   if (leadValues.source !== undefined) {
-    leadValues.sourceId = await resolveSource(programId, leadValues.source);
-    providedFields.add("sourceId");
+    sourceName = String(leadValues.source).trim();
+    if (sourceName.length > 255)
+      throw new ProcessFailure("INVALID_FIELD_VALUE", "Nguồn tối đa 255 ký tự.", 400, "source");
+    providedFields.delete("source" as keyof LeadInput);
     delete leadValues.source;
+  }
+  if (leadValues.sourceGroupUrl !== undefined) {
+    sourceGroupUrl = String(leadValues.sourceGroupUrl).trim();
+    if (sourceGroupUrl.length > 2000)
+      throw new ProcessFailure("INVALID_FIELD_VALUE", "URL nhóm nguồn tối đa 2.000 ký tự.", 400, "sourceGroupUrl");
+    providedFields.delete("sourceGroupUrl" as keyof LeadInput);
+    delete leadValues.sourceGroupUrl;
+  }
+  if (sourceName) {
+    originName = sourceGroupFromUrl(sourceGroupUrl ?? sourceName);
+    if (originName.length > 150)
+      throw new ProcessFailure("INVALID_FIELD_VALUE", "Nhóm nguồn tối đa 150 ký tự.", 400, "sourceGroupUrl");
+    providedFields.add("originId");
   }
   return {
     mapped,
     leadValues,
+    originName,
+    sourceName,
+    sourceGroupUrl,
     customFieldValues,
     providedFields,
     missingRequiredIncoming,
@@ -976,6 +1004,16 @@ async function processWebhookRecord(
       institutionProgramId: webhook.institution_program_id,
       duplicatePolicy: webhook.duplicate_policy as WebhookDuplicatePolicy,
       leadInput,
+      originName: mapping.originName,
+      sourceOccurrence: mapping.originName ? {
+        webhookId: webhook.id,
+        requestId,
+        sourceName: mapping.sourceName && mapping.sourceName.toLocaleLowerCase("vi") !== mapping.originName?.toLocaleLowerCase("vi")
+          ? mapping.sourceName
+          : webhook.name,
+        note: typeof mapping.mapped.note === "string" ? mapping.mapped.note : undefined,
+        details: toJson(mapping.mapped),
+      } : undefined,
       providedFields: mapping.providedFields,
       customFieldValues: mapping.customFieldValues,
       canCreate: missingCreateFields.length === 0,

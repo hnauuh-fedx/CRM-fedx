@@ -193,7 +193,8 @@ async function cleanup() {
       where: { id: customFieldGroupId },
     });
   await prisma.leads.deleteMany({ where: { id: { in: leadIds } } });
-  await prisma.lead_sources.deleteMany({ where: { id: { in: sourceIds } } });
+  await prisma.lead_origins.deleteMany({ where: { institution_program_id: { in: programIds } } });
+  await prisma.lead_sources.deleteMany({ where: { institution_program_id: { in: programIds } } });
   await prisma.user_roles.deleteMany({ where: { user_id: { in: userIds } } });
   await prisma.users.deleteMany({ where: { id: { in: userIds } } });
   await prisma.role_permissions.deleteMany({
@@ -237,10 +238,16 @@ const webhookInput = {
       defaultValue: null,
     },
     {
-      incomingKey: "utm_source",
+      incomingKey: "form_name",
       crmField: "source",
       isRequired: false,
-      defaultValue: "Website",
+      defaultValue: "Form Website",
+    },
+    {
+      incomingKey: "utm_url",
+      crmField: "sourceGroupUrl",
+      isRequired: false,
+      defaultValue: "https://landing.example.test/dang-ky?utm_source=website",
     },
     {
       incomingKey: "graduation_year",
@@ -403,7 +410,7 @@ async function main() {
   customFieldIds.push(...customFields.map((field) => field.id));
   const manager = await createActor(
     "manager",
-    ["webhook.view", "webhook.manage", "lead.view_all"],
+    ["webhook.view", "webhook.manage", "lead.view_all", "lead.update_all"],
     programIds[0],
     "ALL",
   );
@@ -626,7 +633,8 @@ async function main() {
       name: "Webhook Lead",
       phone: phone1,
       email: "webhook@example.test",
-      utm_source: "facebook",
+      form_name: "Form Facebook",
+      utm_url: "https://landing.example.test/dang-ky?utm_source=facebook",
       graduation_year: "2024",
       workspace_id: programIds[1],
     },
@@ -642,19 +650,45 @@ async function main() {
   );
   const lead = await prisma.leads.findUniqueOrThrow({
     where: { id: accepted.payload.data.record_id },
-    select: { institution_program_id: true, source_id: true, full_name: true },
+    select: { institution_program_id: true, source_id: true, origin_id: true, full_name: true },
   });
   equal(
     lead.institution_program_id,
     programIds[0],
     "Payload không được spoof tenant.",
   );
+  const newFacebookOrigin = await prisma.lead_origins.findFirstOrThrow({
+    where: { institution_program_id: programIds[0], name: "Facebook" },
+    select: { id: true },
+  });
+  equal(lead.origin_id, newFacebookOrigin.id, "Webhook phải tự tạo Nguồn trong đúng chương trình.");
+  equal(lead.source_id, null, "Nguồn học viên phải để Sale chọn sau.");
+  check(newFacebookOrigin.id !== facebookSource.id, "Nguồn và Nguồn học viên phải tách biệt.");
   equal(
-    lead.source_id,
-    facebookSource.id,
-    "Giá trị facebook phải resolve thành Facebook Ads trong tenant webhook.",
+    await prisma.audit_logs.count({
+      where: { entity_type: "lead_origin", entity_id: newFacebookOrigin.id, action: "create" },
+    }),
+    1,
+    "Nguồn mới phải có audit tạo nguồn.",
   );
   equal(lead.full_name, "Webhook Lead", "Mapping incoming key phải hoạt động.");
+
+  equal(
+    (await api(baseUrl, `/leads/${accepted.payload.data.record_id}`, {
+      token: managerToken,
+      programId: programIds[0],
+      method: "PATCH",
+      body: { fullName: "Webhook Lead", phone: phone1, sourceId: sourceIds[0] },
+    })).status,
+    200,
+    "Sale phải chọn được Nguồn học viên sau khi Lead được tạo.",
+  );
+  const classifiedLead = await prisma.leads.findUniqueOrThrow({
+    where: { id: accepted.payload.data.record_id },
+    select: { source_id: true, origin_id: true },
+  });
+  equal(classifiedLead.source_id, sourceIds[0], "Nguồn học viên phải lưu lựa chọn của Sale.");
+  equal(classifiedLead.origin_id, newFacebookOrigin.id, "Chọn Nguồn học viên không được thay đổi Nguồn.");
 
   const createNewAgain = await api(baseUrl, `/webhooks/${key}`, {
     secret,
@@ -663,18 +697,19 @@ async function main() {
       name: "Webhook Lead duplicate",
       phone: phone1,
       email: "duplicate@example.test",
-      utm_source: "Website",
+      form_name: "Form Google",
+      utm_url: "https://landing.example.test/dang-ky?utm_source=google",
     },
   });
   equal(
     createNewAgain.status,
     200,
-    "CREATE_NEW phải cho phép tạo Lead cùng phone.",
+    "Webhook cũ cấu hình CREATE_NEW vẫn phải xử lý được Lead trùng.",
   );
   equal(
     createNewAgain.payload.data.action,
-    "created",
-    "CREATE_NEW phải trả action created.",
+    "updated",
+    "Lead trùng phải trả action updated.",
   );
   equal(
     await prisma.leads.count({
@@ -684,8 +719,29 @@ async function main() {
         deleted_at: null,
       },
     }),
+    1,
+    "Webhook không được tạo thêm Lead khi trùng số điện thoại.",
+  );
+  const sourceOccurrences = await prisma.lead_source_occurrences.findMany({
+    where: { lead_id: accepted.payload.data.record_id },
+    orderBy: { received_at: "asc" },
+    select: { source_name: true, lead_origins: { select: { name: true } } },
+  });
+  equal(sourceOccurrences.length, 2, "Mỗi lần phát sinh phải thêm một thông tin nguồn.");
+  equal(sourceOccurrences[0]?.lead_origins.name, "Facebook", "Lần đầu phải giữ đúng Nhóm nguồn.");
+  equal(sourceOccurrences[0]?.source_name, "Form Facebook", "Nguồn phải lấy từ tên form.");
+  equal(sourceOccurrences[1]?.lead_origins.name, "Google", "Nhóm nguồn phải lấy từ utm_url mới.");
+  equal(sourceOccurrences[1]?.source_name, "Form Google", "Lần trùng phải giữ đúng tên form mới.");
+  const leadDetail = await api(baseUrl, `/leads/${accepted.payload.data.record_id}`, {
+    token: managerToken,
+    programId: programIds[0],
+  });
+  equal(leadDetail.status, 200, "Sale phải xem được lịch sử nguồn của Lead trong phạm vi.");
+  equal(leadDetail.payload.data.sourceOccurrences.length, 2, "API chi tiết Lead phải trả các nút thông tin nguồn.");
+  equal(
+    leadDetail.payload.data.recentChanges.filter((change: { action: string }) => change.action === "source_received").length,
     2,
-    "CREATE_NEW phải tạo hai Lead trong cùng tenant.",
+    "API chi tiết Lead phải ghi lại từng lần tiếp nhận nguồn trong thay đổi gần đây.",
   );
 
   const updateInput = { ...webhookInput, duplicatePolicy: "UPDATE_EXISTING" };
@@ -1214,12 +1270,21 @@ async function main() {
   equal(tested.status, 200, "Test endpoint phải dùng cùng pipeline.");
   const testedLead = await prisma.leads.findUniqueOrThrow({
     where: { id: tested.payload.data.record_id },
-    select: { source_id: true },
+    select: { source_id: true, origin_id: true },
   });
+  const websiteOrigin = await prisma.lead_origins.findFirstOrThrow({
+    where: { institution_program_id: programIds[0], name: "Website" },
+    select: { id: true },
+  });
+  equal(testedLead.origin_id, websiteOrigin.id, "Default Website phải tự tạo Nguồn đúng tên.");
+  equal(testedLead.source_id, null, "Test webhook không được tự chọn Nguồn học viên.");
+  check(websiteOrigin.id !== sourceIds[0], "Nguồn và Nguồn học viên phải là hai danh mục khác nhau.");
   equal(
-    testedLead.source_id,
-    sourceIds[0],
-    "Default Website phải resolve thành Website đăng ký.",
+    await prisma.lead_origins.count({
+      where: { institution_program_id: programIds[0], normalized_name: "website" },
+    }),
+    1,
+    "Các request dùng cùng tên nguồn phải tái sử dụng một nguồn.",
   );
 
   const invalidJsonResponse = await fetch(`${baseUrl}/webhooks/${key}`, {

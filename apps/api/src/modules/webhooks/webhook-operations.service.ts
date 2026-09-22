@@ -21,6 +21,7 @@ async function currentSnapshot(webhookId: string): Promise<WebhookConfigSnapshot
     targetModule: webhook.target_module,
     duplicatePolicy: webhook.duplicate_policy as WebhookDuplicatePolicy,
     actorId: webhook.created_by,
+    webhookName: webhook.name,
     mappings: webhook.field_mappings,
     fields: await getAllowedFieldMetadata(webhook.institution_program_id),
   };

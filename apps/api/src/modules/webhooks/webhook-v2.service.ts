@@ -35,6 +35,7 @@ export type WebhookConfigSnapshot = {
   targetModule: string;
   duplicatePolicy: WebhookDuplicatePolicy;
   actorId: string;
+  webhookName?: string;
   mappings: MappingSnapshot[];
   fields: FieldMetadata[];
 };
@@ -145,6 +146,7 @@ export async function ingestInboundWebhook(
     targetModule: webhook.target_module,
     duplicatePolicy: webhook.duplicate_policy as WebhookDuplicatePolicy,
     actorId: webhook.created_by,
+    webhookName: webhook.name,
     mappings: webhook.field_mappings,
     fields,
   };
@@ -316,6 +318,17 @@ export async function processInboundWebhookRequest(
       institutionProgramId: snapshot.institutionProgramId,
       duplicatePolicy: snapshot.duplicatePolicy,
       leadInput,
+      originName: mapping.originName,
+      sourceOccurrence: mapping.originName ? {
+        webhookId: request.webhook_id,
+        requestId,
+        sourceName: mapping.sourceName && mapping.sourceName.toLocaleLowerCase("vi") !== mapping.originName?.toLocaleLowerCase("vi")
+          ? mapping.sourceName
+          : snapshot.webhookName ?? "Webhook",
+        note: typeof mapping.mapped.note === "string" ? mapping.mapped.note : undefined,
+        details: toJson(mapping.mapped),
+        receivedAt: request.received_at,
+      } : undefined,
       providedFields: mapping.providedFields,
       customFieldValues: mapping.customFieldValues,
       canCreate: missingCreateFields.length === 0,

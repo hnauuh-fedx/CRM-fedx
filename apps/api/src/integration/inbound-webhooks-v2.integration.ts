@@ -335,6 +335,7 @@ async function main() {
     await prisma.automation_execution_logs.deleteMany({ where: { requested_by: { in: ids.users } } });
     await prisma.webhooks.deleteMany({ where: { id: { in: ids.webhooks } } });
     await prisma.leads.deleteMany({ where: { id: { in: leadIds } } });
+    await prisma.lead_origins.deleteMany({ where: { institution_program_id: { in: ids.programs } } });
     await prisma.lead_sources.deleteMany({ where: { id: { in: ids.sources } } });
     await prisma.user_access_scopes.deleteMany({ where: { user_id: { in: ids.users } } });
     await prisma.user_roles.deleteMany({ where: { user_id: { in: ids.users } } });

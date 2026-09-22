@@ -360,7 +360,7 @@ function normalizeDecimal(value: unknown) {
 
 function resultMessage(reason: string) {
   if (reason === "phone_already_exists") return "Số điện thoại đã tồn tại trong danh sách lead.";
-  if (reason === "source_not_found") return "Nguồn lead không tồn tại.";
+  if (reason === "source_not_found") return "Nguồn học viên không tồn tại.";
   if (reason === "stage_not_found") return "Tiến trình đã chọn không tồn tại.";
   return "Ngành đăng ký hoặc trạng thái hồ sơ không tồn tại.";
 }

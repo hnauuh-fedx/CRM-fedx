@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { ArrowLeft, CalendarDays, ExternalLink, FileText, History, Trash2, UserRound } from "lucide-react";
+import { Activity, ArrowLeft, CalendarDays, ChevronDown, ExternalLink, FileText, History, Network, Pencil, StickyNote, Trash2, UserRound } from "lucide-react";
 import { Link, useNavigate, useParams } from "react-router-dom";
 
 import { PageHeader } from "@/components/shared/page-header";
@@ -66,6 +66,7 @@ const activityLabels: Record<string, string> = {
   consultation: "Tư vấn",
   follow_up: "Theo dõi tiếp",
   other: "Hoạt động khác",
+  source_received: "Ghi nhận nguồn mới",
 };
 
 function getLeadWorkflowLabel(lead: LeadDetail) {
@@ -104,6 +105,7 @@ export function LeadDetailPage() {
     queryFn: () => getLeadActionOptions(auth.accessToken!),
     enabled: canAct,
   });
+  const [isEditing, setIsEditing] = useState(false);
 
   if (leadQuery.isLoading) {
     return (
@@ -139,80 +141,123 @@ export function LeadDetailPage() {
         eyebrow="CRM Sale / Chi tiết lead"
         title={lead.fullName}
         description={`${lead.leadCode ?? "Chưa có mã lead"} · Tạo ngày ${formatDate(lead.createdAt)}`}
-        actions={<Badge variant="secondary">{getLeadWorkflowLabel(lead)}</Badge>}
+        actions={<div className="flex flex-wrap items-center gap-2"><Badge variant="secondary">{getLeadWorkflowLabel(lead)}</Badge>{canUpdate && <Button type="button" size="sm" variant={isEditing ? "secondary" : "default"} onClick={() => setIsEditing((value) => !value)}><Pencil aria-hidden="true" />{isEditing ? "Đóng chỉnh sửa" : "Chỉnh sửa"}</Button>}</div>}
       />
 
-      <div className="grid gap-6 xl:grid-cols-[1.15fr_0.85fr]">
-        {canUpdate ? (
-          <Card className="border-border/70 shadow-xs xl:col-span-2">
-            <CardHeader><CardTitle>Cập nhật hồ sơ ứng viên</CardTitle><CardDescription>Cập nhật thông tin cá nhân, học vấn, tuyển sinh và chăm sóc trong cùng hồ sơ.</CardDescription></CardHeader>
-            <CardContent>
-              <EditLeadForm lead={lead} options={options} accessToken={auth.accessToken!} />
-            </CardContent>
-          </Card>
-        ) : (
-          <LeadSummaryCard lead={lead} />
-        )}
+      <PipelineProgressCard lead={lead} options={options} />
+      {isEditing && canUpdate && <Card className="border-primary/30 shadow-xs"><CardHeader><CardTitle>Cập nhật hồ sơ ứng viên</CardTitle><CardDescription>Cập nhật thông tin cá nhân, học vấn, tuyển sinh và chăm sóc trong cùng hồ sơ.</CardDescription></CardHeader><CardContent><EditLeadForm lead={lead} options={options} accessToken={auth.accessToken!} /></CardContent></Card>}
 
-        <div className="flex flex-col gap-6">
+      <div className="grid items-start gap-6 xl:grid-cols-[minmax(320px,0.82fr)_minmax(0,1.48fr)]">
+        <aside className="flex min-w-0 flex-col gap-6">
+          <LeadSummaryCard lead={lead} canUpdate={canUpdate} onEdit={() => setIsEditing(true)} />
+          <SourceOccurrencesCard lead={lead} />
+          <LeadCustomFieldsCard leadId={lead.id} />
           {canAssign && <AssignmentActionCard key={lead.assignee?.id ?? "unassigned"} lead={lead} options={options} accessToken={auth.accessToken!} />}
-          {canDelete && <DeleteLeadCard lead={lead} accessToken={auth.accessToken!} />}
           {!canUpdate && <LeadOwnershipCard lead={lead} />}
-        </div>
-      </div>
-
-      <LeadCustomFieldsCard leadId={lead.id} />
-
-      <div className="grid gap-6 xl:grid-cols-2">
-        <Card className="border-border/70 shadow-xs">
-          <CardHeader><CardTitle>Ghi chú lead</CardTitle><CardDescription>Lịch sử ghi chú chăm sóc được lưu theo người tạo.</CardDescription></CardHeader>
-          <CardContent className="flex flex-col gap-5">
-            {canNote && <NoteComposer leadId={lead.id} accessToken={auth.accessToken!} />}
-            {lead.notes.length === 0 ? <p className="text-sm text-muted-foreground">Chưa có ghi chú chăm sóc.</p> : (
-              <ol className="flex flex-col gap-4">{lead.notes.map((note) => (
-                <li key={note.id} className="rounded-lg border bg-muted/20 p-4">
-                  <p className="whitespace-pre-wrap text-sm">{note.content}</p>
-                  <p className="mt-2 text-xs text-muted-foreground">{note.author?.fullName ?? "Hệ thống"} · {formatDateTime(note.createdAt)}</p>
-                </li>
-              ))}</ol>
-            )}
-          </CardContent>
-        </Card>
-        <Card className="border-border/70 shadow-xs">
-          <CardHeader><CardTitle>Tệp đính kèm</CardTitle><CardDescription>Tệp liên quan đến lead, lưu trên kho tệp được cấu hình.</CardDescription></CardHeader>
-          <CardContent className="flex flex-col gap-5">
-            {canFile && <FileComposer leadId={lead.id} accessToken={auth.accessToken!} />}
-            {lead.files.length === 0 ? <p className="text-sm text-muted-foreground">Chưa có tệp đính kèm.</p> : (
-              <ul className="flex flex-col gap-3">{lead.files.map((file) => (
-                <li key={file.id} className="flex items-center justify-between gap-3 rounded-lg border p-3">
-                  <div className="flex min-w-0 items-center gap-3"><FileText aria-hidden="true" /><div className="min-w-0"><p className="truncate text-sm font-medium">{file.fileName}</p><p className="text-xs text-muted-foreground">{formatDate(file.createdAt)}</p></div></div>
-                  <Button asChild size="sm" variant="outline"><a href={file.fileUrl} target="_blank" rel="noreferrer" aria-label={`Mở tệp ${file.fileName}`}><ExternalLink aria-hidden="true" />Mở</a></Button>
-                </li>
-              ))}</ul>
-            )}
-          </CardContent>
-        </Card>
-      </div>
-
-      <div className="grid gap-6 xl:grid-cols-2">
-        <TimelineCard lead={lead} />
-        <HistoryCard lead={lead} />
+          {canDelete && <DeleteLeadCard lead={lead} accessToken={auth.accessToken!} />}
+        </aside>
+        <ActivityWorkspace lead={lead} canNote={canNote} canFile={canFile} accessToken={auth.accessToken!} />
       </div>
     </div>
   );
 }
 
-function LeadSummaryCard({ lead }: { lead: LeadDetail }) {
+export function PipelineProgressCard({ lead, options, fallbackStages = [], onStageChange, isChanging = false }: { lead: LeadDetail; options?: LeadActionOptions; fallbackStages?: Array<{ id: string; name: string; color: string | null }>; onStageChange?: (stageId: string) => void; isChanging?: boolean }) {
+  const currentStage = options?.stages.find((stage) => stage.id === lead.pipelineStage?.id);
+  const availableStages = options?.stages.length ? options.stages : fallbackStages.map((stage) => ({ ...stage, pipelineId: null, pipelineName: null }));
+  const stages = availableStages.filter((stage) => !currentStage?.pipelineId || stage.pipelineId === currentStage.pipelineId);
+  const visibleStages = stages.length > 0 ? stages : lead.pipelineStage ? [{ ...lead.pipelineStage, pipelineId: null, pipelineName: null }] : [];
+  const currentIndex = visibleStages.findIndex((stage) => stage.id === lead.pipelineStage?.id);
+  return <Card className="overflow-hidden border-border/70 shadow-xs"><CardHeader className="pb-3"><CardTitle className="text-base">Tiến trình</CardTitle></CardHeader><CardContent>{visibleStages.length === 0 ? <p className="text-sm text-muted-foreground">Chưa có tiến trình áp dụng cho Lead này.</p> : <ol className="flex min-w-max gap-2 overflow-x-auto pb-2" aria-label="Tiến trình xử lý Lead">{visibleStages.map((stage, index) => { const isCurrent = index === currentIndex; const isCompleted = currentIndex >= 0 && index < currentIndex; return <li key={stage.id} className="min-w-40"><button type="button" className={`min-h-10 w-full rounded-md border px-4 py-2 text-center text-sm font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:cursor-default ${isCurrent ? "border-primary bg-primary text-primary-foreground" : isCompleted ? "border-primary/30 bg-primary/10 text-primary" : "bg-muted/50 text-muted-foreground"} ${onStageChange && !isCurrent ? "hover:border-primary/60 hover:text-primary" : ""}`} aria-current={isCurrent ? "step" : undefined} disabled={!onStageChange || isCurrent || isChanging} onClick={() => onStageChange?.(stage.id)}>{stage.name}</button></li>; })}</ol>}</CardContent></Card>;
+}
+
+type ActivityTab = "activities" | "notes" | "changes" | "files";
+
+export function ActivityWorkspace({ lead, canNote, canFile, accessToken }: { lead: LeadDetail; canNote: boolean; canFile: boolean; accessToken: string }) {
+  const [activeTab, setActiveTab] = useState<ActivityTab>("activities");
+  const tabs: Array<{ id: ActivityTab; label: string; count: number; icon: typeof Activity }> = [
+    { id: "activities", label: "Hoạt động", count: lead.activities.length, icon: Activity },
+    { id: "notes", label: "Ghi chú", count: lead.notes.length, icon: StickyNote },
+    { id: "changes", label: "Thay đổi gần đây", count: lead.recentChanges.length, icon: History },
+    { id: "files", label: "Tệp đính kèm", count: lead.files.length, icon: FileText },
+  ];
+  return <Card className="min-w-0 border-border/70 shadow-xs"><CardHeader className="border-b pb-0"><div className="flex gap-1 overflow-x-auto" role="tablist" aria-label="Thông tin hoạt động của Lead">{tabs.map((tab) => { const Icon = tab.icon; const selected = activeTab === tab.id; return <button key={tab.id} type="button" role="tab" aria-selected={selected} aria-controls={`lead-tab-${tab.id}`} id={`lead-tab-button-${tab.id}`} onClick={() => setActiveTab(tab.id)} className={`flex min-h-11 shrink-0 items-center gap-2 border-b-2 px-3 text-sm font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring ${selected ? "border-primary text-primary" : "border-transparent text-muted-foreground hover:text-foreground"}`}><Icon className="size-4" aria-hidden="true" />{tab.label}<Badge variant="secondary" className="min-w-6 justify-center px-1.5">{tab.count}</Badge></button>; })}</div></CardHeader><CardContent className="pt-6" role="tabpanel" id={`lead-tab-${activeTab}`} aria-labelledby={`lead-tab-button-${activeTab}`}>{activeTab === "activities" && <ActivityPanel lead={lead} />}{activeTab === "notes" && <NotesPanel lead={lead} canNote={canNote} accessToken={accessToken} />}{activeTab === "changes" && <RecentChangesPanel lead={lead} />}{activeTab === "files" && <FilesPanel lead={lead} canFile={canFile} accessToken={accessToken} />}</CardContent></Card>;
+}
+
+function ActivityPanel({ lead }: { lead: LeadDetail }) {
+  return <div className="flex flex-col gap-6"><TimelineCard lead={lead} embedded /><HistoryCard lead={lead} embedded /></div>;
+}
+
+function NotesPanel({ lead, canNote, accessToken }: { lead: LeadDetail; canNote: boolean; accessToken: string }) {
+  return <div className="flex flex-col gap-5">{canNote && <NoteComposer leadId={lead.id} accessToken={accessToken} />}{lead.notes.length === 0 ? <p className="text-sm text-muted-foreground">Chưa có ghi chú chăm sóc.</p> : <ol className="flex flex-col gap-4">{lead.notes.map((note) => <li key={note.id} className="rounded-lg border bg-muted/20 p-4"><p className="whitespace-pre-wrap text-sm">{note.content}</p><p className="mt-2 text-xs text-muted-foreground">{note.author?.fullName ?? "Hệ thống"} · {formatDateTime(note.createdAt)}</p></li>)}</ol>}</div>;
+}
+
+function RecentChangesPanel({ lead }: { lead: LeadDetail }) {
+  if (lead.recentChanges.length === 0) return <p className="text-sm text-muted-foreground">Chưa ghi nhận thay đổi nào trên Lead này.</p>;
+  return <ol className="flex flex-col gap-3">{lead.recentChanges.map((change, index) => <li key={change.id} className="grid grid-cols-[2rem_minmax(0,1fr)] gap-3"><span className="flex size-8 items-center justify-center rounded-full bg-primary/10 text-sm font-semibold text-primary" aria-hidden="true">{index + 1}</span><div className="rounded-lg border bg-card p-4"><div className="flex flex-wrap items-center gap-2"><Badge variant="secondary">Nhật ký</Badge><p className="text-sm font-semibold">{change.description}</p></div><p className="mt-2 text-xs text-muted-foreground">{change.actor?.fullName ?? "Hệ thống"} · {formatDateTime(change.createdAt)}</p></div></li>)}</ol>;
+}
+
+function FilesPanel({ lead, canFile, accessToken }: { lead: LeadDetail; canFile: boolean; accessToken: string }) {
+  return <div className="flex flex-col gap-5">{canFile && <FileComposer leadId={lead.id} accessToken={accessToken} />}{lead.files.length === 0 ? <p className="text-sm text-muted-foreground">Chưa có tệp đính kèm.</p> : <ul className="flex flex-col gap-3">{lead.files.map((file) => <li key={file.id} className="flex items-center justify-between gap-3 rounded-lg border p-3"><div className="flex min-w-0 items-center gap-3"><FileText className="shrink-0" aria-hidden="true" /><div className="min-w-0"><p className="truncate text-sm font-medium">{file.fileName}</p><p className="text-xs text-muted-foreground">{formatDate(file.createdAt)}</p></div></div><Button asChild size="sm" variant="outline"><a href={file.fileUrl} target="_blank" rel="noreferrer" aria-label={`Mở tệp ${file.fileName}`}><ExternalLink aria-hidden="true" />Mở</a></Button></li>)}</ul>}</div>;
+}
+
+export function SourceOccurrencesCard({ lead }: { lead: LeadDetail }) {
   return (
     <Card className="border-border/70 shadow-xs">
-      <CardHeader><CardTitle>Thông tin lead</CardTitle><CardDescription>Thông tin liên hệ và nghiệp vụ hiện tại.</CardDescription></CardHeader>
-      <CardContent><dl className="grid gap-5 sm:grid-cols-2">
+      <CardHeader>
+        <CardTitle className="flex items-center gap-2"><Network aria-hidden="true" />Nguồn khách hàng</CardTitle>
+        <CardDescription>Mỗi lần Lead phát sinh từ một form hoặc webhook được lưu thành một mục riêng.</CardDescription>
+      </CardHeader>
+      <CardContent>
+        {lead.sourceOccurrences.length === 0 ? (
+          <p className="text-sm text-muted-foreground">Chưa có lịch sử nguồn.</p>
+        ) : (
+          <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-1 2xl:grid-cols-2">
+            {lead.sourceOccurrences.map((occurrence, index) => (
+              <details key={occurrence.id} className="group rounded-lg border bg-card open:border-primary/40">
+                <summary className="flex min-h-11 cursor-pointer list-none items-center justify-between gap-3 rounded-lg p-4 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring">
+                  <span className="min-w-0 text-left">
+                    <span className="block truncate text-sm font-medium">{occurrence.sourceName}</span>
+                    <span className="block text-xs text-muted-foreground">{formatDateTime(occurrence.receivedAt)}</span>
+                  </span>
+                  <span className="flex shrink-0 items-center gap-1 text-xs text-primary">
+                    {index === 0 ? "Mới nhất" : "Xem thêm"}
+                    <ChevronDown className="size-4 transition-transform group-open:rotate-180" aria-hidden="true" />
+                  </span>
+                </summary>
+                <dl className="grid gap-2 border-t px-4 py-3 text-sm">
+                  <DetailValue label="Nhóm nguồn" value={occurrence.sourceGroup.name} />
+                  <DetailValue label="Nguồn" value={occurrence.sourceName} />
+                  <DetailValue label="Thời gian" value={formatDateTime(occurrence.receivedAt)} />
+                  <DetailValue label="Ghi chú" value={occurrence.note ?? "-"} />
+                </dl>
+              </details>
+            ))}
+          </div>
+        )}
+      </CardContent>
+    </Card>
+  );
+}
+
+export function LeadSummaryCard({ lead, canUpdate, onEdit }: { lead: LeadDetail; canUpdate: boolean; onEdit: () => void }) {
+  return (
+    <Card className="border-border/70 shadow-xs">
+      <CardHeader className="flex flex-row items-start justify-between gap-4"><div><CardTitle>Thông tin cơ bản</CardTitle><CardDescription>Thông tin liên hệ và nghiệp vụ hiện tại.</CardDescription></div>{canUpdate && <Button type="button" size="icon-sm" variant="ghost" onClick={onEdit} aria-label="Chỉnh sửa thông tin Lead"><Pencil aria-hidden="true" /></Button>}</CardHeader>
+      <CardContent><dl className="grid gap-4 sm:grid-cols-2 xl:grid-cols-1 2xl:grid-cols-2">
+        <DetailValue label="Họ và tên" value={lead.fullName} />
         <DetailValue label="Số điện thoại" value={lead.phone ?? "Chưa cập nhật"} />
         <DetailValue label="Email" value={lead.email ?? "Chưa cập nhật"} />
-        <DetailValue label="Nguồn lead" value={lead.source?.name ?? "Chưa cập nhật"} />
+        <DetailValue label="Ngày sinh" value={formatDate(lead.dateOfBirth)} />
+        <DetailValue label="Địa chỉ" value={lead.currentAddress ?? lead.specificAddress ?? "Chưa cập nhật"} />
+        <DetailValue label="Nhóm nguồn" value={lead.origin?.name ?? "Chưa cập nhật"} />
+        <DetailValue label="Nguồn học viên" value={lead.source?.name ?? "Chưa chọn"} />
         <DetailValue label="Tiến trình" value={lead.pipelineStage?.name ?? "Chưa cập nhật"} />
         <DetailValue label="Nhân viên phụ trách" value={lead.assignee?.fullName ?? "Chưa phân công"} />
         <DetailValue label="Mức độ quan tâm" value={lead.temperature ?? "-"} />
+        <DetailValue label="Chương trình" value={lead.institutionProgram ? `${lead.institutionProgram.name} · ${lead.institutionProgram.institutionName}` : "Chưa chọn"} />
+        <DetailValue label="Ngành đăng ký" value={lead.majorName ?? "Chưa chọn"} />
+        <DetailValue label="Ghi chú" value={lead.note ?? "-"} />
       </dl></CardContent>
     </Card>
   );
@@ -349,24 +394,24 @@ function FileComposer({ leadId, accessToken }: { leadId: string; accessToken: st
   );
 }
 
-function TimelineCard({ lead }: { lead: LeadDetail }) {
+function TimelineCard({ lead, embedded = false }: { lead: LeadDetail; embedded?: boolean }) {
+  const content = lead.activities.length === 0 ? <p className="text-sm text-muted-foreground">Chưa có hoạt động chăm sóc.</p> : <ol className="flex flex-col gap-4">{lead.activities.map((activity) => <li key={activity.id} className="flex gap-3"><CalendarDays className="shrink-0 text-primary" aria-hidden="true" /><div><p className="text-sm font-medium">{activityLabels[activity.type] ?? activity.type}</p>{activity.content && <p className="text-sm text-muted-foreground">{activity.content}</p>}<p className="text-xs text-muted-foreground">{activity.actor?.fullName ?? "Hệ thống"} · {formatDateTime(activity.createdAt)}</p></div></li>)}</ol>;
+  if (embedded) return <section aria-labelledby="lead-activity-title"><h3 id="lead-activity-title" className="mb-4 font-semibold">Lịch sử chăm sóc</h3>{content}</section>;
   return (
     <Card className="border-border/70 shadow-xs">
       <CardHeader><CardTitle className="flex items-center gap-2"><History aria-hidden="true" />Lịch sử chăm sóc</CardTitle><CardDescription>Hoạt động nghiệp vụ gần nhất của lead.</CardDescription></CardHeader>
-      <CardContent>{lead.activities.length === 0 ? <p className="text-sm text-muted-foreground">Chưa có hoạt động chăm sóc.</p> : <ol className="flex flex-col gap-4">{lead.activities.map((activity) => <li key={activity.id} className="flex gap-3"><CalendarDays className="shrink-0 text-primary" aria-hidden="true" /><div><p className="text-sm font-medium">{activityLabels[activity.type] ?? activity.type}</p>{activity.content && <p className="text-sm text-muted-foreground">{activity.content}</p>}<p className="text-xs text-muted-foreground">{activity.actor?.fullName ?? "Hệ thống"} · {formatDateTime(activity.createdAt)}</p></div></li>)}</ol>}</CardContent>
+      <CardContent>{content}</CardContent>
     </Card>
   );
 }
 
-function HistoryCard({ lead }: { lead: LeadDetail }) {
+function HistoryCard({ lead, embedded = false }: { lead: LeadDetail; embedded?: boolean }) {
+  const content = <div className="flex flex-col gap-5">{lead.stageHistory.length === 0 ? <p className="text-sm text-muted-foreground">Chưa có thay đổi tiến trình.</p> : <ol className="flex flex-col gap-3">{lead.stageHistory.map((history) => <li key={history.id} className="text-sm"><span className="font-medium">{history.fromStage?.name ?? "Khởi tạo"} → {history.toStage?.name ?? "Chưa xác định"}</span><p className="text-muted-foreground">{formatDateTime(history.changedAt)}{history.changedBy ? ` · ${history.changedBy.fullName}` : ""}</p></li>)}</ol>}<Separator />{lead.assignments.length === 0 ? <p className="text-sm text-muted-foreground">Chưa có dữ liệu phân công.</p> : <ol className="flex flex-col gap-3">{lead.assignments.map((assignment) => <li key={assignment.id} className="flex gap-3 text-sm"><UserRound className="shrink-0 text-primary" aria-hidden="true" /><div><p className="font-medium">{assignment.assignee?.fullName ?? "Chưa xác định"}</p><p className="text-muted-foreground">{assignment.department?.name ?? "Không có phòng ban"} · {formatDateTime(assignment.assignedAt)}</p></div></li>)}</ol>}</div>;
+  if (embedded) return <section aria-labelledby="lead-history-title" className="border-t pt-6"><h3 id="lead-history-title" className="mb-4 font-semibold">Tiến trình và phân công</h3>{content}</section>;
   return (
     <Card className="border-border/70 shadow-xs">
       <CardHeader><CardTitle>Lịch sử tiến trình và phân công</CardTitle><CardDescription>Dữ liệu truy vết xử lý lead gần nhất.</CardDescription></CardHeader>
-      <CardContent className="flex flex-col gap-5">
-        {lead.stageHistory.length === 0 ? <p className="text-sm text-muted-foreground">Chưa có thay đổi tiến trình.</p> : <ol className="flex flex-col gap-3">{lead.stageHistory.map((history) => <li key={history.id} className="text-sm"><span className="font-medium">{history.fromStage?.name ?? "Khởi tạo"} → {history.toStage?.name ?? "Chưa xác định"}</span><p className="text-muted-foreground">{formatDateTime(history.changedAt)}{history.changedBy ? ` · ${history.changedBy.fullName}` : ""}</p></li>)}</ol>}
-        <Separator />
-        {lead.assignments.length === 0 ? <p className="text-sm text-muted-foreground">Chưa có dữ liệu phân công.</p> : <ol className="flex flex-col gap-3">{lead.assignments.map((assignment) => <li key={assignment.id} className="flex gap-3 text-sm"><UserRound className="shrink-0 text-primary" aria-hidden="true" /><div><p className="font-medium">{assignment.assignee?.fullName ?? "Chưa xác định"}</p><p className="text-muted-foreground">{assignment.department?.name ?? "Không có phòng ban"} · {formatDateTime(assignment.assignedAt)}</p></div></li>)}</ol>}
-      </CardContent>
+      <CardContent>{content}</CardContent>
     </Card>
   );
 }

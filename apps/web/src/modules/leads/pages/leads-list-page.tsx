@@ -8,7 +8,7 @@ import {
   type Table as DataTable,
   useReactTable,
 } from "@tanstack/react-table";
-import { ArrowDown, ArrowUp, ArrowUpDown, ChevronLeft, ChevronRight, Eye, FileSpreadsheet, Plus, Search, Upload } from "lucide-react";
+import { ArrowDown, ArrowUp, ArrowUpDown, ChevronLeft, ChevronRight, ExternalLink, Eye, FileSpreadsheet, Pencil, Plus, Search, Upload } from "lucide-react";
 import { Link, useNavigate } from "react-router-dom";
 
 import { EmptyState } from "@/components/shared/data-states";
@@ -25,10 +25,12 @@ import { Input } from "@/components/ui/input";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { useAuth } from "@/modules/auth/auth-context";
 import { ApiError } from "@/services/api";
-import { createLead, getLead, getLeadActionOptions, getLeadFilterOptions, getLeads, importLeads, updateLead, updateLeadCustomFields } from "@/services/lead.service";
+import { changeLeadStage, createLead, getLead, getLeadActionOptions, getLeadFilterOptions, getLeads, importLeads, updateLead, updateLeadCustomFields } from "@/services/lead.service";
 import { LeadForm, LeadProgressSelector } from "../components/lead-form";
+import { LeadCustomFieldsCard } from "../components/lead-custom-fields-card";
 import { toLeadFormOptions, toLeadFormValues } from "../lead-form.helpers";
 import { emptyLeadForm } from "../lead.schema";
+import { ActivityWorkspace, LeadSummaryCard, PipelineProgressCard, SourceOccurrencesCard } from "./lead-detail-page";
 import type {
   LeadActionOptions,
   LeadDetail,
@@ -358,7 +360,7 @@ export function LeadsListPage() {
   const actionOptionsQuery = useQuery({
     queryKey: ["leads", "action-options"],
     queryFn: () => getLeadActionOptions(auth.accessToken!),
-    enabled: canCreate || canUpdate,
+    enabled: canCreate || canUpdate || Boolean(editingLeadId),
   });
   const createMutation = useMutation({
     mutationFn: async (input: LeadFormInput) => {
@@ -384,7 +386,7 @@ export function LeadsListPage() {
   const editingLeadQuery = useQuery({
     queryKey: ["leads", "detail", editingLeadId],
     queryFn: () => getLead(editingLeadId!, auth.accessToken!),
-    enabled: canUpdate && Boolean(editingLeadId),
+    enabled: Boolean(editingLeadId),
   });
   const updateMutation = useMutation({
     mutationFn: async (input: LeadFormInput) => {
@@ -430,8 +432,14 @@ export function LeadsListPage() {
         cell: ({ row }) => row.original.pipelineStage?.name ?? "-",
       },
       {
+        id: "origin",
+        header: "Nhóm nguồn",
+        enableSorting: false,
+        cell: ({ row }) => row.original.origin?.name ?? "-",
+      },
+      {
         id: "source",
-        header: "Nguồn HV",
+        header: "Nguồn học viên",
         enableSorting: false,
         cell: ({ row }) => row.original.source?.name ?? "-",
       },
@@ -586,7 +594,6 @@ export function LeadsListPage() {
         onReload={() => leadsQuery.refetch()}
         onPrevious={() => setViewState((current) => ({ ...current, page: Math.max(1, current.page - 1) }))}
         onNext={() => setViewState((current) => ({ ...current, page: current.page + 1 }))}
-        canEdit={canUpdate}
         onEditLead={(leadId) => {
           updateMutation.reset();
           setViewState((current) => ({ ...current, editingLeadId: leadId, isEditDialogOpen: true }));
@@ -596,10 +603,12 @@ export function LeadsListPage() {
         isOpen={isEditDialogOpen}
         lead={editingLeadQuery.data?.data}
         options={actionOptionsQuery.data}
+        fallbackStages={optionsQuery.data?.stages}
+        canUpdate={canUpdate}
         status={
-          editingLeadQuery.isPending || actionOptionsQuery.isPending
+          editingLeadQuery.isPending
             ? "loading"
-            : editingLeadQuery.isError || actionOptionsQuery.isError
+            : editingLeadQuery.isError
               ? "error"
               : "ready"
         }
@@ -626,6 +635,8 @@ type EditLeadDialogProps = {
   isOpen: boolean;
   lead?: LeadDetail;
   options?: LeadActionOptions;
+  fallbackStages?: LeadFilterOptions["stages"];
+  canUpdate: boolean;
   status: "loading" | "error" | "ready";
   isSaving: boolean;
   mutationError: Error | null;
@@ -638,6 +649,8 @@ function EditLeadDialog({
   isOpen,
   lead,
   options,
+  fallbackStages,
+  canUpdate,
   status,
   isSaving,
   mutationError,
@@ -645,17 +658,32 @@ function EditLeadDialog({
   onAfterClose,
   onSubmit,
 }: EditLeadDialogProps) {
+  const auth = useAuth();
+  const [isEditing, setIsEditing] = useState(false);
+  const canNote = canUpdate || auth.can("lead_note.create");
+  const canFile = canUpdate || auth.can("file.upload");
+  const queryClient = useQueryClient();
+  const stageMutation = useMutation({
+    mutationFn: (stageId: string) => changeLeadStage(lead!.id, stageId, auth.accessToken!),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["leads"] });
+      queryClient.invalidateQueries({ queryKey: ["sale"] });
+    },
+  });
   return (
-    <Dialog open={isOpen} onOpenChange={onOpenChange}>
+    <Dialog open={isOpen} onOpenChange={(open) => { if (!open) setIsEditing(false); onOpenChange(open); }}>
       <DialogContent
-        className="flex max-h-[calc(100dvh-2rem)] flex-col gap-0 overflow-hidden p-0 sm:max-w-[calc(100vw-2rem)] xl:max-w-368"
+        className="flex h-[calc(100dvh-2rem)] max-h-[calc(100dvh-2rem)] flex-col gap-0 overflow-hidden p-0 sm:max-w-[calc(100vw-2rem)] xl:max-w-400"
         onCloseAutoFocus={onAfterClose}
       >
         <DialogHeader className="shrink-0 border-b px-6 py-5 pr-14">
-          <DialogTitle>Chỉnh sửa thông tin ứng viên</DialogTitle>
-          <DialogDescription>
-            Cập nhật hồ sơ, tiến trình và thông tin tuyển sinh của ứng viên.
-          </DialogDescription>
+          <div className="flex flex-col justify-between gap-4 sm:flex-row sm:items-start">
+            <div className="space-y-2">
+              <DialogTitle>{lead?.fullName ?? "Chi tiết Lead"}</DialogTitle>
+              <DialogDescription>{lead ? `${lead.leadCode ?? "Chưa có mã Lead"} · Tạo ngày ${formatDate(lead.createdAt)}` : "Thông tin hồ sơ và lịch sử xử lý Lead."}</DialogDescription>
+            </div>
+            {lead && <div className="flex flex-wrap gap-2">{canUpdate && <Button type="button" size="sm" variant={isEditing ? "secondary" : "default"} onClick={() => setIsEditing((value) => !value)}><Pencil aria-hidden="true" />{isEditing ? "Xem thông tin" : "Chỉnh sửa"}</Button>}<Button asChild type="button" size="sm" variant="outline"><Link to={`/sale/leads/${lead.id}`}><ExternalLink aria-hidden="true" />Mở trang chi tiết</Link></Button></div>}
+          </div>
         </DialogHeader>
         {mutationError && (
           <p role="alert" className="mx-6 mt-4 text-sm text-destructive">
@@ -664,11 +692,12 @@ function EditLeadDialog({
         )}
         {status === "loading" ? (
           <p role="status" className="px-6 py-5 text-sm text-muted-foreground">Đang tải thông tin ứng viên…</p>
-        ) : status === "error" || !lead || !options ? (
+        ) : status === "error" || !lead ? (
           <p role="alert" className="px-6 py-5 text-sm text-destructive">
             Không thể tải thông tin ứng viên. Vui lòng đóng cửa sổ và thử lại.
           </p>
-        ) : (
+        ) : isEditing && canUpdate ? (
+          options ? (
           <LeadForm
             defaultValues={toLeadFormValues(lead)}
             options={toLeadFormOptions(lead, options)}
@@ -678,6 +707,20 @@ function EditLeadDialog({
             dialogLayout
             onSubmit={onSubmit}
           />
+          ) : <p role="status" className="px-6 py-5 text-sm text-muted-foreground">Đang tải dữ liệu chỉnh sửa…</p>
+        ) : (
+          <div className="flex min-h-0 flex-1 flex-col gap-6 overflow-y-auto bg-muted/20 p-4 sm:p-6">
+            <PipelineProgressCard lead={lead} options={options} fallbackStages={fallbackStages} onStageChange={canUpdate ? (stageId) => stageMutation.mutate(stageId) : undefined} isChanging={stageMutation.isPending} />
+            {stageMutation.isError && <p role="alert" className="-mt-4 text-sm text-destructive">{stageMutation.error instanceof ApiError ? stageMutation.error.message : "Không thể chuyển tiến trình. Vui lòng thử lại."}</p>}
+            <div className="grid items-start gap-6 xl:grid-cols-[minmax(320px,0.82fr)_minmax(0,1.48fr)]">
+              <aside className="flex min-w-0 flex-col gap-6">
+                <LeadSummaryCard lead={lead} canUpdate={canUpdate} onEdit={() => setIsEditing(true)} />
+                <SourceOccurrencesCard lead={lead} />
+                <LeadCustomFieldsCard leadId={lead.id} />
+              </aside>
+              <ActivityWorkspace lead={lead} canNote={canNote} canFile={canFile} accessToken={auth.accessToken!} />
+            </div>
+          </div>
         )}
       </DialogContent>
     </Dialog>
@@ -732,7 +775,7 @@ function LeadFiltersCard({ filters, options, onChange, onApply, onReset }: LeadF
           />
           <FilterSelect
             id="lead-source"
-            label="Nguồn lead"
+            label="Nguồn học viên"
             value={filters.sourceId}
             onChange={(value) => onChange("sourceId", value)}
             options={(options?.sources ?? []).map((source) => ({
@@ -776,7 +819,6 @@ type LeadResultsCardProps = {
   onReload: () => void;
   onPrevious: () => void;
   onNext: () => void;
-  canEdit: boolean;
   onEditLead: (leadId: string) => void;
 };
 
@@ -789,7 +831,6 @@ function LeadResultsCard({
   onReload,
   onPrevious,
   onNext,
-  canEdit,
   onEditLead,
 }: LeadResultsCardProps) {
   const { isLoading, isError, isFetching } = queryState;
@@ -818,7 +859,7 @@ function LeadResultsCard({
             description="Danh sách sẽ cập nhật khi lead được tạo hoặc phân công cho bạn."
           />
         ) : (
-          <LeadTable table={table} canEdit={canEdit} onEditLead={onEditLead} />
+          <LeadTable table={table} onEditLead={onEditLead} />
         )}
       </CardContent>
       {pagination && pagination.total > 0 && (
@@ -844,11 +885,9 @@ function LeadResultsCard({
 
 function LeadTable({
   table,
-  canEdit,
   onEditLead,
 }: {
   table: DataTable<LeadListItem>;
-  canEdit: boolean;
   onEditLead: (leadId: string) => void;
 }) {
   function openLeadWithKeyboard(event: KeyboardEvent<HTMLTableRowElement>, leadId: string) {
@@ -909,11 +948,11 @@ function LeadTable({
           {table.getRowModel().rows.map((row) => (
             <TableRow
               key={row.id}
-              className={canEdit ? "cursor-pointer focus-visible:bg-muted/50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring" : undefined}
-              tabIndex={canEdit ? 0 : undefined}
-              aria-label={canEdit ? `Chỉnh sửa thông tin ${row.original.fullName}` : undefined}
-              onClick={canEdit ? () => onEditLead(row.original.id) : undefined}
-              onKeyDown={canEdit ? (event) => openLeadWithKeyboard(event, row.original.id) : undefined}
+              className="cursor-pointer focus-visible:bg-muted/50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring"
+              tabIndex={0}
+              aria-label={`Mở chi tiết ${row.original.fullName}`}
+              onClick={() => onEditLead(row.original.id)}
+              onKeyDown={(event) => openLeadWithKeyboard(event, row.original.id)}
             >
               {row.getVisibleCells().map((cell) => (
                 <TableCell key={cell.id} className="px-5 py-4">

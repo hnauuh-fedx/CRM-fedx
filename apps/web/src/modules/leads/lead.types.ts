@@ -66,6 +66,7 @@ export type LeadListItem = {
   temperature: string | null;
   status: string | null;
   source: { id: string; name: string } | null;
+  origin: { id: string; name: string } | null;
   pipelineStage: { id: string; name: string; color: string | null } | null;
   assignee: { id: string; fullName: string } | null;
   createdAt: string | null;
@@ -106,6 +107,13 @@ export type LeadFilterOptions = {
 };
 
 export type LeadDetail = LeadListItem & {
+  sourceOccurrences: Array<{
+    id: string;
+    sourceGroup: { id: string; name: string };
+    sourceName: string;
+    note: string | null;
+    receivedAt: string;
+  }>;
   phone: string | null;
   email: string | null;
   gender: string | null;
@@ -195,6 +203,13 @@ export type LeadDetail = LeadListItem & {
     id: string;
     type: string;
     content: string | null;
+    createdAt: string | null;
+    actor: { id: string; fullName: string } | null;
+  }>;
+  recentChanges: Array<{
+    id: string;
+    action: string;
+    description: string;
     createdAt: string | null;
     actor: { id: string; fullName: string } | null;
   }>;

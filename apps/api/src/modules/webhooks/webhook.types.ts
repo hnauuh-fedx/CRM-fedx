@@ -34,9 +34,16 @@ export const webhookFieldMetadata = [
   },
   {
     key: "source",
-    label: "Nguồn lead",
+    label: "Nguồn",
     type: "string",
     requiredByCrm: true,
+    group: "STANDARD",
+  },
+  {
+    key: "sourceGroupUrl",
+    label: "URL xác định nhóm nguồn",
+    type: "string",
+    requiredByCrm: false,
     group: "STANDARD",
   },
   {

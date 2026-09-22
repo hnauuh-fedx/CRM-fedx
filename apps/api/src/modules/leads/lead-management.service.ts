@@ -24,6 +24,7 @@ export type LeadInput = {
   fullName: string;
   phone: string;
   sourceId: string;
+  originId?: string;
   assigneeId?: string | null;
   pipelineStageId?: string;
   email?: string;
@@ -141,7 +142,8 @@ function toLeadData(input: LeadInput) {
   return {
     full_name: input.fullName.trim(),
     phone: input.phone.trim(),
-    source_id: input.sourceId,
+    source_id: input.sourceId || null,
+    ...(input.originId !== undefined ? { origin_id: input.originId } : {}),
     institution_program_id: input.institutionProgramId ?? null,
     major_id: input.majorId ?? null,
     email: emptyToNull(input.email),
@@ -430,7 +432,7 @@ export async function createLeadInTransaction(
   tx: Prisma.TransactionClient,
   user: AuthUser,
   input: LeadInput,
-  options: { allowDuplicate?: boolean; ipAddress?: string } = {},
+  options: { allowDuplicate?: boolean; allowMissingSource?: boolean; ipAddress?: string } = {},
 ) {
   if (!options.allowDuplicate) {
     const duplicate = await tx.leads.findFirst({
@@ -446,12 +448,14 @@ export async function createLeadInTransaction(
     if (duplicate)
       return { ok: false as const, reason: "phone_already_exists" as const };
   }
-  const source = await tx.lead_sources.findUnique({
-    where: { id: input.sourceId },
-    select: { id: true },
-  });
-  if (!source) {
-    return { ok: false as const, reason: "source_not_found" as const };
+  if (input.sourceId || !options.allowMissingSource) {
+    const source = input.sourceId ? await tx.lead_sources.findUnique({
+      where: { id: input.sourceId },
+      select: { id: true },
+    }) : null;
+    if (!source) {
+      return { ok: false as const, reason: "source_not_found" as const };
+    }
   }
   if (!(await hasValidAdmissionReferences(tx, input))) {
     return {
@@ -597,7 +601,7 @@ export async function updateLeadFromInboundInTransaction(
   const [oldLead, oldStudentProfile, oldAdmissionProfile, oldTracking] = await Promise.all([
     tx.leads.findUniqueOrThrow({
       where: { id: leadId },
-      select: { full_name: true, phone: true, email: true, source_id: true, note: true, date_of_birth: true },
+      select: { full_name: true, phone: true, email: true, source_id: true, origin_id: true, note: true, date_of_birth: true },
     }),
     tx.student_profiles.findUnique({ where: { lead_id: leadId }, select: { company_name: true, graduation_year: true } }),
     tx.admission_profiles.findUnique({ where: { lead_id: leadId }, select: { monthly_revenue: true, decision_signed_date: true } }),
@@ -608,12 +612,13 @@ export async function updateLeadFromInboundInTransaction(
   if (providedFields.has("phone")) data.phone = input.phone.trim();
   if (providedFields.has("email")) data.email = optionalInboundText(input.email);
   if (providedFields.has("sourceId")) data.source_id = input.sourceId;
+  if (providedFields.has("originId")) data.origin_id = input.originId;
   if (providedFields.has("note")) data.note = optionalInboundText(input.note);
   if (providedFields.has("dateOfBirth")) data.date_of_birth = input.dateOfBirth ? new Date(input.dateOfBirth) : null;
   const updatedLead = await tx.leads.update({
     where: { id: leadId },
     data,
-    select: { full_name: true, phone: true, email: true, source_id: true, note: true, date_of_birth: true },
+    select: { full_name: true, phone: true, email: true, source_id: true, origin_id: true, note: true, date_of_birth: true },
   });
 
   if (providedFields.has("companyName") || providedFields.has("graduationYear")) {

@@ -370,6 +370,7 @@ model institution_programs {
   custom_fields             custom_fields[]
   kpi_targets               kpi_targets[]
   lead_sources              lead_sources[]
+  lead_origins              lead_origins[]
   leads                     leads[]
   report_configs            report_configs[]
   personal_dashboard_widgets personal_dashboard_widgets[]
@@ -462,6 +463,39 @@ model lead_sources {
   @@index([type, created_at, id], map: "idx_lead_sources_type_created_page")
 }
 
+model lead_origins {
+  id                     String               @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  institution_program_id String               @db.Uuid
+  name                   String               @db.VarChar(150)
+  normalized_name        String               @db.VarChar(150)
+  created_at             DateTime             @default(now()) @db.Timestamp(6)
+  institution_programs   institution_programs @relation(fields: [institution_program_id], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  leads                  leads[]
+  occurrences            lead_source_occurrences[]
+
+  @@unique([institution_program_id, normalized_name])
+  @@index([institution_program_id, name])
+}
+
+model lead_source_occurrences {
+  id            String       @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  lead_id       String       @db.Uuid
+  origin_id     String       @db.Uuid
+  webhook_id    String?      @db.Uuid
+  request_id    String       @unique @db.Uuid
+  source_name   String       @db.VarChar(255)
+  note          String?
+  details       Json?
+  received_at   DateTime     @default(now()) @db.Timestamp(6)
+  leads         leads        @relation(fields: [lead_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  lead_origins  lead_origins @relation(fields: [origin_id], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  webhooks      webhooks?    @relation(fields: [webhook_id], references: [id], onDelete: SetNull, onUpdate: NoAction)
+
+  @@index([lead_id, received_at, id])
+  @@index([origin_id, received_at, id])
+  @@index([webhook_id, received_at, id])
+}
+
 model lead_status_histories {
   id                                                                   String           @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
   lead_id                                                              String?          @db.Uuid
@@ -487,6 +521,7 @@ model leads {
   email                          String?                      @db.VarChar(255)
   cccd                           String?                      @db.VarChar(30)
   source_id                      String?                      @db.Uuid
+  origin_id                      String?                      @db.Uuid
   institution_program_id         String?                      @db.Uuid
   major_id                       String?                      @db.Uuid
   pipeline_stage_id              String?                      @db.Uuid
@@ -511,6 +546,7 @@ model leads {
   users_leads_owner_idTousers    users?                       @relation("leads_owner_idTousers", fields: [owner_id], references: [id], onDelete: NoAction, onUpdate: NoAction)
   pipeline_stages                pipeline_stages?             @relation(fields: [pipeline_stage_id], references: [id], onDelete: NoAction, onUpdate: NoAction)
   lead_sources                   lead_sources?                @relation(fields: [source_id], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  lead_origins                   lead_origins?                @relation(fields: [origin_id], references: [id], onDelete: NoAction, onUpdate: NoAction)
   institution_programs           institution_programs?        @relation(fields: [institution_program_id], references: [id], onDelete: NoAction, onUpdate: NoAction)
   majors                         majors?                      @relation(fields: [major_id], references: [id], onDelete: NoAction, onUpdate: NoAction)
   relatives                      relatives[]
@@ -518,6 +554,7 @@ model leads {
   student_profiles               student_profiles?
   students                       students?
   utm_trackings                  utm_trackings[]
+  lead_source_occurrences        lead_source_occurrences[]
 
   @@index([assigned_to], map: "idx_leads_assigned_to")
   @@index([assigned_to, created_at, id], map: "idx_leads_assignee_created_page")
@@ -529,6 +566,7 @@ model leads {
   @@index([phone], map: "idx_leads_phone")
   @@index([pipeline_stage_id], map: "idx_leads_pipeline_stage")
   @@index([source_id], map: "idx_leads_source_id")
+  @@index([origin_id], map: "idx_leads_origin_id")
   @@index([source_id, created_at, id], map: "idx_leads_source_created_page")
   @@index([institution_program_id, created_at, id], map: "idx_leads_program_created_page")
   @@index([major_id, created_at, id], map: "idx_leads_major_created_page")
@@ -1043,6 +1081,7 @@ model webhooks {
   users                  users                    @relation("webhooks_created_by", fields: [created_by], references: [id], onDelete: Restrict, onUpdate: NoAction)
   field_mappings         webhook_field_mappings[]
   requests               webhook_requests[]
+  source_occurrences     lead_source_occurrences[]
 
   @@index([institution_program_id, created_at, id], map: "idx_webhooks_program_created")
   @@index([institution_program_id, status], map: "idx_webhooks_program_status")

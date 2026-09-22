@@ -68,6 +68,7 @@ import {
 } from "@/components/ui/table";
 import { Textarea } from "@/components/ui/textarea";
 import { useAuth } from "@/modules/auth/auth-context";
+import { useInstitutionProgram } from "@/modules/institutions/institution-program-context";
 import { ApiError } from "@/services/api";
 import type {
   WebhookDetail,
@@ -118,17 +119,23 @@ const defaultMappings = [
     defaultValue: null,
   },
   {
-    incomingKey: "utm_source",
+    incomingKey: "form_name",
     crmField: "source",
-    isRequired: false,
-    defaultValue: "Website",
+    isRequired: true,
+    defaultValue: null,
+  },
+  {
+    incomingKey: "utm_url",
+    crmField: "sourceGroupUrl",
+    isRequired: true,
+    defaultValue: null,
   },
 ];
 const emptyWebhook: WebhookInput = {
   name: "",
   targetModule: "LEAD",
   status: "ACTIVE",
-  duplicatePolicy: "CREATE_NEW",
+  duplicatePolicy: "UPDATE_EXISTING",
   mappings: defaultMappings,
 };
 const samplePayload = JSON.stringify(
@@ -136,7 +143,8 @@ const samplePayload = JSON.stringify(
     name: "Test Customer",
     phone: "0901234567",
     email: "test@example.com",
-    utm_source: "Website",
+    form_name: "Form Facebook",
+    utm_url: "https://landing.example.vn/dang-ky?utm_source=facebook",
   },
   null,
   2,
@@ -147,7 +155,7 @@ function formatDate(value: string | null) {
 }
 
 const duplicatePolicyLabels = {
-  CREATE_NEW: "Luôn tạo Lead mới",
+  CREATE_NEW: "Gộp vào Lead hiện có",
   UPDATE_EXISTING: "Cập nhật Lead hiện có",
   REJECT: "Từ chối nếu trùng",
 } as const;
@@ -200,6 +208,7 @@ function duplicateRecordFromError(error: unknown) {
 
 export function WebhooksPage() {
   const auth = useAuth();
+  const { selectedProgramId } = useInstitutionProgram();
   const queryClient = useQueryClient();
   const canManage = auth.can("webhook.manage");
   const [selectedId, setSelectedId] = useState<string | null>(null);
@@ -228,8 +237,9 @@ export function WebhooksPage() {
     queryFn: () => getWebhooks(page, auth.accessToken!),
   });
   const metadataQuery = useQuery({
-    queryKey: ["webhooks", "metadata"],
+    queryKey: ["webhooks", "metadata", selectedProgramId],
     queryFn: () => getWebhookMetadata(auth.accessToken!),
+    enabled: Boolean(selectedProgramId && auth.accessToken),
   });
   const detailQuery = useQuery({
     queryKey: ["webhooks", selectedId],
@@ -334,6 +344,7 @@ export function WebhooksPage() {
               type="button"
               onClick={() => {
                 saveMutation.reset();
+                void metadataQuery.refetch();
                 setEditor({ mode: "create" });
               }}
             >
@@ -491,7 +502,10 @@ export function WebhooksPage() {
             onLogTo={(value) => { setLogTo(value); setLogPage(1); }}
             onLogPage={setLogPage}
             onReloadLogs={() => void logsQuery.refetch()}
-            onEdit={() => setEditor({ mode: "edit", webhook: detail })}
+            onEdit={() => {
+              void metadataQuery.refetch();
+              setEditor({ mode: "edit", webhook: detail });
+            }}
             onTest={() => {
               testMutation.reset();
               setTestValidation("");
@@ -523,7 +537,7 @@ export function WebhooksPage() {
               webhook sẽ tạo Lead thật.
             </DialogDescription>
           </DialogHeader>
-          {editor && metadataQuery.isError ? (
+          {editor && metadataQuery.isError && !metadataQuery.data ? (
             <ErrorState
               title="Không thể tải danh sách trường CRM"
               description="Vui lòng tải lại metadata trước khi cấu hình mapping."
@@ -558,6 +572,10 @@ export function WebhooksPage() {
                   : emptyWebhook
               }
               fields={metadataQuery.data.fields}
+              canViewCustomFields={auth.can("custom_field.view")}
+              onRefreshFields={() => void metadataQuery.refetch()}
+              refreshingFields={metadataQuery.isFetching}
+              refreshFieldsError={metadataQuery.isError}
               pending={saveMutation.isPending}
               error={saveMutation.error}
               onSubmit={(value) => saveMutation.mutate(value)}
@@ -944,18 +962,28 @@ function WebhookDetails({
 function WebhookForm({
   initialValue,
   fields,
+  canViewCustomFields,
+  onRefreshFields,
+  refreshingFields,
+  refreshFieldsError,
   pending,
   error,
   onSubmit,
 }: {
   initialValue: WebhookInput;
   fields: WebhookField[];
+  canViewCustomFields: boolean;
+  onRefreshFields: () => void;
+  refreshingFields: boolean;
+  refreshFieldsError: boolean;
   pending: boolean;
   error: Error | null;
   onSubmit: (value: WebhookInput) => void;
 }) {
   const form = useForm<WebhookInput>({ defaultValues: initialValue });
   const mappings = useFieldArray({ control: form.control, name: "mappings" });
+  const standardFields = fields.filter((field) => field.group === "STANDARD");
+  const customFields = fields.filter((field) => field.group === "CUSTOM");
   return (
     <form
       className="flex flex-col gap-6"
@@ -1018,11 +1046,8 @@ function WebhookForm({
                 </SelectTrigger>
                 <SelectContent>
                   <SelectGroup>
-                    <SelectItem value="CREATE_NEW">
-                      Luôn tạo Lead mới
-                    </SelectItem>
                     <SelectItem value="UPDATE_EXISTING">
-                      Cập nhật Lead hiện có
+                      Gộp nguồn và cập nhật Lead hiện có
                     </SelectItem>
                     <SelectItem value="REJECT">Từ chối nếu trùng</SelectItem>
                   </SelectGroup>
@@ -1031,8 +1056,7 @@ function WebhookForm({
             )}
           />
           <FieldDescription>
-            Fedx sẽ kiểm tra dữ liệu trùng theo quy tắc nhận diện Lead hiện tại
-            trong chương trình này.
+            Khi trùng số điện thoại, hệ thống giữ một Lead và thêm lần phát sinh nguồn mới.
             {form.watch("duplicatePolicy") === "UPDATE_EXISTING"
               ? " Các trường có trong request sẽ cập nhật Lead hiện có; trường không được gửi sẽ được giữ nguyên."
               : ""}
@@ -1046,22 +1070,45 @@ function WebhookForm({
             <FieldDescription>
               Default được áp dụng trước khi kiểm tra bắt buộc.
             </FieldDescription>
+            {customFields.length === 0 && (
+              <FieldDescription>
+                Chương trình này chưa có trường Lead tùy chỉnh đang dùng. Tạo trường ở trang cấu hình rồi tải lại danh sách.
+              </FieldDescription>
+            )}
+            {refreshFieldsError && (
+              <FieldDescription role="alert">
+                Chưa thể tải lại danh sách trường. Vui lòng thử lại.
+              </FieldDescription>
+            )}
           </div>
-          <Button
-            type="button"
-            variant="outline"
-            onClick={() =>
-              mappings.append({
-                incomingKey: "",
-                crmField: fields[0]?.key ?? "fullName",
-                isRequired: false,
-                defaultValue: null,
-              })
-            }
-          >
-            <Plus aria-hidden="true" />
-            Thêm mapping
-          </Button>
+          <div className="flex flex-wrap gap-2">
+            {canViewCustomFields && (
+              <Button type="button" variant="outline" size="sm" asChild>
+                <a href="/sale/cau-hinh-truong?form=lead" target="_blank" rel="noopener noreferrer">
+                  Quản lý trường Lead
+                </a>
+              </Button>
+            )}
+            <Button type="button" variant="outline" size="sm" onClick={onRefreshFields} disabled={refreshingFields}>
+              <RefreshCw aria-hidden="true" data-icon="inline-start" />
+              {refreshingFields ? "Đang tải trường..." : "Tải lại trường"}
+            </Button>
+            <Button
+              type="button"
+              variant="outline"
+              onClick={() =>
+                mappings.append({
+                  incomingKey: "",
+                  crmField: fields[0]?.key ?? "fullName",
+                  isRequired: false,
+                  defaultValue: null,
+                })
+              }
+            >
+              <Plus aria-hidden="true" data-icon="inline-start" />
+              Thêm mapping
+            </Button>
+          </div>
         </div>
         <div className="flex flex-col gap-3">
           {mappings.fields.map((mapping, index) => (
@@ -1109,26 +1156,24 @@ function WebhookForm({
                       <SelectContent>
                         <SelectGroup>
                           <SelectLabel>Trường hệ thống</SelectLabel>
-                          {fields
-                            .filter((option) => option.group === "STANDARD")
-                            .map((option) => (
+                          {standardFields.map((option) => (
                               <SelectItem key={option.key} value={option.key}>
                                 {option.label} · {option.type}
                               </SelectItem>
                             ))}
                         </SelectGroup>
-                        {fields.some((option) => option.group === "CUSTOM") && (
-                          <SelectGroup>
-                            <SelectLabel>Trường tùy chỉnh</SelectLabel>
-                            {fields
-                              .filter((option) => option.group === "CUSTOM")
-                              .map((option) => (
-                                <SelectItem key={option.key} value={option.key}>
-                                  {option.label} · {option.type}
-                                </SelectItem>
-                              ))}
-                          </SelectGroup>
-                        )}
+                        <SelectGroup>
+                          <SelectLabel>Trường tùy chỉnh ({customFields.length})</SelectLabel>
+                          {customFields.length === 0 ? (
+                            <p className="px-2 py-1.5 text-sm text-muted-foreground">
+                              Chưa có trường Lead tùy chỉnh đang dùng.
+                            </p>
+                          ) : customFields.map((option) => (
+                            <SelectItem key={option.key} value={option.key}>
+                              {option.label} · {option.type}
+                            </SelectItem>
+                          ))}
+                        </SelectGroup>
                       </SelectContent>
                     </Select>
                   )}
