@@ -12,6 +12,7 @@ import {
 import { ArrowDown, ArrowUp, ArrowUpDown, ChevronLeft, ChevronRight, Search } from "lucide-react";
 
 import { EmptyState } from "@/components/shared/data-states";
+import { AutoFilterActions } from "@/components/shared/auto-filter-actions";
 import { ErrorState } from "@/components/shared/error-state";
 import { FilterSelect } from "@/components/shared/filter-select";
 import { PageHeader } from "@/components/shared/page-header";
@@ -147,10 +148,7 @@ function Filters({ filters, options, onChange, onApply, onReset }: {
             </Field>
             <FilterSelect id="activity-type" label="Loại hoạt động" value={filters.type} onChange={(value) => onChange("type", value)} options={(options?.activityTypes ?? []).map((type) => ({ value: type, label: type }))} />
             <FilterSelect id="activity-user" label="Người thực hiện" value={filters.userId} onChange={(value) => onChange("userId", value)} options={(options?.assignees ?? []).map((item) => ({ value: item.id, label: item.fullName }))} />
-            <div className="flex items-end gap-2">
-              <Button type="submit">Áp dụng</Button>
-              <Button type="button" variant="outline" onClick={onReset}>Xóa lọc</Button>
-            </div>
+            <AutoFilterActions snapshot={filters} onApply={onApply} onReset={onReset} />
           </FieldGroup>
         </form>
       </CardContent>

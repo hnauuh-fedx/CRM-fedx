@@ -15,10 +15,12 @@ import {
 import {
   addLeadNote,
   assignLead,
+  assignLeads,
   attachLeadFile,
   changeLeadStage,
   createLead,
   deleteLead,
+  deleteLeads,
   getLeadActionOptions,
   leadUpdatePermissions,
   updateLead,
@@ -26,20 +28,26 @@ import {
 import { getInstitutionProgramScope } from "../institutions/institution-program-scope";
 import { importLeadsFromWorkbook, InvalidLeadImportFileError } from "./lead-import.service";
 import { getLeadCustomFieldDefinitions, getLeadCustomFields, patchLeadCustomFields } from "./lead-custom-fields.service";
+import { canCheckSensitiveDuplicates, listDuplicateGroupMembers, listDuplicateLeads } from "./lead-duplicates.service";
 
 const leadListQuerySchema = z.object({
   page: z.coerce.number().int().min(1).default(1),
   limit: z.coerce.number().int().min(1).max(100).default(20),
   search: z.string().trim().max(100).optional().transform((value) => value || undefined),
-  status: z.string().trim().max(50).optional().transform((value) => value || undefined),
   pipelineStageId: z.uuid().optional().or(z.literal("")).transform((value) => value || undefined),
   sourceId: z.uuid().optional().or(z.literal("")).transform((value) => value || undefined),
   institutionProgramId: z.uuid().optional().or(z.literal("")).transform((value) => value || undefined),
   assigneeId: z.uuid().optional().or(z.literal("")).transform((value) => value || undefined),
-  sortBy: z.enum(["createdAt", "fullName", "leadCode", "status"]).default("createdAt"),
+  sortBy: z.enum(["createdAt", "fullName", "leadCode", "pipelineStage"]).default("createdAt"),
   sortOrder: z.enum(["asc", "desc"]).default("desc"),
 });
 const leadIdSchema = z.uuid();
+const duplicateQuerySchema = z.object({
+  field: z.enum(["fullName", "phone", "email"]),
+  page: z.coerce.number().int().min(1).default(1),
+  limit: z.coerce.number().int().min(1).max(50).default(20),
+});
+const duplicateMembersQuerySchema = duplicateQuerySchema.extend({ key: z.string().trim().min(1).max(255) });
 const optionalText = (max: number) =>
   z.string().trim().max(max).optional().transform((value) => value || undefined);
 const optionalDate = z.iso.date().optional().or(z.literal("")).transform((value) => value || undefined);
@@ -63,7 +71,6 @@ const leadBodySchema = z.object({
   dateOfBirth: optionalDate,
   cccd: optionalText(30),
   note: optionalText(2000),
-  status: optionalText(150),
   temperature: optionalText(50),
   birthPlace: optionalText(255),
   cccdIssueDate: optionalDate,
@@ -153,6 +160,13 @@ const assignmentBodySchema = z.object({
   assigneeId: z.uuid(),
   departmentId: z.uuid().optional().or(z.literal("")).transform((value) => value || undefined),
 });
+const bulkAssignmentBodySchema = z.object({
+  leadIds: z.array(z.uuid()).min(1).max(100).transform((leadIds) => [...new Set(leadIds)]),
+  assigneeId: z.uuid(),
+});
+const bulkDeleteBodySchema = z.object({
+  leadIds: z.array(z.uuid()).min(1).max(100).transform((leadIds) => [...new Set(leadIds)]),
+});
 const customFieldValuesSchema = z.object({ values: z.array(z.object({ fieldId: z.uuid(), value: z.unknown().nullable() })).min(1).max(100) });
 
 export const leadsRouter = Router();
@@ -217,6 +231,117 @@ leadsRouter.get(
   async (request, response, next) => {
     try {
       response.json(await getLeadActionOptions(request.authUser!, getInstitutionProgramScope(request)));
+    } catch (error) {
+      next(error);
+    }
+  },
+);
+
+leadsRouter.get(
+  "/duplicates",
+  requireAuthentication,
+  requireAnyPermission(...leadListPermissions),
+  async (request, response, next) => {
+    try {
+      const parsed = duplicateQuerySchema.safeParse(request.query);
+      if (!parsed.success) {
+        response.status(400).json({ message: "Tham số kiểm tra trùng không hợp lệ." });
+        return;
+      }
+      if (parsed.data.field !== "fullName" && !canCheckSensitiveDuplicates(request.authUser!)) {
+        response.status(403).json({ message: "Bạn không có quyền xem số điện thoại hoặc email của lead." });
+        return;
+      }
+      response.json(await listDuplicateLeads(request.authUser!, {
+        ...parsed.data,
+        institutionProgramId: getInstitutionProgramScope(request),
+      }));
+    } catch (error) {
+      next(error);
+    }
+  },
+);
+
+leadsRouter.post(
+  "/duplicates/members",
+  requireAuthentication,
+  requireAnyPermission(...leadListPermissions),
+  async (request, response, next) => {
+    try {
+      const parsed = duplicateMembersQuerySchema.safeParse(request.body);
+      if (!parsed.success) {
+        response.status(400).json({ message: "Tham số nhóm lead trùng không hợp lệ." });
+        return;
+      }
+      if (parsed.data.field !== "fullName" && !canCheckSensitiveDuplicates(request.authUser!)) {
+        response.status(403).json({ message: "Bạn không có quyền xem số điện thoại hoặc email của lead." });
+        return;
+      }
+      response.json(await listDuplicateGroupMembers(request.authUser!, {
+        ...parsed.data,
+        institutionProgramId: getInstitutionProgramScope(request),
+      }));
+    } catch (error) {
+      next(error);
+    }
+  },
+);
+
+leadsRouter.post(
+  "/bulk-assign",
+  requireAuthentication,
+  requireAnyPermission("lead.assign", "lead.reassign"),
+  async (request, response, next) => {
+    try {
+      const parsed = bulkAssignmentBodySchema.safeParse(request.body);
+      if (!parsed.success) {
+        response.status(400).json({ message: "Thông tin phân công hàng loạt không hợp lệ." });
+        return;
+      }
+      const result = await assignLeads(
+        request.authUser!,
+        parsed.data.leadIds,
+        { assigneeId: parsed.data.assigneeId },
+        getInstitutionProgramScope(request),
+      );
+      if (!result.ok) {
+        response.status(result.reason === "lead_not_found" ? 404 : 400).json({
+          message: result.reason === "lead_not_found"
+            ? "Có lead không tồn tại hoặc nằm ngoài phạm vi truy cập. Không có lead nào được phân công."
+            : "Nhân viên sale không hoạt động hoặc nằm ngoài phạm vi phân công của bạn.",
+        });
+        return;
+      }
+      response.json(result.data);
+    } catch (error) {
+      next(error);
+    }
+  },
+);
+
+leadsRouter.post(
+  "/bulk-delete",
+  requireAuthentication,
+  requireAnyPermission("lead.delete"),
+  async (request, response, next) => {
+    try {
+      const parsed = bulkDeleteBodySchema.safeParse(request.body);
+      if (!parsed.success) {
+        response.status(400).json({ message: "Danh sách lead cần xóa không hợp lệ." });
+        return;
+      }
+      const result = await deleteLeads(
+        request.authUser!,
+        parsed.data.leadIds,
+        getInstitutionProgramScope(request),
+      );
+      if (!result.ok) {
+        response.status(404).json({
+          message: "Có lead không tồn tại hoặc nằm ngoài phạm vi truy cập. Không có lead nào bị xóa.",
+        });
+        return;
+      }
+      response.json(result.data);
     } catch (error) {
       next(error);
     }

@@ -9,7 +9,7 @@ export type AssignmentListQuery = {
   status: "assigned" | "unassigned";
   search?: string;
   assigneeId?: string;
-  departmentId?: string;
+  sourceId?: string;
   institutionProgramId?: string;
   sortOrder: "asc" | "desc";
 };
@@ -64,6 +64,7 @@ export async function listLeadAssignments(user: AuthUser, query: AssignmentListQ
       assigned_to: null,
       ...getLeadScopeWhere(user),
       ...(query.institutionProgramId ? { institution_program_id: query.institutionProgramId } : {}),
+      ...(query.sourceId ? { source_id: query.sourceId } : {}),
       ...(query.search
         ? {
             OR: [
@@ -76,7 +77,12 @@ export async function listLeadAssignments(user: AuthUser, query: AssignmentListQ
     const [items, total] = await prisma.$transaction([
       prisma.leads.findMany({
         where,
-        select: { id: true, lead_code: true, full_name: true, status: true },
+        select: {
+          id: true,
+          lead_code: true,
+          full_name: true,
+          lead_sources: { select: { id: true, name: true } },
+        },
         orderBy: [{ created_at: query.sortOrder }, { id: "asc" }],
         skip: (query.page - 1) * query.limit,
         take: query.limit,
@@ -89,10 +95,10 @@ export async function listLeadAssignments(user: AuthUser, query: AssignmentListQ
         id: item.id,
         assignedAt: null,
         isMainOwner: false,
-        lead: { id: item.id, leadCode: item.lead_code, fullName: item.full_name, status: item.status },
+        lead: { id: item.id, leadCode: item.lead_code, fullName: item.full_name },
+        source: item.lead_sources,
         assignee: null,
         assignedBy: null,
-        department: null,
       })),
       pagination: pagination(query.page, query.limit, total),
       sort: { sortOrder: query.sortOrder },
@@ -100,7 +106,7 @@ export async function listLeadAssignments(user: AuthUser, query: AssignmentListQ
         status: query.status,
         search: query.search ?? "",
         assigneeId: "",
-        departmentId: "",
+        sourceId: query.sourceId ?? "",
       },
     };
   }
@@ -127,7 +133,7 @@ export async function listLeadAssignments(user: AuthUser, query: AssignmentListQ
           ]
         : []),
       ...(query.assigneeId ? [{ assigned_to: query.assigneeId }] : []),
-      ...(query.departmentId ? [{ department_id: query.departmentId }] : []),
+      ...(query.sourceId ? [{ leads: { is: { source_id: query.sourceId } } }] : []),
     ],
   };
   const [items, total] = await prisma.$transaction([
@@ -137,10 +143,16 @@ export async function listLeadAssignments(user: AuthUser, query: AssignmentListQ
         id: true,
         assigned_at: true,
         is_main_owner: true,
-        leads: { select: { id: true, lead_code: true, full_name: true, status: true } },
+        leads: {
+          select: {
+            id: true,
+            lead_code: true,
+            full_name: true,
+            lead_sources: { select: { id: true, name: true } },
+          },
+        },
         users_lead_assignments_assigned_toTousers: { select: { id: true, full_name: true } },
         users_lead_assignments_assigned_byTousers: { select: { id: true, full_name: true } },
-        departments: { select: { id: true, name: true } },
       },
       orderBy: [{ assigned_at: query.sortOrder }, { id: "asc" }],
       skip: (query.page - 1) * query.limit,
@@ -159,9 +171,9 @@ export async function listLeadAssignments(user: AuthUser, query: AssignmentListQ
             id: item.leads.id,
             leadCode: item.leads.lead_code,
             fullName: item.leads.full_name,
-            status: item.leads.status,
           }
         : null,
+      source: item.leads?.lead_sources ?? null,
       assignee: item.users_lead_assignments_assigned_toTousers
         ? {
             id: item.users_lead_assignments_assigned_toTousers.id,
@@ -174,7 +186,6 @@ export async function listLeadAssignments(user: AuthUser, query: AssignmentListQ
             fullName: item.users_lead_assignments_assigned_byTousers.full_name,
           }
         : null,
-      department: item.departments,
     })),
     pagination: pagination(query.page, query.limit, total),
     sort: { sortOrder: query.sortOrder },
@@ -182,7 +193,7 @@ export async function listLeadAssignments(user: AuthUser, query: AssignmentListQ
       status: query.status,
       search: query.search ?? "",
       assigneeId: query.assigneeId ?? "",
-      departmentId: query.departmentId ?? "",
+      sourceId: query.sourceId ?? "",
     },
   };
 }
@@ -194,7 +205,7 @@ export async function getSaleFilterOptions(user: AuthUser, institutionProgramId?
     ...getLeadScopeWhere(user),
     ...(institutionProgramId ? { institution_program_id: institutionProgramId } : {}),
   };
-  const [assignees, telesales, departments, activityTypes, reminderStatuses, leads] = await prisma.$transaction([
+  const [assignees, telesales, sources, activityTypes, reminderStatuses, leads] = await prisma.$transaction([
     prisma.users.findMany({
       where: { deleted_at: null, status: "active", leads_leads_assigned_toTousers: { some: scopeWhere } },
       select: { id: true, full_name: true },
@@ -219,8 +230,8 @@ export async function getSaleFilterOptions(user: AuthUser, institutionProgramId?
       select: { id: true, full_name: true },
       orderBy: { full_name: "asc" },
     }),
-    prisma.departments.findMany({
-      where: { lead_assignments: { some: { leads: { is: scopeWhere } } } },
+    prisma.lead_sources.findMany({
+      where: { leads: { some: scopeWhere } },
       select: { id: true, name: true },
       orderBy: { name: "asc" },
     }),
@@ -237,7 +248,7 @@ export async function getSaleFilterOptions(user: AuthUser, institutionProgramId?
   return {
     assignees: assignees.map((item) => ({ id: item.id, fullName: item.full_name })),
     telesales: telesales.map((item) => ({ id: item.id, fullName: item.full_name })),
-    departments,
+    sources,
     activityTypes: activityTypes.map((item) => item.type).sort(),
     reminderStatuses: reminderStatuses.flatMap((item) => (item.status ? [item.status] : [])).sort(),
     leads: leads.map((lead) => ({ id: lead.id, leadCode: lead.lead_code, fullName: lead.full_name })),

@@ -354,7 +354,6 @@ export function rawFieldExpression(datasetKey: PersonalReportDatasetKey, fieldKe
     if (fieldKey === "SOURCE") return Prisma.sql`fact.source_name`;
     if (fieldKey === "ASSIGNEE") return Prisma.sql`fact.assignee_name`;
     if (fieldKey === "PIPELINE_STAGE") return Prisma.sql`fact.pipeline_stage_name`;
-    if (fieldKey === "STATUS") return Prisma.sql`fact.lead_status`;
     if (fieldKey === "CREATED_DATE") return Prisma.sql`fact.lead_date`;
   }
   if (datasetKey === "ADMISSION_CANDIDATES") {
@@ -548,7 +547,7 @@ async function executeLeadSingleReport(user: AuthUser, stored: NonNullable<Await
       ? Prisma.sql`fact.source_name`
       : filters.singleDimensionKey === "PIPELINE_STAGE"
         ? Prisma.sql`fact.pipeline_stage_name`
-        : Prisma.sql`fact.lead_status`;
+        : Prisma.sql`fact.pipeline_stage_name`;
   const rawRows = await prisma.$queryRaw<SingleQueryRow[]>(Prisma.sql`
     SELECT ${dimensionExpression} AS label,
            COUNT(DISTINCT fact.lead_id)::bigint AS total
@@ -600,7 +599,7 @@ async function executeLeadPivotReport(user: AuthUser, stored: NonNullable<Awaite
     ? Prisma.sql`fact.source_name`
     : filters.rowDimensionKey === "PIPELINE_STAGE"
       ? Prisma.sql`fact.pipeline_stage_name`
-      : Prisma.sql`fact.lead_status`;
+      : Prisma.sql`fact.pipeline_stage_name`;
   const columnExpression = dateDimensionExpression(granularity);
   const rawRows = await prisma.$queryRaw<PivotQueryRow[]>(Prisma.sql`
     SELECT ${rowExpression} AS row_label,

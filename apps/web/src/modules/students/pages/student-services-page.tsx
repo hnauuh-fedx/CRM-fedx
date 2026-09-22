@@ -3,6 +3,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { ChevronLeft, ChevronRight, Pencil, Plus, Search } from "lucide-react";
 
 import { EmptyState } from "@/components/shared/data-states";
+import { AutoFilterActions } from "@/components/shared/auto-filter-actions";
 import { ErrorState } from "@/components/shared/error-state";
 import { FilterSelect } from "@/components/shared/filter-select";
 import { PageHeader } from "@/components/shared/page-header";
@@ -155,10 +156,11 @@ export function StudentServicesPage() {
               </Field>
               <FilterSelect id="student-service-type" label="Loại dịch vụ" value={typeDraft} onChange={setTypeDraft} options={(optionsQuery.data?.types ?? []).map((item) => ({ value: item, label: item }))} />
               <FilterSelect id="student-service-status" label="Trạng thái" value={statusDraft} onChange={setStatusDraft} options={statusOptions} />
-              <div className="flex items-end gap-2">
-                <Button type="submit">Áp dụng</Button>
-                <Button type="button" variant="outline" onClick={() => { setSearchDraft(""); setTypeDraft(""); setStatusDraft(""); setSearch(""); setType(""); setStatus(""); setPage(1); }}>Xóa lọc</Button>
-              </div>
+              <AutoFilterActions
+                snapshot={{ searchDraft, typeDraft, statusDraft }}
+                onApply={() => { setSearch(searchDraft); setType(typeDraft); setStatus(statusDraft); setPage(1); }}
+                onReset={() => { setSearchDraft(""); setTypeDraft(""); setStatusDraft(""); setSearch(""); setType(""); setStatus(""); setPage(1); }}
+              />
             </FieldGroup>
           </form>
         </CardContent>

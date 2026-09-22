@@ -22,6 +22,7 @@ import {
 } from "lucide-react";
 
 import { EmptyState } from "@/components/shared/data-states";
+import { AutoFilterActions } from "@/components/shared/auto-filter-actions";
 import { ErrorState } from "@/components/shared/error-state";
 import { FilterSelect } from "@/components/shared/filter-select";
 import { PageHeader } from "@/components/shared/page-header";
@@ -402,10 +403,7 @@ function AdmissionFilters({ filters, options, onChange, onApply, onReset }: Filt
             </Field>
             <FilterSelect id="admission-status" label="Trạng thái" value={filters.statusId} onChange={(value) => onChange("statusId", value)} options={(options?.statuses ?? []).map((item) => ({ value: item.id, label: item.name }))} />
             <FilterSelect id="admission-major" label="Ngành đăng ký" value={filters.majorId} onChange={(value) => onChange("majorId", value)} options={(options?.majors ?? []).map((item) => ({ value: item.id, label: item.facultyName ? `${item.name} - ${item.facultyName}` : item.name }))} />
-            <div className="flex items-end gap-2">
-              <Button type="submit">Áp dụng</Button>
-              <Button type="button" variant="outline" onClick={onReset}>Xóa lọc</Button>
-            </div>
+            <AutoFilterActions snapshot={filters} onApply={onApply} onReset={onReset} />
           </FieldGroup>
         </form>
       </CardContent>

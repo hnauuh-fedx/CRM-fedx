@@ -13,6 +13,7 @@ import { ArrowDown, ArrowUp, ArrowUpDown, ChevronLeft, ChevronRight, Eye, Search
 import { Link } from "react-router-dom";
 
 import { EmptyState } from "@/components/shared/data-states";
+import { AutoFilterActions } from "@/components/shared/auto-filter-actions";
 import { ErrorState } from "@/components/shared/error-state";
 import { FilterSelect } from "@/components/shared/filter-select";
 import { PageHeader } from "@/components/shared/page-header";
@@ -31,7 +32,7 @@ import { getLeadAssignments, getSaleFilterOptions } from "@/services/sale.servic
 import type { AssignmentFilters, AssignmentItem, AssignmentListResponse, AssignmentStatus, SaleFilterOptions } from "../sale.types";
 
 const pageSize = 20;
-const emptyFilters: AssignmentFilters = { search: "", assigneeId: "", departmentId: "" };
+const emptyFilters: AssignmentFilters = { search: "", assigneeId: "", sourceId: "" };
 const dateFormatter = new Intl.DateTimeFormat("vi-VN");
 
 function formatDate(value: string | null) {
@@ -95,7 +96,7 @@ export function LeadAssignmentsPage() {
         eyebrow="CRM Sale"
         title="Phân công lead"
         scopeLabel="Toàn hệ thống"
-        description="Theo dõi các lượt phân công lead theo nhân viên và phòng ban."
+        description="Theo dõi các lượt phân công lead theo nhân viên và nguồn học viên."
       />
       <Filters
         filters={draftFilters}
@@ -149,7 +150,7 @@ function useColumns({ status, telesales, assigningLeadId, onAssign }: {
           ? <InlineAssigneeSelect item={row.original} telesales={telesales} isPending={assigningLeadId === row.original.lead?.id} onAssign={onAssign} />
           : row.original.assignee?.fullName ?? "-",
       },
-      { id: "department", header: "Phòng ban", enableSorting: false, cell: ({ row }) => row.original.department?.name ?? "-" },
+      { id: "source", header: "Nguồn HV", enableSorting: false, cell: ({ row }) => row.original.source?.name ?? "-" },
       { id: "assignedBy", header: "Người phân công", enableSorting: false, cell: ({ row }) => row.original.assignedBy?.fullName ?? "Hệ thống" },
       {
         id: "owner",
@@ -235,11 +236,8 @@ function Filters({ filters, options, onChange, onApply, onReset }: {
               </div>
             </Field>
             <FilterSelect id="assignment-assignee" label="Nhân viên" value={filters.assigneeId} onChange={(value) => onChange("assigneeId", value)} options={(options?.assignees ?? []).map((item) => ({ value: item.id, label: item.fullName }))} />
-            <FilterSelect id="assignment-department" label="Phòng ban" value={filters.departmentId} onChange={(value) => onChange("departmentId", value)} options={(options?.departments ?? []).map((item) => ({ value: item.id, label: item.name }))} />
-            <div className="flex items-end gap-2">
-              <Button type="submit">Áp dụng</Button>
-              <Button type="button" variant="outline" onClick={onReset}>Xóa lọc</Button>
-            </div>
+            <FilterSelect id="assignment-source" label="Nguồn HV" value={filters.sourceId} onChange={(value) => onChange("sourceId", value)} options={(options?.sources ?? []).map((item) => ({ value: item.id, label: item.name }))} />
+            <AutoFilterActions snapshot={filters} onApply={onApply} onReset={onReset} />
           </FieldGroup>
         </form>
       </CardContent>

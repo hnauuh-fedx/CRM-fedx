@@ -9,6 +9,8 @@ import type {
   LeadFormInput,
   LeadImportResult,
   LeadSortField,
+  DuplicateLeadField,
+  DuplicateLeadResponse,
 } from "@/modules/leads/lead.types";
 import { apiFormRequest, apiRequest } from "./api";
 
@@ -26,7 +28,6 @@ export function getLeads(params: LeadListParams, accessToken: string) {
     sortBy: params.sortBy,
     sortOrder: params.sortOrder,
     search: params.search,
-    status: params.status,
     pipelineStageId: params.pipelineStageId,
     sourceId: params.sourceId,
     assigneeId: params.assigneeId,
@@ -84,6 +85,25 @@ export function deleteLead(leadId: string, accessToken: string) {
   return apiRequest<{ id: string }>(`/leads/${leadId}`, { method: "DELETE" }, accessToken);
 }
 
+export function getDuplicateLeads(field: DuplicateLeadField, page: number, accessToken: string) {
+  const query = new URLSearchParams({ field, page: String(page), limit: "20" });
+  return apiRequest<DuplicateLeadResponse>(`/leads/duplicates?${query.toString()}`, {}, accessToken);
+}
+
+export function getDuplicateGroupMembers(field: DuplicateLeadField, key: string, page: number, accessToken: string) {
+  return apiRequest<{ data: DuplicateLeadResponse["data"][number]["leads"]; pagination: DuplicateLeadResponse["pagination"] }>(
+    "/leads/duplicates/members", { method: "POST", body: JSON.stringify({ field, key, page, limit: 20 }) }, accessToken,
+  );
+}
+
+export function deleteLeads(leadIds: string[], accessToken: string) {
+  return apiRequest<{ leadIds: string[]; deletedCount: number }>(
+    "/leads/bulk-delete",
+    { method: "POST", body: JSON.stringify({ leadIds }) },
+    accessToken,
+  );
+}
+
 export function changeLeadStage(leadId: string, stageId: string, accessToken: string) {
   return apiRequest<{ id: string; pipelineStageId: string }>(
     `/leads/${leadId}/stage`,
@@ -120,6 +140,14 @@ export function assignLead(
   return apiRequest<{ id: string; assigneeId: string }>(
     `/leads/${leadId}/assign`,
     { method: "POST", body: JSON.stringify(input) },
+    accessToken,
+  );
+}
+
+export function assignLeads(leadIds: string[], assigneeId: string, accessToken: string) {
+  return apiRequest<{ leadIds: string[]; assigneeId: string; assignedCount: number }>(
+    "/leads/bulk-assign",
+    { method: "POST", body: JSON.stringify({ leadIds, assigneeId }) },
     accessToken,
   );
 }

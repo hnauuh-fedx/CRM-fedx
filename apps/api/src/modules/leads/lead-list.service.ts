@@ -1,3 +1,4 @@
+import type { Prisma } from "../../generated/prisma/client";
 import type { AuthUser } from "../auth/auth.types";
 import { prisma } from "../../database/prisma";
 
@@ -18,12 +19,11 @@ export type LeadListQuery = {
   page: number;
   limit: number;
   search?: string;
-  status?: string;
   pipelineStageId?: string;
   sourceId?: string;
   institutionProgramId?: string;
   assigneeId?: string;
-  sortBy: "createdAt" | "fullName" | "leadCode" | "status";
+  sortBy: "createdAt" | "fullName" | "leadCode" | "pipelineStage";
   sortOrder: "asc" | "desc";
 };
 
@@ -31,7 +31,6 @@ const leadSortFields = {
   createdAt: "created_at",
   fullName: "full_name",
   leadCode: "lead_code",
-  status: "status",
 } as const;
 
 function canViewSensitiveLeadData(user: AuthUser) {
@@ -80,7 +79,11 @@ export function getLeadScopeWhere(user: AuthUser) {
   };
 }
 
-export async function listLeads(user: AuthUser, query: LeadListQuery) {
+export async function listLeads(
+  user: AuthUser,
+  query: LeadListQuery,
+  additionalWhere?: Prisma.leadsWhereInput,
+) {
   const canViewSensitive = canViewSensitiveLeadData(user);
   const where = {
     AND: [
@@ -96,16 +99,16 @@ export async function listLeads(user: AuthUser, query: LeadListQuery) {
             },
           ]
         : []),
-      ...(query.status ? [{ status: query.status }] : []),
       ...(query.pipelineStageId ? [{ pipeline_stage_id: query.pipelineStageId }] : []),
       ...(query.sourceId ? [{ source_id: query.sourceId }] : []),
       ...(query.institutionProgramId ? [{ institution_program_id: query.institutionProgramId }] : []),
       ...(query.assigneeId ? [{ assigned_to: query.assigneeId }] : []),
+      ...(additionalWhere ? [additionalWhere] : []),
     ],
   };
-  const orderBy = {
-    [leadSortFields[query.sortBy]]: query.sortOrder,
-  };
+  const orderBy = query.sortBy === "pipelineStage"
+    ? { pipeline_stages: { position: query.sortOrder } }
+    : { [leadSortFields[query.sortBy]]: query.sortOrder };
   const skip = (query.page - 1) * query.limit;
 
   const [items, total] = await prisma.$transaction([
@@ -121,7 +124,6 @@ export async function listLeads(user: AuthUser, query: LeadListQuery) {
         date_of_birth: true,
         cccd: true,
         note: true,
-        status: true,
         temperature: true,
         created_at: true,
         institution_programs: {
@@ -310,7 +312,6 @@ export async function listLeads(user: AuthUser, query: LeadListQuery) {
         tags: (tagsByLeadId.get(lead.id) ?? []).join(", "),
         note: lead.note,
         temperature: lead.temperature,
-        status: lead.status,
         source: lead.lead_sources
           ? { id: lead.lead_sources.id, name: lead.lead_sources.name }
           : null,
@@ -345,7 +346,6 @@ export async function listLeads(user: AuthUser, query: LeadListQuery) {
     },
     filters: {
       search: query.search ?? "",
-      status: query.status ?? "",
       pipelineStageId: query.pipelineStageId ?? "",
       sourceId: query.sourceId ?? "",
       institutionProgramId: query.institutionProgramId ?? "",
@@ -361,7 +361,7 @@ export async function getLeadFilterOptions(user: AuthUser, institutionProgramId?
     ...(institutionProgramId ? { institution_program_id: institutionProgramId } : {}),
   };
 
-  const [sources, institutionPrograms, assignees, statuses, stages, stageCounts, totalLeads] = await prisma.$transaction([
+  const [sources, institutionPrograms, assignees, stages, majors, stageCounts, totalLeads] = await prisma.$transaction([
     prisma.lead_sources.findMany({
       where: { leads: { some: scopeWhere } },
       select: { id: true, name: true },
@@ -381,15 +381,14 @@ export async function getLeadFilterOptions(user: AuthUser, institutionProgramId?
       select: { id: true, full_name: true },
       orderBy: { full_name: "asc" },
     }),
-    prisma.leads.findMany({
-      where: scopeWhere,
-      select: { status: true },
-      distinct: ["status"],
-      take: 100,
-    }),
     prisma.pipeline_stages.findMany({
       select: { id: true, name: true, color: true },
       orderBy: [{ position: "asc" }, { id: "asc" }],
+    }),
+    prisma.majors.findMany({
+      where: { leads: { some: scopeWhere } },
+      select: { id: true, name: true },
+      orderBy: { name: "asc" },
     }),
     prisma.leads.groupBy({
       by: ["pipeline_stage_id"],
@@ -413,11 +412,11 @@ export async function getLeadFilterOptions(user: AuthUser, institutionProgramId?
       id: userItem.id,
       fullName: userItem.full_name,
     })),
-    statuses: statuses.flatMap((lead) => (lead.status ? [lead.status] : [])).sort(),
     stages: stages.map((stage) => ({
       ...stage,
       count: stageCountById.get(stage.id) ?? 0,
     })),
+    majors,
     totalLeads,
   };
 }
@@ -468,7 +467,6 @@ export async function getLeadDetail(user: AuthUser, leadId: string, institutionP
       date_of_birth: true,
       cccd: true,
       note: true,
-      status: true,
       lead_score: true,
       temperature: true,
       created_at: true,
@@ -658,7 +656,6 @@ export async function getLeadDetail(user: AuthUser, leadId: string, institutionP
     dateOfBirth: lead.date_of_birth?.toISOString().slice(0, 10) ?? null,
     cccd: canViewSensitive ? lead.cccd : null,
     note: lead.note,
-    status: lead.status,
     leadScore: lead.lead_score,
     temperature: lead.temperature,
     createdAt: lead.created_at?.toISOString() ?? null,

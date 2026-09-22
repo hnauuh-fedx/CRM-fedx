@@ -40,13 +40,6 @@ const dateTimeFormatter = new Intl.DateTimeFormat("vi-VN", {
   hour: "2-digit",
   minute: "2-digit",
 });
-const statusLabels: Record<string, string> = {
-  new: "Mới",
-  contacted: "Đã liên hệ",
-  qualified: "Tiềm năng",
-  converted: "Đã chuyển đổi",
-  lost: "Không phù hợp",
-};
 const activityLabels: Record<string, string> = {
   lead_created: "Tạo lead",
   lead_updated: "Cập nhật thông tin",
@@ -70,13 +63,7 @@ const activityLabels: Record<string, string> = {
 };
 
 function getLeadWorkflowLabel(lead: LeadDetail) {
-  if (lead.pipelineStage?.name) {
-    return lead.pipelineStage.name;
-  }
-  if (!lead.status) {
-    return "Chưa chọn tiến trình";
-  }
-  return statusLabels[lead.status] ?? lead.status;
+  return lead.pipelineStage?.name ?? "Chưa chọn tiến trình";
 }
 
 function formatDate(value: string | null) {
@@ -86,7 +73,17 @@ function formatDateTime(value: string | null) {
   return value ? dateTimeFormatter.format(new Date(value)) : "-";
 }
 
-export function LeadDetailPage() {
+type LeadDetailPageProps = {
+  listPath?: string;
+  listLabel?: string;
+  eyebrow?: string;
+};
+
+export function LeadDetailPage({
+  listPath = "/sale/leads",
+  listLabel = "Danh sách lead",
+  eyebrow = "CRM Sale / Chi tiết lead",
+}: LeadDetailPageProps = {}) {
   const auth = useAuth();
   const { leadId = "" } = useParams();
   const canUpdate = ["lead.update_all", "lead.update_department", "lead.update_assigned"].some(auth.can);
@@ -123,7 +120,7 @@ export function LeadDetailPage() {
             <EmptyTitle>Không thể mở chi tiết lead</EmptyTitle>
             <EmptyDescription>Lead không tồn tại hoặc nằm ngoài phạm vi truy cập của bạn.</EmptyDescription>
           </EmptyHeader>
-          <EmptyContent><Button asChild variant="outline"><Link to="/sale/leads"><ArrowLeft aria-hidden="true" />Quay lại danh sách</Link></Button></EmptyContent>
+          <EmptyContent><Button asChild variant="outline"><Link to={listPath}><ArrowLeft aria-hidden="true" />Quay lại danh sách</Link></Button></EmptyContent>
         </Empty>
       </Card>
     );
@@ -135,10 +132,10 @@ export function LeadDetailPage() {
   return (
     <div className="mx-auto flex max-w-400 flex-col gap-6">
       <Button asChild variant="ghost" size="sm" className="mr-auto -ml-3">
-        <Link to="/sale/leads"><ArrowLeft aria-hidden="true" />Danh sách lead</Link>
+        <Link to={listPath}><ArrowLeft aria-hidden="true" />{listLabel}</Link>
       </Button>
       <PageHeader
-        eyebrow="CRM Sale / Chi tiết lead"
+        eyebrow={eyebrow}
         title={lead.fullName}
         description={`${lead.leadCode ?? "Chưa có mã lead"} · Tạo ngày ${formatDate(lead.createdAt)}`}
         actions={<div className="flex flex-wrap items-center gap-2"><Badge variant="secondary">{getLeadWorkflowLabel(lead)}</Badge>{canUpdate && <Button type="button" size="sm" variant={isEditing ? "secondary" : "default"} onClick={() => setIsEditing((value) => !value)}><Pencil aria-hidden="true" />{isEditing ? "Đóng chỉnh sửa" : "Chỉnh sửa"}</Button>}</div>}
@@ -153,8 +150,8 @@ export function LeadDetailPage() {
           <SourceOccurrencesCard lead={lead} />
           <LeadCustomFieldsCard leadId={lead.id} />
           {canAssign && <AssignmentActionCard key={lead.assignee?.id ?? "unassigned"} lead={lead} options={options} accessToken={auth.accessToken!} />}
+          {canDelete && <DeleteLeadCard lead={lead} accessToken={auth.accessToken!} listPath={listPath} />}
           {!canUpdate && <LeadOwnershipCard lead={lead} />}
-          {canDelete && <DeleteLeadCard lead={lead} accessToken={auth.accessToken!} />}
         </aside>
         <ActivityWorkspace lead={lead} canNote={canNote} canFile={canFile} accessToken={auth.accessToken!} />
       </div>
@@ -307,7 +304,7 @@ function AssignmentActionCard({ lead, options, accessToken }: { lead: LeadDetail
   );
 }
 
-function DeleteLeadCard({ lead, accessToken }: { lead: LeadDetail; accessToken: string }) {
+function DeleteLeadCard({ lead, accessToken, listPath }: { lead: LeadDetail; accessToken: string; listPath: string }) {
   const navigate = useNavigate();
   const queryClient = useQueryClient();
   const [isConfirming, setIsConfirming] = useState(false);
@@ -316,7 +313,7 @@ function DeleteLeadCard({ lead, accessToken }: { lead: LeadDetail; accessToken: 
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["leads"] });
       queryClient.invalidateQueries({ queryKey: ["sale"] });
-      navigate("/sale/leads", { replace: true });
+      navigate(listPath, { replace: true });
     },
   });
 

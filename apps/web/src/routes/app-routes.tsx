@@ -203,6 +203,21 @@ const ConnectionChannelsPage = lazy(() =>
     default: module.ConnectionChannelsPage,
   })),
 );
+const CustomerListManagementPage = lazy(() =>
+  import("@/modules/marketing/pages/customer-list-management-page").then((module) => ({
+    default: module.CustomerListManagementPage,
+  })),
+);
+const CustomerListDetailPage = lazy(() =>
+  import("@/modules/marketing/pages/customer-list-management-page").then((module) => ({
+    default: module.CustomerListDetailPage,
+  })),
+);
+const DuplicateLeadsPage = lazy(() =>
+  import("@/modules/marketing/pages/duplicate-leads-page").then((module) => ({
+    default: module.DuplicateLeadsPage,
+  })),
+);
 const AuditLogsPage = lazy(() =>
   import("@/modules/audit/pages/audit-logs-page").then((module) => ({
     default: module.AuditLogsPage,
@@ -327,6 +342,35 @@ export function AppRoutes() {
 
             <Route element={<ProtectedRoute anyPermissions={["campaign.view_all", "campaign.view", "campaign.view_own"]} />}>
               <Route path="/marketing/chien-dich" element={<CampaignsListPage />} />
+            </Route>
+            <Route element={<ProtectedRoute anyPermissions={["lead.view_all", "lead.view_department", "lead.view_assigned"]} />}>
+              <Route
+                path="/marketing/danh-sach-khach-hang"
+                element={
+                  <LeadsListPage
+                    eyebrow="CRM Marketing / Khách hàng"
+                    title="Danh sách khách hàng"
+                    description="Danh sách tất cả lead trong phạm vi dữ liệu bạn được quyền truy cập."
+                    detailBasePath="/marketing/danh-sach-khach-hang"
+                    enableCustomerListAssignment
+                  />
+                }
+              />
+              <Route
+                path="/marketing/danh-sach-khach-hang/:leadId"
+                element={
+                  <LeadDetailPage
+                    listPath="/marketing/danh-sach-khach-hang"
+                    listLabel="Danh sách khách hàng"
+                    eyebrow="CRM Marketing / Khách hàng / Chi tiết lead"
+                  />
+                }
+              />
+              <Route path="/marketing/check-trung-data" element={<DuplicateLeadsPage />} />
+              <Route element={<ProtectedRoute anyPermissions={["customer_list.view_all", "customer_list.manage"]} />}>
+                <Route path="/marketing/quan-ly-danh-sach" element={<CustomerListManagementPage />} />
+                <Route path="/marketing/quan-ly-danh-sach/:customerListId" element={<CustomerListDetailPage />} />
+              </Route>
             </Route>
             <Route element={<ProtectedRoute anyPermissions={["campaign.view_all", "lead_source.manage"]} />}>
               <Route path="/marketing/nguon-lead" element={<LeadSourcesPage />} />

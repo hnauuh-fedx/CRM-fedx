@@ -12,6 +12,7 @@ import {
 import { ArrowDown, ArrowUp, ArrowUpDown, ChartColumn, ChevronLeft, ChevronRight, ClipboardList, ContactRound, GraduationCap, Search } from "lucide-react";
 
 import { EmptyState } from "@/components/shared/data-states";
+import { AutoFilterActions } from "@/components/shared/auto-filter-actions";
 import { MetricCard } from "@/components/shared/dashboard-cards";
 import { ErrorState } from "@/components/shared/error-state";
 import { FilterSelect } from "@/components/shared/filter-select";
@@ -260,10 +261,7 @@ function Filters({ filters, options, onChange, onApply, onReset }: {
                 }} 
               />
             </Field>
-            <div className="flex items-end gap-2">
-              <Button type="submit">Áp dụng</Button>
-              <Button type="button" variant="outline" onClick={onReset}>Xóa lọc</Button>
-            </div>
+            <AutoFilterActions snapshot={filters} onApply={onApply} onReset={onReset} />
           </FieldGroup>
         </form>
       </CardContent>
@@ -408,7 +406,7 @@ function LeadDialog(props: {
                       <p className="font-medium">{lead.fullName}</p>
                       <p className="text-sm text-muted-foreground">{lead.leadCode ?? "Chưa có mã lead"}</p>
                     </TableCell>
-                    <TableCell>{lead.pipelineStageName ?? lead.status ?? "-"}</TableCell>
+                    <TableCell>{lead.pipelineStageName ?? "Chưa chọn tiến trình"}</TableCell>
                     <TableCell>
                       {lead.attribution
                         ? [lead.attribution.source, lead.attribution.medium, lead.attribution.campaign?.name ?? lead.attribution.utmCampaign].filter(Boolean).join(" / ")

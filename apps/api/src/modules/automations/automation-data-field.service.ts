@@ -17,6 +17,7 @@ export type AutomationCustomDataField = {
 const legacySystemFieldAliases: Record<string, string> = {
   source_id: "source.id",
   pipeline_stage_id: "pipelineStage.id",
+  status: "pipelineStage.id",
   assigned_to: "assignee.id",
   institution_program_id: "institutionProgramId",
   full_name: "fullName",

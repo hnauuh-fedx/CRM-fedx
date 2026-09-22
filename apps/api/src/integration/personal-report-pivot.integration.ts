@@ -18,7 +18,7 @@ async function main() {
         AND table_name IN ('sale_pipeline_scope_fact', 'admission_candidate_scope_fact', 'student_scope_fact')
     `;
     const names = new Set(columns.filter((column) => column.table_name === "sale_pipeline_scope_fact").map((column) => column.column_name));
-    for (const required of ["scope_key", "lead_id", "institution_program_id", "lead_date", "source_name", "assignee_name", "pipeline_stage_name", "pipeline_stage_position", "lead_status"]) {
+    for (const required of ["scope_key", "lead_id", "institution_program_id", "lead_date", "source_name", "assignee_name", "pipeline_stage_name", "pipeline_stage_position"]) {
       assert.ok(names.has(required), `Missing reporting column: ${required}`);
     }
     assert.ok(personalReportDatasetDefinitions.LEADS.singleDimensions.some((field) => field.key === "ASSIGNEE"), "Assignee must be available as a report output.");

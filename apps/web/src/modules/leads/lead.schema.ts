@@ -16,7 +16,6 @@ export const leadFormSchema = z.object({
   dateOfBirth: z.string(),
   cccd: optionalText(30),
   note: optionalText(2000),
-  status: optionalText(150),
   temperature: optionalText(50),
   birthPlace: optionalText(255),
   cccdIssueDate: z.string(),
@@ -90,7 +89,7 @@ export const leadFormSchema = z.object({
 
 export const emptyLeadForm = {
   fullName: "", phone: "", sourceId: "", assigneeId: "", pipelineStageId: "", email: "", gender: "", dateOfBirth: "", cccd: "", note: "",
-  status: "", temperature: "", birthPlace: "", cccdIssueDate: "", cccdIssuePlace: "", nationality: "",
+  temperature: "", birthPlace: "", cccdIssueDate: "", cccdIssuePlace: "", nationality: "",
   ethnicity: "", religion: "", graduationYear: "", graduationCertificate: "", previousGraduationCertificate: "",
   graduationMajor: "", graduationRank: "", diplomaIssuePlace: "", academicRank12: "", conductRank12: "",
   highSchoolName: "", highSchoolProvince: "", highSchoolDistrict: "", currentJob: "", companyName: "",

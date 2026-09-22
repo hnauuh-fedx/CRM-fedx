@@ -14,7 +14,6 @@ export function toLeadFormValues(lead: LeadDetail): LeadFormInput {
     dateOfBirth: lead.dateOfBirth ?? "",
     cccd: lead.cccd ?? "",
     note: lead.note ?? "",
-    status: lead.pipelineStage?.name ?? lead.status ?? "",
     temperature: lead.temperature ?? "",
     birthPlace: lead.birthPlace ?? "",
     cccdIssueDate: lead.cccdIssueDate ?? "",

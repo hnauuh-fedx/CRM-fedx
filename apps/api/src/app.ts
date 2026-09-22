@@ -8,6 +8,7 @@ import { admissionsRouter } from "./modules/admissions/admissions.router";
 import { majorsRouter } from "./modules/admissions/majors.router";
 import { auditLogsRouter } from "./modules/audit/audit-logs.router";
 import { campaignsRouter } from "./modules/campaigns/campaigns.router";
+import { customerListsRouter } from "./modules/customer-lists/customer-lists.router";
 import { formFieldsRouter, formsRouter } from "./modules/campaigns/forms.router";
 import {
   leadSourcesRouter,
@@ -63,6 +64,7 @@ app.use("/api/admissions", admissionsRouter);
 app.use("/api/majors", majorsRouter);
 app.use("/api/audit-logs", auditLogsRouter);
 app.use("/api/campaigns", campaignsRouter);
+app.use("/api/customer-lists", customerListsRouter);
 app.use("/api/forms", formsRouter);
 app.use("/api/form-fields", formFieldsRouter);
 app.use("/api/lead-sources", leadSourcesRouter);

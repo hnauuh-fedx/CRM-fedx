@@ -64,7 +64,6 @@ export type LeadListItem = {
   tags: string;
   note: string | null;
   temperature: string | null;
-  status: string | null;
   source: { id: string; name: string } | null;
   origin: { id: string; name: string } | null;
   pipelineStage: { id: string; name: string; color: string | null } | null;
@@ -72,11 +71,10 @@ export type LeadListItem = {
   createdAt: string | null;
 };
 
-export type LeadSortField = "createdAt" | "fullName" | "leadCode" | "status";
+export type LeadSortField = "createdAt" | "fullName" | "leadCode" | "pipelineStage";
 
 export type LeadListFilters = {
   search: string;
-  status: string;
   pipelineStageId: string;
   sourceId: string;
   assigneeId: string;
@@ -101,9 +99,27 @@ export type LeadFilterOptions = {
   sources: Array<{ id: string; name: string }>;
   institutionPrograms: Array<{ id: string; name: string; institutionName: string }>;
   assignees: Array<{ id: string; fullName: string }>;
-  statuses: string[];
   stages: Array<{ id: string; name: string; color: string | null; count: number }>;
+  majors: Array<{ id: string; name: string }>;
   totalLeads: number;
+};
+
+export type DuplicateLeadField = "fullName" | "phone" | "email";
+
+export type DuplicateLeadResponse = {
+  data: Array<{
+    key: string;
+    count: number;
+    leads: Array<{
+      id: string;
+      leadCode: string | null;
+      fullName: string;
+      phone: string | null;
+      email: string | null;
+      createdAt: string | null;
+    }>;
+  }>;
+  pagination: { page: number; limit: number; total: number; totalPages: number };
 };
 
 export type LeadDetail = LeadListItem & {
@@ -235,7 +251,6 @@ export type LeadFormInput = {
   dateOfBirth: string;
   cccd: string;
   note: string;
-  status: string;
   temperature: string;
   birthPlace: string;
   cccdIssueDate: string;

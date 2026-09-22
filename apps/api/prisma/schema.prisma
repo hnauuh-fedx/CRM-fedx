@@ -367,6 +367,7 @@ model institution_programs {
   admission_profiles        admission_profiles[]
   automation_rules          automation_rules[]
   campaigns                 campaigns[]
+  customer_lists            customer_lists[]
   custom_fields             custom_fields[]
   kpi_targets               kpi_targets[]
   lead_sources              lead_sources[]
@@ -527,7 +528,8 @@ model leads {
   pipeline_stage_id              String?                      @db.Uuid
   owner_id                       String?                      @db.Uuid
   assigned_to                    String?                      @db.Uuid
-  status                         String?                      @default("new") @db.VarChar(50)
+  /// Deprecated compatibility column. Application code uses pipeline_stage_id as the workflow source of truth.
+  status                         String?                      @db.VarChar(50)
   lead_score                     Int?                         @default(0)
   temperature                    String?                      @db.VarChar(50)
   note                           String?
@@ -541,6 +543,7 @@ model leads {
   lead_assignments               lead_assignments[]
   lead_notes                     lead_notes[]
   lead_status_histories          lead_status_histories[]
+  customer_list_members          customer_list_members[]
   marketing_form_submissions     marketing_form_submissions[]
   users_leads_assigned_toTousers users?                       @relation("leads_assigned_toTousers", fields: [assigned_to], references: [id], onDelete: NoAction, onUpdate: NoAction)
   users_leads_owner_idTousers    users?                       @relation("leads_owner_idTousers", fields: [owner_id], references: [id], onDelete: NoAction, onUpdate: NoAction)
@@ -570,8 +573,6 @@ model leads {
   @@index([source_id, created_at, id], map: "idx_leads_source_created_page")
   @@index([institution_program_id, created_at, id], map: "idx_leads_program_created_page")
   @@index([major_id, created_at, id], map: "idx_leads_major_created_page")
-  @@index([status], map: "idx_leads_status")
-  @@index([status, created_at, id], map: "idx_leads_status_created_page")
 }
 
 model majors {
@@ -1035,6 +1036,8 @@ model users {
   automation_rule_versions                             automation_rule_versions[]
   automation_rules                                     automation_rules[]
   campaigns                                            campaigns[]
+  customer_lists                                       customer_lists[]
+  customer_list_members                                customer_list_members[]
   departments                                          departments[]
   files                                                files[]
   lead_activities                                      lead_activities[]
@@ -1164,21 +1167,51 @@ model webhook_request_attempts {
   @@index([request_id, started_at], map: "idx_webhook_request_attempts_request")
 }
 
+model customer_lists {
+  id                     String                  @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  institution_program_id String                  @db.Uuid
+  name                   String                  @db.VarChar(255)
+  filter_config          Json?
+  created_by             String                  @db.Uuid
+  created_at             DateTime                @default(now()) @db.Timestamp(6)
+  updated_at             DateTime                @default(now()) @db.Timestamp(6)
+  deleted_at             DateTime?               @db.Timestamp(6)
+  institution_programs   institution_programs    @relation(fields: [institution_program_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  users                  users                   @relation(fields: [created_by], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  customer_list_members  customer_list_members[]
+
+  @@index([institution_program_id, deleted_at, updated_at, id], map: "idx_customer_lists_program_active")
+  @@index([created_by, deleted_at, updated_at, id], map: "idx_customer_lists_creator_active")
+}
+
+model customer_list_members {
+  customer_list_id String         @db.Uuid
+  lead_id          String         @db.Uuid
+  added_by         String         @db.Uuid
+  added_at         DateTime       @default(now()) @db.Timestamp(6)
+  customer_lists   customer_lists @relation(fields: [customer_list_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  leads            leads          @relation(fields: [lead_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  users            users          @relation(fields: [added_by], references: [id], onDelete: NoAction, onUpdate: NoAction)
+
+  @@id([customer_list_id, lead_id])
+  @@index([lead_id, customer_list_id], map: "idx_customer_list_members_lead")
+}
+
 model personal_reports {
-  id                     String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
-  owner_id               String    @db.Uuid
-  institution_program_id String?   @db.Uuid
-  name                   String    @db.VarChar(255)
-  module                 String    @db.VarChar(30)
-  metric_keys            Json
-  breakdown_key          String?   @db.VarChar(80)
-  chart_type             String    @default("BAR") @db.VarChar(30)
-  filters                Json
-  is_shared              Boolean   @default(false)
-  archived_at            DateTime? @db.Timestamp(6)
-  created_at             DateTime  @default(now()) @db.Timestamp(6)
-  updated_at             DateTime  @default(now()) @db.Timestamp(6)
-  users                  users     @relation(fields: [owner_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  id                         String                       @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  owner_id                   String                       @db.Uuid
+  institution_program_id     String?                      @db.Uuid
+  name                       String                       @db.VarChar(255)
+  module                     String                       @db.VarChar(30)
+  metric_keys                Json
+  breakdown_key              String?                      @db.VarChar(80)
+  chart_type                 String                       @default("BAR") @db.VarChar(30)
+  filters                    Json
+  is_shared                  Boolean                      @default(false)
+  archived_at                DateTime?                    @db.Timestamp(6)
+  created_at                 DateTime                     @default(now()) @db.Timestamp(6)
+  updated_at                 DateTime                     @default(now()) @db.Timestamp(6)
+  users                      users                        @relation(fields: [owner_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
   personal_dashboard_widgets personal_dashboard_widgets[]
 
   @@index([owner_id, archived_at, updated_at], map: "idx_personal_reports_owner_active")

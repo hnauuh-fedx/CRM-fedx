@@ -3,6 +3,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { ChevronLeft, ChevronRight, GraduationCap, Pencil, Plus, Search, Trash2 } from "lucide-react";
 
 import { EmptyState } from "@/components/shared/data-states";
+import { AutoFilterActions } from "@/components/shared/auto-filter-actions";
 import { ErrorState } from "@/components/shared/error-state";
 import { PageHeader } from "@/components/shared/page-header";
 import { TableLoadingState } from "@/components/shared/table-loading-state";
@@ -111,8 +112,7 @@ export function InstitutionProgramsManagementPage() {
             <FilterSelect label="Trường" value={filters.institutionId} allLabel="Tất cả" options={(optionsQuery.data?.institutions ?? []).map((item) => ({ value: item.id, label: item.name }))} onChange={(institutionId) => setFilters((value) => ({ ...value, institutionId }))} />
             <FilterSelect label="Loại" value={filters.programTypeId} allLabel="Tất cả" options={(optionsQuery.data?.programTypes ?? []).map((item) => ({ value: item.id, label: item.name }))} onChange={(programTypeId) => setFilters((value) => ({ ...value, programTypeId }))} />
             <FilterSelect label="Trạng thái" value={filters.status} allLabel="Tất cả" options={Object.entries(statusLabels).map(([value, label]) => ({ value, label }))} onChange={(status) => setFilters((value) => ({ ...value, status }))} />
-            <Button type="submit">Áp dụng</Button>
-            <Button type="button" variant="outline" onClick={() => { setFilters(emptyFilters); setAppliedFilters(emptyFilters); setPage(1); }}>Xóa lọc</Button>
+            <AutoFilterActions snapshot={filters} onApply={() => { setAppliedFilters({ ...filters, search: filters.search.trim() }); setPage(1); }} onReset={() => { setFilters(emptyFilters); setAppliedFilters(emptyFilters); setPage(1); }} />
           </form>
         </CardContent>
       </Card>

@@ -3,6 +3,7 @@ import { useQuery } from "@tanstack/react-query";
 import { ChevronLeft, ChevronRight, Clock3, Eye, Search } from "lucide-react";
 
 import { EmptyState } from "@/components/shared/data-states";
+import { AutoFilterActions } from "@/components/shared/auto-filter-actions";
 import { ErrorState } from "@/components/shared/error-state";
 import { FilterSelect } from "@/components/shared/filter-select";
 import { PageHeader } from "@/components/shared/page-header";
@@ -181,12 +182,10 @@ export function StudentSupportHistoryPage() {
                 onChange={setStatusDraft}
                 options={statusOptions}
               />
-              <div className="flex items-end gap-2">
-                <Button type="submit">Áp dụng</Button>
-                <Button
-                  type="button"
-                  variant="outline"
-                  onClick={() => {
+              <AutoFilterActions
+                snapshot={{ searchDraft, studentDraft, typeDraft, statusDraft }}
+                onApply={() => { setSearch(searchDraft); setStudentId(studentDraft); setType(typeDraft); setStatus(statusDraft); setPage(1); }}
+                onReset={() => {
                     setSearchDraft("");
                     setStudentDraft("");
                     setTypeDraft("");
@@ -196,11 +195,8 @@ export function StudentSupportHistoryPage() {
                     setType("");
                     setStatus("");
                     setPage(1);
-                  }}
-                >
-                  Xóa lọc
-                </Button>
-              </div>
+                }}
+              />
             </FieldGroup>
           </form>
         </CardContent>

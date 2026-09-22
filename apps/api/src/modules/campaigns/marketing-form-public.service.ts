@@ -394,7 +394,6 @@ export async function submitMarketingForm(input: PublicSubmissionInput) {
         major_id: normalized.major_id || null,
         owner_id: ownerId,
         assigned_to: ownerId,
-        status: "new",
       },
       select: { id: true },
     });

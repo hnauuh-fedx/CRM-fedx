@@ -9,7 +9,7 @@ const legacyReferences: Record<string, string> = {
   source_id: "system:sourceId",
   pipeline_stage_id: "system:pipelineStageId",
   assigned_to: "system:assigneeId",
-  status: "system:status",
+  status: "system:pipelineStageId",
   gender: "system:gender",
 };
 

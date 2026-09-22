@@ -31,7 +31,7 @@ const assignmentQuerySchema = z.object({
   ...pagingSchema,
   status: z.enum(["assigned", "unassigned"]).default("assigned"),
   assigneeId: z.uuid().optional().or(z.literal("")).transform((value) => value || undefined),
-  departmentId: z.uuid().optional().or(z.literal("")).transform((value) => value || undefined),
+  sourceId: z.uuid().optional().or(z.literal("")).transform((value) => value || undefined),
 });
 const activityQuerySchema = z.object({
   ...pagingSchema,

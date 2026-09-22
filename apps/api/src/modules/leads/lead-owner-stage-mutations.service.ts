@@ -5,10 +5,6 @@ import { getLeadScopeWhere } from "./lead-list.service";
 type TransactionClient = Parameters<Parameters<typeof prisma.$transaction>[0]>[0];
 export type LeadMutationTransactionEffect = (tx: TransactionClient) => Promise<void>;
 
-function toStageStatus(stage: { name: string }) {
-  return stage.name.trim().slice(0, 50) || null;
-}
-
 export const leadUpdatePermissions = [
   "lead.update_all",
   "lead.update_department",
@@ -33,19 +29,13 @@ export async function changeVisibleLeadStage(
     const stage = await tx.pipeline_stages.findUnique({ where: { id: stageId }, select: { id: true, name: true } });
     if (!stage) return { ok: false as const, reason: "stage_not_found" as const };
     if (lead.pipeline_stage_id === stageId) {
-      if (lead.status !== toStageStatus(stage)) {
-        await tx.leads.update({
-          where: { id: leadId },
-          data: { status: toStageStatus(stage), updated_at: new Date() },
-        });
-      }
       await transactionEffect?.(tx);
       return { ok: true as const, data: { id: leadId, pipelineStageId: stageId, changed: false } };
     }
 
     await tx.leads.update({
       where: { id: leadId },
-      data: { pipeline_stage_id: stageId, status: toStageStatus(stage), updated_at: new Date() },
+      data: { pipeline_stage_id: stageId, updated_at: new Date() },
     });
     await tx.lead_status_histories.create({
       data: { lead_id: leadId, from_stage_id: lead.pipeline_stage_id, to_stage_id: stageId, changed_by: actor.id },
@@ -66,7 +56,7 @@ export async function changeVisibleLeadStage(
         entity_id: leadId,
         action: "pipeline_stage_changed",
         old_data: { pipelineStageId: lead.pipeline_stage_id },
-        new_data: { pipelineStageId: stageId, status: toStageStatus(stage) },
+        new_data: { pipelineStageId: stageId, pipelineStageName: stage.name },
       },
     });
     await transactionEffect?.(tx);
@@ -173,6 +163,6 @@ async function findVisibleLead(actor: AuthUser, leadId: string, institutionProgr
       ...getLeadScopeWhere(actor),
       ...(institutionProgramId ? { institution_program_id: institutionProgramId } : {}),
     },
-    select: { id: true, full_name: true, status: true, pipeline_stage_id: true, assigned_to: true },
+    select: { id: true, full_name: true, pipeline_stage_id: true, assigned_to: true },
   });
 }

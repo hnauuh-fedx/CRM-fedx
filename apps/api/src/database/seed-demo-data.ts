@@ -153,6 +153,8 @@ const permissionDefinitions = {
     ["campaign.update", "Cập nhật toàn bộ chiến dịch", "marketing"],
     ["campaign.delete", "Xóa chiến dịch", "marketing"],
     ["marketing_form.manage", "Quản lý biểu mẫu Marketing", "marketing"],
+    ["customer_list.view_all", "Xem mọi danh sách khách hàng", "marketing"],
+    ["customer_list.manage", "Quản lý danh sách khách hàng", "marketing"],
     ["admission.view_all", "Xem toàn bộ hồ sơ tuyển sinh", "admission"],
     ["admission.view", "Xem hồ sơ tuyển sinh", "admission"],
     ["admission.update", "Cập nhật hồ sơ tuyển sinh", "admission"],
@@ -224,6 +226,7 @@ const permissionDefinitions = {
     ["file.upload", "Đính kèm tệp cho lead", "lead"],
   ],
   MARKETING_MANAGER: [
+    ["lead.view_department", "Xem lead trong phòng ban", "lead"],
     ["report.marketing.view", "Xem báo cáo Marketing", "report"],
     ["report.personal.view", "Xem báo cáo KPI cá nhân", "report"],
     ["report.personal.create", "Tạo báo cáo KPI cá nhân", "report"],
@@ -237,6 +240,7 @@ const permissionDefinitions = {
     ["lead_source.manage", "Quản lý nguồn lead Marketing", "marketing"],
     ["utm.view", "Xem UTM phòng Marketing", "marketing"],
     ["marketing_form.manage", "Quản lý biểu mẫu Marketing", "marketing"],
+    ["customer_list.manage", "Quản lý danh sách khách hàng", "marketing"],
   ],
   STUDENT_SERVICE: [
     ["report.student.view", "Xem báo cáo Sinh viên theo phạm vi", "report"],
@@ -464,33 +468,33 @@ async function seedBusinessData(principals: Awaited<ReturnType<typeof seedAccess
   const leads = await Promise.all([
     prisma.leads.upsert({
       where: { lead_code: "DEMO-LD-001" },
-      update: { full_name: "Nguyễn Hải Anh", phone: "0901000001", email: "hai.anh@example.test", source_id: sources[0].id, institution_program_id: institutionPrograms[0].id, pipeline_stage_id: stages[1].id, owner_id: manager.id, assigned_to: telesale.id, status: "contacted", lead_score: 78, temperature: "hot", deleted_at: null },
-      create: { lead_code: "DEMO-LD-001", full_name: "Nguyễn Hải Anh", phone: "0901000001", email: "hai.anh@example.test", source_id: sources[0].id, institution_program_id: institutionPrograms[0].id, pipeline_stage_id: stages[1].id, owner_id: manager.id, assigned_to: telesale.id, status: "contacted", lead_score: 78, temperature: "hot", created_at: days(-7) },
+      update: { full_name: "Nguyễn Hải Anh", phone: "0901000001", email: "hai.anh@example.test", source_id: sources[0].id, institution_program_id: institutionPrograms[0].id, pipeline_stage_id: stages[1].id, owner_id: manager.id, assigned_to: telesale.id, lead_score: 78, temperature: "hot", deleted_at: null },
+      create: { lead_code: "DEMO-LD-001", full_name: "Nguyễn Hải Anh", phone: "0901000001", email: "hai.anh@example.test", source_id: sources[0].id, institution_program_id: institutionPrograms[0].id, pipeline_stage_id: stages[1].id, owner_id: manager.id, assigned_to: telesale.id, lead_score: 78, temperature: "hot", created_at: days(-7) },
     }),
     prisma.leads.upsert({
       where: { lead_code: "DEMO-LD-002" },
-      update: { full_name: "Trần Minh Khoa", phone: "0901000002", source_id: sources[1].id, institution_program_id: institutionPrograms[1].id, pipeline_stage_id: stages[0].id, owner_id: manager.id, assigned_to: telesaleTwo.id, status: "new", lead_score: 42, temperature: "warm", deleted_at: null },
-      create: { lead_code: "DEMO-LD-002", full_name: "Trần Minh Khoa", phone: "0901000002", source_id: sources[1].id, institution_program_id: institutionPrograms[1].id, pipeline_stage_id: stages[0].id, owner_id: manager.id, assigned_to: telesaleTwo.id, status: "new", lead_score: 42, temperature: "warm", created_at: days(-4) },
+      update: { full_name: "Trần Minh Khoa", phone: "0901000002", source_id: sources[1].id, institution_program_id: institutionPrograms[1].id, pipeline_stage_id: stages[0].id, owner_id: manager.id, assigned_to: telesaleTwo.id, lead_score: 42, temperature: "warm", deleted_at: null },
+      create: { lead_code: "DEMO-LD-002", full_name: "Trần Minh Khoa", phone: "0901000002", source_id: sources[1].id, institution_program_id: institutionPrograms[1].id, pipeline_stage_id: stages[0].id, owner_id: manager.id, assigned_to: telesaleTwo.id, lead_score: 42, temperature: "warm", created_at: days(-4) },
     }),
     prisma.leads.upsert({
       where: { lead_code: "DEMO-LD-003" },
-      update: { full_name: "Lê Thu Trang", phone: "0901000003", email: "thu.trang@example.test", source_id: sources[0].id, institution_program_id: institutionPrograms[0].id, pipeline_stage_id: stages[2].id, owner_id: manager.id, assigned_to: telesale.id, status: "qualified", lead_score: 91, temperature: "hot", deleted_at: null },
-      create: { lead_code: "DEMO-LD-003", full_name: "Lê Thu Trang", phone: "0901000003", email: "thu.trang@example.test", source_id: sources[0].id, institution_program_id: institutionPrograms[0].id, pipeline_stage_id: stages[2].id, owner_id: manager.id, assigned_to: telesale.id, status: "qualified", lead_score: 91, temperature: "hot", created_at: days(-18) },
+      update: { full_name: "Lê Thu Trang", phone: "0901000003", email: "thu.trang@example.test", source_id: sources[0].id, institution_program_id: institutionPrograms[0].id, pipeline_stage_id: stages[2].id, owner_id: manager.id, assigned_to: telesale.id, lead_score: 91, temperature: "hot", deleted_at: null },
+      create: { lead_code: "DEMO-LD-003", full_name: "Lê Thu Trang", phone: "0901000003", email: "thu.trang@example.test", source_id: sources[0].id, institution_program_id: institutionPrograms[0].id, pipeline_stage_id: stages[2].id, owner_id: manager.id, assigned_to: telesale.id, lead_score: 91, temperature: "hot", created_at: days(-18) },
     }),
     prisma.leads.upsert({
       where: { lead_code: "DEMO-LD-004" },
-      update: { full_name: "Phạm Quốc Bảo", phone: "0901000004", source_id: sources[2].id, institution_program_id: institutionPrograms[0].id, pipeline_stage_id: stages[5].id, owner_id: manager.id, assigned_to: telesale.id, status: "converted", lead_score: 96, temperature: "hot", deleted_at: null },
-      create: { lead_code: "DEMO-LD-004", full_name: "Phạm Quốc Bảo", phone: "0901000004", source_id: sources[2].id, institution_program_id: institutionPrograms[0].id, pipeline_stage_id: stages[5].id, owner_id: manager.id, assigned_to: telesale.id, status: "converted", lead_score: 96, temperature: "hot", created_at: days(-42) },
+      update: { full_name: "Phạm Quốc Bảo", phone: "0901000004", source_id: sources[2].id, institution_program_id: institutionPrograms[0].id, pipeline_stage_id: stages[5].id, owner_id: manager.id, assigned_to: telesale.id, lead_score: 96, temperature: "hot", deleted_at: null },
+      create: { lead_code: "DEMO-LD-004", full_name: "Phạm Quốc Bảo", phone: "0901000004", source_id: sources[2].id, institution_program_id: institutionPrograms[0].id, pipeline_stage_id: stages[5].id, owner_id: manager.id, assigned_to: telesale.id, lead_score: 96, temperature: "hot", created_at: days(-42) },
     }),
     prisma.leads.upsert({
       where: { lead_code: "DEMO-LD-005" },
-      update: { full_name: "Vũ Thanh Mai", phone: "0901000005", source_id: sources[1].id, pipeline_stage_id: stages[1].id, owner_id: manager.id, assigned_to: telesaleTwo.id, status: "contacted", lead_score: 62, temperature: "warm", deleted_at: null },
-      create: { lead_code: "DEMO-LD-005", full_name: "Vũ Thanh Mai", phone: "0901000005", source_id: sources[1].id, pipeline_stage_id: stages[1].id, owner_id: manager.id, assigned_to: telesaleTwo.id, status: "contacted", lead_score: 62, temperature: "warm", created_at: days(-3) },
+      update: { full_name: "Vũ Thanh Mai", phone: "0901000005", source_id: sources[1].id, pipeline_stage_id: stages[1].id, owner_id: manager.id, assigned_to: telesaleTwo.id, lead_score: 62, temperature: "warm", deleted_at: null },
+      create: { lead_code: "DEMO-LD-005", full_name: "Vũ Thanh Mai", phone: "0901000005", source_id: sources[1].id, pipeline_stage_id: stages[1].id, owner_id: manager.id, assigned_to: telesaleTwo.id, lead_score: 62, temperature: "warm", created_at: days(-3) },
     }),
     prisma.leads.upsert({
       where: { lead_code: "DEMO-LD-006" },
-      update: { full_name: "Đỗ Gia Huy", phone: "0901000006", source_id: sources[0].id, pipeline_stage_id: stages[0].id, owner_id: manager.id, assigned_to: telesale.id, status: "new", lead_score: 34, temperature: "cold", deleted_at: null },
-      create: { lead_code: "DEMO-LD-006", full_name: "Đỗ Gia Huy", phone: "0901000006", source_id: sources[0].id, pipeline_stage_id: stages[0].id, owner_id: manager.id, assigned_to: telesale.id, status: "new", lead_score: 34, temperature: "cold", created_at: days(-1) },
+      update: { full_name: "Đỗ Gia Huy", phone: "0901000006", source_id: sources[0].id, pipeline_stage_id: stages[0].id, owner_id: manager.id, assigned_to: telesale.id, lead_score: 34, temperature: "cold", deleted_at: null },
+      create: { lead_code: "DEMO-LD-006", full_name: "Đỗ Gia Huy", phone: "0901000006", source_id: sources[0].id, pipeline_stage_id: stages[0].id, owner_id: manager.id, assigned_to: telesale.id, lead_score: 34, temperature: "cold", created_at: days(-1) },
     }),
   ]);
 
