@@ -1194,7 +1194,7 @@ export async function testWebhook(
         id: recordId,
         institution_program_id: programId,
         deleted_at: null,
-        ...getLeadScopeWhere(user),
+        ...getLeadScopeWhere(user, programId),
       },
       select: { id: true },
     });

@@ -7,7 +7,7 @@ import {
   createTrustedInboundLeadInTransaction,
   triggerLeadCreatedAutomation,
 } from "./application/create-lead.use-case";
-import { updateLeadFromInboundInTransaction } from "./lead-management.service";
+import { updateLeadFromInboundInTransaction } from "./application/update-lead.use-case";
 import type { LeadInput } from "./domain/lead-input";
 
 type TransactionClient = Parameters<Parameters<typeof prisma.$transaction>[0]>[0];
@@ -190,7 +190,10 @@ export async function applyInboundLeadMutation(
 
       if (duplicate && input.enforceActorScope) {
         const visibleDuplicate = await tx.leads.findFirst({
-          where: { id: duplicate.id, ...getLeadScopeWhere(input.actor) },
+          where: {
+            id: duplicate.id,
+            ...getLeadScopeWhere(input.actor, input.institutionProgramId),
+          },
           select: { id: true },
         });
         if (!visibleDuplicate) {

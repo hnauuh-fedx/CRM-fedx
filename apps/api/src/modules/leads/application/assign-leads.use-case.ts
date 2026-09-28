@@ -13,6 +13,7 @@ export async function assignLeads(
   leadIds: string[],
   input: { assigneeId: string },
   institutionProgramId?: string,
+  ipAddress?: string,
 ) {
   if (!canAssignLead(actor)) {
     return { ok: false as const, reason: "permission_denied" as const };
@@ -24,7 +25,7 @@ export async function assignLeads(
       where: {
         id: { in: uniqueLeadIds },
         deleted_at: null,
-        ...getLeadScopeWhere(actor),
+        ...getLeadScopeWhere(actor, institutionProgramId),
         ...(institutionProgramId
           ? { institution_program_id: institutionProgramId }
           : {}),
@@ -86,6 +87,7 @@ export async function assignLeads(
         entity_type: "lead",
         entity_id: lead.id,
         action: lead.assigned_to ? "reassign" : "assign",
+        ip_address: ipAddress,
         old_data: { assigneeId: lead.assigned_to },
         new_data: { assigneeId: assignee.id, departmentId },
       })),

@@ -1,6 +1,40 @@
 import type { AuthUser } from "../../auth/auth.types";
+import { prisma } from "../../../database/prisma";
 import type { Prisma } from "../../../generated/prisma/client";
 import type { LeadInput } from "../domain/lead-input";
+import { getLeadScopeWhere } from "../lead-list.service";
+
+export async function findVisibleLeadForMutation(
+  actor: AuthUser,
+  leadId: string,
+  institutionProgramId?: string,
+  client: Pick<Prisma.TransactionClient, "leads"> = prisma,
+) {
+  return client.leads.findFirst({
+    where: {
+      id: leadId,
+      deleted_at: null,
+      ...getLeadScopeWhere(actor, institutionProgramId),
+      ...(institutionProgramId
+        ? { institution_program_id: institutionProgramId }
+        : {}),
+    },
+    select: {
+      id: true,
+      full_name: true,
+      phone: true,
+      email: true,
+      gender: true,
+      date_of_birth: true,
+      cccd: true,
+      note: true,
+      source_id: true,
+      temperature: true,
+      pipeline_stage_id: true,
+      assigned_to: true,
+    },
+  });
+}
 
 export function emptyToNull(value?: string) {
   return value?.trim() || null;
@@ -104,6 +138,7 @@ export async function recordStageChange(
   options: {
     activityContent?: string;
     includeStageNameInAudit?: boolean;
+    ipAddress?: string;
   } = {},
 ) {
   const toStageId = toStage?.id ?? null;
@@ -134,6 +169,7 @@ export async function recordStageChange(
       entity_type: "lead",
       entity_id: leadId,
       action: "pipeline_stage_changed",
+      ip_address: options.ipAddress,
       old_data: { pipelineStageId: fromStageId },
       new_data: {
         pipelineStageId: toStageId,

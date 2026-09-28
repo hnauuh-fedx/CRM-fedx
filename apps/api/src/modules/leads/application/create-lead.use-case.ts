@@ -228,7 +228,11 @@ export function triggerLeadCreatedAutomation(
   }
 }
 
-export async function createLead(actor: AuthUser, input: LeadInput) {
+export async function createLead(
+  actor: AuthUser,
+  input: LeadInput,
+  ipAddress?: string,
+) {
   if (!canCreateLead(actor)) {
     return { ok: false as const, reason: "permission_denied" as const };
   }
@@ -240,7 +244,7 @@ export async function createLead(actor: AuthUser, input: LeadInput) {
   }
 
   const result = await prisma.$transaction((tx) =>
-    createLeadInTransaction(tx, actor, input),
+    createLeadInTransaction(tx, actor, input, { ipAddress }),
   );
 
   if (result.ok) {

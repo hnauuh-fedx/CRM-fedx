@@ -37,7 +37,10 @@ function canViewSensitiveLeadData(user: AuthUser) {
   return user.permissions.some((permission) => sensitiveLeadPermissions.has(permission));
 }
 
-export function getLeadScopeWhere(user: AuthUser) {
+export function getLeadScopeWhere(
+  user: AuthUser,
+  institutionProgramId?: string,
+) {
   const permissions = new Set(user.permissions);
 
   if (user.accessScope === "ALL" && permissions.has("lead.view_all")) {
@@ -50,13 +53,30 @@ export function getLeadScopeWhere(user: AuthUser) {
 
   if (user.accessScope === "DEPARTMENT" || permissions.has("lead.view_department")) {
     if (user.departmentIds.length === 0) return { id: "00000000-0000-4000-8000-000000000000" };
-    return {
+    const departmentScope = {
       lead_assignments: {
         some: {
           department_id: { in: user.departmentIds },
           is_main_owner: true,
         },
       },
+    };
+    if (
+      !institutionProgramId ||
+      !user.institutionProgramIds.includes(institutionProgramId)
+    ) {
+      return departmentScope;
+    }
+
+    return {
+      OR: [
+        departmentScope,
+        {
+          institution_program_id: institutionProgramId,
+          assigned_to: null,
+          lead_assignments: { none: { is_main_owner: true } },
+        },
+      ],
     };
   }
 
@@ -88,7 +108,7 @@ export async function listLeads(
   const where = {
     AND: [
       { deleted_at: null },
-      getLeadScopeWhere(user),
+      getLeadScopeWhere(user, query.institutionProgramId),
       ...(query.search
         ? [
             {
@@ -357,7 +377,7 @@ export async function listLeads(
 export async function getLeadFilterOptions(user: AuthUser, institutionProgramId?: string) {
   const scopeWhere = {
     deleted_at: null,
-    ...getLeadScopeWhere(user),
+    ...getLeadScopeWhere(user, institutionProgramId),
     ...(institutionProgramId ? { institution_program_id: institutionProgramId } : {}),
   };
 
@@ -454,7 +474,7 @@ export async function getLeadDetail(user: AuthUser, leadId: string, institutionP
     where: {
       id: leadId,
       deleted_at: null,
-      ...getLeadScopeWhere(user),
+      ...getLeadScopeWhere(user, institutionProgramId),
       ...(institutionProgramId ? { institution_program_id: institutionProgramId } : {}),
     },
     select: {

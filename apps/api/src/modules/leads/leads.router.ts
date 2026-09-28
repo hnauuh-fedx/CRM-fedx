@@ -303,6 +303,7 @@ leadsRouter.post(
         parsed.data.leadIds,
         { assigneeId: parsed.data.assigneeId },
         getInstitutionProgramScope(request),
+        request.ip,
       );
       if (!result.ok) {
         response.status(result.reason === "lead_not_found" ? 404 : 400).json({
@@ -334,6 +335,7 @@ leadsRouter.post(
         request.authUser!,
         parsed.data.leadIds,
         getInstitutionProgramScope(request),
+        request.ip,
       );
       if (!result.ok) {
         response.status(404).json({
@@ -363,7 +365,7 @@ leadsRouter.post(
         response.status(400).json({ message: "Dữ liệu tạo lead không hợp lệ." });
         return;
       }
-      const result = await createLead(request.authUser!, parsed.data);
+      const result = await createLead(request.authUser!, parsed.data, request.ip);
       if (!result.ok) {
         if (
           result.reason === "permission_denied" ||
@@ -441,7 +443,14 @@ leadsRouter.post(
         return;
       }
 
-      response.json(await importLeadsFromWorkbook(request.authUser!, request.file.buffer, getInstitutionProgramScope(request)));
+      response.json(
+        await importLeadsFromWorkbook(
+          request.authUser!,
+          request.file.buffer,
+          getInstitutionProgramScope(request),
+          request.ip,
+        ),
+      );
     } catch (error) {
       if (error instanceof InvalidLeadImportFileError) {
         response.status(400).json({ message: error.message });
@@ -468,7 +477,13 @@ leadsRouter.patch(
         response.status(400).json({ message: "Dữ liệu cập nhật lead không hợp lệ." });
         return;
       }
-      const result = await updateLead(request.authUser!, parsedId.data, parsedBody.data, institutionProgramId);
+      const result = await updateLead(
+        request.authUser!,
+        parsedId.data,
+        parsedBody.data,
+        institutionProgramId,
+        request.ip,
+      );
       if (!result.ok && result.reason === "lead_not_found") {
         response.status(404).json({ message: "Không tìm thấy lead trong phạm vi truy cập." });
         return;
@@ -510,7 +525,13 @@ leadsRouter.patch(
         response.status(400).json({ message: "Dữ liệu chuyển giai đoạn không hợp lệ." });
         return;
       }
-      const result = await changeLeadStage(request.authUser!, parsedId.data, parsedBody.data.stageId, getInstitutionProgramScope(request));
+      const result = await changeLeadStage(
+        request.authUser!,
+        parsedId.data,
+        parsedBody.data.stageId,
+        getInstitutionProgramScope(request),
+        request.ip,
+      );
       if (!result.ok) {
         response.status(404).json({
           message: result.reason === "lead_not_found"
@@ -537,7 +558,12 @@ leadsRouter.delete(
         response.status(400).json({ message: "Mã lead không hợp lệ." });
         return;
       }
-      const result = await deleteLead(request.authUser!, parsedId.data, getInstitutionProgramScope(request));
+      const result = await deleteLead(
+        request.authUser!,
+        parsedId.data,
+        getInstitutionProgramScope(request),
+        request.ip,
+      );
       if (!result.ok) {
         response.status(404).json({ message: "Không tìm thấy lead trong phạm vi truy cập." });
         return;
@@ -561,7 +587,13 @@ leadsRouter.post(
         response.status(400).json({ message: "Nội dung ghi chú không hợp lệ." });
         return;
       }
-      const result = await addLeadNote(request.authUser!, parsedId.data, parsedBody.data.content, getInstitutionProgramScope(request));
+      const result = await addLeadNote(
+        request.authUser!,
+        parsedId.data,
+        parsedBody.data.content,
+        getInstitutionProgramScope(request),
+        request.ip,
+      );
       if (!result.ok) {
         response.status(404).json({ message: "Không tìm thấy lead trong phạm vi truy cập." });
         return;
@@ -585,7 +617,13 @@ leadsRouter.post(
         response.status(400).json({ message: "Thông tin tệp đính kèm không hợp lệ." });
         return;
       }
-      const result = await attachLeadFile(request.authUser!, parsedId.data, parsedBody.data, getInstitutionProgramScope(request));
+      const result = await attachLeadFile(
+        request.authUser!,
+        parsedId.data,
+        parsedBody.data,
+        getInstitutionProgramScope(request),
+        request.ip,
+      );
       if (!result.ok) {
         response.status(404).json({ message: "Không tìm thấy lead trong phạm vi truy cập." });
         return;
@@ -609,7 +647,13 @@ leadsRouter.post(
         response.status(400).json({ message: "Thông tin phân công không hợp lệ." });
         return;
       }
-      const result = await assignLead(request.authUser!, parsedId.data, parsedBody.data, getInstitutionProgramScope(request));
+      const result = await assignLead(
+        request.authUser!,
+        parsedId.data,
+        parsedBody.data,
+        getInstitutionProgramScope(request),
+        request.ip,
+      );
       if (!result.ok) {
         response.status(result.reason === "lead_not_found" ? 404 : 400).json({
           message: result.reason === "lead_not_found"
@@ -636,7 +680,11 @@ leadsRouter.get(
         response.status(400).json({ message: "Mã lead không hợp lệ." });
         return;
       }
-      const data = await getLeadCustomFields(request.authUser!, parsed.data);
+      const data = await getLeadCustomFields(
+        request.authUser!,
+        parsed.data,
+        getInstitutionProgramScope(request),
+      );
       if (!data) {
         response.status(404).json({ message: "Không tìm thấy lead trong phạm vi truy cập." });
         return;
@@ -647,7 +695,7 @@ leadsRouter.get(
     }
   },
 );
-leadsRouter.patch("/:id/custom-fields", requireAuthentication, requireAnyPermission(...leadUpdatePermissions), async (request, response, next) => { try { const parsedId = leadIdSchema.safeParse(request.params.id), parsedBody = customFieldValuesSchema.safeParse(request.body); if (!parsedId.success || !parsedBody.success) return response.status(400).json({ message: "Giá trị trường dữ liệu không hợp lệ." }); const result = await patchLeadCustomFields(request.authUser!, parsedId.data, parsedBody.data.values, request.ip); if (!result.ok) return response.status(result.reason === "not_found" ? 404 : result.reason === "forbidden" || result.reason === "sensitive_forbidden" ? 403 : 400).json({ message: result.reason === "sensitive_forbidden" ? "Bạn không có quyền sửa trường dữ liệu nhạy cảm." : "Không thể lưu trường dữ liệu tùy chỉnh." }); response.json({ message: "Đã lưu trường dữ liệu tùy chỉnh." }); } catch (error) { next(error); } });
+leadsRouter.patch("/:id/custom-fields", requireAuthentication, requireAnyPermission(...leadUpdatePermissions), async (request, response, next) => { try { const parsedId = leadIdSchema.safeParse(request.params.id), parsedBody = customFieldValuesSchema.safeParse(request.body); if (!parsedId.success || !parsedBody.success) return response.status(400).json({ message: "Giá trị trường dữ liệu không hợp lệ." }); const result = await patchLeadCustomFields(request.authUser!, parsedId.data, parsedBody.data.values, request.ip, getInstitutionProgramScope(request)); if (!result.ok) return response.status(result.reason === "not_found" ? 404 : result.reason === "forbidden" || result.reason === "sensitive_forbidden" ? 403 : 400).json({ message: result.reason === "sensitive_forbidden" ? "Bạn không có quyền sửa trường dữ liệu nhạy cảm." : "Không thể lưu trường dữ liệu tùy chỉnh." }); response.json({ message: "Đã lưu trường dữ liệu tùy chỉnh." }); } catch (error) { next(error); } });
 
 leadsRouter.get(
   "/:id",

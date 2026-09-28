@@ -111,9 +111,20 @@ function applicable(programId: string | null) {
   };
 }
 
-async function leadFor(user: AuthUser, leadId: string) {
+async function leadFor(
+  user: AuthUser,
+  leadId: string,
+  institutionProgramId?: string,
+) {
   return prisma.leads.findFirst({
-    where: { id: leadId, deleted_at: null, ...getLeadScopeWhere(user) },
+    where: {
+      id: leadId,
+      deleted_at: null,
+      ...getLeadScopeWhere(user, institutionProgramId),
+      ...(institutionProgramId
+        ? { institution_program_id: institutionProgramId }
+        : {}),
+    },
     select: { id: true, institution_program_id: true },
   });
 }
@@ -129,8 +140,12 @@ function serializeGroup(group: any) {
   };
 }
 
-export async function getLeadCustomFields(user: AuthUser, leadId: string) {
-  const lead = await leadFor(user, leadId);
+export async function getLeadCustomFields(
+  user: AuthUser,
+  leadId: string,
+  institutionProgramId?: string,
+) {
+  const lead = await leadFor(user, leadId, institutionProgramId);
   if (!lead) return null;
   const fields = await prisma.custom_fields.findMany({
     where: applicable(lead.institution_program_id),
@@ -188,8 +203,14 @@ export async function getLeadCustomFieldDefinitions(user: AuthUser, programId: s
   };
 }
 
-export async function patchLeadCustomFields(user: AuthUser, leadId: string, values: Input[], ip?: string) {
-  const lead = await leadFor(user, leadId);
+export async function patchLeadCustomFields(
+  user: AuthUser,
+  leadId: string,
+  values: Input[],
+  ip?: string,
+  institutionProgramId?: string,
+) {
+  const lead = await leadFor(user, leadId, institutionProgramId);
   if (!lead) return { ok: false as const, reason: "not_found" };
   if (!user.permissions.some((permission) => ["lead.update_all", "lead.update_department", "lead.update_assigned"].includes(permission))) return { ok: false as const, reason: "forbidden" };
 

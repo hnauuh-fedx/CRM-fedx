@@ -21,15 +21,22 @@ export async function changeVisibleLeadStage(
   stageId: string,
   institutionProgramId?: string,
   transactionEffect?: LeadMutationTransactionEffect,
+  ipAddress?: string,
 ) {
   if (!canUpdateLead(actor)) {
     return { ok: false as const, reason: "permission_denied" as const };
   }
 
-  const lead = await findVisibleLead(actor, leadId, institutionProgramId);
-  if (!lead) return { ok: false as const, reason: "lead_not_found" as const };
-
   return prisma.$transaction(async (tx) => {
+    const lead = await findVisibleLead(
+      actor,
+      leadId,
+      institutionProgramId,
+      tx,
+    );
+    if (!lead) {
+      return { ok: false as const, reason: "lead_not_found" as const };
+    }
     const stage = await tx.pipeline_stages.findUnique({
       where: { id: stageId },
       select: { id: true, name: true },
@@ -52,6 +59,7 @@ export async function changeVisibleLeadStage(
     await recordStageChange(tx, actor, leadId, lead.pipeline_stage_id, stage, {
       activityContent: `Chuyển lead sang giai đoạn ${stage.name}.`,
       includeStageNameInAudit: true,
+      ipAddress,
     });
     await transactionEffect?.(tx);
     return {
@@ -67,6 +75,7 @@ export async function assignVisibleLead(
   input: { assigneeId: string; departmentId?: string },
   institutionProgramId?: string,
   transactionEffect?: LeadMutationTransactionEffect,
+  ipAddress?: string,
 ) {
   if (!canAssignLead(actor)) {
     return { ok: false as const, reason: "permission_denied" as const };
@@ -78,10 +87,16 @@ export async function assignVisibleLead(
     return { ok: false as const, reason: "assignee_not_found" as const };
   }
 
-  const lead = await findVisibleLead(actor, leadId, institutionProgramId);
-  if (!lead) return { ok: false as const, reason: "lead_not_found" as const };
-
   return prisma.$transaction(async (tx) => {
+    const lead = await findVisibleLead(
+      actor,
+      leadId,
+      institutionProgramId,
+      tx,
+    );
+    if (!lead) {
+      return { ok: false as const, reason: "lead_not_found" as const };
+    }
     const canAssignAll =
       actor.accessScope === "ALL" && actor.permissions.includes("lead.view_all");
     const assignee = await tx.users.findFirst({
@@ -188,6 +203,7 @@ export async function assignVisibleLead(
         entity_type: "lead",
         entity_id: leadId,
         action: lead.assigned_to ? "reassign" : "assign",
+        ip_address: ipAddress,
         old_data: { assigneeId: lead.assigned_to },
         new_data: { assigneeId: assignee.id, departmentId },
       },
@@ -204,12 +220,13 @@ async function findVisibleLead(
   actor: AuthUser,
   leadId: string,
   institutionProgramId?: string,
+  client: Pick<Prisma.TransactionClient, "leads"> = prisma,
 ) {
-  return prisma.leads.findFirst({
+  return client.leads.findFirst({
     where: {
       id: leadId,
       deleted_at: null,
-      ...getLeadScopeWhere(actor),
+      ...getLeadScopeWhere(actor, institutionProgramId),
       ...(institutionProgramId
         ? { institution_program_id: institutionProgramId }
         : {}),

@@ -252,7 +252,7 @@ async function visibleLead(
     where: {
       id: leadId,
       deleted_at: null,
-      ...getLeadScopeWhere(user),
+      ...getLeadScopeWhere(user, institutionProgramId),
       ...(institutionProgramId
         ? { institution_program_id: institutionProgramId }
         : {}),
@@ -274,7 +274,7 @@ async function saleEntityContext(
         leads: {
           is: {
             deleted_at: null,
-            ...getLeadScopeWhere(user),
+            ...getLeadScopeWhere(user, institutionProgramId),
             ...(institutionProgramId
               ? { institution_program_id: institutionProgramId }
               : {}),
@@ -296,7 +296,7 @@ async function saleEntityContext(
       leads: {
         is: {
           deleted_at: null,
-          ...getLeadScopeWhere(user),
+          ...getLeadScopeWhere(user, institutionProgramId),
           ...(institutionProgramId
             ? { institution_program_id: institutionProgramId }
             : {}),

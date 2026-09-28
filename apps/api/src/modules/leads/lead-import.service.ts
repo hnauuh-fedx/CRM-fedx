@@ -128,7 +128,12 @@ const headerAliases: Record<string, keyof LeadInput | "sourceName" | "stageName"
 
 export class InvalidLeadImportFileError extends Error {}
 
-export async function importLeadsFromWorkbook(user: AuthUser, file: Buffer, scopedInstitutionProgramId?: string): Promise<LeadImportResult> {
+export async function importLeadsFromWorkbook(
+  user: AuthUser,
+  file: Buffer,
+  scopedInstitutionProgramId?: string,
+  ipAddress?: string,
+): Promise<LeadImportResult> {
   const { headers, rows } = readRows(file);
   validateRequiredHeaders(headers, Boolean(scopedInstitutionProgramId));
   const referenceMaps = await getReferenceMaps(scopedInstitutionProgramId);
@@ -144,7 +149,7 @@ export async function importLeadsFromWorkbook(user: AuthUser, file: Buffer, scop
       continue;
     }
 
-    const result = await createLead(user, normalized.input);
+    const result = await createLead(user, normalized.input, ipAddress);
     if (!result.ok) {
       errors.push({
         row: rowNumber,

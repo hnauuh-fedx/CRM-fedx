@@ -62,7 +62,7 @@ export async function listLeadAssignments(user: AuthUser, query: AssignmentListQ
     const where = {
       deleted_at: null,
       assigned_to: null,
-      ...getLeadScopeWhere(user),
+      ...getLeadScopeWhere(user, query.institutionProgramId),
       ...(query.institutionProgramId ? { institution_program_id: query.institutionProgramId } : {}),
       ...(query.sourceId ? { source_id: query.sourceId } : {}),
       ...(query.search
@@ -115,7 +115,7 @@ export async function listLeadAssignments(user: AuthUser, query: AssignmentListQ
     AND: [
       { is_main_owner: true },
       { leads: { is: { deleted_at: null, assigned_to: { not: null } } } },
-      { leads: { is: getLeadScopeWhere(user) } },
+      { leads: { is: getLeadScopeWhere(user, query.institutionProgramId) } },
       ...(query.institutionProgramId ? [{ leads: { is: { institution_program_id: query.institutionProgramId } } }] : []),
       ...(query.search
         ? [
@@ -202,7 +202,7 @@ export async function getSaleFilterOptions(user: AuthUser, institutionProgramId?
   const canViewAll = user.accessScope === "ALL" && user.permissions.includes("lead.view_all");
   const scopeWhere = {
     deleted_at: null,
-    ...getLeadScopeWhere(user),
+    ...getLeadScopeWhere(user, institutionProgramId),
     ...(institutionProgramId ? { institution_program_id: institutionProgramId } : {}),
   };
   const [assignees, telesales, sources, activityTypes, reminderStatuses, leads] = await prisma.$transaction([
@@ -259,7 +259,7 @@ export async function listLeadActivities(user: AuthUser, query: ActivityListQuer
   const where = {
     AND: [
       { leads: { is: { deleted_at: null } } },
-      { leads: { is: getLeadScopeWhere(user) } },
+      { leads: { is: getLeadScopeWhere(user, query.institutionProgramId) } },
       ...(query.institutionProgramId ? [{ leads: { is: { institution_program_id: query.institutionProgramId } } }] : []),
       ...(query.search
         ? [
@@ -320,7 +320,7 @@ export async function listLeadActivities(user: AuthUser, query: ActivityListQuer
 
 export async function createManualActivity(user: AuthUser, input: ManualActivityInput, institutionProgramId?: string, ip?: string) {
   const lead = await prisma.leads.findFirst({
-    where: { id: input.leadId, deleted_at: null, ...getLeadScopeWhere(user), ...(institutionProgramId ? { institution_program_id: institutionProgramId } : {}) },
+    where: { id: input.leadId, deleted_at: null, ...getLeadScopeWhere(user, institutionProgramId), ...(institutionProgramId ? { institution_program_id: institutionProgramId } : {}) },
     select: { id: true, institution_program_id: true },
   });
   if (!lead) {
@@ -360,7 +360,7 @@ export async function createManualActivity(user: AuthUser, input: ManualActivity
 
 export async function updateManualActivity(user: AuthUser, activityId: string, input: Omit<ManualActivityInput, "leadId">, institutionProgramId?: string, ip?: string) {
   const activity = await prisma.lead_activities.findFirst({
-    where: { id: activityId, leads: { is: { deleted_at: null, ...getLeadScopeWhere(user), ...(institutionProgramId ? { institution_program_id: institutionProgramId } : {}) } } },
+    where: { id: activityId, leads: { is: { deleted_at: null, ...getLeadScopeWhere(user, institutionProgramId), ...(institutionProgramId ? { institution_program_id: institutionProgramId } : {}) } } },
     select: { id: true, type: true, content: true, metadata: true, leads: { select: { institution_program_id: true } } },
   });
   const metadata = activity?.metadata as { origin?: string } | null;
@@ -398,7 +398,7 @@ export async function listReminders(user: AuthUser, query: ReminderListQuery) {
   const where = {
     AND: [
       { leads: { is: { deleted_at: null } } },
-      { leads: { is: getLeadScopeWhere(user) } },
+      { leads: { is: getLeadScopeWhere(user, query.institutionProgramId) } },
       ...(query.institutionProgramId ? [{ leads: { is: { institution_program_id: query.institutionProgramId } } }] : []),
       ...(query.search
         ? [
@@ -460,7 +460,7 @@ export async function listReminders(user: AuthUser, query: ReminderListQuery) {
 
 export async function createReminder(user: AuthUser, input: ReminderInput, institutionProgramId?: string, ip?: string) {
   const lead = await prisma.leads.findFirst({
-    where: { id: input.leadId, deleted_at: null, ...getLeadScopeWhere(user), ...(institutionProgramId ? { institution_program_id: institutionProgramId } : {}) },
+    where: { id: input.leadId, deleted_at: null, ...getLeadScopeWhere(user, institutionProgramId), ...(institutionProgramId ? { institution_program_id: institutionProgramId } : {}) },
     select: { id: true, full_name: true, institution_program_id: true },
   });
   if (!lead) {
@@ -504,7 +504,7 @@ export async function createReminder(user: AuthUser, input: ReminderInput, insti
 
 async function findVisibleReminder(user: AuthUser, reminderId: string, institutionProgramId?: string) {
   return prisma.reminders.findFirst({
-    where: { id: reminderId, leads: { is: { deleted_at: null, ...getLeadScopeWhere(user), ...(institutionProgramId ? { institution_program_id: institutionProgramId } : {}) } } },
+    where: { id: reminderId, leads: { is: { deleted_at: null, ...getLeadScopeWhere(user, institutionProgramId), ...(institutionProgramId ? { institution_program_id: institutionProgramId } : {}) } } },
     select: { id: true, lead_id: true, title: true, content: true, remind_at: true, status: true, leads: { select: { institution_program_id: true } } },
   });
 }
