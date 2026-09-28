@@ -7,7 +7,7 @@ import { prisma } from "../../database/prisma";
 import type { AuthUser } from "../auth/auth.types";
 import { getAuthUser } from "../auth/auth.service";
 import { applyInboundLeadMutation } from "../leads/lead-inbound.service";
-import type { LeadInput } from "../leads/lead-management.service";
+import type { LeadInput } from "../leads/lead.contracts";
 import { getLeadScopeWhere } from "../leads/lead-list.service";
 import {
   webhookFieldMetadata,

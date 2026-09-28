@@ -365,6 +365,18 @@ leadsRouter.post(
       }
       const result = await createLead(request.authUser!, parsed.data);
       if (!result.ok) {
+        if (
+          result.reason === "permission_denied" ||
+          result.reason === "assignment_forbidden"
+        ) {
+          response.status(403).json({
+            message:
+              result.reason === "assignment_forbidden"
+                ? "Bạn không có quyền phân công Sale phụ trách khi tạo lead."
+                : "Bạn không có quyền tạo lead.",
+          });
+          return;
+        }
         response.status(result.reason === "phone_already_exists" ? 409 : 400).json({
           message: result.reason === "phone_already_exists"
             ? "Số điện thoại đã tồn tại trong danh sách lead."

@@ -1,8 +1,8 @@
 import * as XLSX from "xlsx";
 
 import type { AuthUser } from "../auth/auth.types";
-import type { LeadInput } from "./lead-management.service";
-import { createLead } from "./lead-management.service";
+import { createLead } from "./application/create-lead.use-case";
+import type { LeadInput } from "./domain/lead-input";
 import { prisma } from "../../database/prisma";
 
 type ImportRow = Record<string, unknown>;

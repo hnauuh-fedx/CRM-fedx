@@ -4,11 +4,11 @@ import type { AuthUser } from "../auth/auth.types";
 import { getLeadScopeWhere } from "./lead-list.service";
 import { saveSaleCustomFieldValues } from "./sale-custom-fields.service";
 import {
-  createLeadInTransaction,
+  createTrustedInboundLeadInTransaction,
   triggerLeadCreatedAutomation,
-  updateLeadFromInboundInTransaction,
-  type LeadInput,
-} from "./lead-management.service";
+} from "./application/create-lead.use-case";
+import { updateLeadFromInboundInTransaction } from "./lead-management.service";
+import type { LeadInput } from "./domain/lead-input";
 
 type TransactionClient = Parameters<Parameters<typeof prisma.$transaction>[0]>[0];
 
@@ -249,7 +249,7 @@ export async function applyInboundLeadMutation(
         return completed;
       }
 
-      const created = await createLeadInTransaction(
+      const created = await createTrustedInboundLeadInTransaction(
         tx,
         input.actor,
         leadInput,
