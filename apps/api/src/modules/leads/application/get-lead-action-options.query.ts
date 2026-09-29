@@ -1,6 +1,7 @@
 import { prisma } from "../../../database/prisma";
 import type { AuthUser } from "../../auth/auth.types";
 import { assignableSaleWhere } from "./lead-mutation-support";
+import { getSystemFieldRequirements } from "../../custom-fields/system-field-requirements.service";
 
 export async function getLeadActionOptions(
   actor: AuthUser,
@@ -134,6 +135,12 @@ export async function getLeadActionOptions(
       take: 200,
     }),
   ]);
+  const systemFieldRequirements = {
+    fullName: true,
+    phone: true,
+    sourceId: true,
+    ...await getSystemFieldRequirements("LEAD"),
+  };
 
   return {
     sources,
@@ -168,5 +175,6 @@ export async function getLeadActionOptions(
     })),
     admissionStatuses,
     tags: tags.map((tag) => tag.name),
+    systemFieldRequirements,
   };
 }

@@ -7,6 +7,7 @@ import { createCustomFieldGroup, listCustomFieldGroups, setCustomFieldGroupStatu
 import { customFieldEntityTypes } from "./custom-fields.types";
 import { getInstitutionProgramScope } from "../institutions/institution-program-scope";
 import { getRuntimeCustomFieldDefinitions, getRuntimeCustomFields, saveRuntimeCustomFields, type RuntimeCustomFieldEntityType } from "../leads/sale-custom-fields.service";
+import { getSystemFieldRequirements, setSystemFieldRequirement } from "./system-field-requirements.service";
 export const customFieldsRouter = Router(); customFieldsRouter.use(requireAuthentication);
 const id = z.uuid(); const message: Record<string, string> = { scope_denied: "Bạn không có quyền truy cập chương trình tuyển sinh này.", not_found: "Không tìm thấy trường dữ liệu.", duplicate_key: "Mã trường đã tồn tại trong phạm vi áp dụng.", program_not_found: "Không tìm thấy chương trình tuyển sinh.", group_not_found: "Không tìm thấy nhóm trường dữ liệu đang hoạt động.", duplicate_group_key: "Mã nhóm trường đã tồn tại.", system_group_locked: "Nhóm hệ thống không thể chỉnh sửa cấu hình.", group_archived: "Nhóm trường dữ liệu đã được lưu trữ.", group_not_empty: "Hãy chuyển hoặc lưu trữ các trường trong nhóm trước khi lưu trữ nhóm.", data_type_locked: "Không thể đổi kiểu dữ liệu khi trường đã có giá trị.", scope_locked: "Không thể đổi phạm vi của trường đã tạo.", already_archived: "Trường dữ liệu đã được lưu trữ.", different_group: "Chỉ có thể sắp xếp lại các trường cùng nhóm." };
 function fail(response: any, result: any) { response.status(result.reason === "scope_denied" ? 403 : ["duplicate_key", "duplicate_group_key"].includes(result.reason) ? 409 : ["not_found", "group_not_found"].includes(result.reason) ? 404 : 400).json({ message: message[result.reason] ?? "Không thể xử lý trường dữ liệu." }); }
@@ -14,6 +15,33 @@ const runtimeEntityTypes = ["MARKETING_CAMPAIGN", "MARKETING_FORM", "ADMISSION_P
 const runtimeEntitySchema = z.enum(runtimeEntityTypes);
 const runtimeQuerySchema = z.object({ entityId: z.uuid().optional() });
 const runtimeValuesSchema = z.object({ values: z.record(z.uuid(), z.unknown().nullable()).default({}) });
+const systemFieldRequirementSchema = z.object({
+  fieldKey: z.string().trim().min(1).max(150).regex(/^[A-Za-z][A-Za-z0-9_.-]*$/),
+  isRequired: z.boolean(),
+});
+customFieldsRouter.get("/system/:entityType/requirements", requireAnyPermission("custom_field.view"), async (req, res, next) => {
+  try {
+    const type = z.enum(customFieldEntityTypes).safeParse(req.params.entityType);
+    if (!type.success) return res.status(400).json({ message: "Loại đối tượng không hợp lệ." });
+    res.json(await getSystemFieldRequirements(type.data));
+  } catch (error) {
+    next(error);
+  }
+});
+customFieldsRouter.patch("/system/:entityType/requirements", requireAnyPermission("custom_field.update"), async (req, res, next) => {
+  try {
+    const type = z.enum(customFieldEntityTypes).safeParse(req.params.entityType);
+    const body = systemFieldRequirementSchema.safeParse(req.body);
+    if (!type.success || !body.success) return res.status(400).json({ message: "Cấu hình bắt buộc của trường dữ liệu không hợp lệ." });
+    if (type.data !== "LEAD") return res.status(400).json({ message: "Form này chưa hỗ trợ thay đổi quy tắc bắt buộc của trường hệ thống." });
+    if (type.data === "LEAD" && ["fullName", "phone", "sourceId"].includes(body.data.fieldKey) && !body.data.isRequired) {
+      return res.status(400).json({ message: "Trường định danh cốt lõi của lead luôn bắt buộc." });
+    }
+    res.json(await setSystemFieldRequirement(req.authUser!, type.data, body.data.fieldKey, body.data.isRequired, req.ip));
+  } catch (error) {
+    next(error);
+  }
+});
 const runtimePermissions: Record<typeof runtimeEntityTypes[number], { view: string[]; edit: string[] }> = {
   MARKETING_CAMPAIGN: { view: ["campaign.view_all", "campaign.view", "campaign.view_own", "campaign.create", "campaign.update", "campaign.update_own"], edit: ["campaign.create", "campaign.update", "campaign.update_own"] },
   MARKETING_FORM: { view: ["campaign.view_all", "marketing_form.manage", "marketing_form.create", "marketing_form.update_own"], edit: ["marketing_form.manage", "marketing_form.create", "marketing_form.update_own"] },

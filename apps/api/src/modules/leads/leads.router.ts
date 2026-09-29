@@ -29,6 +29,7 @@ import { getInstitutionProgramScope } from "../institutions/institution-program-
 import { importLeadsFromWorkbook, InvalidLeadImportFileError } from "./lead-import.service";
 import { getLeadCustomFieldDefinitions, getLeadCustomFields, patchLeadCustomFields } from "./lead-custom-fields.service";
 import { canCheckSensitiveDuplicates, listDuplicateGroupMembers, listDuplicateLeads } from "./lead-duplicates.service";
+import { getSystemFieldRequirements } from "../custom-fields/system-field-requirements.service";
 
 const leadListQuerySchema = z.object({
   page: z.coerce.number().int().min(1).default(1),
@@ -137,17 +138,25 @@ const leadBodySchema = z.object({
   if (hasAdmissionInformation && !input.institutionProgramId) {
     context.addIssue({ code: "custom", path: ["institutionProgramId"], message: "Vui lòng chọn chương trình tuyển sinh." });
   }
-  if (hasAdmissionInformation && !input.majorId) {
-    context.addIssue({ code: "custom", path: ["majorId"], message: "Vui lòng chọn ngành đăng ký khi nhập thông tin tuyển sinh." });
-  }
-  if (hasAdmissionInformation && !input.admissionStatusId) {
-    context.addIssue({ code: "custom", path: ["admissionStatusId"], message: "Vui lòng chọn trạng thái hồ sơ tuyển sinh." });
-  }
 });
 const createLeadBodySchema = leadBodySchema.refine((input) => Boolean(input.institutionProgramId), {
   path: ["institutionProgramId"],
   message: "Vui lòng chọn chương trình tuyển sinh.",
 });
+const defaultLeadFieldRequirements: Record<string, boolean> = {
+  fullName: true,
+  phone: true,
+  sourceId: true,
+};
+async function hasAllRequiredLeadFields(input: Record<string, unknown>) {
+  const overrides = await getSystemFieldRequirements("LEAD");
+  const requirements = { ...defaultLeadFieldRequirements, ...overrides };
+  return Object.entries(requirements).every(([fieldKey, isRequired]) => {
+    if (!isRequired || !(fieldKey in input)) return true;
+    const value = input[fieldKey];
+    return Array.isArray(value) ? value.length > 0 : value !== undefined && value !== null && value !== "";
+  });
+}
 const stageBodySchema = z.object({ stageId: z.uuid() });
 const noteBodySchema = z.object({ content: z.string().trim().min(1).max(4000) });
 const fileBodySchema = z.object({
@@ -361,7 +370,7 @@ leadsRouter.post(
         ...request.body,
         ...(institutionProgramId ? { institutionProgramId } : {}),
       });
-      if (!parsed.success) {
+      if (!parsed.success || !await hasAllRequiredLeadFields(parsed.data as Record<string, unknown>)) {
         response.status(400).json({ message: "Dữ liệu tạo lead không hợp lệ." });
         return;
       }
@@ -473,7 +482,7 @@ leadsRouter.patch(
         ...request.body,
         ...(institutionProgramId ? { institutionProgramId } : {}),
       });
-      if (!parsedId.success || !parsedBody.success) {
+      if (!parsedId.success || !parsedBody.success || !await hasAllRequiredLeadFields(parsedBody.data as Record<string, unknown>)) {
         response.status(400).json({ message: "Dữ liệu cập nhật lead không hợp lệ." });
         return;
       }

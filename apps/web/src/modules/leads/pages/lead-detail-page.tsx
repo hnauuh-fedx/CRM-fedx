@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, type CSSProperties } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Activity, ArrowLeft, CalendarDays, ChevronDown, ExternalLink, FileText, History, Network, Pencil, StickyNote, Trash2, UserRound } from "lucide-react";
 import { Link, useNavigate, useParams } from "react-router-dom";
@@ -15,6 +15,7 @@ import { Select, SelectContent, SelectGroup, SelectItem, SelectTrigger, SelectVa
 import { Separator } from "@/components/ui/separator";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Textarea } from "@/components/ui/textarea";
+import { cn } from "@/lib/utils";
 import { useAuth } from "@/modules/auth/auth-context";
 import { ApiError } from "@/services/api";
 import {
@@ -40,6 +41,25 @@ const dateTimeFormatter = new Intl.DateTimeFormat("vi-VN", {
   hour: "2-digit",
   minute: "2-digit",
 });
+const pipelineStageFallbackColors = ["#64748B", "#2563EB", "#0EA5E9", "#8B5CF6", "#10B981", "#16A34A", "#F59E0B", "#DC2626"];
+
+function normalizePipelineStageColor(value: string | null | undefined, fallback: string) {
+  if (!value) return fallback;
+  const trimmed = value.trim();
+  if (/^#[0-9a-fA-F]{6}$/.test(trimmed)) return trimmed;
+  if (/^#[0-9a-fA-F]{3}$/.test(trimmed)) {
+    return `#${trimmed.slice(1).split("").map((character) => character + character).join("")}`;
+  }
+  return fallback;
+}
+
+function getPipelineStageTextColor(hexColor: string) {
+  const red = Number.parseInt(hexColor.slice(1, 3), 16);
+  const green = Number.parseInt(hexColor.slice(3, 5), 16);
+  const blue = Number.parseInt(hexColor.slice(5, 7), 16);
+  const luminance = (0.299 * red + 0.587 * green + 0.114 * blue) / 255;
+  return luminance > 0.58 ? "#0f172a" : "#ffffff";
+}
 const activityLabels: Record<string, string> = {
   lead_created: "Tạo lead",
   lead_updated: "Cập nhật thông tin",
@@ -159,13 +179,122 @@ export function LeadDetailPage({
   );
 }
 
-export function PipelineProgressCard({ lead, options, fallbackStages = [], onStageChange, isChanging = false }: { lead: LeadDetail; options?: LeadActionOptions; fallbackStages?: Array<{ id: string; name: string; color: string | null }>; onStageChange?: (stageId: string) => void; isChanging?: boolean }) {
-  const currentStage = options?.stages.find((stage) => stage.id === lead.pipelineStage?.id);
-  const availableStages = options?.stages.length ? options.stages : fallbackStages.map((stage) => ({ ...stage, pipelineId: null, pipelineName: null }));
-  const stages = availableStages.filter((stage) => !currentStage?.pipelineId || stage.pipelineId === currentStage.pipelineId);
-  const visibleStages = stages.length > 0 ? stages : lead.pipelineStage ? [{ ...lead.pipelineStage, pipelineId: null, pipelineName: null }] : [];
+type PipelineStageView = {
+  id: string;
+  name: string;
+  color: string | null;
+  pipelineId: string | null;
+  pipelineName: string | null;
+};
+
+export function PipelineProgressCard({
+  lead,
+  options,
+  fallbackStages = [],
+  onStageChange,
+  isChanging = false,
+  isLoading = false,
+  hasLoadError = false,
+}: {
+  lead: LeadDetail;
+  options?: LeadActionOptions;
+  fallbackStages?: PipelineStageView[];
+  onStageChange?: (stageId: string) => void;
+  isChanging?: boolean;
+  isLoading?: boolean;
+  hasLoadError?: boolean;
+}) {
+  const availableStages: PipelineStageView[] = options?.stages.length
+    ? options.stages
+    : fallbackStages;
+  const currentStage = availableStages.find((stage) => stage.id === lead.pipelineStage?.id);
+  const stagesInCurrentPipeline = currentStage?.pipelineId
+    ? availableStages.filter((stage) => stage.pipelineId === currentStage.pipelineId)
+    : availableStages;
+  const visibleStages = stagesInCurrentPipeline.length > 0
+    ? stagesInCurrentPipeline
+    : lead.pipelineStage
+      ? [{ ...lead.pipelineStage, pipelineId: null, pipelineName: null }]
+      : [];
   const currentIndex = visibleStages.findIndex((stage) => stage.id === lead.pipelineStage?.id);
-  return <Card className="overflow-hidden border-border/70 shadow-xs"><CardHeader className="pb-3"><CardTitle className="text-base">Tiến trình</CardTitle></CardHeader><CardContent>{visibleStages.length === 0 ? <p className="text-sm text-muted-foreground">Chưa có tiến trình áp dụng cho Lead này.</p> : <ol className="flex min-w-max gap-2 overflow-x-auto pb-2" aria-label="Tiến trình xử lý Lead">{visibleStages.map((stage, index) => { const isCurrent = index === currentIndex; const isCompleted = currentIndex >= 0 && index < currentIndex; return <li key={stage.id} className="min-w-40"><button type="button" className={`min-h-10 w-full rounded-md border px-4 py-2 text-center text-sm font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:cursor-default ${isCurrent ? "border-primary bg-primary text-primary-foreground" : isCompleted ? "border-primary/30 bg-primary/10 text-primary" : "bg-muted/50 text-muted-foreground"} ${onStageChange && !isCurrent ? "hover:border-primary/60 hover:text-primary" : ""}`} aria-current={isCurrent ? "step" : undefined} disabled={!onStageChange || isCurrent || isChanging} onClick={() => onStageChange?.(stage.id)}>{stage.name}</button></li>; })}</ol>}</CardContent></Card>;
+  const pipelineName = currentStage?.pipelineName;
+
+  return (
+    <Card className="shrink-0 overflow-hidden border-border/70 shadow-xs" aria-busy={isChanging || isLoading}>
+      <CardHeader>
+        <CardTitle>Tiến trình</CardTitle>
+        <CardDescription>
+          {pipelineName ? `${pipelineName} · ` : ""}Chọn bước xử lý cho lead. Mỗi thay đổi sẽ được lưu vào lịch sử hệ thống.
+        </CardDescription>
+      </CardHeader>
+      <CardContent className="flex flex-col gap-4">
+        {isLoading && visibleStages.length === 0 ? (
+          <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-3" aria-label="Đang tải danh sách tiến trình">
+            <Skeleton className="h-12" />
+            <Skeleton className="h-12" />
+            <Skeleton className="h-12" />
+          </div>
+        ) : visibleStages.length === 0 ? (
+          <p className="text-sm text-muted-foreground">
+            {hasLoadError ? "Không thể tải danh sách tiến trình. Vui lòng thử lại." : "Chưa có tiến trình áp dụng cho lead này."}
+          </p>
+        ) : (
+          <ol className="grid gap-2 sm:grid-cols-2 lg:grid-cols-3 2xl:grid-cols-6" aria-label="Tiến trình xử lý lead">
+            {visibleStages.map((stage, index) => {
+              const isCurrent = index === currentIndex;
+              const canSelect = Boolean(onStageChange) && !isCurrent && !isChanging;
+              const stageColor = normalizePipelineStageColor(
+                stage.color,
+                pipelineStageFallbackColors[index % pipelineStageFallbackColors.length],
+              );
+              const stageStyle: CSSProperties = isCurrent
+                ? {
+                    backgroundColor: stageColor,
+                    borderColor: stageColor,
+                    color: getPipelineStageTextColor(stageColor),
+                  }
+                : {
+                    borderColor: `${stageColor}66`,
+                    boxShadow: `inset 0 3px 0 ${stageColor}`,
+                  };
+              return (
+                <li key={stage.id}>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    style={stageStyle}
+                    className={cn(
+                      "h-auto min-h-12 w-full justify-start whitespace-normal bg-muted/30 text-left font-semibold hover:bg-background",
+                      isCurrent && "shadow-sm hover:opacity-90",
+                      canSelect && "cursor-pointer",
+                    )}
+                    aria-current={isCurrent ? "step" : undefined}
+                    aria-pressed={isCurrent}
+                    aria-disabled={!canSelect}
+                    disabled={isChanging}
+                    onClick={() => {
+                      if (canSelect) onStageChange?.(stage.id);
+                    }}
+                  >
+                    {stage.name}
+                  </Button>
+                </li>
+              );
+            })}
+          </ol>
+        )}
+        {visibleStages.length > 0 && (
+          <p className="text-sm text-muted-foreground" role={isChanging ? "status" : undefined}>
+            {isChanging
+              ? "Đang cập nhật tiến trình..."
+              : lead.pipelineStage
+                ? `Tiến trình hiện tại: ${lead.pipelineStage.name}`
+                : "Chưa chọn tiến trình hiện tại."}
+          </p>
+        )}
+      </CardContent>
+    </Card>
+  );
 }
 
 type ActivityTab = "activities" | "notes" | "changes" | "files";

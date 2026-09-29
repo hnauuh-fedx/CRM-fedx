@@ -26,7 +26,7 @@ const compactNumberFormatter = new Intl.NumberFormat("vi-VN", { notation: "compa
 
 type LeadFormProps = {
   defaultValues: LeadFormInput;
-  options: Pick<LeadActionOptions, "sources" | "stages" | "telesales" | "institutionPrograms" | "majors" | "admissionStatuses" | "tags">;
+  options: Pick<LeadActionOptions, "sources" | "stages" | "telesales" | "institutionPrograms" | "majors" | "admissionStatuses" | "tags" | "systemFieldRequirements">;
   leadId?: string;
   submitLabel: string;
   isPending: boolean;
@@ -52,7 +52,8 @@ export function LeadForm({ defaultValues, options, leadId, submitLabel, isPendin
     enabled: Boolean(auth.accessToken && (leadId || programId)),
   });
   const customFields = useMemo(() => customFieldsQuery.data?.fields ?? [], [customFieldsQuery.data?.fields]);
-  const { formRef, handleFormSubmit } = useLeadFormSubmission(form, customFields, onSubmit);
+  const { formRef, handleFormSubmit } = useLeadFormSubmission(form, customFields, options.systemFieldRequirements, onSubmit);
+  const isRequired = (fieldKey: keyof LeadFormInput) => options.systemFieldRequirements[fieldKey] ?? false;
   const customFieldsByGroup = useMemo(() => {
     const grouped = new Map<string, LeadCustomField[]>();
     for (const field of customFields) grouped.set(field.group.key, [...(grouped.get(field.group.key) ?? []), field]);
@@ -110,10 +111,10 @@ export function LeadForm({ defaultValues, options, leadId, submitLabel, isPendin
 
       <FormSection title="Thông tin cơ bản" description="Thông tin nhận diện và liên hệ bắt buộc của ứng viên.">
         <FieldGroup className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
-          <TextField name="fullName" id="lead-full-name" label="Họ và tên *" register={form.register} errors={form.formState.errors} autoComplete="name" />
-          <TextField name="phone" id="lead-phone" label="Số điện thoại *" register={form.register} errors={form.formState.errors} type="tel" inputMode="numeric" autoComplete="tel" placeholder="Nhập đúng 10 chữ số" />
+          <TextField name="fullName" id="lead-full-name" label={`Họ và tên${isRequired("fullName") ? " *" : ""}`} register={form.register} errors={form.formState.errors} autoComplete="name" />
+          <TextField name="phone" id="lead-phone" label={`Số điện thoại${isRequired("phone") ? " *" : ""}`} register={form.register} errors={form.formState.errors} type="tel" inputMode="numeric" autoComplete="tel" placeholder="Nhập đúng 10 chữ số" />
           <Field data-invalid={Boolean(form.formState.errors.sourceId)}>
-            <FieldLabel htmlFor="lead-form-source">Nguồn học viên *</FieldLabel>
+            <FieldLabel htmlFor="lead-form-source">Nguồn học viên{isRequired("sourceId") ? " *" : ""}</FieldLabel>
             <Select value={form.watch("sourceId")} onValueChange={(value) => form.setValue("sourceId", value, { shouldValidate: true })}>
               <SelectTrigger id="lead-form-source" className="w-full" aria-invalid={Boolean(form.formState.errors.sourceId)}>
                 <SelectValue placeholder="Chọn nguồn học viên" />
@@ -198,10 +199,10 @@ export function LeadForm({ defaultValues, options, leadId, submitLabel, isPendin
         <CustomFieldInputs fields={customFieldsByGroup.get("relatives") ?? []} control={form.control} isPending={isPending} />
       </FormSection>
 
-      <FormSection title="Thông tin tuyển sinh" description="Hồ sơ được ghi vào chương trình đang chọn trên thanh công cụ; ngành đăng ký và trạng thái hồ sơ là bắt buộc khi nhập phần này.">
+      <FormSection title="Thông tin tuyển sinh" description="Hồ sơ được ghi vào chương trình đang chọn; các trường bắt buộc tuân theo mục Cấu hình trường dữ liệu.">
         <FieldGroup className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
           <Field data-invalid={Boolean(form.formState.errors.majorId)}>
-            <FieldLabel htmlFor="lead-major">Ngành đăng ký *</FieldLabel>
+            <FieldLabel htmlFor="lead-major">Ngành đăng ký{isRequired("majorId") ? " *" : ""}</FieldLabel>
             <Select value={form.watch("majorId") || "__empty__"} onValueChange={(value) => form.setValue("majorId", value === "__empty__" ? "" : value, { shouldValidate: true })}>
               <SelectTrigger id="lead-major" className="w-full" aria-invalid={Boolean(form.formState.errors.majorId)}><SelectValue placeholder="Chọn ngành đăng ký" /></SelectTrigger>
               <SelectContent><SelectGroup><SelectItem value="__empty__">Chưa lập hồ sơ</SelectItem>{options.majors.map((major) => <SelectItem key={major.id} value={major.id}>{major.code ? `${major.code} - ` : ""}{major.name}</SelectItem>)}</SelectGroup></SelectContent>
@@ -209,7 +210,7 @@ export function LeadForm({ defaultValues, options, leadId, submitLabel, isPendin
             <FieldError errors={[form.formState.errors.majorId]} />
           </Field>
           <Field data-invalid={Boolean(form.formState.errors.admissionStatusId)}>
-            <FieldLabel htmlFor="lead-admission-status">Trạng thái hồ sơ *</FieldLabel>
+            <FieldLabel htmlFor="lead-admission-status">Trạng thái hồ sơ{isRequired("admissionStatusId") ? " *" : ""}</FieldLabel>
             <Select value={form.watch("admissionStatusId") || "__empty__"} onValueChange={(value) => form.setValue("admissionStatusId", value === "__empty__" ? "" : value, { shouldValidate: true })}>
               <SelectTrigger id="lead-admission-status" className="w-full" aria-invalid={Boolean(form.formState.errors.admissionStatusId)}><SelectValue placeholder="Chọn trạng thái" /></SelectTrigger>
               <SelectContent><SelectGroup><SelectItem value="__empty__">Chưa xác định</SelectItem>{options.admissionStatuses.map((status) => <SelectItem key={status.id} value={status.id}>{status.name}</SelectItem>)}</SelectGroup></SelectContent>
@@ -303,6 +304,7 @@ export function LeadForm({ defaultValues, options, leadId, submitLabel, isPendin
 function useLeadFormSubmission(
   form: UseFormReturn<LeadFormInput>,
   customFields: LeadCustomField[],
+  systemFieldRequirements: Record<string, boolean>,
   onSubmit: (values: LeadFormInput) => void,
 ) {
   const formRef = useRef<HTMLFormElement>(null);
@@ -331,8 +333,15 @@ function useLeadFormSubmission(
       });
     }
 
+    const missingRequiredFields = Object.entries(systemFieldRequirements)
+      .filter(([fieldKey, required]) => required && fieldKey in values && isEmptyRequiredValue(values[fieldKey as keyof LeadFormInput]))
+      .map(([fieldKey]) => fieldKey as keyof LeadFormInput);
+    for (const field of missingRequiredFields) {
+      form.setError(field, { message: "Trường này là bắt buộc." });
+    }
+
     const customFieldsAreValid = await form.trigger("customFieldValues", { shouldFocus: false });
-    if (!parsed.success || !customFieldsAreValid) {
+    if (!parsed.success || missingRequiredFields.length > 0 || !customFieldsAreValid) {
       focusFirstInvalidField();
       return;
     }
@@ -347,6 +356,10 @@ function useLeadFormSubmission(
   };
 
   return { formRef, handleFormSubmit };
+}
+
+function isEmptyRequiredValue(value: unknown) {
+  return value === undefined || value === null || value === "" || (Array.isArray(value) && value.length === 0);
 }
 
 function CustomFieldInputs({ fields, control, isPending, emptyLabel }: { fields: LeadCustomField[]; control: Control<LeadFormInput>; isPending: boolean; emptyLabel?: string }) {

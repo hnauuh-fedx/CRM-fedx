@@ -17,6 +17,7 @@ export type CustomFieldDataType = (typeof customFieldDataTypes)[number];
 export type CustomFieldEntityType = "LEAD" | "SALE_ACTIVITY" | "SALE_REMINDER" | "MARKETING_CAMPAIGN" | "MARKETING_FORM" | "ADMISSION_PROFILE" | "ADMISSION_DOCUMENT" | "ADMISSION_STATUS" | "ADMISSION_MAJOR" | "STUDENT";
 export type CustomFieldScopeType = "GLOBAL" | "PROGRAM";
 export type CustomFieldStatusAction = "activate" | "deactivate" | "archive";
+export type SystemFieldRequirements = Record<string, boolean>;
 export type CustomFieldGroupDefinition = {
   id: string;
   entityType: CustomFieldEntityType;

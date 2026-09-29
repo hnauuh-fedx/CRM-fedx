@@ -6,6 +6,7 @@ export type SystemFormField = {
   dataType: CustomFieldDataType;
   storage: string;
   isRequired?: boolean;
+  requiredLocked?: boolean;
   isSensitive?: boolean;
   optionSource?: string;
   note?: string;

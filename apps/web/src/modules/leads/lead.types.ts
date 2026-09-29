@@ -99,7 +99,14 @@ export type LeadFilterOptions = {
   sources: Array<{ id: string; name: string }>;
   institutionPrograms: Array<{ id: string; name: string; institutionName: string }>;
   assignees: Array<{ id: string; fullName: string }>;
-  stages: Array<{ id: string; name: string; color: string | null; count: number }>;
+  stages: Array<{
+    id: string;
+    name: string;
+    color: string | null;
+    pipelineId: string | null;
+    pipelineName: string | null;
+    count: number;
+  }>;
   majors: Array<{ id: string; name: string }>;
   totalLeads: number;
 };
@@ -320,6 +327,7 @@ export type LeadActionOptions = {
   majors: Array<{ id: string; name: string; code: string | null; facultyName: string | null }>;
   admissionStatuses: Array<{ id: string; name: string }>;
   tags: string[];
+  systemFieldRequirements: Record<string, boolean>;
 };
 
 export type LeadImportError = {

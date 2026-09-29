@@ -72,19 +72,6 @@ export const leadFormSchema = z.object({
   monthlyRevenue: optionalDecimal,
   gclid: optionalText(1000),
   tags: optionalText(1000),
-}).superRefine((values, context) => {
-  const admissionFields = [
-    values.majorId, values.admissionStatusId, values.trainingCode, values.classCode, values.subjectGroupCode,
-    values.subjectGroupName, values.score1, values.score2, values.score3, values.admissionScore,
-    values.enrollmentBatch, values.registrationStation, values.decisionNumber, values.decisionSignedDate,
-    values.monthlyRevenue,
-  ];
-  if (admissionFields.some(Boolean) && !values.majorId) {
-    context.addIssue({ code: "custom", path: ["majorId"], message: "Vui lòng chọn ngành đăng ký khi lập hồ sơ tuyển sinh." });
-  }
-  if (admissionFields.some(Boolean) && !values.admissionStatusId) {
-    context.addIssue({ code: "custom", path: ["admissionStatusId"], message: "Vui lòng chọn trạng thái hồ sơ." });
-  }
 });
 
 export const emptyLeadForm = {

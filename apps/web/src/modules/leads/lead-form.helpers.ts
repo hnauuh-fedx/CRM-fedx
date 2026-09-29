@@ -82,5 +82,6 @@ export function toLeadFormOptions(lead: LeadDetail, options?: LeadActionOptions)
     majors: options?.majors ?? [],
     admissionStatuses: options?.admissionStatuses ?? [],
     tags: options?.tags ?? [],
+    systemFieldRequirements: options?.systemFieldRequirements ?? { fullName: true, phone: true, sourceId: true },
   };
 }
