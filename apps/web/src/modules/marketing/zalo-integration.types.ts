@@ -34,7 +34,6 @@ export type ZaloConnectionOptions = {
 };
 
 export type SaveZaloConnectionInput = {
-  appId?: string;
   accessToken: string;
   refreshToken: string;
   accessTokenExpiresInHours: number;

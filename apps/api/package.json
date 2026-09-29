@@ -31,6 +31,7 @@
     "test:integration:webhooks-v2": "tsx src/integration/inbound-webhooks-v2.integration.ts",
     "test:integration:automation": "tsx src/integration/automation-engine.integration.ts",
     "test:automation": "tsx --test src/modules/automations/*.test.ts",
+    "test:meta-webhook": "tsx --test src/modules/integrations/meta/*.test.ts",
     "test:security:reporting": "tsx src/integration/reporting-security.integration.ts",
     "test:integration:reporting-pivot": "tsx src/integration/personal-report-pivot.integration.ts",
     "test:integration:personal-dashboard": "tsx src/integration/personal-dashboard.integration.ts"

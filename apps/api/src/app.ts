@@ -35,9 +35,12 @@ import { usersRouter } from "./modules/users/users.router";
 import { customFieldsRouter } from "./modules/custom-fields/custom-fields.router";
 import { publicWebhookRouter, webhooksAdminRouter } from "./modules/webhooks/webhooks.router";
 import { zaloRouter } from "./modules/integrations/zalo/zalo.router";
+import { metaRouter } from "./modules/integrations/meta/meta.router";
 import "./modules/integrations/zalo/zalo-worker.service";
+import "./modules/integrations/meta/meta-worker.service";
 
 export const app = express();
+app.set("trust proxy", 1);
 const publicDirectory = path.resolve(__dirname, "../public");
 
 app.disable("x-powered-by");
@@ -88,6 +91,7 @@ app.use("/api/users", usersRouter);
 app.use("/api/custom-fields", customFieldsRouter);
 app.use("/api/settings/webhooks", webhooksAdminRouter);
 app.use("/api/integrations/zalo", zaloRouter);
+app.use("/api/integrations/meta", metaRouter);
 
 const errorHandler: ErrorRequestHandler = (error, _request, response, _next) => {
   if (error instanceof InstitutionProgramScopeError) {

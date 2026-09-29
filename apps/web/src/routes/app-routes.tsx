@@ -203,6 +203,12 @@ const ConnectionChannelsPage = lazy(() =>
     default: module.ConnectionChannelsPage,
   })),
 );
+const ZaloConnectionPage = lazy(() =>
+  import("@/modules/marketing/pages/zalo-connection-page").then((module) => ({ default: module.ZaloConnectionPage })),
+);
+const MetaConnectionPage = lazy(() =>
+  import("@/modules/marketing/pages/meta-connection-page").then((module) => ({ default: module.MetaConnectionPage })),
+);
 const CustomerListManagementPage = lazy(() =>
   import("@/modules/marketing/pages/customer-list-management-page").then((module) => ({
     default: module.CustomerListManagementPage,
@@ -385,6 +391,8 @@ export function AppRoutes() {
             </Route>
             <Route element={<ProtectedRoute anyPermissions={["integration.view", "integration.manage"]} />}>
               <Route path="/marketing/kenh-ket-noi" element={<ConnectionChannelsPage />} />
+              <Route path="/marketing/kenh-ket-noi/zalo" element={<ZaloConnectionPage />} />
+              <Route path="/marketing/kenh-ket-noi/meta" element={<MetaConnectionPage />} />
             </Route>
 
             <Route element={<ProtectedRoute anyPermissions={["audit.view"]} />}>

@@ -191,6 +191,91 @@ model zalo_lead_extractions {
   @@index([status, created_at], map: "idx_zalo_extractions_status")
 }
 
+model meta_oauth_sessions {
+  id                     String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  state_hash             String   @unique @db.VarChar(64)
+  user_access_token_encrypted String?
+  institution_program_id String   @db.Uuid
+  lead_source_id         String   @db.Uuid
+  created_by             String   @db.Uuid
+  redirect_uri           String
+  status                 String   @default("pending") @db.VarChar(30)
+  expires_at             DateTime @db.Timestamp(6)
+  created_at             DateTime @default(now()) @db.Timestamp(6)
+
+  @@index([created_by, status, expires_at], map: "idx_meta_oauth_sessions_user_status")
+}
+
+model meta_connections {
+  id                       String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  page_id                  String    @unique @db.VarChar(100)
+  page_name                String?   @db.VarChar(255)
+  page_access_token_encrypted String
+  status                   String    @default("active") @db.VarChar(50)
+  webhook_subscribed_at    DateTime? @db.Timestamp(6)
+  last_checked_at          DateTime? @db.Timestamp(6)
+  last_error               String?
+  institution_program_id   String    @db.Uuid
+  lead_source_id           String    @db.Uuid
+  created_by               String    @db.Uuid
+  created_at               DateTime  @default(now()) @db.Timestamp(6)
+  updated_at               DateTime  @default(now()) @db.Timestamp(6)
+
+  @@index([institution_program_id, updated_at], map: "idx_meta_connections_program")
+  @@index([status, updated_at], map: "idx_meta_connections_status")
+}
+
+model meta_messages {
+  id                String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  connection_id     String    @db.Uuid
+  meta_message_id   String    @db.VarChar(255)
+  sender_psid       String    @db.VarChar(100)
+  direction         String    @db.VarChar(20)
+  event_type        String    @db.VarChar(50)
+  message_text      String?
+  sent_at           DateTime  @db.Timestamp(6)
+  raw_payload       Json
+  processing_status String    @default("pending") @db.VarChar(50)
+  processing_error  String?
+  lead_id           String?   @db.Uuid
+  created_at        DateTime  @default(now()) @db.Timestamp(6)
+  processed_at      DateTime? @db.Timestamp(6)
+
+  @@unique([connection_id, meta_message_id], map: "uq_meta_messages_connection_message")
+  @@index([connection_id, sender_psid, sent_at], map: "idx_meta_messages_conversation")
+  @@index([processing_status, created_at], map: "idx_meta_messages_processing")
+}
+
+model meta_user_profiles {
+  id              String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  connection_id   String    @db.Uuid
+  sender_psid     String    @db.VarChar(100)
+  display_name    String?   @db.VarChar(255)
+  last_synced_at  DateTime? @db.Timestamp(6)
+  last_sync_error String?
+  created_at      DateTime  @default(now()) @db.Timestamp(6)
+  updated_at      DateTime  @default(now()) @db.Timestamp(6)
+
+  @@unique([connection_id, sender_psid], map: "uq_meta_user_profiles_connection_user")
+  @@index([connection_id, display_name], map: "idx_meta_user_profiles_connection_name")
+}
+
+model meta_lead_extractions {
+  id                String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  connection_id     String   @db.Uuid
+  sender_psid       String   @db.VarChar(100)
+  source_message_id String   @db.Uuid
+  extracted_data    Json?
+  confidence        Decimal? @db.Decimal(5, 4)
+  status            String   @db.VarChar(50)
+  lead_id           String?  @db.Uuid
+  error_message     String?
+  created_at        DateTime @default(now()) @db.Timestamp(6)
+
+  @@index([connection_id, sender_psid, created_at], map: "idx_meta_extractions_conversation")
+  @@index([status, created_at], map: "idx_meta_extractions_status")
+}
+
 model campaigns {
   id                     String                @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
   institution_program_id String?               @db.Uuid

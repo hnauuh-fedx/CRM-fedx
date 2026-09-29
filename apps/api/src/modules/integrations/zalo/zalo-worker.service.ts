@@ -84,8 +84,13 @@ async function withMessageLock(messageId: string, action: () => Promise<void>) {
 }
 
 async function runRefreshSweep() {
+  const configuredAppId = process.env.ZALO_APP_ID?.trim();
   const due = await prisma.zalo_connections.findMany({
-    where: { status: { in: ["active", "error"] }, next_refresh_at: { lte: new Date() } },
+    where: {
+      status: { in: ["active", "error"] },
+      next_refresh_at: { lte: new Date() },
+      ...(configuredAppId ? { app_id: configuredAppId } : {}),
+    },
     select: { id: true },
     take: 500,
   });

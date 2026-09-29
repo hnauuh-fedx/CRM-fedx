@@ -26,7 +26,6 @@ declare global {
 }
 
 const manualConnectionSchema = z.object({
-  appId: z.string().trim().min(1).optional(),
   accessToken: z.string().trim().min(20),
   refreshToken: z.string().trim().min(20),
   accessTokenExpiresInHours: z.coerce.number().positive().max(168),
