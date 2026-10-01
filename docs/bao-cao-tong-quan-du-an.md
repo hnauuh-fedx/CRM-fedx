@@ -1,252 +1,430 @@
-# Báo cáo tổng quan dự án Admission CRM
+# Báo cáo hiện trạng và phương án triển khai Admission CRM
 
-Ngày cập nhật: 07/07/2026
+**Ngày cập nhật:** 22/09/2026
 
-## 1. Tóm tắt dự án
+**Phạm vi:** triển khai hệ thống lên các nền tảng dịch vụ để có thể vận hành thực tế; không phải roadmap phát triển chức năng nghiệp vụ.
 
-Admission CRM là hệ thống quản lý tuyển sinh theo mô hình CRM, hỗ trợ nhà trường theo dõi toàn bộ hành trình từ lúc thí sinh để lại thông tin quan tâm cho đến khi trở thành sinh viên và tiếp tục được chăm sóc sau nhập học.
+**Căn cứ:** source code hiện tại, `docker-compose.yml`, cấu hình môi trường mẫu, tài liệu webhook, báo cáo chi phí triển khai tháng 09/2026 và các script kiểm thử trong repository.
 
-Hệ thống được chia thành các mảng nghiệp vụ chính:
+## 1. Kết luận đề xuất
 
-- CRM Marketing: quản lý chiến dịch, nguồn lead, UTM và biểu mẫu thu thập thông tin.
-- CRM Sale / Telesale: tiếp nhận lead, phân công nhân viên, chăm sóc, ghi chú, nhắc việc và chuyển giai đoạn pipeline.
-- CRM Tuyển sinh: tạo hồ sơ tuyển sinh, quản lý tài liệu, trạng thái hồ sơ, phí và học phí.
-- CRM Sinh viên: quản lý sinh viên đã nhập học, dịch vụ sinh viên và lịch sử hỗ trợ.
-- Quản lý / Admin: quản lý người dùng, vai trò, quyền hạn, phòng ban, pipeline, cấu hình hệ thống và nhật ký.
-- Báo cáo / Dashboard: tổng hợp số liệu vận hành, hiệu quả marketing, sale, tuyển sinh và sinh viên.
+Phương án phù hợp nhất cho giai đoạn đầu là triển khai trên **DigitalOcean Singapore (`SGP1`)** theo mô hình PaaS managed:
 
-Mục tiêu của dự án là giúp các bộ phận phối hợp trên cùng một dữ liệu, giảm thất thoát lead, kiểm soát quyền truy cập và cung cấp báo cáo rõ ràng cho quản lý.
+- Frontend React/Vite: DigitalOcean App Platform Static Site.
+- Backend API Express: DigitalOcean App Platform Web Service.
+- Webhook worker: DigitalOcean App Platform Worker riêng.
+- PostgreSQL: DigitalOcean Managed PostgreSQL.
+- Redis-compatible queue/cache: DigitalOcean Managed Valkey.
+- File: DigitalOcean Spaces và CDN sau khi hoàn thiện adapter upload/download.
+- DNS/TLS: custom domain và HTTPS managed; có thể dùng chứng thư Let's Encrypt.
+- Log/giám sát: DigitalOcean Monitoring kết hợp Grafana Cloud và uptime check.
+- Dịch vụ ngoài: Zalo OA và OpenAI API nếu bật tính năng tiếp nhận Lead từ hội thoại.
 
-## 2. Đối tượng sử dụng
+DigitalOcean được chọn làm baseline vì có region gần Việt Nam, đủ compute, PostgreSQL, Valkey và object storage trên cùng một nhà cung cấp, phù hợp với đội vận hành nhỏ. Giá và availability của từng SKU cần được xác nhận lại tại thời điểm mua.
 
-Hệ thống phục vụ nhiều nhóm người dùng với quyền và phạm vi dữ liệu khác nhau:
+Hệ thống **chưa thể đưa thẳng lên production chỉ bằng việc tạo server và chạy lệnh**. Trước go-live cần hoàn thiện container/build, migration production, object storage, worker lifecycle, CI/CD, secrets, monitoring, backup/restore và kiểm thử bảo mật.
 
-| Nhóm người dùng | Vai trò chính |
+## 2. Thành phần cần triển khai
+
+| Thành phần | Hiện trạng trong repository | Đích triển khai đề xuất |
+| --- | --- | --- |
+| Web | React/Vite tại `apps/web`, build thành static assets | App Platform Static Site/CDN |
+| API | Express/TypeScript tại `apps/api` | App Platform Web Service |
+| Webhook worker | Có entrypoint và graceful shutdown riêng | App Platform Worker riêng |
+| Automation worker | Được khởi tạo khi API import module automation | Tách thành worker/service riêng trước khi scale API |
+| Zalo worker | Được khởi tạo khi API import module Zalo | Tách thành worker/service riêng trước khi scale API |
+| Reminder processor | Chạy interval trong process API | Chuyển sang scheduled worker hoặc bảo đảm singleton |
+| PostgreSQL | Prisma kết nối qua `DATABASE_URL` | Managed PostgreSQL, private networking |
+| Redis/BullMQ | Dùng cho webhook, automation và Zalo | Managed Valkey/Redis-compatible |
+| File | Hiện chủ yếu lưu metadata và URL | Spaces S3-compatible + signed URL/CDN |
+| Webhook public | `/api/webhooks/:webhookKey` | Public HTTPS endpoint qua API service |
+| Public Form | `/forms/:publicKey` và public API | Static web + public HTTPS API |
+| Zalo OA | Có API/webhook và token mã hóa | Zalo OA Open API + public callback URL |
+| OpenAI | Có cấu hình model/API key cho trích xuất Zalo | OpenAI API với budget và usage monitoring |
+
+## 3. Kiến trúc triển khai mục tiêu
+
+### 3.1 Luồng truy cập chính
+
+1. Người dùng truy cập frontend qua domain HTTPS.
+2. Frontend gọi API qua `VITE_API_URL`.
+3. API xác thực JWT, kiểm tra permission/scope và đọc ghi PostgreSQL.
+4. API đưa tác vụ bất đồng bộ vào Valkey/BullMQ.
+5. Worker nhận job, xử lý webhook/automation/tích hợp và ghi kết quả về PostgreSQL.
+6. File được tải lên Spaces; cơ sở dữ liệu chỉ lưu metadata và object key/URL có kiểm soát.
+7. Log, metrics và cảnh báo được gửi đến nền tảng giám sát.
+
+### 3.2 Network và quyền truy cập
+
+- Chỉ frontend, API public route, public form và webhook callback được mở Internet.
+- PostgreSQL và Valkey dùng private networking, không mở cổng public nếu không cần thiết.
+- Trang quản trị và API nghiệp vụ bắt buộc đi qua HTTPS, authentication, permission và scope.
+- Database user của ứng dụng chỉ có quyền cần thiết; tài khoản migration tách riêng nếu nền tảng hỗ trợ.
+- Spaces bucket để private; file nhạy cảm dùng signed URL có thời hạn thay vì public URL cố định.
+- CORS chỉ cho phép domain frontend chính thức và domain staging tương ứng.
+
+## 4. Môi trường triển khai
+
+### 4.1 Local development
+
+- PostgreSQL và Redis chạy qua `docker-compose.yml`.
+- Web mặc định `http://localhost:5173`.
+- API mặc định `http://localhost:3000/api`.
+- Không dùng dữ liệu production hoặc secret production tại local.
+
+### 4.2 Staging/UAT
+
+- Tách database, Valkey, bucket, domain và secrets khỏi production.
+- Dùng dữ liệu giả hoặc dữ liệu đã masking.
+- Chạy migration, smoke test, integration test và UAT tại đây trước production.
+- Chỉ kết nối Zalo/OpenAI sandbox hoặc tài khoản thử nghiệm khi có thể.
+- Có thể dùng cấu hình nhỏ tương đương pilot và bật theo nhu cầu để tiết kiệm chi phí.
+
+### 4.3 Production
+
+- Dùng database, queue, bucket và secrets riêng.
+- Chỉ deploy từ nhánh/tag release đã qua quality gate.
+- Migration có backup và kế hoạch rollback.
+- Bật log tập trung, uptime check, cảnh báo queue/worker và kiểm tra backup.
+- Giới hạn quyền truy cập console theo nguyên tắc least privilege và bật MFA.
+
+## 5. Cấu hình dịch vụ đề xuất
+
+### 5.1 Kịch bản Pilot
+
+Phù hợp thử nghiệm có kiểm soát với khoảng tối đa 30 người dùng nội bộ, tải thấp và chưa cam kết HA.
+
+| Thành phần | Cấu hình tham khảo | Chi phí tham khảo |
+| --- | --- | ---: |
+| Web | Static Site | $0/tháng |
+| API | 1 shared container, 1 vCPU/2 GiB | $25/tháng |
+| Worker | 1 shared container, 1 vCPU/1 GiB | $10/tháng |
+| PostgreSQL | Single node, 1 GiB | $15/tháng |
+| Valkey | Single node, 1 GiB | $15/tháng |
+| Spaces + CDN | Gói cơ bản | $5/tháng |
+| Monitoring/log | Gói miễn phí ban đầu | $0/tháng |
+| Domain `.com` | Tham chiếu phân bổ | khoảng $0,92/tháng |
+| **Tổng cố định** | Chưa gồm GPT/Zalo/thuế/nhân công | **khoảng $70,92/tháng** |
+
+Rủi ro: API, worker, database và Valkey đều có single point of failure. Chỉ phù hợp pilot có maintenance window.
+
+### 5.2 Kịch bản Production vừa
+
+Phù hợp khoảng 30–100 người dùng và 2.000–20.000 webhook/ngày sau khi load test.
+
+| Thành phần | Cấu hình tham khảo | Chi phí tham khảo |
+| --- | --- | ---: |
+| Web | Static Site | $0/tháng |
+| API | 2 × shared 1 vCPU/2 GiB | $50/tháng |
+| Worker | 1 × shared 1 vCPU/1 GiB | $12/tháng |
+| PostgreSQL | Primary + standby, 2 GiB/node | $60/tháng |
+| Valkey | Single node, 1 GiB | $15/tháng |
+| Spaces + CDN | Gói cơ bản | $5/tháng |
+| Monitoring/log | Grafana Pro cơ bản + uptime | $20/tháng |
+| Domain `.com` | Tham chiếu phân bổ | khoảng $0,92/tháng |
+| **Tổng cố định** | Chưa gồm GPT/Zalo/thuế/nhân công | **khoảng $162,92/tháng** |
+
+Điều kiện bắt buộc trước khi chạy nhiều API replica: tách automation worker, Zalo worker và reminder processor khỏi lifecycle của API hoặc có cơ chế singleton/leader election rõ ràng.
+
+### 5.3 Kịch bản HA/tăng trưởng
+
+Phù hợp khoảng 100–300 người dùng và 20.000–100.000 webhook/ngày sau benchmark.
+
+| Thành phần | Cấu hình tham khảo | Chi phí tham khảo |
+| --- | --- | ---: |
+| Web | Static Site | $0/tháng |
+| API | 2 × dedicated 2 vCPU/4 GiB | $156/tháng |
+| Worker | 2 × dedicated 1 vCPU/2 GiB | $78/tháng |
+| PostgreSQL | Primary + standby, 4 GiB/2 vCPU mỗi node | $121,80/tháng |
+| Valkey | Primary + standby, 2 GiB/node | $60/tháng |
+| Spaces + CDN | Gói cơ bản | $5/tháng |
+| Monitoring/log | Grafana Pro + uptime checks | $21/tháng |
+| Domain `.com` | Tham chiếu phân bổ | khoảng $0,92/tháng |
+| **Tổng cố định** | Chưa gồm GPT/Zalo/thuế/nhân công | **khoảng $442,72/tháng** |
+
+Đây là cấu hình khởi điểm, không phải cam kết sizing cho hơn 500.000 hồ sơ. Cần dùng metrics pilot và load test để chốt.
+
+Chi tiết căn cứ và đơn giá nằm trong `docs/deployment-cost-report-2026-09.md`.
+
+## 6. Dịch vụ bên thứ ba
+
+### 6.1 Zalo Official Account
+
+- Muốn dùng Open API cần gói Zalo OA phù hợp.
+- Baseline hiện tại: gói Tăng trưởng khoảng **2.500.000 VND/năm**.
+- Khi số nhân sự/hạn mức API tăng: cân nhắc gói Toàn diện khoảng **6.000.000 VND/năm**.
+- ZNS, tin ngoài cửa sổ chăm sóc, template và sản lượng gửi phải dự toán riêng.
+- Callback webhook phải dùng HTTPS public và xác minh đúng secret/signature của Zalo.
+
+### 6.2 OpenAI API
+
+- Hiện cấu hình mặc định dùng model `gpt-5.4-mini` để trích xuất thông tin từ hội thoại Zalo.
+- Chi phí phụ thuộc số lần gọi và token thực tế, không phải phí cố định.
+- Giả định trong báo cáo chi phí: khoảng `$0,00285` cho một lần gọi 2.000 input token và 300 output token.
+- Cần ghi nhận usage, đặt budget alert, giới hạn hội thoại và lọc trước khi gọi model.
+- API key chỉ lưu trong secrets manager/runtime secret, không đưa vào frontend, log hoặc repository.
+
+### 6.3 Email, SMS, tổng đài và thanh toán
+
+Các dịch vụ này chưa nằm trong cấu hình production hiện tại. Nếu triển khai phải lựa chọn nhà cung cấp, ký hợp đồng, tính phí theo sản lượng và thực hiện security review riêng.
+
+## 7. Biến môi trường và secrets
+
+### 7.1 Frontend
+
+| Biến | Mục đích |
 | --- | --- |
-| Giám đốc / Director | Xem tổng quan kinh doanh, báo cáo, hiệu quả tuyển sinh và nhật ký hệ thống. |
-| Admin | Cấu hình người dùng, vai trò, quyền, phòng ban, pipeline và hệ thống. |
-| Marketing Manager / Staff | Quản lý chiến dịch, nguồn lead, biểu mẫu, UTM và hiệu quả marketing. |
-| Sale Manager | Quản lý danh sách lead, phân công, pipeline, KPI và hoạt động sale. |
-| Telesale | Chăm sóc lead được giao, tạo ghi chú, hoạt động, nhắc việc và cập nhật trạng thái. |
-| Admission Officer | Xử lý hồ sơ tuyển sinh, tài liệu, trạng thái hồ sơ và chuyển sinh viên. |
-| Student Service | Theo dõi sinh viên, dịch vụ sinh viên và lịch sử hỗ trợ. |
-| Viewer | Chỉ xem dashboard và báo cáo theo quyền được cấp. |
+| `VITE_API_URL` | URL API public, ví dụ `https://api.example.com/api` |
 
-## 3. Luồng nghiệp vụ tổng thể
+Biến Vite được đóng vào build artifact, vì vậy không được chứa secret.
 
-Luồng xử lý chính của Admission CRM có thể hiểu như sau:
+### 7.2 API và worker
 
- 1. Marketing tạo chiến dịch, nguồn lead, UTM hoặc biểu mẫu.
- 2. Thí sinh để lại thông tin qua biểu mẫu, chiến dịch hoặc được nhập thủ công.
- 3. Lead được lưu vào hệ thống và gắn với nguồn, chiến dịch, chương trình tuyển sinh nếu có.
- 4. Sale Manager phân công lead cho Telesale hoặc nhân viên phụ trách.
- 5. Telesale chăm sóc lead, ghi chú, tạo nhắc việc, cập nhật hoạt động và chuyển giai đoạn pipeline.
- 6. Khi lead đủ điều kiện, bộ phận Tuyển sinh tạo hồ sơ tuyển sinh.
- 7. Admission Officer xử lý hồ sơ, tài liệu, trạng thái xét tuyển, phí và học phí.
- 8. Khi hồ sơ được duyệt và đủ điều kiện, hệ thống chuyển hồ sơ thành sinh viên.
- 9. Student Service tiếp tục quản lý thông tin sinh viên và các yêu cầu hỗ trợ.
-10. Dashboard và báo cáo tổng hợp dữ liệu xuyên suốt từ marketing đến sinh viên.
+| Biến | Mức độ | Mục đích |
+| --- | --- | --- |
+| `DATABASE_URL` | Secret | Kết nối PostgreSQL |
+| `JWT_SECRET` | Secret | Ký JWT, tối thiểu 32 ký tự |
+| `JWT_EXPIRES_IN_SECONDS` | Config | Thời gian sống access token |
+| `PORT` | Config | Cổng API |
+| `WEB_ORIGIN` | Config | Origin frontend được phép |
+| `REDIS_URL` | Secret | Kết nối Valkey/Redis |
+| `WEBHOOK_QUEUE_ENABLED` | Config | Bật queue webhook |
+| `WEBHOOK_WORKER_CONCURRENCY` | Config | Mức song song worker |
+| `WEBHOOK_MAX_ATTEMPTS` | Config | Số lần retry |
+| `WEBHOOK_PROCESSING_STALE_SECONDS` | Config | Ngưỡng job stale |
+| `WEBHOOK_RATE_LIMIT_PER_MINUTE` | Config | Rate limit mỗi webhook |
+| `WEBHOOK_LOG_RETENTION_DAYS` | Config cần bổ sung vào schema/env | Thời gian giữ log webhook |
+| `ZALO_APP_ID` | Secret/config | Zalo application ID |
+| `ZALO_APP_SECRET` | Secret | Zalo application secret |
+| `ZALO_OA_SECRET_KEY` | Secret | Xác minh callback OA |
+| `ZALO_TOKEN_ENCRYPTION_KEY` | Secret | Mã hóa access/refresh token |
+| `GPT_API_KEY` | Secret | OpenAI API key |
+| `GPT_MODEL` | Config | Model trích xuất |
 
-## 4. Các phân hệ chức năng
+Ngoài các biến hiện có, khi tích hợp Spaces cần bổ sung endpoint, region, bucket, access key, secret key, CDN/base URL và chính sách signed URL.
 
-### 4.1 Dashboard và tổng quan
+### 7.3 Quy tắc quản lý secret
 
-Dashboard giúp người dùng xem nhanh tình hình vận hành theo quyền của mình. Tài khoản có quyền xem toàn hệ thống có thể theo dõi các chỉ số như tổng lead, hồ sơ tuyển sinh, sinh viên nhập học, tỷ lệ chuyển đổi, doanh thu, lead theo nguồn, pipeline, KPI nhân viên và funnel tuyển sinh.
+- Không commit `.env` chứa thông tin thật.
+- Tách secrets theo môi trường và theo service.
+- Có quy trình rotate JWT, webhook, Zalo, OpenAI và storage credentials.
+- Không in token, payload nhạy cảm hoặc connection string đầy đủ vào log.
+- Người quản trị cloud phải bật MFA và giới hạn quyền theo vai trò.
 
-### 4.2 CRM Marketing
+## 8. Khoảng trống phải xử lý trước khi triển khai
 
-Phân hệ Marketing hỗ trợ:
+### P0 — Chặn go-live
 
-- Quản lý chiến dịch marketing theo trạng thái, loại chiến dịch và chương trình tuyển sinh.
-- Quản lý nguồn lead.
-- Theo dõi UTM để biết lead đến từ kênh, campaign hoặc medium nào.
-- Quản lý biểu mẫu marketing, mapping field biểu mẫu về dữ liệu lead.
-- Xem hiệu quả theo lead, hồ sơ, sinh viên nhập học, chi phí/lead và tỷ lệ chuyển đổi.
+1. **Container/build production:** repo chưa có Dockerfile cho web/API/worker.
+2. **CI/CD:** chưa có pipeline build, test, migration, deploy và rollback.
+3. **Database migration:** cần release step chạy `prisma migrate deploy`, backup trước migration và quy tắc migration tương thích ngược.
+4. **Worker lifecycle:** automation và Zalo đang chạy cùng API; reminder cũng chạy trong API. Phải tách hoặc bảo đảm chỉ có một instance xử lý.
+5. **Object storage:** UI/API hiện nhận URL file; chưa có adapter upload thật vào S3/Spaces và signed URL.
+6. **Health/readiness:** `/api/health` mới chỉ trả trạng thái tĩnh, chưa kiểm tra database, Valkey hoặc readiness.
+7. **Secrets:** chưa có quy trình secrets manager và rotation production.
+8. **Monitoring:** chưa có log tập trung, trace/metrics, queue alert và incident notification.
+9. **Backup/restore:** cần xác nhận PITR, backup bucket và diễn tập restore.
+10. **Security/privacy:** cần hoàn thiện masking Admission/Student/file/export và kiểm thử scope.
 
-### 4.3 CRM Sale / Telesale
+### P1 — Nên hoàn thành trong pilot
 
-Phân hệ Sale là nơi xử lý lead sau khi được tạo. Các chức năng chính gồm:
+1. WAF/edge rate limit cho public form và webhook.
+2. Dependency/container scanning và cảnh báo lỗ hổng.
+3. Queue dashboard, dead-letter workflow và lịch recovery.
+4. Log redaction và retention policy.
+5. Load test với dữ liệu gần production.
+6. Runbook vận hành, rollback, xử lý queue và sự cố tích hợp.
+7. Staging/UAT tách biệt hoàn toàn production.
 
-- Danh sách lead có phân trang, tìm kiếm, lọc và sắp xếp.
-- Tạo, cập nhật và xem chi tiết lead.
-- Phân công hoặc chuyển giao lead cho nhân viên.
-- Quản lý pipeline và giai đoạn xử lý.
-- Ghi chú, hoạt động, nhắc việc và file liên quan đến lead.
-- Theo dõi KPI sale, hoạt động sale và nhắc việc đến hạn hoặc quá hạn.
+## 9. CI/CD và quy trình phát hành
 
-### 4.4 CRM Tuyển sinh
+### 9.1 Quality gate trên pull request
 
-Phân hệ Tuyển sinh quản lý giai đoạn sau khi lead đã đủ điều kiện lập hồ sơ. Các chức năng chính gồm:
+- Cài dependency bằng lockfile.
+- Generate Prisma client.
+- Typecheck API.
+- Build frontend.
+- Chạy unit test automation.
+- Chạy integration test phù hợp với database/Valkey tạm thời.
+- Scan dependency, secret và container image.
 
-- Tạo hồ sơ tuyển sinh từ lead.
-- Cập nhật ngành, chương trình, lớp, tổ hợp môn, điểm, đợt tuyển sinh và trạng thái hồ sơ.
-- Quản lý tài liệu hồ sơ theo trạng thái như chờ duyệt, đã duyệt, từ chối, thiếu hoặc yêu cầu bổ sung.
-- Quản lý trạng thái và luồng xử lý hồ sơ.
-- Theo dõi phí, học phí, lịch sử thanh toán và xác nhận công nợ.
-- Chuyển hồ sơ đủ điều kiện thành sinh viên.
+### 9.2 Deploy staging
 
-### 4.5 CRM Sinh viên
+1. Build artifact/container có version theo commit SHA.
+2. Backup database staging nếu migration có dữ liệu quan trọng.
+3. Chạy migration.
+4. Deploy API và worker cùng một release version.
+5. Deploy web với `VITE_API_URL` staging.
+6. Chạy smoke test đăng nhập, Lead, public form, webhook, worker và report.
+7. Thực hiện UAT và phê duyệt release.
 
-Phân hệ Sinh viên quản lý dữ liệu sau nhập học:
+### 9.3 Deploy production
 
-- Danh sách sinh viên có phân trang, tìm kiếm, lọc theo trạng thái, chương trình, ngành, khoa và lớp.
-- Xem và cập nhật thông tin học vụ cơ bản.
-- Tạo và xử lý yêu cầu dịch vụ sinh viên.
-- Xem lịch sử hỗ trợ theo sinh viên và theo phạm vi được cấp quyền.
+1. Tạo backup/snapshot và xác nhận khả năng restore.
+2. Đóng băng thay đổi dữ liệu nếu migration yêu cầu.
+3. Chạy migration tương thích ngược.
+4. Deploy API theo rolling strategy.
+5. Deploy worker đúng release version.
+6. Deploy frontend sau khi API tương thích đã sẵn sàng.
+7. Chạy smoke test và theo dõi error rate, latency, DB connection, queue lag.
+8. Mở lại traffic đầy đủ và ghi nhận biên bản go-live.
 
-### 4.6 Quản lý / Admin
+### 9.4 Rollback
 
-Phân hệ Quản lý dành cho cấu hình hệ thống và vận hành:
+- Ứng dụng: rollback về container/artifact trước đó.
+- Migration: ưu tiên forward-fix và migration tương thích ngược; không tự động rollback migration phá hủy dữ liệu.
+- Database restore chỉ dùng khi có quyết định sự cố và chấp nhận mất dữ liệu theo RPO.
+- Webhook/queue: tạm dừng worker nhưng giữ durable request trong PostgreSQL, sau đó recovery/replay có kiểm soát.
 
-- Quản lý người dùng, vai trò, quyền hạn và phòng ban.
-- Quản lý access scope để xác định phạm vi dữ liệu mỗi người được xem.
-- Quản lý pipeline và các giai đoạn pipeline.
-- Quản lý chương trình, cơ sở, ngành và cấu hình hệ thống.
-- Xem nhật ký hệ thống để truy vết thao tác quan trọng.
-- Quản lý automation rule cho các tác vụ tự động hóa.
+## 10. Tác vụ vận hành bắt buộc
 
-### 4.7 Báo cáo
+| Tác vụ | Tần suất đề xuất | Ghi chú |
+| --- | --- | --- |
+| Webhook queue recovery | 1–5 phút | Chạy script maintenance riêng, bảo đảm singleton |
+| Webhook log cleanup | Hằng ngày | Theo retention đã phê duyệt |
+| Backup PostgreSQL | Theo dịch vụ managed | Kiểm tra thực tế và diễn tập restore định kỳ |
+| Backup/replication Spaces | Hằng ngày hoặc theo RPO | Spaces không thay thế backup độc lập |
+| Kiểm tra dead-letter/failed jobs | Liên tục + tổng hợp hằng ngày | Có cảnh báo và owner xử lý |
+| Dependency/security update | Hằng tuần/tháng | Theo mức độ lỗ hổng |
+| Restore drill | Hằng quý | Ghi nhận thời gian và sai lệch RPO/RTO |
+| Capacity review | Sau pilot, rồi hằng tháng | Dựa trên p95/p99 và tăng trưởng dữ liệu |
 
-Hệ thống có các nhóm báo cáo:
+## 11. Monitoring và cảnh báo
 
-- Báo cáo tổng hợp: lead, hồ sơ, sinh viên và tỷ lệ chuyển đổi.
-- Báo cáo marketing: hiệu quả chiến dịch, nguồn lead, kênh, chi phí/lead và conversion.
-- Báo cáo sale: pipeline, hiệu quả nhân viên, hoạt động, nhắc việc và chuyển đổi.
-- Báo cáo tuyển sinh: hồ sơ, trạng thái, ngành, khoa, phí và học phí.
-- Báo cáo sinh viên: số lượng sinh viên, trạng thái, lớp, khoa và dịch vụ hỗ trợ.
+### 11.1 Chỉ số cần theo dõi
 
-## 5. Kiến trúc kỹ thuật
+- API request rate, error rate, p50/p95/p99 latency và số request 401/403/429/500.
+- CPU, memory, restart count và số replica của API/worker.
+- PostgreSQL storage, connection, slow query, lock, CPU và replication lag.
+- Valkey memory, connection, eviction và availability.
+- BullMQ waiting/active/delayed/failed, oldest job age và processing duration.
+- Webhook accepted/succeeded/retrying/dead-letter và queue lag.
+- Zalo token expiry, callback error, retry và số lần gọi OpenAI.
+- OpenAI token usage, cost estimate, error và timeout.
+- Spaces storage, request error và outbound bandwidth.
 
-Dự án được tổ chức theo monorepo:
+### 11.2 Cảnh báo tối thiểu
 
-| Khu vực | Mô tả |
-| --- | --- |
-| `apps/web` | Ứng dụng frontend dùng React, Vite, TypeScript, Tailwind CSS, shadcn/ui, TanStack Query, TanStack Table, React Hook Form và Zod. |
-| `apps/api` | Backend API dùng Node.js TypeScript, Express, PostgreSQL, Prisma, JWT và RBAC. |
-| `packages/shared` | Nơi đặt type, constant hoặc validator dùng chung giữa frontend và backend. |
-| `database` | Migration SQL, seed hoặc tài liệu liên quan đến cơ sở dữ liệu. |
-| `docs` | Tài liệu dự án. |
-| `uploads` | Thư mục upload local cho môi trường phát triển. |
+- API health fail từ hai khu vực kiểm tra.
+- Error rate hoặc latency vượt ngưỡng liên tục.
+- Database/Valkey không kết nối được.
+- Queue backlog hoặc oldest job age vượt SLA.
+- Có dead-letter mới.
+- Worker restart lặp lại.
+- Storage/database đạt 70%, 85% và 95%.
+- Backup thất bại hoặc chưa có backup hợp lệ.
+- OpenAI/Zalo usage gần hạn mức ngân sách.
 
-API chạy dưới prefix `/api`. Khi phát triển local:
+## 12. Backup, RPO và RTO
 
-- Web: `http://localhost:5173`
-- API: `http://localhost:3000/api`
+Mức mục tiêu cần được lãnh đạo phê duyệt. Đề xuất ban đầu:
 
-## 6. Dữ liệu chính
+| Môi trường | RPO đề xuất | RTO đề xuất |
+| --- | --- | --- |
+| Pilot | Không quá 24 giờ | 4–8 giờ |
+| Production vừa | Không quá 1 giờ nếu dịch vụ hỗ trợ PITR phù hợp | 2–4 giờ |
+| HA/tăng trưởng | 15–60 phút | 1–2 giờ |
 
-Cơ sở dữ liệu PostgreSQL được quản lý qua Prisma. Các nhóm bảng quan trọng gồm:
+Phải kiểm tra chính sách backup/PITR thật của gói PostgreSQL trước khi mua. Với file, cần versioning hoặc bản sao sang bucket/tài khoản khác. Backup chỉ được coi là hợp lệ sau khi restore thử thành công.
 
-| Nhóm dữ liệu | Bảng tiêu biểu |
-| --- | --- |
-| Phân quyền | `users`, `roles`, `permissions`, `user_roles`, `role_permissions`, `departments`, `access_scopes`. |
-| Marketing | `campaigns`, `lead_sources`, `utm_trackings`, `marketing_forms`, `marketing_form_fields`, `marketing_form_submissions`. |
-| Sale / Lead | `leads`, `lead_assignments`, `lead_activities`, `lead_notes`, `lead_status_histories`, `reminders`, `kpi_targets`. |
-| Pipeline | `pipelines`, `pipeline_stages`. |
-| Tuyển sinh | `admission_profiles`, `admission_documents`, `admission_statuses`, `faculties`, `majors`. |
-| Sinh viên | `students`, `student_profiles`, `student_classes`, `student_services`. |
-| File | `files`, `file_relations`. |
-| Hệ thống | `notifications`, `automation_jobs`, `automation_rules`, `audit_logs`, `system_settings`, `report_configs`. |
-| Mở rộng | `tags`, `entity_tags`, `custom_fields`, `custom_field_values`. |
-| Đa chương trình | `institutions`, `program_types`, `institution_programs`. |
+## 13. Kế hoạch triển khai theo giai đoạn
 
-Thiết kế dữ liệu tách theo domain để tránh dồn toàn bộ thông tin vào một bảng lớn. Ví dụ, dữ liệu lead, hồ sơ tuyển sinh, sinh viên, địa chỉ, người thân, file và custom field được lưu ở các bảng riêng.
+### Giai đoạn 1 — Chuẩn hóa ứng dụng cho production (10–17 person-day)
 
-## 7. Bảo mật và phân quyền
+- Tạo Dockerfile/build configuration cho web, API và worker.
+- Tách automation/Zalo/reminder khỏi API hoặc triển khai singleton an toàn.
+- Bổ sung object storage adapter.
+- Hoàn thiện health/readiness và graceful shutdown.
+- Chuẩn hóa env schema và log redaction.
 
-Hệ thống định hướng bảo vệ chức năng theo ba lớp:
+### Giai đoạn 2 — Hạ tầng và CI/CD (10–16 person-day)
 
-1. Authentication: người dùng phải đăng nhập.
-2. Permission: người dùng phải có quyền phù hợp với hành động.
-3. Scope: người dùng chỉ được xem hoặc thao tác trên dữ liệu thuộc phạm vi của mình.
+- Tạo project, network, PostgreSQL, Valkey, Spaces, domain và TLS.
+- Tạo staging và production tách biệt.
+- Thiết lập secrets và quyền truy cập.
+- Xây dựng pipeline build/test/migration/deploy/rollback.
+- Có thể bổ sung IaC sau khi topology được chốt.
 
-Các scope chính:
+### Giai đoạn 3 — Bảo mật, quan sát và phục hồi (15–26 person-day)
 
-- `ALL`: toàn hệ thống.
-- `DEPARTMENT`: theo phòng ban.
-- `ASSIGNED_ONLY`: chỉ dữ liệu được phân công.
-- `OWNED_ONLY`: chỉ dữ liệu do mình tạo hoặc phụ trách.
-- `READ_ONLY`: chỉ xem, không thao tác ghi.
+- Hardening dữ liệu nhạy cảm, CORS, rate limit và file access.
+- Log tập trung, dashboard, metrics và alert.
+- Backup/restore, queue recovery và dead-letter runbook.
+- Dependency/container scan và security test.
 
-Nguyên tắc quan trọng:
+### Giai đoạn 4 — Migration, UAT và go-live (18–32 person-day)
 
-- Không cấp quyền chỉ dựa vào tên vai trò hardcode.
-- Không trả dữ liệu nhạy cảm như password hash, CCCD, phone, email hoặc audit data ngoài phạm vi cho phép.
-- Các danh sách lớn phải dùng phân trang, tìm kiếm, lọc và sắp xếp ở phía server.
-- Các thao tác quan trọng như tạo, sửa, xóa, phân công, duyệt và chuyển trạng thái cần ghi audit log.
+- Làm sạch/import dữ liệu ban đầu.
+- Chạy integration, smoke, load test và UAT.
+- Kiểm tra Zalo/OpenAI trên tài khoản production.
+- Đào tạo người dùng và bàn giao runbook.
+- Go-live có giám sát tăng cường và kế hoạch rollback.
 
-## 8. Khả năng mở rộng
+**Tổng effort tham khảo:** 53–91 person-day. Đây là ước lượng kỹ thuật, chưa phải báo giá nhà thầu.
 
-Dự án được định hướng phục vụ ít nhất 50.000 sinh viên và có khả năng mở rộng lên hơn 500.000 bản ghi trong tương lai. Vì vậy, hệ thống cần duy trì các nguyên tắc:
+## 14. Checklist go-live
 
-- Không tải toàn bộ danh sách lớn lên frontend.
-- API danh sách phải có pagination, filter, search và sort.
-- Query phải áp dụng scope dữ liệu ngay ở backend.
-- Pipeline stage phải đọc từ cơ sở dữ liệu, không hardcode.
-- File production nên lưu qua S3, Cloudinary hoặc MinIO; local storage chỉ phù hợp cho phát triển.
-- Báo cáo lớn có thể cần cache, job nền hoặc kho dữ liệu báo cáo khi dữ liệu tăng mạnh.
+### Ứng dụng
 
-## 9. Tình trạng hiện tại
+- [ ] Web, API và các worker dùng cùng release version.
+- [ ] Build frontend và typecheck API thành công.
+- [ ] Toàn bộ test bắt buộc pass trên staging.
+- [ ] Không còn worker ngoài chủ đích trong API replica.
+- [ ] Migration đã chạy thử trên bản sao dữ liệu.
 
-Theo cấu trúc code và tài liệu hiện có, dự án đã có nền tảng cho các nhóm chức năng chính:
+### Bảo mật
 
-- Đăng nhập JWT và lấy thông tin người dùng hiện tại.
-- Protected route ở frontend theo permission.
-- Quản lý người dùng, vai trò, quyền hạn, phòng ban, scope và pipeline.
-- Các màn hình nghiệp vụ chính cho Marketing, Sale, Tuyển sinh, Sinh viên, Báo cáo, Audit và Notification.
-- API backend theo domain cho auth, users, roles, permissions, campaigns, marketing forms, leads, admissions, students, dashboard, reports, notifications, audit logs, system và automations.
-- Seed demo data và một số integration test cho lead workflow, director lead CRUD, demo data, majors, campaigns, UTM, marketing forms và access control.
+- [ ] Không có secret thật trong Git, image hoặc frontend artifact.
+- [ ] MFA và least privilege đã bật trên cloud/Zalo/OpenAI.
+- [ ] CORS, JWT, permission, scope và masking đã nghiệm thu.
+- [ ] Bucket private; file nhạy cảm không dùng public URL cố định.
+- [ ] Log đã redaction phone, email, CCCD, token và payload nhạy cảm.
 
-Một số phần trong tài liệu cũ vẫn ở mức phác thảo hoặc cần hoàn thiện thêm, ví dụ đặc tả yêu cầu chi tiết, thiết kế API tổng hợp và thiết kế database dạng tài liệu đầy đủ.
+### Hạ tầng
 
-## 10. Roadmap đề xuất
+- [ ] PostgreSQL, Valkey và Spaces đúng region/network.
+- [ ] Domain, TLS, DNS và webhook callback hoạt động.
+- [ ] Health/readiness và graceful shutdown hoạt động.
+- [ ] Backup tồn tại và restore thử thành công.
+- [ ] Cảnh báo API, database, queue, worker và dung lượng đã thử nghiệm.
 
-### Giai đoạn 1: Hoàn thiện nền tảng vận hành
+### Nghiệp vụ
 
-- Hoàn thiện tài liệu yêu cầu, API và database.
-- Rà soát copy tiếng Việt và lỗi encoding nếu còn trong UI hoặc tài liệu.
-- Hoàn thiện dashboard riêng theo vai trò.
-- Bổ sung test cho user, role, admission, student service và report.
-- Chuẩn hóa audit cho toàn bộ thao tác nghiệp vụ quan trọng.
+- [ ] Đăng nhập và chọn đúng chương trình tuyển sinh.
+- [ ] Tạo Lead thủ công và qua public form.
+- [ ] Nhận webhook `202 Accepted`, worker xử lý và tạo/cập nhật Lead.
+- [ ] Phân công, đổi pipeline, reminder và notification hoạt động.
+- [ ] Chuyển Lead → Admission → Student đúng điều kiện.
+- [ ] Báo cáo/export đúng scope và không lộ dữ liệu nhạy cảm.
+- [ ] Zalo OA/OpenAI chạy đúng budget và có cách tắt khẩn cấp.
 
-### Giai đoạn 2: Hoàn thiện Marketing đến Sale
+## 15. Dữ liệu cần đo sau 2–4 tuần pilot
 
-- Hoàn thiện public form, webhook và xử lý lead từ biểu mẫu.
-- Chống trùng lead theo phone, email hoặc CCCD theo chính sách sản phẩm.
-- Tự động phân bổ lead theo nguồn, chương trình, phòng ban hoặc workload.
-- Theo dõi chi phí quảng cáo và ROI chiến dịch.
-- Bổ sung export có kiểm soát quyền và audit.
+- Peak concurrent users và request/giây.
+- API latency p95/p99 và error rate theo endpoint.
+- Webhook/ngày, peak/phút, retry, dead-letter và queue lag.
+- PostgreSQL storage growth, connection, slow query và index hit rate.
+- Valkey memory, job/giây và eviction.
+- File upload/tháng, tổng storage và CDN egress.
+- Log GB/ngày và retention thực tế.
+- Số hội thoại Zalo gọi OpenAI, token/lần và chi phí/ngày.
+- Số sự cố, thời gian xử lý và kết quả backup/restore.
 
-### Giai đoạn 3: Hoàn thiện Tuyển sinh đến Sinh viên
+Dựa trên số liệu này để chuyển từ Pilot sang Production vừa hoặc HA, giữ tối thiểu khoảng 30% headroom trên peak đã quan sát.
 
-- Checklist tài liệu theo ngành và chương trình.
-- Flow phê duyệt nhiều cấp.
-- Quản lý công nợ, học phí và tích hợp thanh toán.
-- Chuyển admission thành student với dữ liệu lớp, ngành, khoa đầy đủ.
-- Portal cho thí sinh hoặc sinh viên tự theo dõi trạng thái.
+## 16. Quyết định cần phê duyệt
 
-### Giai đoạn 4: Tự động hóa và phân tích nâng cao
+1. Chọn DigitalOcean hay nhà cung cấp khác theo chính sách mua sắm và dữ liệu của đơn vị.
+2. Chọn mức Pilot, Production vừa hay HA.
+3. Domain chính thức và người sở hữu tài khoản DNS/cloud.
+4. RPO, RTO, thời gian bảo trì và mức SLA mong muốn.
+5. Retention cho database, webhook payload, audit log và file.
+6. Ngân sách cố định cloud, ngân sách OpenAI và gói Zalo OA.
+7. Người trực vận hành, nhận cảnh báo và phê duyệt incident/restore.
+8. Phạm vi dữ liệu được phép đưa lên cloud và yêu cầu pháp lý/bảo mật nội bộ.
 
-- SLA engine và automation jobs.
-- Notification realtime qua WebSocket hoặc SSE.
-- Báo cáo dự báo tuyển sinh và drill-down từ chỉ số về danh sách bản ghi.
-- Export Excel/PDF có masking dữ liệu nhạy cảm.
-- Tích hợp tổng đài, email, SMS hoặc Zalo.
+## 17. Kết luận
 
-## 11. Các điểm cần xác nhận thêm
+Admission CRM có thể triển khai thực tế theo mô hình DigitalOcean App Platform + Managed PostgreSQL + Managed Valkey + Spaces. Kịch bản Pilot có chi phí hạ tầng cố định khoảng **$71/tháng**, còn Production vừa khoảng **$163/tháng**, chưa gồm Zalo, OpenAI, thuế, lưu lượng vượt quota và nhân công vận hành.
 
-Để hoàn thiện sản phẩm theo đúng nghiệp vụ thực tế, cần xác nhận thêm với product owner:
-
-- Bộ trạng thái lead, pipeline và hồ sơ tuyển sinh mặc định.
-- Quy trình phân công lead: thủ công, tự động hay kết hợp.
-- Chính sách xử lý lead trùng.
-- Quy trình phí, học phí, công nợ và tích hợp thanh toán.
-- Danh sách báo cáo bắt buộc cho từng vai trò.
-- Quy tắc che dữ liệu nhạy cảm như phone, email, CCCD và audit.
-- Phạm vi multi-institution: một người dùng có thể thuộc một hay nhiều chương trình/cơ sở.
-
-## 12. Kết luận
-
-Admission CRM là một hệ thống CRM tuyển sinh có phạm vi khá đầy đủ, bao phủ từ marketing, sale, tuyển sinh, sinh viên đến quản trị và báo cáo. Điểm mạnh của thiết kế hiện tại là tách module theo nghiệp vụ, dùng phân quyền dựa trên permission và scope, có định hướng xử lý dữ liệu lớn và có cơ sở để mở rộng automation, notification, reporting trong tương lai.
-
-Trong giai đoạn tiếp theo, dự án nên ưu tiên hoàn thiện tài liệu đặc tả, chuẩn hóa dữ liệu/phân quyền, tăng kiểm thử integration và làm rõ các quy trình nghiệp vụ thực tế để giảm rủi ro khi triển khai cho người dùng cuối.
+Trước khi go-live, các việc quan trọng nhất là chuẩn hóa container và CI/CD, tách worker khỏi API, triển khai object storage, hoàn thiện bảo mật dữ liệu, thiết lập monitoring/backup và diễn tập migration/rollback. Sau 2–4 tuần pilot, cần dùng số liệu thực tế để chốt sizing và SLA production.

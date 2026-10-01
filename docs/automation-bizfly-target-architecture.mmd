@@ -1,0 +1,44 @@
+flowchart LR
+  subgraph Sources["Nguồn phát sự kiện"]
+    LEAD["CRM Lead"]
+    MKT["Marketing Form và tích hợp"]
+    ADM["CRM Tuyển sinh"]
+    STU["CRM Sinh viên"]
+    SCH["Scheduler"]
+    BULK["Chạy hàng loạt"]
+  end
+
+  subgraph Core["Automation Core"]
+    EVENT["Event Dispatcher\nphát sự kiện chuẩn hóa"]
+    MATCH["Rule Matcher\ntrigger + program + scope"]
+    AUTH["Execution Authorization\npermission + scope + dữ liệu nhạy cảm"]
+    ORCH["Execution Orchestrator\nversion snapshot + idempotency"]
+    QUEUE["BullMQ\ndelay + retry + rate limit"]
+    WORKER["Automation Worker"]
+    COND["Condition Evaluator"]
+    ACTION["Action Registry"]
+  end
+
+  subgraph Adapters["Action adapters"]
+    DATA["Dữ liệu\nstatus, tag, pipeline"]
+    ASSIGN["Nhân sự\nfixed, round-robin, team"]
+    TASK["Công việc\ntask, reminder, SLA"]
+    MSG["Tin nhắn\nnotification, email, ZNS, SMS"]
+    DOMAIN["Tuyển sinh\nhồ sơ, tài liệu, phí, nhập học"]
+    HOOK["Webhook và ứng dụng ngoài"]
+  end
+
+  subgraph Governance["Quản trị và quan sát"]
+    DB[("PostgreSQL\nrules, versions, executions, audit")]
+    UI["Rule Builder và Templates"]
+    MON["Execution Monitor\nretry, replay, metrics"]
+  end
+
+  LEAD & MKT & ADM & STU & SCH & BULK --> EVENT
+  EVENT --> MATCH --> AUTH --> ORCH --> QUEUE --> WORKER
+  WORKER --> COND --> ACTION
+  ACTION --> DATA & ASSIGN & TASK & MSG & DOMAIN & HOOK
+  UI --> MATCH
+  MATCH & AUTH & ORCH & WORKER --> DB
+  DB --> MON
+
