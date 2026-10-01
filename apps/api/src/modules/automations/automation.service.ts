@@ -42,15 +42,20 @@ async function getAccessibleAutomationProgramIds(user: AuthUser) {
   return rows.flatMap((row) => row.institution_program_id ? [row.institution_program_id] : []);
 }
 
+function canManageGlobalAutomation(user: AuthUser) {
+  return user.accessScope === "ALL" && user.permissions.includes("automation.manage_global");
+}
+
 async function getAutomationRuleScopeWhere(user: AuthUser) {
   const accessibleProgramIds = await getAccessibleAutomationProgramIds(user);
-  return accessibleProgramIds === null
-    ? {}
-    : { OR: [{ institution_program_id: null }, { institution_program_id: { in: accessibleProgramIds } }] };
+  if (accessibleProgramIds === null) {
+    return canManageGlobalAutomation(user) ? {} : { institution_program_id: { not: null } };
+  }
+  return { institution_program_id: { in: accessibleProgramIds } };
 }
 
 async function canAccessAutomationProgram(user: AuthUser, institutionProgramId?: string | null) {
-  if (!institutionProgramId) return true;
+  if (!institutionProgramId) return canManageGlobalAutomation(user);
   const accessibleProgramIds = await getAccessibleAutomationProgramIds(user);
   return accessibleProgramIds === null || accessibleProgramIds.includes(institutionProgramId);
 }
@@ -63,9 +68,10 @@ export async function listAutomationRules(user: AuthUser, query: AutomationRuleL
 
   const where = {
     AND: [
+      { archived_at: null },
       ...(accessibleProgramIds === null
-        ? []
-        : [{ OR: [{ institution_program_id: null }, { institution_program_id: { in: accessibleProgramIds } }] }]),
+        ? (canManageGlobalAutomation(user) ? [] : [{ institution_program_id: { not: null } }])
+        : [{ institution_program_id: { in: accessibleProgramIds } }]),
       ...(query.search ? [{
         OR: [
           { name: { contains: query.search, mode: "insensitive" as const } },
@@ -121,7 +127,7 @@ export async function listAutomationRules(user: AuthUser, query: AutomationRuleL
 
 export async function getAutomationRule(user: AuthUser, id: string) {
   const rule = await prisma.automation_rules.findFirst({
-    where: { id, ...(await getAutomationRuleScopeWhere(user)) },
+    where: { id, archived_at: null, ...(await getAutomationRuleScopeWhere(user)) },
     select: {
       id: true,
       name: true,
@@ -169,7 +175,7 @@ export async function createAutomationRule(user: AuthUser, input: AutomationRule
 
 export async function updateAutomationRule(user: AuthUser, id: string, input: AutomationRuleUpdateInput) {
   const existing = await prisma.automation_rules.findFirst({
-    where: { id, ...(await getAutomationRuleScopeWhere(user)) },
+    where: { id, archived_at: null, ...(await getAutomationRuleScopeWhere(user)) },
     select: { id: true, name: true, version: true, is_active: true, institution_program_id: true },
   });
   if (!existing) return null;
@@ -215,28 +221,33 @@ export async function updateAutomationRule(user: AuthUser, id: string, input: Au
 
 export async function deleteAutomationRule(user: AuthUser, id: string) {
   const existing = await prisma.automation_rules.findFirst({
-    where: { id, ...(await getAutomationRuleScopeWhere(user)) },
+    where: { id, archived_at: null, ...(await getAutomationRuleScopeWhere(user)) },
     select: { id: true, name: true, is_active: true },
   });
   if (!existing) return null;
   if (existing.is_active) return { ok: false as const, reason: "rule_is_active" as const };
 
-  await prisma.automation_rules.delete({ where: { id } });
-  await prisma.audit_logs.create({
-    data: {
-      user_id: user.id,
-      entity_type: "automation_rule",
-      entity_id: id,
-      action: "delete",
-      old_data: { name: existing.name },
-    },
-  });
+  await prisma.$transaction([
+    prisma.automation_rules.update({
+      where: { id },
+      data: { archived_at: new Date(), archived_by: user.id, updated_at: new Date() },
+    }),
+    prisma.audit_logs.create({
+      data: {
+        user_id: user.id,
+        entity_type: "automation_rule",
+        entity_id: id,
+        action: "archive",
+        old_data: { name: existing.name },
+      },
+    }),
+  ]);
   return { ok: true as const };
 }
 
 export async function toggleAutomationRule(user: AuthUser, id: string, isActive: boolean) {
   const existing = await prisma.automation_rules.findFirst({
-    where: { id, ...(await getAutomationRuleScopeWhere(user)) },
+    where: { id, archived_at: null, ...(await getAutomationRuleScopeWhere(user)) },
     select: {
       id: true,
       name: true,
@@ -297,7 +308,7 @@ export async function toggleAutomationRule(user: AuthUser, id: string, isActive:
 
 export async function validateAutomationRule(user: AuthUser, id: string) {
   const rule = await prisma.automation_rules.findFirst({
-    where: { id, ...(await getAutomationRuleScopeWhere(user)) },
+    where: { id, archived_at: null, ...(await getAutomationRuleScopeWhere(user)) },
     select: { id: true, trigger_type: true, graph_data: true },
   });
   if (!rule) return null;
@@ -323,7 +334,7 @@ function validateRuleConfiguration(triggerType: string, graphData: unknown) {
 
 export async function listExecutionLogs(user: AuthUser, ruleId: string, page: number, limit: number) {
   const rule = await prisma.automation_rules.findFirst({
-    where: { id: ruleId, ...(await getAutomationRuleScopeWhere(user)) },
+    where: { id: ruleId, archived_at: null, ...(await getAutomationRuleScopeWhere(user)) },
     select: { id: true },
   });
   if (!rule) return null;
@@ -338,6 +349,7 @@ export async function listExecutionLogs(user: AuthUser, ruleId: string, page: nu
         id: true,
         source: true,
         status: true,
+        execution_actor_id: true,
         context_data: true,
         error_message: true,
         started_at: true,
@@ -356,6 +368,7 @@ export async function listExecutionLogs(user: AuthUser, ruleId: string, page: nu
       status: log.status,
       version: log.automation_rule_versions?.version ?? null,
       requestedBy: log.users ? { id: log.users.id, fullName: log.users.full_name } : null,
+      executionActorId: log.execution_actor_id,
       nodeExecutionCount: log._count.automation_node_executions,
       contextData: log.context_data,
       errorMessage: log.error_message,
@@ -368,7 +381,7 @@ export async function listExecutionLogs(user: AuthUser, ruleId: string, page: nu
 
 export async function getAutomationExecution(user: AuthUser, ruleId: string, executionId: string) {
   const rule = await prisma.automation_rules.findFirst({
-    where: { id: ruleId, ...(await getAutomationRuleScopeWhere(user)) },
+    where: { id: ruleId, archived_at: null, ...(await getAutomationRuleScopeWhere(user)) },
     select: { id: true },
   });
   if (!rule) return null;
@@ -378,6 +391,7 @@ export async function getAutomationExecution(user: AuthUser, ruleId: string, exe
       id: true,
       source: true,
       status: true,
+      execution_actor_id: true,
       context_data: true,
       error_message: true,
       started_at: true,
@@ -404,6 +418,7 @@ export async function getAutomationExecution(user: AuthUser, ruleId: string, exe
     source: log.source,
     status: log.status,
     version: log.automation_rule_versions?.version ?? null,
+    executionActorId: log.execution_actor_id,
     contextData: log.context_data,
     errorMessage: log.error_message,
     startedAt: log.started_at?.toISOString() ?? null,
@@ -427,10 +442,11 @@ export async function listAutomationTestLeads(
   query: { page: number; limit: number; search?: string },
 ) {
   const rule = await prisma.automation_rules.findFirst({
-    where: { id: ruleId, ...(await getAutomationRuleScopeWhere(user)) },
+    where: { id: ruleId, archived_at: null, ...(await getAutomationRuleScopeWhere(user)) },
     select: { institution_program_id: true },
   });
   if (!rule) return null;
+  const canViewSensitiveData = user.permissions.includes("lead.sensitive.view");
   const where = {
     AND: [
       { deleted_at: null },
@@ -440,7 +456,7 @@ export async function listAutomationTestLeads(
         OR: [
           { full_name: { contains: query.search, mode: "insensitive" as const } },
           { lead_code: { contains: query.search, mode: "insensitive" as const } },
-          { phone: { contains: query.search } },
+          ...(canViewSensitiveData ? [{ phone: { contains: query.search } }] : []),
         ],
       }] : []),
     ],
@@ -460,7 +476,7 @@ export async function listAutomationTestLeads(
       id: lead.id,
       leadCode: lead.lead_code,
       fullName: lead.full_name,
-      phone: lead.phone,
+      phone: canViewSensitiveData ? lead.phone : null,
       institutionProgramId: lead.institution_program_id,
     })),
     pagination: {
@@ -474,7 +490,7 @@ export async function listAutomationTestLeads(
 
 export async function runAutomationTest(user: AuthUser, ruleId: string, leadId: string) {
   const rule = await prisma.automation_rules.findFirst({
-    where: { id: ruleId, ...(await getAutomationRuleScopeWhere(user)) },
+    where: { id: ruleId, archived_at: null, ...(await getAutomationRuleScopeWhere(user)) },
     select: {
       id: true,
       version: true,

@@ -557,7 +557,11 @@ export async function processZaloMessage(messageId: string) {
       }),
     ]);
     if (!existing) {
-      await triggerAutomation("lead_created", { leadId, institutionProgramId: connection.institution_program_id ?? undefined });
+      await triggerAutomation("lead_created", {
+        actorId: connection.created_by,
+        leadId,
+        institutionProgramId: connection.institution_program_id ?? undefined,
+      });
     }
   } catch (error) {
     const messageText = error instanceof Error ? error.message : String(error);

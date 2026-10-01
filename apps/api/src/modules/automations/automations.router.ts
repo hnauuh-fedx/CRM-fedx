@@ -246,7 +246,7 @@ automationsRouter.post(
       }
       const rule = await createAutomationRule(request.authUser!, parsed.data);
       if (!rule) {
-        response.status(404).json({ message: "Không tìm thấy chương trình tuyển sinh trong phạm vi truy cập." });
+        response.status(403).json({ message: "Bạn không có quyền tạo rule toàn hệ thống hoặc ngoài phạm vi chương trình được giao." });
         return;
       }
       response.status(201).json(rule);
@@ -334,10 +334,10 @@ automationsRouter.delete(
         return;
       }
       if (!result.ok) {
-        response.status(409).json({ message: "Không thể xoá rule đang được bật. Vui lòng tắt rule trước." });
+        response.status(409).json({ message: "Không thể lưu trữ rule đang được bật. Vui lòng tắt rule trước." });
         return;
       }
-      response.json({ message: "Đã xoá automation rule." });
+      response.json({ message: "Đã lưu trữ automation rule." });
     } catch (error) {
       next(error);
     }

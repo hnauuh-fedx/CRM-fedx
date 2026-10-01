@@ -149,6 +149,7 @@ export type AutomationExecutionDetail = {
   source: string;
   status: string;
   version: number | null;
+  executionActorId: string | null;
   contextData: unknown;
   errorMessage: string | null;
   startedAt: string | null;

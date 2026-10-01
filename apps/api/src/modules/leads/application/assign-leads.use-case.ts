@@ -107,6 +107,7 @@ export async function assignLeads(
     await Promise.all(
       result.data.leadIds.map((leadId) =>
         triggerAutomation("lead_assigned", {
+          actorId: actor.id,
           leadId,
           institutionProgramId: institutionProgramId ?? undefined,
         }).catch(console.error),

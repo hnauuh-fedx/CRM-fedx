@@ -19,6 +19,7 @@ const matchingLeadName = `Automation Matching Lead ${runId}`;
 
 const permissionDefinitions = [
   { code: "automation.manage", name: "Quản lý Rule Automation", module: "system" },
+  { code: "automation.manage_global", name: "Quản lý Rule Automation toàn hệ thống", module: "system" },
   { code: "audit.view", name: "Xem audit log", module: "system" },
   { code: "lead.view_all", name: "Xem toàn bộ lead", module: "lead" },
   { code: "lead.view_assigned", name: "Xem lead được phân công", module: "lead" },
@@ -316,6 +317,16 @@ async function main() {
       "Thiếu automation.manage phải bị từ chối.",
     );
 
+    const forbiddenGlobalRule = await request(baseUrl, "/automations", {
+      token: scopedToken,
+      method: "POST",
+      body: {
+        name: `[INTEGRATION ${runId}] Global rule bị từ chối`,
+        triggerType: "lead_created",
+      },
+    });
+    assert.equal(forbiddenGlobalRule.status, 403, "Rule global phải yêu cầu automation.manage_global và scope ALL.");
+
     const created = await request(baseUrl, "/automations", {
       token: actorToken,
       method: "POST",
@@ -327,6 +338,17 @@ async function main() {
     });
     assert.equal(created.status, 201, "Actor có quyền phải tạo được rule.");
     ruleId = created.payload.id as string;
+
+    const testLeadsWithoutSensitivePermission = await request(
+      baseUrl,
+      `/automations/${ruleId}/test-leads?page=1&limit=20`,
+      { token: actorToken },
+    );
+    assert.equal(testLeadsWithoutSensitivePermission.status, 200);
+    assert.ok(
+      testLeadsWithoutSensitivePermission.payload.data.every((lead: JsonRecord) => lead.phone === null),
+      "Danh sách Lead chạy thử phải ẩn số điện thoại khi thiếu lead.sensitive.view.",
+    );
 
     const options = await request(baseUrl, "/automations/options", { token: actorToken });
     assert.equal(options.status, 200);
@@ -466,8 +488,32 @@ async function main() {
     assert.equal(logs.status, 200);
     assert.equal(logs.payload.pagination.total, 2, "Rule phải có đủ hai execution quan sát được qua API.");
     assert.ok(logs.payload.data.every((log: JsonRecord) => log.status === "completed" && log.version === 1));
+    assert.ok(
+      logs.payload.data.every((log: JsonRecord) => log.executionActorId === fixtures.actor.id),
+      "Execution phải ghi nhận chủ sở hữu rule là danh tính thực thi.",
+    );
 
-    console.log("Automation integration passed: API, Redis worker, branching and all action nodes verified.");
+    const deactivation = await request(baseUrl, `/automations/${ruleId}/toggle`, {
+      method: "PATCH",
+      token: actorToken,
+      body: { isActive: false },
+    });
+    assert.equal(deactivation.status, 200, "Phải tắt được rule trước khi lưu trữ.");
+
+    const archived = await request(baseUrl, `/automations/${ruleId}`, { method: "DELETE", token: actorToken });
+    assert.equal(archived.status, 200, "Rule đã tắt phải lưu trữ được.");
+    assert.equal(archived.payload.message, "Đã lưu trữ automation rule.");
+
+    const listAfterArchive = await request(baseUrl, "/automations?page=1&limit=20", { token: actorToken });
+    assert.equal(listAfterArchive.status, 200);
+    assert.equal(listAfterArchive.payload.pagination.total, 0, "Rule lưu trữ không còn xuất hiện trong danh sách.");
+    assert.equal(
+      await prisma.automation_execution_logs.count({ where: { rule_id: ruleId } }),
+      2,
+      "Lưu trữ rule phải giữ nguyên lịch sử thực thi.",
+    );
+
+    console.log("Automation integration passed: API, RBAC, archive, Redis worker, branching and all action nodes verified.");
   } finally {
     await new Promise<void>((resolve) => server.close(() => resolve()));
     await engine.automationWorker?.close();

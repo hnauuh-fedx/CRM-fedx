@@ -177,6 +177,7 @@ const permissionDefinitions = {
     ["department.manage", "Quản lý phòng ban", "system"],
     ["pipeline.manage", "Quản lý pipeline", "system"],
     ["automation.manage", "Quản lý Rule Automation", "system"],
+    ["automation.manage_global", "Quản lý Rule Automation toàn hệ thống", "system"],
     ["system.manage", "Quản lý cấu hình hệ thống", "system"],
     ["audit.view", "Xem audit log", "system"],
   ],

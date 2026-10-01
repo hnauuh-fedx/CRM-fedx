@@ -1304,12 +1304,15 @@ model automation_rules {
   created_by                String?                     @db.Uuid
   created_at                DateTime?                   @default(now()) @db.Timestamp(6)
   updated_at                DateTime?                   @default(now()) @db.Timestamp(6)
+  archived_at               DateTime?                   @db.Timestamp(6)
+  archived_by               String?                     @db.Uuid
   users                     users?                      @relation(fields: [created_by], references: [id], onDelete: NoAction, onUpdate: NoAction)
   institution_programs      institution_programs?       @relation(fields: [institution_program_id], references: [id], onDelete: NoAction, onUpdate: NoAction)
   automation_execution_logs automation_execution_logs[]
   automation_rule_versions  automation_rule_versions[]
 
   @@index([is_active, trigger_type], map: "idx_automation_rules_active_trigger")
+  @@index([archived_at, is_active, trigger_type], map: "idx_automation_rules_archive_active_trigger")
   @@index([institution_program_id, created_at, id], map: "idx_automation_rules_program_created_page")
   @@index([created_at, id], map: "idx_automation_rules_created_page")
 }
@@ -1336,6 +1339,7 @@ model automation_execution_logs {
   rule_id                    String                       @db.Uuid
   rule_version_id            String?                      @db.Uuid
   requested_by               String?                      @db.Uuid
+  execution_actor_id         String?                      @db.Uuid
   source                     String                       @default("event") @db.VarChar(50)
   status                     String                       @default("running") @db.VarChar(50)
   context_data               Json?
@@ -1351,6 +1355,7 @@ model automation_execution_logs {
   @@index([status, started_at, id], map: "idx_automation_exec_logs_status_started_page")
   @@index([rule_version_id], map: "idx_automation_exec_logs_rule_version")
   @@index([requested_by, started_at, id], map: "idx_automation_exec_logs_requester")
+  @@index([execution_actor_id, started_at, id], map: "idx_automation_exec_logs_actor")
 }
 
 model automation_node_executions {

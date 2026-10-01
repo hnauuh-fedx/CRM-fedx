@@ -66,8 +66,11 @@ export async function triggerAutomation(triggerType: string, context: Omit<Autom
   const rules = await prisma.automation_rules.findMany({
     where: {
       is_active: true,
+      archived_at: null,
       trigger_type: triggerType,
-      OR: [{ institution_program_id: null }, { institution_program_id: context.institutionProgramId }],
+      OR: context.institutionProgramId
+        ? [{ institution_program_id: null }, { institution_program_id: context.institutionProgramId }]
+        : [{ institution_program_id: null }],
     },
     select: {
       id: true,
@@ -79,19 +82,27 @@ export async function triggerAutomation(triggerType: string, context: Omit<Autom
     },
   });
   for (const rule of rules) {
-    await startAutomationExecution(
-      {
-        id: rule.id,
-        version: rule.version,
-        triggerType: rule.trigger_type,
-        graphData: rule.graph_data as unknown as AutomationGraphData,
-        institutionProgramId: rule.institution_program_id,
-        createdBy: rule.created_by,
-      },
-      context,
-      "event",
-      context.actorId ?? null,
-    );
+    try {
+      await startAutomationExecution(
+        {
+          id: rule.id,
+          version: rule.version,
+          triggerType: rule.trigger_type,
+          graphData: rule.graph_data as unknown as AutomationGraphData,
+          institutionProgramId: rule.institution_program_id,
+          createdBy: rule.created_by,
+        },
+        context,
+        "event",
+        context.actorId ?? null,
+      );
+    } catch (error) {
+      console.error("Automation rule failed to start", {
+        ruleId: rule.id,
+        triggerType,
+        error: toErrorMessage(error),
+      });
+    }
   }
 }
 
@@ -115,13 +126,15 @@ export async function startAutomationExecution(
     institutionProgramId: rule.institutionProgramId,
     createdBy: rule.createdBy ?? requestedBy,
   });
-  const executionContext: AutomationContext = { ...context, ruleId: rule.id };
+  const executionActorId = rule.createdBy ?? context.actorId;
+  const executionContext: AutomationContext = { ...context, actorId: executionActorId, ruleId: rule.id };
   const log = await prisma.$transaction(async (tx) => {
     const createdLog = await tx.automation_execution_logs.create({
       data: {
         rule_id: rule.id,
         rule_version_id: version.id,
         requested_by: requestedBy,
+        execution_actor_id: executionActorId,
         source,
         status: "processing",
         context_data: JSON.parse(JSON.stringify(executionContext)),
@@ -135,7 +148,12 @@ export async function startAutomationExecution(
           entity_type: "automation_rule",
           entity_id: rule.id,
           action: "manual_test_run",
-          new_data: { leadId: context.leadId, executionId: createdLog.id, version: version.version },
+          new_data: {
+            leadId: context.leadId,
+            executionId: createdLog.id,
+            executionActorId,
+            version: version.version,
+          },
         },
       });
     }

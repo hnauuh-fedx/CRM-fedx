@@ -4,7 +4,7 @@ import {
   Play,
   Pause,
   Plus,
-  Trash2,
+  Archive,
   Settings2,
   Zap,
   CircleDot,
@@ -28,6 +28,7 @@ import {
   CardTitle,
 } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
+import { Field, FieldDescription, FieldError, FieldGroup, FieldLabel } from "@/components/ui/field";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useAuth } from "@/modules/auth/auth-context";
 import { ApiError } from "@/services/api";
@@ -120,6 +121,7 @@ export function AutomationRulesPage() {
   }
 
   const hasFilters = Boolean(search || statusFilter !== "all" || triggerFilter !== "all" || programFilter !== "all");
+  const mutationError = toggleMutation.error ?? deleteMutation.error;
 
   return (
     <div className="mx-auto flex max-w-7xl flex-col gap-6">
@@ -180,11 +182,11 @@ export function AutomationRulesPage() {
         </CardContent>
       </Card>
 
-      {toggleMutation.error && (
+      {mutationError && (
         <p role="alert" className="rounded-md border border-destructive/30 bg-destructive/5 px-4 py-3 text-sm text-destructive">
-          {toggleMutation.error instanceof ApiError
-            ? toggleMutation.error.message
-            : "Không thể thay đổi trạng thái rule. Vui lòng thử lại."}
+          {mutationError instanceof ApiError
+            ? mutationError.message
+            : "Không thể cập nhật rule. Vui lòng thử lại."}
         </p>
       )}
 
@@ -242,6 +244,8 @@ export function AutomationRulesPage() {
         open={createOpen}
         onOpenChange={setCreateOpen}
         accessToken={auth.accessToken!}
+        programs={programs}
+        canManageGlobal={auth.user?.accessScope === "ALL" && auth.can("automation.manage_global")}
         onCreated={(id) => {
           queryClient.invalidateQueries({ queryKey: ["automations"] });
           navigate(`/automations/${id}/builder`);
@@ -310,25 +314,25 @@ function RuleCard({
           {rule.isActive ? <Pause className="h-3.5 w-3.5" /> : <Play className="h-3.5 w-3.5" />}
         </Button>
         <Button
-          id={`delete-rule-${rule.id}`}
+          id={`archive-rule-${rule.id}`}
           size="sm"
           variant="ghost"
           className="min-h-11 min-w-11 text-destructive hover:bg-destructive/10 hover:text-destructive"
           disabled={rule.isActive}
-          aria-label={rule.isActive ? `Không thể xóa rule ${rule.name} khi đang chạy` : `Xóa rule ${rule.name}`}
-          title={rule.isActive ? "Tắt rule trước khi xoá" : "Xoá rule"}
+          aria-label={rule.isActive ? `Không thể lưu trữ rule ${rule.name} khi đang chạy` : `Lưu trữ rule ${rule.name}`}
+          title={rule.isActive ? "Tắt rule trước khi lưu trữ" : "Lưu trữ rule"}
           onClick={() => setConfirmOpen(true)}
         >
-          <Trash2 className="h-3.5 w-3.5" />
+          <Archive className="h-3.5 w-3.5" />
         </Button>
       </CardContent>
 
       <Dialog open={confirmOpen} onOpenChange={setConfirmOpen}>
         <DialogContent className="sm:max-w-md">
           <DialogHeader>
-            <DialogTitle>Xoá automation rule?</DialogTitle>
+            <DialogTitle>Lưu trữ automation rule?</DialogTitle>
             <DialogDescription>
-              Rule <strong>{rule.name}</strong> sẽ bị xoá vĩnh viễn. Toàn bộ lịch sử thực thi cũng sẽ bị mất.
+              Rule <strong>{rule.name}</strong> sẽ ngừng xuất hiện trong danh sách. Lịch sử thực thi vẫn được giữ lại để tra soát.
             </DialogDescription>
           </DialogHeader>
           <DialogFooter>
@@ -337,7 +341,7 @@ function RuleCard({
               variant="destructive"
               onClick={() => { setConfirmOpen(false); onDelete(); }}
             >
-              Xoá
+              Lưu trữ
             </Button>
           </DialogFooter>
         </DialogContent>
@@ -351,31 +355,44 @@ function CreateRuleDialog({
   open,
   onOpenChange,
   accessToken,
+  programs,
+  canManageGlobal,
   onCreated,
 }: {
   open: boolean;
   onOpenChange: (v: boolean) => void;
   accessToken: string;
+  programs: Array<{ id: string; name: string; institutionName: string }>;
+  canManageGlobal: boolean;
   onCreated: (id: string) => void;
 }) {
   const [name, setName] = useState("");
   const [description, setDescription] = useState("");
   const [triggerType, setTriggerType] = useState("lead_created");
+  const [programId, setProgramId] = useState("");
+  const [errorMessage, setErrorMessage] = useState("");
   const [isSubmitting, setIsSubmitting] = useState(false);
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
-    if (!name.trim() || !triggerType) return;
+    if (!name.trim() || !triggerType || !programId) return;
     setIsSubmitting(true);
+    setErrorMessage("");
     try {
-      const rule = await createAutomationRule({ name: name.trim(), description: description.trim() || undefined, triggerType }, accessToken);
+      const rule = await createAutomationRule({
+        name: name.trim(),
+        description: description.trim() || undefined,
+        triggerType,
+        institutionProgramId: programId === "global" ? undefined : programId,
+      }, accessToken);
       onOpenChange(false);
       setName("");
       setDescription("");
       setTriggerType("lead_created");
+      setProgramId("");
       onCreated(rule.id);
-    } catch {
-      // error handled globally
+    } catch (error) {
+      setErrorMessage(error instanceof ApiError ? error.message : "Không thể tạo rule. Vui lòng thử lại.");
     } finally {
       setIsSubmitting(false);
     }
@@ -386,23 +403,44 @@ function CreateRuleDialog({
       <DialogContent className="sm:max-w-md">
         <DialogHeader>
           <DialogTitle>Tạo automation rule mới</DialogTitle>
-          <DialogDescription>Chọn sự kiện kích hoạt và đặt tên cho rule trước khi vào builder.</DialogDescription>
+          <DialogDescription>Chọn phạm vi, sự kiện kích hoạt và đặt tên cho rule trước khi vào builder.</DialogDescription>
         </DialogHeader>
-        <form id="create-rule-form" onSubmit={handleSubmit} className="grid gap-4">
-          <div className="grid gap-2">
-            <Label htmlFor="rule-name">Tên rule</Label>
+        <form id="create-rule-form" onSubmit={handleSubmit}>
+          <FieldGroup className="gap-4">
+          <Field>
+            <FieldLabel htmlFor="rule-name">Tên rule</FieldLabel>
             <Input
               id="rule-name"
+              className="min-h-11"
               placeholder="Ví dụ: Nhắc Sale khi có lead mới"
               value={name}
               onChange={(e) => setName(e.target.value)}
               required
             />
-          </div>
-          <div className="grid gap-2">
-            <Label htmlFor="rule-trigger">Sự kiện kích hoạt</Label>
+          </Field>
+          <Field>
+            <FieldLabel htmlFor="rule-program">Chương trình tuyển sinh</FieldLabel>
+            <Select value={programId} onValueChange={setProgramId} required>
+              <SelectTrigger id="rule-program" className="min-h-11 w-full" aria-describedby="rule-program-help">
+                <SelectValue placeholder="Chọn phạm vi áp dụng" />
+              </SelectTrigger>
+              <SelectContent>
+                {canManageGlobal && <SelectItem value="global">Toàn hệ thống</SelectItem>}
+                {programs.map((program) => (
+                  <SelectItem key={program.id} value={program.id}>
+                    {program.institutionName} - {program.name}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+            <FieldDescription id="rule-program-help">
+              Rule chỉ đọc và thay đổi lead thuộc phạm vi đã chọn.
+            </FieldDescription>
+          </Field>
+          <Field>
+            <FieldLabel htmlFor="rule-trigger">Sự kiện kích hoạt</FieldLabel>
             <Select value={triggerType} onValueChange={setTriggerType}>
-              <SelectTrigger id="rule-trigger">
+              <SelectTrigger id="rule-trigger" className="min-h-11 w-full">
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>
@@ -411,9 +449,9 @@ function CreateRuleDialog({
                 ))}
               </SelectContent>
             </Select>
-          </div>
-          <div className="grid gap-2">
-            <Label htmlFor="rule-description">Mô tả (tuỳ chọn)</Label>
+          </Field>
+          <Field>
+            <FieldLabel htmlFor="rule-description">Mô tả (tuỳ chọn)</FieldLabel>
             <Textarea
               id="rule-description"
               placeholder="Mô tả mục đích của rule..."
@@ -421,11 +459,13 @@ function CreateRuleDialog({
               value={description}
               onChange={(e) => setDescription(e.target.value)}
             />
-          </div>
+          </Field>
+          {errorMessage && <FieldError>{errorMessage}</FieldError>}
+          </FieldGroup>
         </form>
         <DialogFooter>
           <Button variant="outline" type="button" onClick={() => onOpenChange(false)}>Huỷ</Button>
-          <Button type="submit" form="create-rule-form" disabled={isSubmitting || !name.trim()}>
+          <Button type="submit" form="create-rule-form" disabled={isSubmitting || !name.trim() || !programId}>
             {isSubmitting ? "Đang tạo..." : "Tạo và vào builder"}
           </Button>
         </DialogFooter>

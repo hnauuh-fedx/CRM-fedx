@@ -102,6 +102,7 @@ const permissionCodeOptions = [
   { code: "department.manage", name: "Quản lý phòng ban", module: "system" },
   { code: "pipeline.manage", name: "Quản lý pipeline", module: "system" },
   { code: "automation.manage", name: "Quản lý Rule Automation", module: "system" },
+  { code: "automation.manage_global", name: "Quản lý Rule Automation toàn hệ thống", module: "system" },
   { code: "system.manage", name: "Quản lý cấu hình hệ thống", module: "system" },
   { code: "audit.view", name: "Xem nhật ký hệ thống", module: "system" },
 ] as const;
