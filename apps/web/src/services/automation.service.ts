@@ -84,7 +84,7 @@ export function toggleAutomationRule(id: string, isActive: boolean, accessToken:
   }, accessToken);
 }
 
-export function deleteAutomationRule(id: string, accessToken: string) {
+export function archiveAutomationRule(id: string, accessToken: string) {
   return apiRequest<{ message: string }>(`/automations/${id}`, {
     method: "DELETE",
   }, accessToken);

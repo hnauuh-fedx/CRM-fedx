@@ -36,7 +36,7 @@ import {
   listAutomationRules,
   getAutomationOptions,
   toggleAutomationRule,
-  deleteAutomationRule,
+  archiveAutomationRule,
   createAutomationRule,
 } from "@/services/automation.service";
 import {
@@ -100,8 +100,8 @@ export function AutomationRulesPage() {
     onSuccess: () => queryClient.invalidateQueries({ queryKey: ["automations"] }),
   });
 
-  const deleteMutation = useMutation({
-    mutationFn: (id: string) => deleteAutomationRule(id, auth.accessToken!),
+  const archiveMutation = useMutation({
+    mutationFn: (id: string) => archiveAutomationRule(id, auth.accessToken!),
     onSuccess: () => queryClient.invalidateQueries({ queryKey: ["automations"] }),
   });
 
@@ -121,7 +121,7 @@ export function AutomationRulesPage() {
   }
 
   const hasFilters = Boolean(search || statusFilter !== "all" || triggerFilter !== "all" || programFilter !== "all");
-  const mutationError = toggleMutation.error ?? deleteMutation.error;
+  const mutationError = toggleMutation.error ?? archiveMutation.error;
 
   return (
     <div className="mx-auto flex max-w-7xl flex-col gap-6">
@@ -217,7 +217,7 @@ export function AutomationRulesPage() {
               key={rule.id}
               rule={rule}
               onToggle={(isActive) => toggleMutation.mutate({ id: rule.id, isActive })}
-              onDelete={() => deleteMutation.mutate(rule.id)}
+              onArchive={() => archiveMutation.mutate(rule.id)}
               onEdit={() => navigate(`/automations/${rule.id}/builder`)}
             />
           ))}
@@ -258,12 +258,12 @@ export function AutomationRulesPage() {
 function RuleCard({
   rule,
   onToggle,
-  onDelete,
+  onArchive,
   onEdit,
 }: {
   rule: AutomationRuleListItem;
   onToggle: (isActive: boolean) => void;
-  onDelete: () => void;
+  onArchive: () => void;
   onEdit: () => void;
 }) {
   const [confirmOpen, setConfirmOpen] = useState(false);
@@ -339,7 +339,7 @@ function RuleCard({
             <Button variant="outline" onClick={() => setConfirmOpen(false)}>Huỷ</Button>
             <Button
               variant="destructive"
-              onClick={() => { setConfirmOpen(false); onDelete(); }}
+              onClick={() => { setConfirmOpen(false); onArchive(); }}
             >
               Lưu trữ
             </Button>

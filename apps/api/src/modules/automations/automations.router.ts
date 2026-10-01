@@ -5,7 +5,7 @@ import { requireAnyPermission, requireAuthentication } from "../../middlewares/a
 import { leadListPermissions } from "../leads/lead-list.service";
 import {
   createAutomationRule,
-  deleteAutomationRule,
+  archiveAutomationRule,
   getAutomationOptions,
   getAutomationExecution,
   getAutomationRule,
@@ -328,7 +328,7 @@ automationsRouter.delete(
         response.status(400).json({ message: "Mã automation không hợp lệ." });
         return;
       }
-      const result = await deleteAutomationRule(request.authUser!, parsedId.data, request.ip);
+      const result = await archiveAutomationRule(request.authUser!, parsedId.data, request.ip);
       if (!result) {
         response.status(404).json({ message: "Không tìm thấy automation rule." });
         return;

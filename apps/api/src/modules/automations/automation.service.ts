@@ -219,7 +219,7 @@ export async function updateAutomationRule(user: AuthUser, id: string, input: Au
   return { ok: true as const, data: updated };
 }
 
-export async function deleteAutomationRule(user: AuthUser, id: string, ipAddress?: string) {
+export async function archiveAutomationRule(user: AuthUser, id: string, ipAddress?: string) {
   const existing = await prisma.automation_rules.findFirst({
     where: { id, archived_at: null, ...(await getAutomationRuleScopeWhere(user)) },
     select: { id: true, name: true, is_active: true },
