@@ -219,7 +219,7 @@ export async function updateAutomationRule(user: AuthUser, id: string, input: Au
   return { ok: true as const, data: updated };
 }
 
-export async function deleteAutomationRule(user: AuthUser, id: string) {
+export async function deleteAutomationRule(user: AuthUser, id: string, ipAddress?: string) {
   const existing = await prisma.automation_rules.findFirst({
     where: { id, archived_at: null, ...(await getAutomationRuleScopeWhere(user)) },
     select: { id: true, name: true, is_active: true },
@@ -227,10 +227,11 @@ export async function deleteAutomationRule(user: AuthUser, id: string) {
   if (!existing) return null;
   if (existing.is_active) return { ok: false as const, reason: "rule_is_active" as const };
 
+  const archivedAt = new Date();
   await prisma.$transaction([
     prisma.automation_rules.update({
       where: { id },
-      data: { archived_at: new Date(), archived_by: user.id, updated_at: new Date() },
+      data: { archived_at: archivedAt, archived_by: user.id, updated_at: archivedAt },
     }),
     prisma.audit_logs.create({
       data: {
@@ -238,7 +239,9 @@ export async function deleteAutomationRule(user: AuthUser, id: string) {
         entity_type: "automation_rule",
         entity_id: id,
         action: "archive",
+        ip_address: ipAddress,
         old_data: { name: existing.name },
+        new_data: { archivedAt: archivedAt.toISOString(), archivedBy: user.id },
       },
     }),
   ]);
@@ -334,7 +337,7 @@ function validateRuleConfiguration(triggerType: string, graphData: unknown) {
 
 export async function listExecutionLogs(user: AuthUser, ruleId: string, page: number, limit: number) {
   const rule = await prisma.automation_rules.findFirst({
-    where: { id: ruleId, archived_at: null, ...(await getAutomationRuleScopeWhere(user)) },
+    where: { id: ruleId, ...(await getAutomationRuleScopeWhere(user)) },
     select: { id: true },
   });
   if (!rule) return null;
@@ -381,7 +384,7 @@ export async function listExecutionLogs(user: AuthUser, ruleId: string, page: nu
 
 export async function getAutomationExecution(user: AuthUser, ruleId: string, executionId: string) {
   const rule = await prisma.automation_rules.findFirst({
-    where: { id: ruleId, archived_at: null, ...(await getAutomationRuleScopeWhere(user)) },
+    where: { id: ruleId, ...(await getAutomationRuleScopeWhere(user)) },
     select: { id: true },
   });
   if (!rule) return null;

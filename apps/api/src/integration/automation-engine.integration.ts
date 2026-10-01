@@ -507,11 +507,9 @@ async function main() {
     const listAfterArchive = await request(baseUrl, "/automations?page=1&limit=20", { token: actorToken });
     assert.equal(listAfterArchive.status, 200);
     assert.equal(listAfterArchive.payload.pagination.total, 0, "Rule lưu trữ không còn xuất hiện trong danh sách.");
-    assert.equal(
-      await prisma.automation_execution_logs.count({ where: { rule_id: ruleId } }),
-      2,
-      "Lưu trữ rule phải giữ nguyên lịch sử thực thi.",
-    );
+    const logsAfterArchive = await request(baseUrl, `/automations/${ruleId}/logs?page=1&limit=20`, { token: actorToken });
+    assert.equal(logsAfterArchive.status, 200, "Lịch sử rule đã lưu trữ phải còn truy cập được để tra soát.");
+    assert.equal(logsAfterArchive.payload.pagination.total, 2, "Lưu trữ rule phải giữ nguyên lịch sử thực thi.");
 
     console.log("Automation integration passed: API, RBAC, archive, Redis worker, branching and all action nodes verified.");
   } finally {

@@ -328,7 +328,7 @@ automationsRouter.delete(
         response.status(400).json({ message: "Mã automation không hợp lệ." });
         return;
       }
-      const result = await deleteAutomationRule(request.authUser!, parsedId.data);
+      const result = await deleteAutomationRule(request.authUser!, parsedId.data, request.ip);
       if (!result) {
         response.status(404).json({ message: "Không tìm thấy automation rule." });
         return;

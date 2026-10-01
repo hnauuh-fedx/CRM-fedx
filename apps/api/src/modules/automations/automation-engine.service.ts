@@ -63,13 +63,26 @@ async function enqueueAutomationJob(data: ExecutionJobData, delay = 0) {
 
 export async function triggerAutomation(triggerType: string, context: Omit<AutomationContext, "ruleId">) {
   if (isAutomationDisabled) return;
+  const lead = context.leadId
+    ? await prisma.leads.findFirst({
+        where: { id: context.leadId, deleted_at: null },
+        select: { institution_program_id: true },
+      })
+    : null;
+  if (context.leadId && !lead) return;
+  const resolvedContext = {
+    ...context,
+    institutionProgramId: context.leadId
+      ? lead?.institution_program_id ?? undefined
+      : context.institutionProgramId,
+  };
   const rules = await prisma.automation_rules.findMany({
     where: {
       is_active: true,
       archived_at: null,
       trigger_type: triggerType,
-      OR: context.institutionProgramId
-        ? [{ institution_program_id: null }, { institution_program_id: context.institutionProgramId }]
+      OR: resolvedContext.institutionProgramId
+        ? [{ institution_program_id: null }, { institution_program_id: resolvedContext.institutionProgramId }]
         : [{ institution_program_id: null }],
     },
     select: {
@@ -92,9 +105,9 @@ export async function triggerAutomation(triggerType: string, context: Omit<Autom
           institutionProgramId: rule.institution_program_id,
           createdBy: rule.created_by,
         },
-        context,
+        resolvedContext,
         "event",
-        context.actorId ?? null,
+        resolvedContext.actorId ?? null,
       );
     } catch (error) {
       console.error("Automation rule failed to start", {
