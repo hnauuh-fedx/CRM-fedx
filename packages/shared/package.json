@@ -1,0 +1,8 @@
+{
+  "name": "@admission-crm/shared",
+  "private": true,
+  "type": "module",
+  "exports": {
+    "./lead-form-field-catalog": "./src/lead-form-field-catalog.ts"
+  }
+}

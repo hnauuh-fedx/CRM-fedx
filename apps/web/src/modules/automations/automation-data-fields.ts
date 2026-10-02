@@ -1,8 +1,8 @@
-import { leadFormFieldCatalog } from "@/modules/custom-fields/lead-form-field-catalog";
 import type {
   AutomationCustomDataField,
   AutomationDataField,
   AutomationDataFieldOption,
+  AutomationRegistryField,
 } from "./automation.types";
 
 const legacyReferences: Record<string, string> = {
@@ -13,54 +13,15 @@ const legacyReferences: Record<string, string> = {
   gender: "system:gender",
 };
 
-const operationalFields: AutomationDataField[] = [
-  {
-    reference: "system:pipelineStageId",
-    key: "pipelineStageId",
-    label: "Giai đoạn Pipeline",
-    description: "Giai đoạn hiện tại của Lead trong Pipeline.",
-    dataType: "SELECT",
-    groupKey: "classification",
-    groupLabel: "Chăm sóc và phân loại",
-    source: "system",
-    isSensitive: false,
-    options: [],
-  },
-  {
-    reference: "system:assigneeId",
-    key: "assigneeId",
-    label: "Người phụ trách",
-    description: "Nhân viên đang được phân công phụ trách Lead.",
-    dataType: "SELECT",
-    groupKey: "classification",
-    groupLabel: "Chăm sóc và phân loại",
-    source: "system",
-    isSensitive: false,
-    options: [],
-  },
-];
-
 export function buildAutomationDataFields(
+  registryFields: AutomationRegistryField[],
   customFields: AutomationCustomDataField[],
   canViewSensitiveLeadData: boolean,
   systemFieldOptions: Record<string, AutomationDataFieldOption[]> = {},
 ): AutomationDataField[] {
-  const systemFields = leadFormFieldCatalog.flatMap((group) =>
-    group.fields
-      .filter((field) => canViewSensitiveLeadData || !field.isSensitive)
-      .map((field) => ({
-        reference: `system:${field.key}`,
-        key: field.key,
-        label: field.label,
-        description: field.note ?? null,
-        dataType: field.dataType,
-        groupKey: group.id,
-        groupLabel: group.label,
-        source: "system" as const,
-        isSensitive: Boolean(field.isSensitive),
-        options: field.optionSource ? (systemFieldOptions[field.optionSource] ?? []) : [],
-      })),
-  );
+  const systemFields: AutomationDataField[] = registryFields
+    .filter((field) => canViewSensitiveLeadData || !field.isSensitive)
+    .map((field) => ({ ...field, options: field.optionSource ? (systemFieldOptions[field.optionSource] ?? []) : [] }));
 
   const configuredFields = customFields.map((field) => ({
     reference: field.reference,
@@ -75,7 +36,7 @@ export function buildAutomationDataFields(
     options: readOptions(field.options),
   }));
 
-  return [...systemFields, ...operationalFields, ...configuredFields];
+  return [...systemFields, ...configuredFields];
 }
 
 export function normalizeAutomationFieldReference(reference?: string) {

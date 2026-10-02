@@ -18,7 +18,7 @@ import {
   updateAutomationRule,
   validateAutomationRule,
 } from "./automation.service";
-import { SUPPORTED_AUTOMATION_TRIGGER_TYPES } from "./automation.types";
+import { AUTOMATION_TRIGGER_TYPES } from "./automation-registry";
 
 export const automationsRouter = Router();
 
@@ -43,7 +43,7 @@ const optionsQuerySchema = z.object({
 const createSchema = z.object({
   name: z.string().trim().min(2).max(255),
   description: z.string().trim().max(1000).optional().transform((v) => v || undefined),
-  triggerType: z.enum(SUPPORTED_AUTOMATION_TRIGGER_TYPES),
+  triggerType: z.enum(AUTOMATION_TRIGGER_TYPES),
   graphData: z.record(z.string(), z.unknown()).default({ nodes: [], edges: [] }),
   institutionProgramId: z.string().uuid().optional().or(z.literal("")).transform((v) => v || undefined),
 });
@@ -51,7 +51,7 @@ const createSchema = z.object({
 const updateSchema = z.object({
   name: z.string().trim().min(2).max(255).optional(),
   description: z.string().trim().max(1000).optional(),
-  triggerType: z.enum(SUPPORTED_AUTOMATION_TRIGGER_TYPES).optional(),
+  triggerType: z.enum(AUTOMATION_TRIGGER_TYPES).optional(),
   graphData: z.record(z.string(), z.unknown()).optional(),
   institutionProgramId: z.string().uuid().optional().or(z.literal("")).transform((v) => v || undefined),
 });

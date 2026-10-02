@@ -11,7 +11,6 @@ import { useAuth } from "@/modules/auth/auth-context";
 import { getAutomationOptions, getAutomationRule, toggleAutomationRule, updateAutomationRule } from "@/services/automation.service";
 import { ApiError } from "@/services/api";
 import type { AutomationNode, AutomationNodeData, AutomationEdge, AutomationGraphData } from "../automation.types";
-import { TRIGGER_TYPE_LABELS } from "../automation.types";
 import { AutomationBuilderCanvas } from "./automation-builder-canvas";
 import { NodePropertiesPanel } from "./builder/node-properties-panel";
 import { AutomationTestRunDialog } from "./builder/automation-test-run-dialog";
@@ -130,6 +129,8 @@ export function AutomationBuilderPage() {
     );
   }
 
+  const triggerLabel = optionsQuery.data?.registry.triggers.find((trigger) => trigger.code === rule.triggerType)?.label ?? rule.triggerType;
+
   return (
     <div className="flex h-screen flex-col overflow-hidden">
       {/* Toolbar */}
@@ -148,7 +149,7 @@ export function AutomationBuilderPage() {
           <div>
             <p className="text-sm font-semibold leading-none">{rule.name}</p>
             <p className="mt-0.5 text-xs text-muted-foreground">
-              {TRIGGER_TYPE_LABELS[rule.triggerType] ?? rule.triggerType} · v{rule.version}
+              {triggerLabel} · v{rule.version}
             </p>
           </div>
           <Badge variant={rule.isActive ? "default" : "secondary"} className="ml-1">

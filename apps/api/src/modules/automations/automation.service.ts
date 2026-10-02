@@ -8,10 +8,9 @@ import { leadUpdatePermissions } from "../leads/lead-owner-stage-mutations.servi
 import { startAutomationExecution } from "./automation-engine.service";
 import { validateAutomationGraph } from "./automation-graph.validator";
 import { ensureAutomationRuleVersionSnapshot } from "./automation-rule-version.service";
-import { SUPPORTED_AUTOMATION_TRIGGER_TYPES } from "./automation.types";
 import type { AutomationGraphData } from "./automation.types";
 import { getAutomationCustomDataFields } from "./automation-data-field.service";
-import { AUTOMATION_REGISTRY } from "./automation-registry";
+import { AUTOMATION_REGISTRY, AUTOMATION_TRIGGER_TYPES } from "./automation-registry";
 import { validateAutomationSemantics } from "./automation-semantic.validator";
 
 export type AutomationRuleListQuery = {
@@ -385,7 +384,7 @@ async function validateRuleConfiguration(
 ) {
   const graphValidation = validateAutomationGraph(graphData);
   const issues = [...graphValidation.issues];
-  if (!SUPPORTED_AUTOMATION_TRIGGER_TYPES.includes(triggerType as typeof SUPPORTED_AUTOMATION_TRIGGER_TYPES[number])) {
+  if (!AUTOMATION_TRIGGER_TYPES.includes(triggerType as typeof AUTOMATION_TRIGGER_TYPES[number])) {
     issues.unshift({
       code: "UNSUPPORTED_TRIGGER" as const,
       message: `Sự kiện kích hoạt ${triggerType} chưa có bộ phát sự kiện trong hệ thống.`,
@@ -714,7 +713,7 @@ export async function getAutomationOptions(user: AuthUser, institutionProgramId?
   return {
     registry: AUTOMATION_REGISTRY,
     institutionPrograms: programs.map((p) => ({ id: p.id, name: p.name, institutionName: p.institutions.name })),
-    triggerTypes: [...SUPPORTED_AUTOMATION_TRIGGER_TYPES],
+    triggerTypes: [...AUTOMATION_TRIGGER_TYPES],
     assignees: assignees.map((assignee) => ({ id: assignee.id, fullName: assignee.full_name })),
     pipelineStages: pipelineStages.map((stage) => ({
       id: stage.id,

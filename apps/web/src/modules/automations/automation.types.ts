@@ -70,7 +70,6 @@ export type AutomationNodeData = {
   // Delay
   delayMinutes?: number;
 };
-
 export type AutomationCondition = {
   id?: string;
   field: string;
@@ -93,6 +92,10 @@ export type AutomationNodeDefinition = {
   category: "trigger" | "condition" | "action" | "delay";
   label: string;
   description: string;
+  icon: "bell" | "clock" | "git-branch" | "notebook" | "refresh" | "user-plus" | "zap";
+  tone: "blue" | "green" | "indigo" | "orange" | "purple" | "teal" | "yellow";
+  defaultData?: Partial<AutomationNodeData>;
+  requiredCapabilities?: Array<"assign" | "updateLead" | "writeActivity">;
   configFields: AutomationConfigField[];
 };
 
@@ -100,6 +103,7 @@ export type AutomationRegistry = {
   version: number;
   triggers: Array<{ code: string; label: string }>;
   nodes: AutomationNodeDefinition[];
+  fields: AutomationRegistryField[];
   operators: Array<{ code: string; label: string; requiresValue: boolean; dataTypes: string[] }>;
 };
 
@@ -146,6 +150,10 @@ export type AutomationDataField = {
   source: "system" | "custom";
   isSensitive: boolean;
   options: AutomationDataFieldOption[];
+};
+
+export type AutomationRegistryField = Omit<AutomationDataField, "options"> & {
+  optionSource?: string;
 };
 
 export type AutomationCustomDataField = {
@@ -200,76 +208,3 @@ export type AutomationExecutionDetail = {
     completedAt: string | null;
   }>;
 };
-
-export const SUPPORTED_AUTOMATION_TRIGGER_TYPES = [
-  "lead_created",
-  "lead_pipeline_stage_changed",
-  "lead_assigned",
-] as const;
-
-export const TRIGGER_TYPE_LABELS: Record<string, string> = {
-  lead_created: "Lead được tạo mới",
-  lead_pipeline_stage_changed: "Lead đổi giai đoạn pipeline",
-  lead_assigned: "Lead được phân công",
-  lead_unassigned: "Lead bị thu hồi phân công",
-  reminder_overdue: "Nhắc việc quá hạn",
-  schedule_daily: "Tự động hàng ngày",
-};
-
-export const NODE_TYPE_DEFINITIONS: Array<{
-  type: AutomationNodeType;
-  label: string;
-  description: string;
-  colorClass: string;
-  category: "trigger" | "condition" | "action" | "delay";
-}> = [
-  {
-    type: "trigger",
-    label: "Khởi động",
-    description: "Điểm bắt đầu của quy trình",
-    colorClass: "bg-blue-500",
-    category: "trigger",
-  },
-  {
-    type: "condition",
-    label: "Điều kiện",
-    description: "Kiểm tra và phân nhánh theo dữ liệu",
-    colorClass: "bg-orange-500",
-    category: "condition",
-  },
-  {
-    type: "action_notification",
-    label: "Gửi thông báo",
-    description: "Gửi thông báo nội bộ cho nhân viên",
-    colorClass: "bg-green-500",
-    category: "action",
-  },
-  {
-    type: "action_assign",
-    label: "Phân công Sale",
-    description: "Gán nhân viên phụ trách cho lead",
-    colorClass: "bg-purple-500",
-    category: "action",
-  },
-  {
-    type: "action_update_stage",
-    label: "Cập nhật Pipeline",
-    description: "Chuyển lead sang giai đoạn khác",
-    colorClass: "bg-teal-500",
-    category: "action",
-  },
-  {
-    type: "action_activity",
-    label: "Ghi hoạt động",
-    description: "Tạo hoạt động chăm sóc cho lead",
-    colorClass: "bg-indigo-500",
-    category: "action",
-  },
-  {
-    type: "delay",
-    label: "Chờ / Delay",
-    description: "Tạm dừng trước khi thực hiện bước tiếp theo",
-    colorClass: "bg-yellow-500",
-    category: "delay",
-  },
-];

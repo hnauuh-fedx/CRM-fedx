@@ -1,4 +1,4 @@
-import { useCallback, useRef } from "react";
+import { useCallback, useMemo, useRef } from "react";
 import {
   ReactFlow,
   Background,
@@ -21,16 +21,7 @@ import type {
 
 import { AutomationNodeComponent } from "./builder/automation-node";
 import { NodePalette } from "./builder/node-palette";
-
-const nodeTypes: NodeTypes = {
-  trigger: AutomationNodeComponent,
-  condition: AutomationNodeComponent,
-  action_notification: AutomationNodeComponent,
-  action_assign: AutomationNodeComponent,
-  action_update_stage: AutomationNodeComponent,
-  action_activity: AutomationNodeComponent,
-  delay: AutomationNodeComponent,
-};
+import { getAutomationNodeMiniMapColor } from "./builder/node-presentation";
 
 type AutomationBuilderCanvasProps = {
   nodes: AutomationNode[];
@@ -52,27 +43,32 @@ export function AutomationBuilderCanvas({
   onNodeSelect,
 }: AutomationBuilderCanvasProps) {
   const reactFlowWrapper = useRef<HTMLDivElement>(null);
+  const definitionsByType = useMemo(() => new Map(nodeDefinitions.map((definition) => [definition.type, definition])), [nodeDefinitions]);
+  const nodeTypes = useMemo(() => Object.fromEntries(
+    nodeDefinitions.map((definition) => [definition.type, AutomationNodeComponent]),
+  ) as NodeTypes, [nodeDefinitions]);
 
   const createNode = useCallback(
     (type: AutomationNodeType, label: string, position: { x: number; y: number }) => {
+      const definition = definitionsByType.get(type);
+      const defaultData = definition?.defaultData ?? {};
       const newNode: AutomationNode = {
         id: `${type}-${Date.now()}`,
         type,
         position,
-        data:
-          type === "condition"
-            ? {
-                label,
-                conditionCombinator: "AND",
-                conditions: [{ id: crypto.randomUUID(), field: "", operator: "equals", value: "" }],
-              }
-            : { label },
+        data: {
+          ...defaultData,
+          ...(defaultData.conditions
+            ? { conditions: defaultData.conditions.map((condition) => ({ ...condition, id: crypto.randomUUID() })) }
+            : {}),
+          label,
+        },
       };
 
       onNodesChange([...initialNodes, newNode]);
       onNodeSelect(newNode.id);
     },
-    [initialNodes, onNodeSelect, onNodesChange],
+    [definitionsByType, initialNodes, onNodeSelect, onNodesChange],
   );
 
   const onConnect = useCallback(
@@ -119,6 +115,10 @@ export function AutomationBuilderCanvas({
         nodes={initialNodes.map((n) => ({
           ...n,
           selected: n.id === selectedNodeId,
+          data: {
+            ...n.data,
+            registryPresentation: definitionsByType.get(n.type),
+          },
         }))}
         edges={initialEdges}
         onNodesChange={(changes) => {
@@ -143,17 +143,7 @@ export function AutomationBuilderCanvas({
         <Controls />
         <MiniMap
           nodeColor={(node) => {
-            const type = node.type as AutomationNodeType;
-            const colors: Record<AutomationNodeType, string> = {
-              trigger: "#3b82f6",
-              condition: "#f97316",
-              action_notification: "#22c55e",
-              action_assign: "#a855f7",
-              action_update_stage: "#14b8a6",
-              action_activity: "#6366f1",
-              delay: "#eab308",
-            };
-            return colors[type] ?? "#888";
+            return getAutomationNodeMiniMapColor(definitionsByType.get(node.type as AutomationNodeType)?.tone);
           }}
           maskColor="rgb(0,0,0,0.05)"
         />

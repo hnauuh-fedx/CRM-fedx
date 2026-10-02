@@ -1,5 +1,5 @@
 import type { AutomationEdge, AutomationGraphData, AutomationNode, AutomationNodeType } from "./automation.types";
-import { AUTOMATION_REGISTRY, getAutomationNodeDefinition } from "./automation-registry";
+import { AUTOMATION_REGISTRY, validateRegisteredAutomationNode } from "./automation-registry";
 
 export type AutomationGraphValidationIssueCode =
   | "INVALID_GRAPH"
@@ -30,9 +30,6 @@ export type AutomationGraphValidationResult = {
 };
 
 const supportedNodeTypes = new Set<AutomationNodeType>(AUTOMATION_REGISTRY.nodes.map((node) => node.type));
-const automationOperators = new Map<string, (typeof AUTOMATION_REGISTRY.operators)[number]>(
-  AUTOMATION_REGISTRY.operators.map((operator) => [operator.code, operator]),
-);
 
 export function validateAutomationGraph(value: unknown): AutomationGraphValidationResult {
   if (!isGraph(value)) {
@@ -156,67 +153,11 @@ export function validateAutomationGraph(value: unknown): AutomationGraphValidati
 }
 
 function validateNodeConfig(node: AutomationNode): AutomationGraphValidationIssue[] {
-  const issues: AutomationGraphValidationIssue[] = [];
-  const missing = (message: string) =>
-    issues.push({ code: "INVALID_NODE_CONFIG", nodeId: node.id, message });
-
-  if (!node.data.label?.trim()) missing(`Node ${node.id} phải có tên hiển thị.`);
-
-  switch (node.type) {
-    case "trigger":
-      break;
-    case "condition":
-      if (node.data.conditions !== undefined) {
-        if (node.data.conditionCombinator !== "AND" && node.data.conditionCombinator !== "OR") {
-          missing(`Node điều kiện ${node.id} phải chọn cách kết hợp AND hoặc OR.`);
-        }
-        if (!Array.isArray(node.data.conditions) || node.data.conditions.length === 0) {
-          missing(`Node điều kiện ${node.id} phải có ít nhất một tiêu chí.`);
-          break;
-        }
-        (node.data.conditions as unknown[]).forEach((condition, index) => {
-          if (!isRecord(condition)) {
-            missing(`Tiêu chí ${index + 1} của node ${node.id} không đúng cấu trúc.`);
-            return;
-          }
-          const field = typeof condition.field === "string" ? condition.field : "";
-          const operatorCode = typeof condition.operator === "string" ? condition.operator : "";
-          if (!field || !operatorCode) missing(`Tiêu chí ${index + 1} của node ${node.id} chưa chọn trường hoặc toán tử.`);
-          const operator = automationOperators.get(operatorCode);
-          if (operatorCode && !operator) missing(`Tiêu chí ${index + 1} của node ${node.id} dùng toán tử không được hỗ trợ.`);
-          if (operator?.requiresValue !== false && !hasText(condition.value)) missing(`Tiêu chí ${index + 1} của node ${node.id} chưa có giá trị so sánh.`);
-        });
-      } else {
-        if (!node.data.field || !node.data.operator) missing(`Node điều kiện ${node.id} chưa chọn trường hoặc toán tử.`);
-        const operator = node.data.operator ? automationOperators.get(node.data.operator) : undefined;
-        if (node.data.operator && !operator) missing(`Node điều kiện ${node.id} dùng toán tử không được hỗ trợ.`);
-        if (operator?.requiresValue !== false && !hasText(node.data.value)) missing(`Node điều kiện ${node.id} chưa có giá trị so sánh.`);
-      }
-      break;
-    case "action_notification":
-      if (!hasText(node.data.title) || !hasText(node.data.content) || !hasText(node.data.targetRole)) {
-        missing(`Node thông báo ${node.id} phải có tiêu đề, nội dung và vai trò nhận.`);
-      }
-      break;
-    case "action_assign":
-      if (!hasText(node.data.assignToUserId)) missing(`Node phân công ${node.id} chưa chọn nhân viên.`);
-      break;
-    case "action_update_stage":
-      if (!hasText(node.data.stageId)) missing(`Node cập nhật pipeline ${node.id} chưa chọn giai đoạn.`);
-      break;
-    case "action_activity":
-      if (!hasText(node.data.activityType) || !hasText(node.data.activityContent)) {
-        missing(`Node hoạt động ${node.id} phải có loại và nội dung.`);
-      }
-      break;
-    case "delay":
-      if (!Number.isFinite(Number(node.data.delayMinutes)) || Number(node.data.delayMinutes) <= 0) {
-        missing(`Node chờ ${node.id} phải có thời gian lớn hơn 0 phút.`);
-      }
-      break;
-  }
-  if (!getAutomationNodeDefinition(node.type)) missing(`Loại node ${node.type} chưa được đăng ký.`);
-  return issues;
+  return validateRegisteredAutomationNode(node).map((message) => ({
+    code: "INVALID_NODE_CONFIG",
+    nodeId: node.id,
+    message,
+  }));
 }
 
 function isGraph(value: unknown): value is AutomationGraphData {
@@ -251,10 +192,6 @@ function isEdge(value: unknown): value is AutomationEdge {
 
 function isRecord(value: unknown): value is Record<string, any> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
-}
-
-function hasText(value: unknown): value is string {
-  return typeof value === "string" && value.trim().length > 0;
 }
 
 function isValidSourceHandle(type: AutomationNodeType, handle: string | null | undefined) {

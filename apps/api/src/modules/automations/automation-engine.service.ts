@@ -2,42 +2,20 @@ import { Queue, UnrecoverableError, Worker, type Job } from "bullmq";
 
 import { redisConnection } from "../../config/redis";
 import { prisma } from "../../database/prisma";
-import { getAuthUser } from "../auth/auth.service";
-import { assignVisibleLead, changeVisibleLeadStage, leadUpdatePermissions } from "../leads/lead-owner-stage-mutations.service";
-import { getAutomationLeadData, getAutomationTemplateReferences, renderAutomationTemplate } from "./automation-data-field.service";
-import { evaluateAutomationConditions } from "./automation-condition-evaluator";
+import { executeRegisteredAutomationNode } from "./automation-action-registry";
 import { decideNodeExecution } from "./automation-execution-state";
+import type { AutomationContext, AutomationExecutionSource, ExecutableAutomationRule } from "./automation-execution.types";
 import { validateAutomationGraph } from "./automation-graph.validator";
 import { ensureAutomationRuleVersionSnapshot } from "./automation-rule-version.service";
-import type { AutomationEdge, AutomationGraphData, AutomationNode } from "./automation.types";
+import type { AutomationEdge, AutomationGraphData } from "./automation.types";
 
-type TransactionClient = Parameters<Parameters<typeof prisma.$transaction>[0]>[0];
-
-export type AutomationContext = {
-  ruleId: string;
-  actorId?: string;
-  leadId?: string;
-  studentId?: string;
-  institutionProgramId?: string;
-  payload?: unknown;
-};
-
-export type AutomationExecutionSource = "event" | "manual_test";
-export type ExecutableAutomationRule = {
-  id: string;
-  version: number;
-  triggerType: string;
-  graphData: AutomationGraphData;
-  institutionProgramId: string | null;
-  createdBy: string | null;
-};
+export type { AutomationContext, AutomationExecutionSource, ExecutableAutomationRule } from "./automation-execution.types";
 export type ExecutionJobData = {
   context: AutomationContext;
   nodeId: string;
   graph: AutomationGraphData;
   logId: string;
 };
-type ActionResult = { nextSourceHandle: string | null; delayMinutes: number };
 
 const DEFAULT_AUTOMATION_QUEUE_NAME = "automation_engine_queue";
 const DEFAULT_DELAY_MS_PER_MINUTE = 60_000;
@@ -219,7 +197,7 @@ async function processAutomationNode(job: Job<ExecutionJobData>) {
   try {
     const actionResult = decision.kind === "reuse_action_result"
       ? { nextSourceHandle: decision.nextSourceHandle, delayMinutes: decision.delayMinutes }
-      : await executeNodeAction(node, context, nodeExecution.id);
+      : await executeRegisteredAutomationNode(node, context, nodeExecution.id);
     const nextNodes = getNextNodes(node.id, graph, actionResult.nextSourceHandle);
     for (const { nextNodeId } of nextNodes) {
       await enqueueAutomationJob(
@@ -280,153 +258,6 @@ function getNextNodes(nodeId: string, graph: AutomationGraphData, sourceHandle: 
   return outgoingEdges
     .filter((edge) => edge.sourceHandle === sourceHandle || (!edge.sourceHandle && sourceHandle === "default"))
     .map((edge) => ({ nextNodeId: edge.target, handle: edge.sourceHandle }));
-}
-
-async function executeNodeAction(node: AutomationNode, context: AutomationContext, nodeExecutionId: string): Promise<ActionResult> {
-  if (node.type === "trigger") throw new UnrecoverableError("Node khởi động không được thực thi như một action.");
-  const executor = AUTOMATION_ACTION_EXECUTORS[node.type];
-  if (!executor) throw new UnrecoverableError(`Loại node không được hỗ trợ: ${String(node.type)}`);
-  return executor(node, context, nodeExecutionId);
-}
-
-type AutomationActionExecutor = (
-  node: AutomationNode,
-  context: AutomationContext,
-  nodeExecutionId: string,
-) => Promise<ActionResult>;
-
-const AUTOMATION_ACTION_EXECUTORS = {
-  condition: executeConditionAction,
-  action_notification: executeNotificationAction,
-  action_assign: executeAssignAction,
-  action_update_stage: executeUpdateStageAction,
-  action_activity: executeActivityAction,
-  delay: executeDelayAction,
-} satisfies Record<Exclude<AutomationNode["type"], "trigger">, AutomationActionExecutor>;
-
-async function executeConditionAction(node: AutomationNode, context: AutomationContext, nodeExecutionId: string) {
-  const result = { nextSourceHandle: await evaluateCondition(node, context) ? "default" : "false", delayMinutes: 0 };
-  await markActionCompleted(prisma, nodeExecutionId, result);
-  return result;
-}
-
-async function executeDelayAction(node: AutomationNode, _context: AutomationContext, nodeExecutionId: string) {
-  const result = { nextSourceHandle: "default", delayMinutes: Number(node.data.delayMinutes ?? 0) };
-  await markActionCompleted(prisma, nodeExecutionId, result);
-  return result;
-}
-
-async function evaluateCondition(node: AutomationNode, context: AutomationContext): Promise<boolean> {
-  const conditions = node.data.conditions ?? (
-    node.data.field && node.data.operator
-      ? [{ field: node.data.field, operator: node.data.operator, value: node.data.value }]
-      : []
-  );
-  if (conditions.length === 0 || !context.leadId) throw new UnrecoverableError("Node điều kiện thiếu tiêu chí hoặc lead context.");
-  const actor = await requireActor(context);
-  const leadData = await getAutomationLeadData(
-    actor,
-    context.leadId,
-    context.institutionProgramId,
-    conditions.map((condition) => condition.field),
-  );
-  if (!leadData) throw new UnrecoverableError("Lead không tồn tại trong phạm vi của tài khoản kích hoạt.");
-  try {
-    return evaluateAutomationConditions(leadData, node.data.conditionCombinator ?? "AND", conditions);
-  } catch (error) {
-    throw new UnrecoverableError(toErrorMessage(error));
-  }
-}
-
-async function executeNotificationAction(node: AutomationNode, context: AutomationContext, nodeExecutionId: string): Promise<ActionResult> {
-  const { title, content, targetRole } = node.data;
-  if (!title || !content || !targetRole) throw new UnrecoverableError("Node thông báo thiếu tiêu đề, nội dung hoặc vai trò nhận.");
-  const actor = await requireActor(context);
-  const templateReferences = getAutomationTemplateReferences(title, content);
-  const leadData = context.leadId && templateReferences.length > 0
-    ? await getAutomationLeadData(actor, context.leadId, context.institutionProgramId, templateReferences)
-    : new Map<string, unknown>();
-  if (!leadData) throw new UnrecoverableError("Lead không tồn tại trong phạm vi của tài khoản kích hoạt.");
-  const renderedTitle = renderAutomationTemplate(title, leadData);
-  const renderedContent = renderAutomationTemplate(content, leadData);
-  const scopeWhere = actor.accessScope === "ALL"
-    ? {}
-    : actor.accessScope === "DEPARTMENT" && actor.departmentIds.length > 0
-      ? { user_departments: { some: { department_id: { in: actor.departmentIds } } } }
-      : { id: actor.id };
-  const users = await prisma.users.findMany({
-    where: { status: "active", deleted_at: null, user_roles: { some: { roles: { code: targetRole } } }, ...scopeWhere },
-    select: { id: true },
-  });
-  const result = { nextSourceHandle: "default", delayMinutes: 0 };
-  await prisma.$transaction(async (tx) => {
-    if (users.length > 0) await tx.notifications.createMany({ data: users.map((user) => ({ user_id: user.id, title: renderedTitle, content: renderedContent, type: "system" })) });
-    await markActionCompleted(tx, nodeExecutionId, result);
-  });
-  return result;
-}
-
-async function executeAssignAction(node: AutomationNode, context: AutomationContext, nodeExecutionId: string): Promise<ActionResult> {
-  const { assignToUserId } = node.data;
-  if (!assignToUserId || !context.leadId) throw new UnrecoverableError("Node phân công thiếu nhân viên hoặc lead context.");
-  const actor = await requireActor(context);
-  const result = { nextSourceHandle: "default", delayMinutes: 0 };
-  const mutation = await assignVisibleLead(actor, context.leadId, { assigneeId: assignToUserId }, context.institutionProgramId, async (tx) => markActionCompleted(tx, nodeExecutionId, result));
-  if (!mutation.ok) throw new UnrecoverableError(`Không thể phân công lead: ${mutation.reason}`);
-  return result;
-}
-
-async function executeUpdateStageAction(node: AutomationNode, context: AutomationContext, nodeExecutionId: string): Promise<ActionResult> {
-  const { stageId } = node.data;
-  if (!stageId || !context.leadId) throw new UnrecoverableError("Node cập nhật pipeline thiếu giai đoạn hoặc lead context.");
-  const actor = await requireActor(context);
-  const result = { nextSourceHandle: "default", delayMinutes: 0 };
-  const mutation = await changeVisibleLeadStage(actor, context.leadId, stageId, context.institutionProgramId, async (tx) => markActionCompleted(tx, nodeExecutionId, result));
-  if (!mutation.ok) throw new UnrecoverableError(`Không thể đổi giai đoạn lead: ${mutation.reason}`);
-  return result;
-}
-
-async function executeActivityAction(node: AutomationNode, context: AutomationContext, nodeExecutionId: string): Promise<ActionResult> {
-  const { activityType, activityContent } = node.data;
-  if (!activityType || !activityContent || !context.leadId) throw new UnrecoverableError("Node hoạt động thiếu loại, nội dung hoặc lead context.");
-  const actor = await requireActor(context);
-  const canWriteActivity = actor.permissions.includes("lead_activity.create") || leadUpdatePermissions.some((permission) => actor.permissions.includes(permission));
-  if (!canWriteActivity) throw new UnrecoverableError("Tài khoản kích hoạt không có quyền ghi hoạt động lead.");
-  const templateReferences = getAutomationTemplateReferences(activityContent);
-  const leadData = templateReferences.length > 0
-    ? await getAutomationLeadData(actor, context.leadId, context.institutionProgramId, templateReferences)
-    : new Map<string, unknown>();
-  if (!leadData) throw new UnrecoverableError("Lead không tồn tại trong phạm vi của tài khoản kích hoạt.");
-  const renderedContent = renderAutomationTemplate(activityContent, leadData);
-  const result = { nextSourceHandle: "default", delayMinutes: 0 };
-  await prisma.$transaction(async (tx) => {
-    await tx.lead_activities.create({ data: { lead_id: context.leadId, user_id: actor.id, type: activityType, content: renderedContent } });
-    await tx.audit_logs.create({
-      data: { user_id: actor.id, entity_type: "lead", entity_id: context.leadId, action: "automation_activity_created", new_data: { ruleId: context.ruleId, activityType } },
-    });
-    await markActionCompleted(tx, nodeExecutionId, result);
-  });
-  return result;
-}
-
-async function markActionCompleted(tx: TransactionClient | typeof prisma, nodeExecutionId: string, result: ActionResult) {
-  await tx.automation_node_executions.update({
-    where: { id: nodeExecutionId },
-    data: {
-      status: "action_completed",
-      next_source_handle: result.nextSourceHandle,
-      delay_minutes: result.delayMinutes,
-      action_completed_at: new Date(),
-      error_message: null,
-    },
-  });
-}
-
-async function requireActor(context: AutomationContext) {
-  if (!context.actorId) throw new UnrecoverableError("Automation context không có tài khoản kích hoạt.");
-  const actor = await getAuthUser(context.actorId);
-  if (!actor) throw new UnrecoverableError("Tài khoản kích hoạt automation không còn hoạt động.");
-  return actor;
 }
 
 function toErrorMessage(error: unknown) {

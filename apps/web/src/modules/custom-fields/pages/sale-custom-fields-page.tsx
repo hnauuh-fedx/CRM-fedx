@@ -4,7 +4,7 @@ import { useSearchParams } from "react-router-dom";
 import { Field, FieldLabel } from "@/components/ui/field";
 import { Select, SelectContent, SelectGroup, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import type { CustomFieldEntityType } from "../custom-field.types";
-import { leadFormFieldCatalog } from "../lead-form-field-catalog";
+import { leadFormFieldCatalog } from "@admission-crm/shared/lead-form-field-catalog";
 import { saleActivityFormFieldCatalog, saleReminderFormFieldCatalog } from "../sale-form-field-catalog";
 import { CustomFieldsManagementPage, type CustomFieldsManagementConfig } from "./custom-fields-management-page";
 

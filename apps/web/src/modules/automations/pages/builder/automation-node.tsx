@@ -1,30 +1,21 @@
 import { memo } from "react";
 import { Handle, Position, type NodeProps } from "@xyflow/react";
-import { Bell, Circle, Clock3, GitBranch, ListPlus, UserRoundPlus, Workflow, Zap, type LucideIcon } from "lucide-react";
-import type { AutomationNodeData, AutomationNodeType } from "../../automation.types";
-
-const NODE_STYLE: Record<
-  AutomationNodeType,
-  { bg: string; border: string; icon: LucideIcon }
-> = {
-  trigger: { bg: "bg-blue-50 dark:bg-blue-950/40", border: "border-blue-300 dark:border-blue-700", icon: Zap },
-  condition: { bg: "bg-orange-50 dark:bg-orange-950/40", border: "border-orange-300 dark:border-orange-700", icon: GitBranch },
-  action_notification: { bg: "bg-green-50 dark:bg-green-950/40", border: "border-green-300 dark:border-green-700", icon: Bell },
-  action_assign: { bg: "bg-purple-50 dark:bg-purple-950/40", border: "border-purple-300 dark:border-purple-700", icon: UserRoundPlus },
-  action_update_stage: { bg: "bg-teal-50 dark:bg-teal-950/40", border: "border-teal-300 dark:border-teal-700", icon: Workflow },
-  action_activity: { bg: "bg-indigo-50 dark:bg-indigo-950/40", border: "border-indigo-300 dark:border-indigo-700", icon: ListPlus },
-  delay: { bg: "bg-yellow-50 dark:bg-yellow-950/40", border: "border-yellow-300 dark:border-yellow-700", icon: Clock3 },
-};
+import type { AutomationNodeData, AutomationNodeDefinition, AutomationNodeType } from "../../automation.types";
+import { getAutomationNodeIcon, toneClasses } from "./node-presentation";
 
 export const AutomationNodeComponent = memo(function AutomationNodeComponent({
   data,
   type,
   selected,
-}: NodeProps & { data: AutomationNodeData; type: AutomationNodeType }) {
-  const style = NODE_STYLE[type] ?? { bg: "bg-muted", border: "border-border", icon: Circle };
-  const Icon = style.icon;
-  const isTrigger = type === "trigger";
-  const isCondition = type === "condition";
+}: NodeProps & {
+  data: AutomationNodeData & { registryPresentation?: Pick<AutomationNodeDefinition, "category" | "icon" | "tone"> };
+  type: AutomationNodeType;
+}) {
+  const presentation = data.registryPresentation;
+  const style = presentation ? toneClasses[presentation.tone] : { bg: "bg-muted", border: "border-border" };
+  const Icon = getAutomationNodeIcon(presentation?.icon);
+  const isTrigger = presentation?.category === "trigger" || type === "trigger";
+  const isCondition = presentation?.category === "condition" || type === "condition";
 
   return (
     <div

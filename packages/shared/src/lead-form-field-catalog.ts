@@ -1,14 +1,30 @@
-import type { SystemFormField, SystemFormFieldGroup } from "./form-field-catalog.types";
+export type LeadSystemField = {
+  key: string;
+  label: string;
+  dataType: "TEXT" | "TEXTAREA" | "NUMBER" | "DATE" | "BOOLEAN" | "EMAIL" | "PHONE" | "SELECT" | "MULTI_SELECT";
+  storage: string;
+  isRequired?: boolean;
+  isSensitive?: boolean;
+  optionSource?: string;
+  note?: string;
+};
+
+export type LeadSystemFieldGroup = {
+  id: string;
+  label: string;
+  description: string;
+  fields: LeadSystemField[];
+};
 
 const field = (
   key: string,
   label: string,
-  dataType: SystemFormField["dataType"],
+  dataType: LeadSystemField["dataType"],
   storage: string,
-  config: Omit<SystemFormField, "key" | "label" | "dataType" | "storage"> = {},
-): SystemFormField => ({ key, label, dataType, storage, ...config });
+  config: Omit<LeadSystemField, "key" | "label" | "dataType" | "storage"> = {},
+): LeadSystemField => ({ key, label, dataType, storage, ...config });
 
-export const leadFormFieldCatalog: SystemFormFieldGroup[] = [
+export const leadFormFieldCatalog: LeadSystemFieldGroup[] = [
   {
     id: "basic",
     label: "Thông tin cơ bản",

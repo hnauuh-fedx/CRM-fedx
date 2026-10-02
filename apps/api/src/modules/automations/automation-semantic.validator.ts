@@ -1,6 +1,7 @@
 import { getAutomationTemplateReferences } from "./automation-data-field.service";
+import { getAutomationSystemField, normalizeAutomationFieldReference } from "./automation-field-registry";
 import type { AutomationGraphValidationIssue } from "./automation-graph.validator";
-import { AUTOMATION_REGISTRY } from "./automation-registry";
+import { AUTOMATION_REGISTRY, getAutomationNodeDefinition } from "./automation-registry";
 import type { AutomationGraphData } from "./automation.types";
 
 export type AutomationSemanticCatalog = {
@@ -13,35 +14,6 @@ export type AutomationSemanticCatalog = {
   canWriteActivity: boolean;
   canViewSensitiveData: boolean;
 };
-
-const SYSTEM_FIELD_DATA_TYPES = new Map<string, string>([
-  ...["fullName", "birthPlace", "cccd", "cccdIssuePlace", "ethnicity", "religion", "nationality", "graduationCertificate", "previousGraduationCertificate", "diplomaIssuePlace", "graduationMajor", "graduationRank", "academicRank12", "conductRank12", "highSchoolName", "highSchoolDistrict", "highSchoolProvince", "hamlet", "ward", "district", "province", "currentJob", "companyName", "relative1FullName", "relative1Relationship", "relative1Job", "relative2FullName", "relative2Relationship", "relative2Job", "trainingCode", "classCode", "subjectGroupCode", "subjectGroupName", "enrollmentBatch", "registrationStation", "decisionNumber", "temperature", "gclid"].map((key) => [`system:${key}`, "TEXT"] as const),
-  ...["specificAddress", "currentAddress", "permanentAddress", "currentResidence", "relative1Address", "relative2Address", "note"].map((key) => [`system:${key}`, "TEXTAREA"] as const),
-  ...["graduationYear", "score1", "score2", "score3", "admissionScore", "monthlyRevenue"].map((key) => [`system:${key}`, "NUMBER"] as const),
-  ...["dateOfBirth", "cccdIssueDate", "decisionSignedDate"].map((key) => [`system:${key}`, "DATE"] as const),
-  ...["sourceId", "gender", "majorId", "admissionStatusId", "pipelineStageId", "institutionProgramId", "assigneeId"].map((key) => [`system:${key}`, "SELECT"] as const),
-  ["system:phone", "PHONE"],
-  ["system:relative1Phone", "PHONE"],
-  ["system:relative2Phone", "PHONE"],
-  ["system:email", "EMAIL"],
-  ["system:tags", "MULTI_SELECT"],
-]);
-
-const SENSITIVE_SYSTEM_FIELDS = new Set([
-  "system:phone", "system:email", "system:dateOfBirth", "system:cccd", "system:cccdIssueDate",
-  "system:cccdIssuePlace", "system:specificAddress", "system:currentAddress", "system:permanentAddress",
-  "system:currentResidence", "system:relative1FullName", "system:relative1Phone", "system:relative1Address",
-  "system:relative2FullName", "system:relative2Phone", "system:relative2Address",
-]);
-
-const LEGACY_FIELD_REFERENCES = new Map([
-  ["source_id", "system:sourceId"],
-  ["pipeline_stage_id", "system:pipelineStageId"],
-  ["status", "system:pipelineStageId"],
-  ["assigned_to", "system:assigneeId"],
-  ["institution_program_id", "system:institutionProgramId"],
-  ["full_name", "system:fullName"],
-]);
 
 export function validateAutomationSemantics(
   graph: AutomationGraphData,
@@ -68,55 +40,28 @@ export function validateAutomationSemantics(
       }
     }
 
-    if (node.type === "action_assign") {
-      if (!catalog.canAssign) {
-        issues.push({
-          code: "INSUFFICIENT_PERMISSION",
-          nodeId: node.id,
-          message: `Bạn không có quyền phân công Lead cho node ${node.id}.`,
-        });
+    const definition = getAutomationNodeDefinition(node.type);
+    for (const capability of definition?.requiredCapabilities ?? []) {
+      const check = capabilityChecks[capability];
+      if (!check.allowed(catalog)) {
+        issues.push({ code: "INSUFFICIENT_PERMISSION", nodeId: node.id, message: check.message(node.id) });
       }
-      if (node.data.assignToUserId && !catalog.assigneeIds.has(node.data.assignToUserId)) {
+    }
+
+    for (const field of definition?.configFields ?? []) {
+      const value = node.data[field.key];
+      if (field.optionsSource && typeof value === "string" && value && !optionReferenceChecks[field.optionsSource]?.exists(value, catalog)) {
         issues.push({
           code: "INVALID_REFERENCE",
           nodeId: node.id,
-          message: `Nhân viên được chọn tại node ${node.id} không còn khả dụng trong phạm vi của rule.`,
+          message: optionReferenceChecks[field.optionsSource]?.message(node.id) ?? `Giá trị tham chiếu tại node ${node.id} không còn tồn tại.`,
         });
       }
     }
 
-    if (node.type === "action_update_stage" && node.data.stageId && !catalog.pipelineStageIds.has(node.data.stageId)) {
-      issues.push({
-        code: "INVALID_REFERENCE",
-        nodeId: node.id,
-        message: `Giai đoạn pipeline tại node ${node.id} không còn tồn tại.`,
-      });
-    }
-    if (node.type === "action_update_stage" && !catalog.canUpdateLead) {
-      issues.push({
-        code: "INSUFFICIENT_PERMISSION",
-        nodeId: node.id,
-        message: `Bạn không có quyền cập nhật Lead cho node ${node.id}.`,
-      });
-    }
-
-    if (node.type === "action_activity" && !catalog.canWriteActivity) {
-      issues.push({
-        code: "INSUFFICIENT_PERMISSION",
-        nodeId: node.id,
-        message: `Bạn không có quyền ghi hoạt động Lead cho node ${node.id}.`,
-      });
-    }
-
-    if (node.type === "action_notification" && node.data.targetRole && !catalog.targetRoleCodes.has(node.data.targetRole)) {
-      issues.push({
-        code: "INVALID_REFERENCE",
-        nodeId: node.id,
-        message: `Vai trò nhận thông báo tại node ${node.id} không còn tồn tại.`,
-      });
-    }
-
-    const templates = [node.data.title, node.data.content, node.data.activityContent]
+    const templates = (definition?.configFields ?? [])
+      .filter((field) => field.control === "template_text" || field.control === "template_textarea")
+      .map((field) => node.data[field.key])
       .filter((value): value is string => typeof value === "string");
     for (const reference of getAutomationTemplateReferences(...templates)) {
       validateFieldReference(reference, node.id, catalog, issues);
@@ -126,6 +71,39 @@ export function validateAutomationSemantics(
   return issues;
 }
 
+const capabilityChecks = {
+  assign: {
+    allowed: (catalog: AutomationSemanticCatalog) => catalog.canAssign,
+    message: (nodeId: string) => `Bạn không có quyền phân công Lead cho node ${nodeId}.`,
+  },
+  updateLead: {
+    allowed: (catalog: AutomationSemanticCatalog) => catalog.canUpdateLead,
+    message: (nodeId: string) => `Bạn không có quyền cập nhật Lead cho node ${nodeId}.`,
+  },
+  writeActivity: {
+    allowed: (catalog: AutomationSemanticCatalog) => catalog.canWriteActivity,
+    message: (nodeId: string) => `Bạn không có quyền ghi hoạt động Lead cho node ${nodeId}.`,
+  },
+};
+
+const optionReferenceChecks: Partial<Record<"assignees" | "pipelineStages" | "targetRoles", {
+  exists: (value: string, catalog: AutomationSemanticCatalog) => boolean;
+  message: (nodeId: string) => string;
+}>> = {
+  assignees: {
+    exists: (value, catalog) => catalog.assigneeIds.has(value),
+    message: (nodeId) => `Nhân viên được chọn tại node ${nodeId} không còn khả dụng trong phạm vi của rule.`,
+  },
+  pipelineStages: {
+    exists: (value, catalog) => catalog.pipelineStageIds.has(value),
+    message: (nodeId) => `Giai đoạn pipeline tại node ${nodeId} không còn tồn tại.`,
+  },
+  targetRoles: {
+    exists: (value, catalog) => catalog.targetRoleCodes.has(value),
+    message: (nodeId) => `Vai trò nhận thông báo tại node ${nodeId} không còn tồn tại.`,
+  },
+};
+
 function validateFieldReference(
   reference: string,
   nodeId: string,
@@ -133,11 +111,12 @@ function validateFieldReference(
   issues: AutomationGraphValidationIssue[],
 ) {
   if (reference.startsWith("system:")) {
-    if (!SYSTEM_FIELD_DATA_TYPES.has(reference)) {
+    const field = getAutomationSystemField(reference);
+    if (!field) {
       issues.push({ code: "INVALID_REFERENCE", nodeId, message: `Trường hệ thống ${reference} tại node ${nodeId} không tồn tại.` });
       return;
     }
-    if (SENSITIVE_SYSTEM_FIELDS.has(reference) && !catalog.canViewSensitiveData) {
+    if (field.isSensitive && !catalog.canViewSensitiveData) {
       issues.push({ code: "INSUFFICIENT_PERMISSION", nodeId, message: `Bạn không có quyền dùng trường nhạy cảm ${reference} tại node ${nodeId}.` });
     }
     return;
@@ -151,7 +130,7 @@ function validateFieldReference(
     });
     return;
   }
-  if (LEGACY_FIELD_REFERENCES.has(reference)) return;
+  if (normalizeAutomationFieldReference(reference) !== reference) return;
   issues.push({
     code: "INVALID_REFERENCE",
     nodeId,
@@ -160,6 +139,6 @@ function validateFieldReference(
 }
 
 function getFieldDataType(reference: string, catalog: AutomationSemanticCatalog) {
-  const normalizedReference = LEGACY_FIELD_REFERENCES.get(reference) ?? reference;
-  return catalog.customFieldDataTypes.get(normalizedReference) ?? SYSTEM_FIELD_DATA_TYPES.get(normalizedReference);
+  const normalizedReference = normalizeAutomationFieldReference(reference);
+  return catalog.customFieldDataTypes.get(normalizedReference) ?? getAutomationSystemField(normalizedReference)?.dataType;
 }

@@ -42,8 +42,6 @@ import {
   duplicateAutomationRule,
 } from "@/services/automation.service";
 import {
-  SUPPORTED_AUTOMATION_TRIGGER_TYPES,
-  TRIGGER_TYPE_LABELS,
   type AutomationGraphData,
   type AutomationRuleListItem,
 } from "../automation.types";
@@ -126,8 +124,7 @@ export function AutomationRulesPage() {
     enabled: Boolean(auth.accessToken),
   });
   const programs = optionsQuery.data?.institutionPrograms ?? [];
-  const triggers = optionsQuery.data?.registry.triggers
-    ?? SUPPORTED_AUTOMATION_TRIGGER_TYPES.map((code) => ({ code, label: TRIGGER_TYPE_LABELS[code] }));
+  const triggers = optionsQuery.data?.registry.triggers ?? [];
 
   const rulesQuery = useQuery({
     queryKey: ["automations", "list", { page, search, statusFilter, triggerFilter, programFilter }],
@@ -270,6 +267,7 @@ export function AutomationRulesPage() {
         <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
           {rulesQuery.data.data.map((rule) => (
             <RuleCard
+              triggerLabel={triggers.find((trigger) => trigger.code === rule.triggerType)?.label ?? rule.triggerType}
               key={rule.id}
               rule={rule}
               onToggle={(isActive) => toggleMutation.mutate({ id: rule.id, isActive })}
@@ -315,20 +313,20 @@ export function AutomationRulesPage() {
 
 function RuleCard({
   rule,
+  triggerLabel,
   onToggle,
   onArchive,
   onDuplicate,
   onEdit,
 }: {
   rule: AutomationRuleListItem;
+  triggerLabel: string;
   onToggle: (isActive: boolean) => void;
   onArchive: () => void;
   onDuplicate: () => void;
   onEdit: () => void;
 }) {
   const [confirmOpen, setConfirmOpen] = useState(false);
-  const triggerLabel = TRIGGER_TYPE_LABELS[rule.triggerType] ?? rule.triggerType;
-
   return (
     <Card className="group border-border/70 shadow-xs transition-shadow hover:shadow-md">
       <CardHeader className="pb-3">

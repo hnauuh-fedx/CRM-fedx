@@ -33,6 +33,7 @@ export function NodePropertiesPanel({ selectedNodeId, nodes, options, isLoadingO
   const selectedNode = nodes.find((n) => n.id === selectedNodeId);
   const localData = selectedNode?.data ?? null;
   const dataFields = useMemo(() => buildAutomationDataFields(
+    options?.registry.fields ?? [],
     options?.customDataFields ?? [],
     canViewSensitiveLeadData,
     options?.systemFieldOptions,
@@ -44,7 +45,7 @@ export function NodePropertiesPanel({ selectedNodeId, nodes, options, isLoadingO
       return { ...field, options: (options?.assignees ?? []).map((assignee) => ({ code: assignee.id, label: assignee.fullName })) };
     }
     return field;
-  }), [canViewSensitiveLeadData, options?.assignees, options?.customDataFields, options?.pipelineStages, options?.systemFieldOptions]);
+  }), [canViewSensitiveLeadData, options?.assignees, options?.customDataFields, options?.pipelineStages, options?.registry.fields, options?.systemFieldOptions]);
 
   if (!selectedNode || !localData) {
     return null;

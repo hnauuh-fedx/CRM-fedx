@@ -1,17 +1,6 @@
-import { Bell, GitBranch, NotebookPen, RefreshCw, Timer, UserPlus, Zap, type LucideIcon } from "lucide-react";
-
 import { Button } from "@/components/ui/button";
 import type { AutomationNodeDefinition, AutomationNodeType } from "../../automation.types";
-
-const NODE_ICONS: Record<AutomationNodeType, LucideIcon> = {
-  trigger: Zap,
-  condition: GitBranch,
-  action_notification: Bell,
-  action_assign: UserPlus,
-  action_update_stage: RefreshCw,
-  action_activity: NotebookPen,
-  delay: Timer,
-};
+import { getAutomationNodeIcon } from "./node-presentation";
 
 export function NodePalette({ definitions, onAdd }: {
   definitions: AutomationNodeDefinition[];
@@ -50,7 +39,7 @@ export function NodePalette({ definitions, onAdd }: {
               </p>
               <div className="flex flex-col gap-2">
                 {nodes.map((node) => {
-                  const Icon = NODE_ICONS[node.type];
+                  const Icon = getAutomationNodeIcon(node.icon);
 
                   return (
                     <Button
