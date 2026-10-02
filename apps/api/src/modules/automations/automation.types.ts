@@ -54,6 +54,8 @@ export type AutomationNodeData = {
   field?: string;
   operator?: string;
   value?: string;
+  conditionCombinator?: "AND" | "OR";
+  conditions?: AutomationCondition[];
   // Action: notification
   title?: string;
   content?: string;
@@ -67,6 +69,13 @@ export type AutomationNodeData = {
   activityContent?: string;
   // Delay
   delayMinutes?: number;
+};
+
+export type AutomationCondition = {
+  id?: string;
+  field: string;
+  operator: string;
+  value?: string;
 };
 
 export type AutomationRuleListResponse = {

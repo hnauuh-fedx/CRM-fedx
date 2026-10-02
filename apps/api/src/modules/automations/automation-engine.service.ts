@@ -5,6 +5,7 @@ import { prisma } from "../../database/prisma";
 import { getAuthUser } from "../auth/auth.service";
 import { assignVisibleLead, changeVisibleLeadStage, leadUpdatePermissions } from "../leads/lead-owner-stage-mutations.service";
 import { getAutomationLeadData, getAutomationTemplateReferences, renderAutomationTemplate } from "./automation-data-field.service";
+import { evaluateAutomationConditions } from "./automation-condition-evaluator";
 import { decideNodeExecution } from "./automation-execution-state";
 import { validateAutomationGraph } from "./automation-graph.validator";
 import { ensureAutomationRuleVersionSnapshot } from "./automation-rule-version.service";
@@ -282,41 +283,58 @@ function getNextNodes(nodeId: string, graph: AutomationGraphData, sourceHandle: 
 }
 
 async function executeNodeAction(node: AutomationNode, context: AutomationContext, nodeExecutionId: string): Promise<ActionResult> {
-  switch (node.type) {
-    case "condition": {
-      const result = { nextSourceHandle: await evaluateCondition(node, context) ? "default" : "false", delayMinutes: 0 };
-      await markActionCompleted(prisma, nodeExecutionId, result);
-      return result;
-    }
-    case "action_notification": return executeNotificationAction(node, context, nodeExecutionId);
-    case "action_assign": return executeAssignAction(node, context, nodeExecutionId);
-    case "action_update_stage": return executeUpdateStageAction(node, context, nodeExecutionId);
-    case "action_activity": return executeActivityAction(node, context, nodeExecutionId);
-    case "delay": {
-      const result = { nextSourceHandle: "default", delayMinutes: Number(node.data.delayMinutes ?? 0) };
-      await markActionCompleted(prisma, nodeExecutionId, result);
-      return result;
-    }
-    case "trigger": throw new UnrecoverableError("Node khởi động không được thực thi như một action.");
-    default: throw new UnrecoverableError(`Loại node không được hỗ trợ: ${String(node.type)}`);
-  }
+  if (node.type === "trigger") throw new UnrecoverableError("Node khởi động không được thực thi như một action.");
+  const executor = AUTOMATION_ACTION_EXECUTORS[node.type];
+  if (!executor) throw new UnrecoverableError(`Loại node không được hỗ trợ: ${String(node.type)}`);
+  return executor(node, context, nodeExecutionId);
+}
+
+type AutomationActionExecutor = (
+  node: AutomationNode,
+  context: AutomationContext,
+  nodeExecutionId: string,
+) => Promise<ActionResult>;
+
+const AUTOMATION_ACTION_EXECUTORS = {
+  condition: executeConditionAction,
+  action_notification: executeNotificationAction,
+  action_assign: executeAssignAction,
+  action_update_stage: executeUpdateStageAction,
+  action_activity: executeActivityAction,
+  delay: executeDelayAction,
+} satisfies Record<Exclude<AutomationNode["type"], "trigger">, AutomationActionExecutor>;
+
+async function executeConditionAction(node: AutomationNode, context: AutomationContext, nodeExecutionId: string) {
+  const result = { nextSourceHandle: await evaluateCondition(node, context) ? "default" : "false", delayMinutes: 0 };
+  await markActionCompleted(prisma, nodeExecutionId, result);
+  return result;
+}
+
+async function executeDelayAction(node: AutomationNode, _context: AutomationContext, nodeExecutionId: string) {
+  const result = { nextSourceHandle: "default", delayMinutes: Number(node.data.delayMinutes ?? 0) };
+  await markActionCompleted(prisma, nodeExecutionId, result);
+  return result;
 }
 
 async function evaluateCondition(node: AutomationNode, context: AutomationContext): Promise<boolean> {
-  const { field, operator, value } = node.data;
-  if (!field || !operator || !context.leadId) throw new UnrecoverableError("Node điều kiện thiếu trường, toán tử hoặc lead context.");
+  const conditions = node.data.conditions ?? (
+    node.data.field && node.data.operator
+      ? [{ field: node.data.field, operator: node.data.operator, value: node.data.value }]
+      : []
+  );
+  if (conditions.length === 0 || !context.leadId) throw new UnrecoverableError("Node điều kiện thiếu tiêu chí hoặc lead context.");
   const actor = await requireActor(context);
-  const leadData = await getAutomationLeadData(actor, context.leadId, context.institutionProgramId, [field]);
+  const leadData = await getAutomationLeadData(
+    actor,
+    context.leadId,
+    context.institutionProgramId,
+    conditions.map((condition) => condition.field),
+  );
   if (!leadData) throw new UnrecoverableError("Lead không tồn tại trong phạm vi của tài khoản kích hoạt.");
-  const actualValue = leadData.get(field);
-  const compareValue = String(value);
-  const actualString = String(actualValue ?? "");
-  switch (operator) {
-    case "equals": return actualString === compareValue;
-    case "not_equals": return actualString !== compareValue;
-    case "contains": return actualString.includes(compareValue);
-    case "exists": return actualValue !== null && actualValue !== undefined && actualString !== "";
-    default: throw new UnrecoverableError(`Toán tử điều kiện không được hỗ trợ: ${operator}`);
+  try {
+    return evaluateAutomationConditions(leadData, node.data.conditionCombinator ?? "AND", conditions);
+  } catch (error) {
+    throw new UnrecoverableError(toErrorMessage(error));
   }
 }
 

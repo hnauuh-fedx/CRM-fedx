@@ -1,5 +1,5 @@
-import { useEffect, useMemo, useState } from "react";
-import { X } from "lucide-react";
+import { useMemo } from "react";
+import { Plus, Trash2, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -7,7 +7,15 @@ import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { useAuth } from "@/modules/auth/auth-context";
 import { buildAutomationDataFields, normalizeAutomationFieldReference } from "../../automation-data-fields";
-import type { AutomationDataField, AutomationNode, AutomationNodeData, AutomationOptions } from "../../automation.types";
+import type {
+  AutomationCondition,
+  AutomationConfigField,
+  AutomationDataField,
+  AutomationNode,
+  AutomationNodeData,
+  AutomationNodeType,
+  AutomationOptions,
+} from "../../automation.types";
 import { AutomationFieldPicker } from "./automation-field-picker";
 
 export type NodePropertiesPanelProps = {
@@ -23,7 +31,7 @@ export function NodePropertiesPanel({ selectedNodeId, nodes, options, isLoadingO
   const auth = useAuth();
   const canViewSensitiveLeadData = auth.can("lead.sensitive.view");
   const selectedNode = nodes.find((n) => n.id === selectedNodeId);
-  const [localData, setLocalData] = useState<AutomationNodeData | null>(null);
+  const localData = selectedNode?.data ?? null;
   const dataFields = useMemo(() => buildAutomationDataFields(
     options?.customDataFields ?? [],
     canViewSensitiveLeadData,
@@ -38,21 +46,11 @@ export function NodePropertiesPanel({ selectedNodeId, nodes, options, isLoadingO
     return field;
   }), [canViewSensitiveLeadData, options?.assignees, options?.customDataFields, options?.pipelineStages, options?.systemFieldOptions]);
 
-  // Sync local state when selected node changes
-  useEffect(() => {
-    if (selectedNode) {
-      setLocalData(selectedNode.data);
-    } else {
-      setLocalData(null);
-    }
-  }, [selectedNode]);
-
   if (!selectedNode || !localData) {
     return null;
   }
 
   const handleChange = (key: keyof AutomationNodeData, value: unknown) => {
-    setLocalData((prev) => (prev ? { ...prev, [key]: value } : null));
     onNodeUpdate(selectedNode.id, { [key]: value });
   };
 
@@ -62,8 +60,25 @@ export function NodePropertiesPanel({ selectedNodeId, nodes, options, isLoadingO
     handleChange(key, `${current}${separator}{{${field.reference}}}`);
   };
 
-  const normalizedConditionReference = normalizeAutomationFieldReference(localData.field);
-  const selectedConditionField = dataFields.find((field) => field.reference === normalizedConditionReference);
+  const conditions: AutomationCondition[] = localData.conditions?.length
+    ? localData.conditions
+    : [{ id: "legacy-condition", field: localData.field ?? "", operator: localData.operator ?? "equals", value: localData.value ?? "" }];
+
+  const updateConditions = (nextConditions: AutomationCondition[]) => {
+    const nextData: Partial<AutomationNodeData> = {
+      conditions: nextConditions,
+      field: undefined,
+      operator: undefined,
+      value: undefined,
+    };
+    onNodeUpdate(selectedNode.id, nextData);
+  };
+
+  const updateCondition = (index: number, patch: Partial<AutomationCondition>) => {
+    updateConditions(conditions.map((condition, conditionIndex) => (
+      conditionIndex === index ? { ...condition, ...patch } : condition
+    )));
+  };
 
   return (
     <div className="w-80 border-l bg-background flex flex-col h-full shadow-sm z-10 shrink-0">
@@ -93,195 +108,200 @@ export function NodePropertiesPanel({ selectedNodeId, nodes, options, isLoadingO
 
         {selectedNode.type === "condition" && (
           <div className="space-y-4 border rounded-md p-3 bg-muted/30">
-            <h4 className="text-sm font-medium">Bộ lọc điều kiện</h4>
-            <div className="space-y-2">
-              <Label className="text-xs">Trường dữ liệu (Field)</Label>
-              <AutomationFieldPicker
-                fields={dataFields}
-                selectedReference={normalizedConditionReference}
-                placeholder={isLoadingOptions ? "Đang tải trường dữ liệu..." : "Chọn trường dữ liệu..."}
-                onSelect={(field) => {
-                  handleChange("field", field.reference);
-                  handleChange("value", "");
-                }}
-              />
-              <p className="text-xs text-muted-foreground">
-                {dataFields.length} trường hệ thống và trường tùy chỉnh đang khả dụng theo cấu hình dữ liệu.
-              </p>
-            </div>
-            <div className="space-y-2">
-              <Label className="text-xs">Toán tử (Operator)</Label>
-              <Select 
-                value={localData.operator || "equals"} 
-                onValueChange={(val) => handleChange("operator", val)}
-              >
-                <SelectTrigger>
-                  <SelectValue placeholder="Chọn..." />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="equals">Bằng (Equals)</SelectItem>
-                  <SelectItem value="not_equals">Khác (Not equals)</SelectItem>
-                  <SelectItem value="contains">Chứa (Contains)</SelectItem>
-                  <SelectItem value="exists">Có dữ liệu (Exists)</SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
-            {localData.operator !== "exists" && <div className="space-y-2">
-              <Label className="text-xs">Giá trị so sánh (Value)</Label>
-              {selectedConditionField?.options.length ? (
-                <Select value={localData.value || ""} onValueChange={(value) => handleChange("value", value)}>
-                  <SelectTrigger><SelectValue placeholder="Chọn giá trị..." /></SelectTrigger>
-                  <SelectContent>{selectedConditionField.options.map((option) => <SelectItem key={option.code} value={option.code}>{option.label}</SelectItem>)}</SelectContent>
-                </Select>
-              ) : selectedConditionField?.dataType === "BOOLEAN" ? (
-                <Select value={localData.value || ""} onValueChange={(value) => handleChange("value", value)}>
-                  <SelectTrigger><SelectValue placeholder="Chọn giá trị..." /></SelectTrigger>
-                  <SelectContent><SelectItem value="true">Có</SelectItem><SelectItem value="false">Không</SelectItem></SelectContent>
-                </Select>
-              ) : (
-                <Input
-                  type={selectedConditionField?.dataType === "NUMBER" ? "number" : selectedConditionField?.dataType === "DATE" ? "date" : "text"}
-                  placeholder="Nhập giá trị so sánh"
-                  value={localData.value || ""}
-                  onChange={(event) => handleChange("value", event.target.value)}
-                />
-              )}
-            </div>}
-          </div>
-        )}
-
-        {selectedNode.type === "action_assign" && (
-          <div className="space-y-2">
-            <Label>Nhân viên phụ trách</Label>
-            <Select 
-              value={localData.assignToUserId || ""} 
-              onValueChange={(val) => handleChange("assignToUserId", val)}
-            >
-              <SelectTrigger>
-                <SelectValue placeholder="Chọn nhân viên..." />
-              </SelectTrigger>
-              <SelectContent>
-                {options?.assignees.map((assignee) => (
-                  <SelectItem key={assignee.id} value={assignee.id}>{assignee.fullName}</SelectItem>
+            <div className="flex items-center justify-between gap-2">
+              <h4 className="text-sm font-medium">Bộ lọc điều kiện</h4>
+              <div className="inline-flex rounded-md border bg-background p-0.5" aria-label="Cách kết hợp điều kiện">
+                {(["AND", "OR"] as const).map((combinator) => (
+                  <Button
+                    key={combinator}
+                    type="button"
+                    size="sm"
+                    variant={localData.conditionCombinator === combinator || (!localData.conditionCombinator && combinator === "AND") ? "secondary" : "ghost"}
+                    className="min-h-11 min-w-11 px-2.5"
+                    aria-pressed={localData.conditionCombinator === combinator || (!localData.conditionCombinator && combinator === "AND")}
+                    onClick={() => handleChange("conditionCombinator", combinator)}
+                  >
+                    {combinator}
+                  </Button>
                 ))}
-              </SelectContent>
-            </Select>
-            <p className="mt-1 text-xs text-muted-foreground">
-              {isLoadingOptions
-                ? "Đang tải danh sách nhân viên..."
-                : options?.assignees.length
-                  ? "Chỉ hiển thị nhân viên trong phạm vi quyền phân công."
-                  : "Không có nhân viên phù hợp hoặc bạn chưa có quyền phân công lead."}
+              </div>
+            </div>
+            <p className="text-xs text-muted-foreground">
+              {localData.conditionCombinator === "OR" ? "Chỉ cần một điều kiện đúng." : "Tất cả điều kiện phải đúng."}
+            </p>
+            {conditions.map((condition, index) => {
+              const normalizedReference = normalizeAutomationFieldReference(condition.field);
+              const selectedField = dataFields.find((field) => field.reference === normalizedReference);
+              const operators = (options?.registry.operators ?? []).filter((operator) => (
+                !selectedField || operator.dataTypes.includes(selectedField.dataType)
+              ));
+              const selectedOperator = operators.find((operator) => operator.code === condition.operator);
+
+              return (
+                <div key={condition.id ?? `${condition.field}:${condition.operator}:${condition.value ?? ""}`} className="space-y-3 rounded-md border bg-background p-3">
+                  <div className="flex items-center justify-between gap-2">
+                    <p className="text-xs font-medium">Điều kiện {index + 1}</p>
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="icon"
+                      className="size-11 text-destructive"
+                      disabled={conditions.length === 1}
+                      aria-label={`Xóa điều kiện ${index + 1}`}
+                      onClick={() => updateConditions(conditions.filter((_, conditionIndex) => conditionIndex !== index))}
+                    >
+                      <Trash2 aria-hidden="true" />
+                    </Button>
+                  </div>
+                  <div className="space-y-2">
+                    <Label className="text-xs">Trường dữ liệu</Label>
+                    <AutomationFieldPicker
+                      fields={dataFields}
+                      selectedReference={normalizedReference}
+                      placeholder={isLoadingOptions ? "Đang tải trường dữ liệu..." : "Chọn trường dữ liệu..."}
+                      onSelect={(field) => updateCondition(index, { field: field.reference, operator: "equals", value: "" })}
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <Label className="text-xs">Toán tử</Label>
+                    <Select value={condition.operator || "equals"} onValueChange={(operator) => updateCondition(index, { operator, value: "" })}>
+                      <SelectTrigger><SelectValue placeholder="Chọn toán tử..." /></SelectTrigger>
+                      <SelectContent>
+                        {operators.map((operator) => <SelectItem key={operator.code} value={operator.code}>{operator.label}</SelectItem>)}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  {selectedOperator?.requiresValue !== false && (
+                    <div className="space-y-2">
+                      <Label className="text-xs">Giá trị so sánh</Label>
+                      {["in", "not_in"].includes(condition.operator) ? (
+                        <Input
+                          placeholder="Nhập các giá trị, phân cách bằng dấu phẩy"
+                          value={condition.value || ""}
+                          onChange={(event) => updateCondition(index, { value: event.target.value })}
+                        />
+                      ) : selectedField?.options.length ? (
+                        <Select value={condition.value || ""} onValueChange={(value) => updateCondition(index, { value })}>
+                          <SelectTrigger><SelectValue placeholder="Chọn giá trị..." /></SelectTrigger>
+                          <SelectContent>{selectedField.options.map((option) => <SelectItem key={option.code} value={option.code}>{option.label}</SelectItem>)}</SelectContent>
+                        </Select>
+                      ) : selectedField?.dataType === "BOOLEAN" ? (
+                        <Select value={condition.value || ""} onValueChange={(value) => updateCondition(index, { value })}>
+                          <SelectTrigger><SelectValue placeholder="Chọn giá trị..." /></SelectTrigger>
+                          <SelectContent><SelectItem value="true">Có</SelectItem><SelectItem value="false">Không</SelectItem></SelectContent>
+                        </Select>
+                      ) : (
+                        <Input
+                          type={selectedField?.dataType === "NUMBER" ? "number" : selectedField?.dataType === "DATE" ? "date" : "text"}
+                          placeholder="Nhập giá trị so sánh"
+                          value={condition.value || ""}
+                          onChange={(event) => updateCondition(index, { value: event.target.value })}
+                        />
+                      )}
+                    </div>
+                  )}
+                </div>
+              );
+            })}
+            <Button
+              type="button"
+              variant="outline"
+              className="w-full"
+              onClick={() => updateConditions([...conditions, { id: crypto.randomUUID(), field: "", operator: "equals", value: "" }])}
+            >
+              <Plus aria-hidden="true" />
+              Thêm điều kiện
+            </Button>
+            <p className="text-xs text-muted-foreground">
+              {dataFields.length} trường dữ liệu đang khả dụng theo quyền truy cập.
             </p>
           </div>
         )}
 
-        {selectedNode.type === "action_notification" && (
-          <div className="space-y-4">
-            <div className="space-y-2">
-              <Label>Vai trò nhận thông báo</Label>
-              <Select value={localData.targetRole || ""} onValueChange={(val) => handleChange("targetRole", val)}>
-                <SelectTrigger>
-                  <SelectValue placeholder={isLoadingOptions ? "Đang tải..." : "Chọn vai trò..."} />
-                </SelectTrigger>
-                <SelectContent>
-                  {options?.targetRoles.map((role) => (
-                    <SelectItem key={role.id} value={role.code}>{role.name}</SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-            <div className="space-y-2">
-              <Label>Tiêu đề thông báo</Label>
-              <Input 
-                placeholder="VD: Bạn có lead mới..." 
-                value={localData.title || ""} 
-                onChange={(e) => handleChange("title", e.target.value)}
-              />
-              <AutomationFieldPicker fields={dataFields} placeholder="Chèn trường vào tiêu đề" onSelect={(field) => insertFieldToken("title", field)} />
-            </div>
-            <div className="space-y-2">
-              <Label>Nội dung thông báo</Label>
-              <Textarea 
-                placeholder="VD: Lead {{lead.full_name}} vừa được tạo..." 
-                value={localData.content || ""} 
-                onChange={(e) => handleChange("content", e.target.value)}
-              />
-              <AutomationFieldPicker fields={dataFields} placeholder="Chèn trường vào nội dung" onSelect={(field) => insertFieldToken("content", field)} />
-              <p className="text-xs text-muted-foreground">Giá trị trường sẽ được thay thế tự động khi rule chạy.</p>
-            </div>
-          </div>
-        )}
-
-        {selectedNode.type === "action_activity" && (
-          <div className="space-y-4">
-            <div className="space-y-2">
-              <Label>Loại hoạt động (Type)</Label>
-              <Select 
-                value={localData.activityType || ""} 
-                onValueChange={(val) => handleChange("activityType", val)}
-              >
-                <SelectTrigger>
-                  <SelectValue placeholder="Chọn loại hoạt động..." />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="call">Gọi điện thoại (Call)</SelectItem>
-                  <SelectItem value="email">Gửi Email</SelectItem>
-                  <SelectItem value="meeting">Hẹn gặp (Meeting)</SelectItem>
-                  <SelectItem value="note">Ghi chú (Note)</SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
-            <div className="space-y-2">
-              <Label>Nội dung ghi nhận</Label>
-              <Textarea 
-                placeholder="VD: Tự động gửi email chào mừng..." 
-                value={localData.activityContent || ""} 
-                onChange={(e) => handleChange("activityContent", e.target.value)}
-              />
-              <AutomationFieldPicker fields={dataFields} placeholder="Chèn trường vào nội dung" onSelect={(field) => insertFieldToken("activityContent", field)} />
-            </div>
-          </div>
-        )}
-
-        {selectedNode.type === "action_update_stage" && (
-          <div className="space-y-2">
-            <Label>Chuyển sang giai đoạn</Label>
-            <Select 
-              value={localData.stageId || ""} 
-              onValueChange={(val) => handleChange("stageId", val)}
-            >
-              <SelectTrigger>
-                <SelectValue placeholder="Chọn giai đoạn..." />
-              </SelectTrigger>
-              <SelectContent>
-                {options?.pipelineStages.map((stage) => (
-                  <SelectItem key={stage.id} value={stage.id}>
-                    {stage.pipelineName ? `${stage.pipelineName} — ${stage.name}` : stage.name}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-            {!isLoadingOptions && !options?.pipelineStages.length && (
-              <p className="text-xs text-muted-foreground">Chưa có giai đoạn pipeline để lựa chọn.</p>
-            )}
-          </div>
-        )}
-
-        {selectedNode.type === "delay" && (
-          <div className="space-y-2">
-            <Label>Thời gian chờ (phút)</Label>
-            <Input 
-              type="number"
-              min="1"
-              placeholder="VD: 60" 
-              value={localData.delayMinutes || ""} 
-              onChange={(e) => handleChange("delayMinutes", parseInt(e.target.value, 10))}
-            />
-          </div>
+        {!['trigger', 'condition'].includes(selectedNode.type) && (
+          <RegistryNodeFields
+            nodeType={selectedNode.type}
+            data={localData}
+            options={options}
+            dataFields={dataFields}
+            isLoading={isLoadingOptions}
+            onChange={handleChange}
+            onInsertToken={insertFieldToken}
+          />
         )}
 
       </div>
+    </div>
+  );
+}
+
+function RegistryNodeFields({
+  nodeType,
+  data,
+  options,
+  dataFields,
+  isLoading,
+  onChange,
+  onInsertToken,
+}: {
+  nodeType: AutomationNodeType;
+  data: AutomationNodeData;
+  options?: AutomationOptions;
+  dataFields: AutomationDataField[];
+  isLoading: boolean;
+  onChange: (key: keyof AutomationNodeData, value: unknown) => void;
+  onInsertToken: (key: "title" | "content" | "activityContent", field: AutomationDataField) => void;
+}) {
+  const definition = options?.registry.nodes.find((node) => node.type === nodeType);
+  if (!definition) {
+    return <p className="text-sm text-muted-foreground">{isLoading ? "Đang tải cấu hình..." : "Không tìm thấy cấu hình cho block này."}</p>;
+  }
+
+  const getSelectOptions = (field: AutomationConfigField) => {
+    if (field.options) return field.options;
+    if (field.optionsSource === "assignees") return (options?.assignees ?? []).map((item) => ({ code: item.id, label: item.fullName }));
+    if (field.optionsSource === "pipelineStages") return (options?.pipelineStages ?? []).map((item) => ({ code: item.id, label: item.pipelineName ? `${item.pipelineName} — ${item.name}` : item.name }));
+    if (field.optionsSource === "targetRoles") return (options?.targetRoles ?? []).map((item) => ({ code: item.code, label: item.name }));
+    return [];
+  };
+
+  return (
+    <div className="space-y-4">
+      {definition.configFields.filter((field) => field.control !== "condition_group").map((field) => {
+        const value = data[field.key];
+        const canInsertToken = field.key === "title" || field.key === "content" || field.key === "activityContent";
+
+        return (
+          <div key={field.key} className="space-y-2">
+            <Label htmlFor={`node-field-${field.key}`}>
+              {field.label}{field.required ? <span className="text-destructive"> *</span> : null}
+            </Label>
+            {field.control === "select" ? (
+              <Select value={typeof value === "string" ? value : ""} onValueChange={(nextValue) => onChange(field.key, nextValue)}>
+                <SelectTrigger id={`node-field-${field.key}`}><SelectValue placeholder={isLoading ? "Đang tải..." : `Chọn ${field.label.toLocaleLowerCase()}...`} /></SelectTrigger>
+                <SelectContent>{getSelectOptions(field).map((option) => <SelectItem key={option.code} value={option.code}>{option.label}</SelectItem>)}</SelectContent>
+              </Select>
+            ) : field.control === "template_textarea" ? (
+              <Textarea id={`node-field-${field.key}`} value={typeof value === "string" ? value : ""} onChange={(event) => onChange(field.key, event.target.value)} />
+            ) : (
+              <Input
+                id={`node-field-${field.key}`}
+                type={field.control === "number" ? "number" : "text"}
+                min={field.min}
+                value={typeof value === "string" || typeof value === "number" ? value : ""}
+                onChange={(event) => onChange(field.key, field.control === "number" ? Number(event.target.value) : event.target.value)}
+              />
+            )}
+            {canInsertToken && (
+              <AutomationFieldPicker
+                fields={dataFields}
+                placeholder={`Chèn trường vào ${field.label.toLocaleLowerCase()}`}
+                onSelect={(selectedField) => onInsertToken(field.key, selectedField)}
+              />
+            )}
+          </div>
+        );
+      })}
     </div>
   );
 }

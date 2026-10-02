@@ -5,6 +5,7 @@ import { requireAnyPermission, requireAuthentication } from "../../middlewares/a
 import { leadListPermissions } from "../leads/lead-list.service";
 import {
   createAutomationRule,
+  duplicateAutomationRule,
   archiveAutomationRule,
   getAutomationOptions,
   getAutomationExecution,
@@ -247,6 +248,29 @@ automationsRouter.post(
       const rule = await createAutomationRule(request.authUser!, parsed.data);
       if (!rule) {
         response.status(403).json({ message: "Bạn không có quyền tạo rule toàn hệ thống hoặc ngoài phạm vi chương trình được giao." });
+        return;
+      }
+      response.status(201).json(rule);
+    } catch (error) {
+      next(error);
+    }
+  },
+);
+
+// POST /api/automations/:id/duplicate
+automationsRouter.post(
+  "/:id/duplicate",
+  requireAnyPermission("automation.manage"),
+  async (request, response, next) => {
+    try {
+      const parsedId = entityIdSchema.safeParse(request.params.id);
+      if (!parsedId.success) {
+        response.status(400).json({ message: "Mã automation không hợp lệ." });
+        return;
+      }
+      const rule = await duplicateAutomationRule(request.authUser!, parsedId.data, request.ip);
+      if (!rule) {
+        response.status(404).json({ message: "Không tìm thấy automation rule." });
         return;
       }
       response.status(201).json(rule);

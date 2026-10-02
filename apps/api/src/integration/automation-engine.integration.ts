@@ -356,6 +356,10 @@ async function main() {
       options.payload.customDataFields.some((field: JsonRecord) => field.reference === `custom:${fixtures.customField.id}`),
       "Options phải trả trường dữ liệu tùy chỉnh đang hoạt động cho builder.",
     );
+    assert.ok(
+      options.payload.registry.nodes.some((node: JsonRecord) => node.type === "action_assign"),
+      "Options phải trả node registry để builder dựng palette và properties panel.",
+    );
     const filteredRules = await request(
       baseUrl,
       `/automations?search=${runId}&isActive=false&triggerType=lead_created&page=1&limit=20`,
@@ -371,6 +375,23 @@ async function main() {
     });
     assert.equal(validation.status, 200, "Graph đầy đủ phải hợp lệ.");
     assert.equal(validation.payload.valid, true);
+
+    const duplicated = await request(baseUrl, `/automations/${ruleId}/duplicate`, {
+      token: actorToken,
+      method: "POST",
+      body: {},
+    });
+    assert.equal(duplicated.status, 201, "Rule trong phạm vi phải nhân bản được.");
+    assert.equal(duplicated.payload.version, 1);
+    const duplicatedDetail = await request(baseUrl, `/automations/${duplicated.payload.id}`, { token: actorToken });
+    assert.equal(duplicatedDetail.status, 200);
+    assert.equal(duplicatedDetail.payload.isActive, false, "Bản sao phải luôn ở trạng thái tắt.");
+    assert.deepEqual(duplicatedDetail.payload.graphData, automationGraph(fixtures.target.id, fixtures.targetStage.id, fixtures.customField.id));
+    assert.equal(
+      (await request(baseUrl, `/automations/${duplicated.payload.id}`, { token: actorToken, method: "DELETE" })).status,
+      200,
+      "Bản sao chưa bật phải lưu trữ được.",
+    );
 
     const activation = await request(baseUrl, `/automations/${ruleId}/toggle`, {
       token: actorToken,

@@ -84,6 +84,12 @@ export function toggleAutomationRule(id: string, isActive: boolean, accessToken:
   }, accessToken);
 }
 
+export function duplicateAutomationRule(id: string, accessToken: string) {
+  return apiRequest<{ id: string; name: string; version: number }>(`/automations/${id}/duplicate`, {
+    method: "POST",
+  }, accessToken);
+}
+
 export function archiveAutomationRule(id: string, accessToken: string) {
   return apiRequest<{ message: string }>(`/automations/${id}`, {
     method: "DELETE",

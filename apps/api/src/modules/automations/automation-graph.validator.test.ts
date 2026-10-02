@@ -89,3 +89,43 @@ test("rejects fan-out from an action until durable branch finalization is availa
 
   assert.ok(validateAutomationGraph(graph).issues.some((issue) => issue.code === "UNSUPPORTED_FAN_OUT" && issue.nodeId === "activity"));
 });
+
+test("accepts an AND condition group with multiple predicates", () => {
+  const graph: AutomationGraphData = {
+    nodes: [
+      node("root", "trigger", { label: "Khởi động" }),
+      node("condition", "condition", {
+        label: "Lead đủ điều kiện",
+        conditionCombinator: "AND",
+        conditions: [
+          { field: "system:status", operator: "equals", value: "new" },
+          { field: "system:email", operator: "exists" },
+        ],
+      }),
+      node("activity", "action_activity", { label: "Ghi hoạt động", activityType: "note", activityContent: "Đủ điều kiện" }),
+    ],
+    edges: [
+      { id: "root-condition", source: "root", target: "condition" },
+      { id: "condition-activity", source: "condition", target: "activity", sourceHandle: "default" },
+    ],
+  };
+
+  assert.deepEqual(validateAutomationGraph(graph), { valid: true, issues: [] });
+});
+
+test("reports a malformed condition item instead of throwing", () => {
+  const condition = node("condition", "condition", {
+    label: "Điều kiện",
+    conditionCombinator: "AND",
+    conditions: [null] as never,
+  });
+  const graph: AutomationGraphData = {
+    nodes: [node("root", "trigger", { label: "Khởi động" }), condition],
+    edges: [{ id: "root-condition", source: "root", target: "condition", sourceHandle: "default" }],
+  };
+
+  const result = validateAutomationGraph(graph);
+
+  assert.equal(result.valid, false);
+  assert.ok(result.issues.some((issue) => issue.code === "INVALID_NODE_CONFIG" && issue.nodeId === condition.id));
+});

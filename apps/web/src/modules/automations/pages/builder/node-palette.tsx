@@ -1,6 +1,22 @@
-import { NODE_TYPE_DEFINITIONS } from "../../automation.types";
+import { Bell, GitBranch, NotebookPen, RefreshCw, Timer, UserPlus, Zap, type LucideIcon } from "lucide-react";
 
-export function NodePalette() {
+import { Button } from "@/components/ui/button";
+import type { AutomationNodeDefinition, AutomationNodeType } from "../../automation.types";
+
+const NODE_ICONS: Record<AutomationNodeType, LucideIcon> = {
+  trigger: Zap,
+  condition: GitBranch,
+  action_notification: Bell,
+  action_assign: UserPlus,
+  action_update_stage: RefreshCw,
+  action_activity: NotebookPen,
+  delay: Timer,
+};
+
+export function NodePalette({ definitions, onAdd }: {
+  definitions: AutomationNodeDefinition[];
+  onAdd: (type: AutomationNodeType, label: string) => void;
+}) {
   function onDragStart(event: React.DragEvent, type: string, label: string) {
     event.dataTransfer.setData("application/automation-node-type", type);
     event.dataTransfer.setData("application/automation-node-label", label);
@@ -23,43 +39,40 @@ export function NodePalette() {
         <p className="text-sm font-semibold">Thêm block mới</p>
         <p className="text-xs text-muted-foreground">Kéo block vào sơ đồ để thêm</p>
       </div>
-      <div className="p-3 space-y-4">
+      <div className="flex flex-col gap-4 p-3">
         {categories.map((cat) => {
-          const nodes = NODE_TYPE_DEFINITIONS.filter((n) => n.category === cat.key);
+          const nodes = definitions.filter((node) => node.category === cat.key);
           if (nodes.length === 0) return null;
           return (
             <div key={cat.key}>
               <p className="mb-2 text-xs font-medium uppercase tracking-wider text-muted-foreground">
                 {cat.label}
               </p>
-              <div className="space-y-2">
-                {nodes.map((node) => (
-                  <div
+              <div className="flex flex-col gap-2">
+                {nodes.map((node) => {
+                  const Icon = NODE_ICONS[node.type];
+
+                  return (
+                    <Button
                     key={node.type}
                     id={`palette-node-${node.type}`}
+                    type="button"
+                    variant="outline"
                     draggable
-                    onDragStart={(e) => onDragStart(e, node.type, node.label)}
-                    className="flex cursor-grab items-center gap-3 rounded-lg border border-border/60 bg-card px-3 py-2.5 shadow-xs transition-all hover:shadow-sm hover:border-primary/40 active:cursor-grabbing"
+                    onDragStart={(event) => onDragStart(event, node.type, node.label)}
+                    onClick={() => onAdd(node.type, node.label)}
+                    className="h-auto min-h-11 cursor-grab justify-start px-3 py-2.5 text-left active:cursor-grabbing"
                   >
-                    <span
-                      className={`flex h-8 w-8 shrink-0 items-center justify-center rounded-md text-white text-sm ${node.colorClass}`}
-                    >
-                      {node.type === "trigger" && "⚡"}
-                      {node.type === "condition" && "◈"}
-                      {node.type === "action_notification" && "🔔"}
-                      {node.type === "action_assign" && "👤"}
-                      {node.type === "action_update_stage" && "🔄"}
-                      {node.type === "action_activity" && "📝"}
-                      {node.type === "delay" && "⏱"}
-                    </span>
-                    <div className="min-w-0">
-                      <p className="text-xs font-medium">{node.label}</p>
-                      <p className="text-[10px] text-muted-foreground leading-tight truncate">
-                        {node.description}
-                      </p>
-                    </div>
-                  </div>
-                ))}
+                      <Icon aria-hidden="true" />
+                      <span className="min-w-0">
+                        <span className="block text-xs font-medium">{node.label}</span>
+                        <span className="block truncate text-xs font-normal leading-tight text-muted-foreground">
+                          {node.description}
+                        </span>
+                      </span>
+                    </Button>
+                  );
+                })}
               </div>
             </div>
           );

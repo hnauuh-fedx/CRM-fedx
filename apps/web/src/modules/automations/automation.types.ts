@@ -54,6 +54,8 @@ export type AutomationNodeData = {
   field?: string;
   operator?: string;
   value?: string;
+  conditionCombinator?: "AND" | "OR";
+  conditions?: AutomationCondition[];
   // Action: notification
   title?: string;
   content?: string;
@@ -67,6 +69,38 @@ export type AutomationNodeData = {
   activityContent?: string;
   // Delay
   delayMinutes?: number;
+};
+
+export type AutomationCondition = {
+  id?: string;
+  field: string;
+  operator: string;
+  value?: string;
+};
+
+export type AutomationConfigField = {
+  key: keyof AutomationNodeData;
+  label: string;
+  control: "condition_group" | "number" | "select" | "template_text" | "template_textarea" | "text";
+  required: boolean;
+  optionsSource?: "assignees" | "pipelineStages" | "targetRoles";
+  options?: Array<{ code: string; label: string }>;
+  min?: number;
+};
+
+export type AutomationNodeDefinition = {
+  type: AutomationNodeType;
+  category: "trigger" | "condition" | "action" | "delay";
+  label: string;
+  description: string;
+  configFields: AutomationConfigField[];
+};
+
+export type AutomationRegistry = {
+  version: number;
+  triggers: Array<{ code: string; label: string }>;
+  nodes: AutomationNodeDefinition[];
+  operators: Array<{ code: string; label: string; requiresValue: boolean; dataTypes: string[] }>;
 };
 
 export type AutomationRuleListResponse = {
@@ -86,6 +120,7 @@ export type AutomationRuleListResponse = {
 };
 
 export type AutomationOptions = {
+  registry: AutomationRegistry;
   institutionPrograms: Array<{ id: string; name: string; institutionName: string }>;
   triggerTypes: string[];
   assignees: Array<{ id: string; fullName: string }>;

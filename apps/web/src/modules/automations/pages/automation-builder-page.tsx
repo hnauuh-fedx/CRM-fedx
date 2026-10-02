@@ -1,5 +1,5 @@
 import { useState, useCallback, useEffect } from "react";
-import { useParams, useNavigate } from "react-router";
+import { useBlocker, useParams, useNavigate } from "react-router";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { ArrowLeft, Save, Play, Pause, Loader2 } from "lucide-react";
 
@@ -15,6 +15,14 @@ import { TRIGGER_TYPE_LABELS } from "../automation.types";
 import { AutomationBuilderCanvas } from "./automation-builder-canvas";
 import { NodePropertiesPanel } from "./builder/node-properties-panel";
 import { AutomationTestRunDialog } from "./builder/automation-test-run-dialog";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
 
 export function AutomationBuilderPage() {
   const { id } = useParams<{ id: string }>();
@@ -27,6 +35,18 @@ export function AutomationBuilderPage() {
   const [selectedNodeId, setSelectedNodeId] = useState<string | null>(null);
   const [isDirty, setIsDirty] = useState(false);
   const [initialized, setInitialized] = useState(false);
+  const blocker = useBlocker(isDirty);
+
+  useEffect(() => {
+    if (!isDirty) return;
+
+    const warnBeforeUnload = (event: BeforeUnloadEvent) => {
+      event.preventDefault();
+      event.returnValue = "";
+    };
+    window.addEventListener("beforeunload", warnBeforeUnload);
+    return () => window.removeEventListener("beforeunload", warnBeforeUnload);
+  }, [isDirty]);
 
   const ruleQuery = useQuery({
     queryKey: ["automations", "detail", id],
@@ -192,6 +212,7 @@ export function AutomationBuilderPage() {
           <AutomationBuilderCanvas
             nodes={nodes}
             edges={edges}
+            nodeDefinitions={optionsQuery.data?.registry.nodes ?? []}
             selectedNodeId={selectedNodeId}
             onNodesChange={handleNodesChange}
             onEdgesChange={handleEdgesChange}
@@ -209,6 +230,30 @@ export function AutomationBuilderPage() {
           />
         )}
       </div>
+
+      <Dialog
+        open={blocker.state === "blocked"}
+        onOpenChange={(open) => {
+          if (!open && blocker.state === "blocked") blocker.reset();
+        }}
+      >
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle>Rời trang khi chưa lưu?</DialogTitle>
+            <DialogDescription>
+              Các thay đổi trong sơ đồ automation chưa được lưu và sẽ bị mất nếu bạn rời trang.
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => blocker.state === "blocked" && blocker.reset()}>
+              Ở lại
+            </Button>
+            <Button variant="destructive" onClick={() => blocker.state === "blocked" && blocker.proceed()}>
+              Rời trang
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

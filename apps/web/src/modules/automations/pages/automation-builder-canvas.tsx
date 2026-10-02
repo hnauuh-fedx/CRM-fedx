@@ -12,7 +12,12 @@ import {
   BackgroundVariant,
 } from "@xyflow/react";
 import "@xyflow/react/dist/style.css";
-import type { AutomationEdge, AutomationNode, AutomationNodeType } from "../automation.types";
+import type {
+  AutomationEdge,
+  AutomationNode,
+  AutomationNodeDefinition,
+  AutomationNodeType,
+} from "../automation.types";
 
 import { AutomationNodeComponent } from "./builder/automation-node";
 import { NodePalette } from "./builder/node-palette";
@@ -30,6 +35,7 @@ const nodeTypes: NodeTypes = {
 type AutomationBuilderCanvasProps = {
   nodes: AutomationNode[];
   edges: AutomationEdge[];
+  nodeDefinitions: AutomationNodeDefinition[];
   selectedNodeId: string | null;
   onNodesChange: (nodes: AutomationNode[]) => void;
   onEdgesChange: (edges: AutomationEdge[]) => void;
@@ -39,12 +45,35 @@ type AutomationBuilderCanvasProps = {
 export function AutomationBuilderCanvas({
   nodes: initialNodes,
   edges: initialEdges,
+  nodeDefinitions,
   selectedNodeId,
   onNodesChange,
   onEdgesChange,
   onNodeSelect,
 }: AutomationBuilderCanvasProps) {
   const reactFlowWrapper = useRef<HTMLDivElement>(null);
+
+  const createNode = useCallback(
+    (type: AutomationNodeType, label: string, position: { x: number; y: number }) => {
+      const newNode: AutomationNode = {
+        id: `${type}-${Date.now()}`,
+        type,
+        position,
+        data:
+          type === "condition"
+            ? {
+                label,
+                conditionCombinator: "AND",
+                conditions: [{ id: crypto.randomUUID(), field: "", operator: "equals", value: "" }],
+              }
+            : { label },
+      };
+
+      onNodesChange([...initialNodes, newNode]);
+      onNodeSelect(newNode.id);
+    },
+    [initialNodes, onNodeSelect, onNodesChange],
+  );
 
   const onConnect = useCallback(
     (params: Connection) => {
@@ -71,16 +100,17 @@ export function AutomationBuilderCanvas({
         y: event.clientY - rect.top - 30,
       };
 
-      const newNode: AutomationNode = {
-        id: `${type}-${Date.now()}`,
-        type,
-        position,
-        data: { label },
-      };
-
-      onNodesChange([...initialNodes, newNode]);
+      createNode(type, label, position);
     },
-    [initialNodes, onNodesChange],
+    [createNode],
+  );
+
+  const addNodeFromPalette = useCallback(
+    (type: AutomationNodeType, label: string) => {
+      const offset = initialNodes.length * 24;
+      createNode(type, label, { x: 220 + offset, y: 120 + offset });
+    },
+    [createNode, initialNodes.length],
   );
 
   return (
@@ -91,8 +121,14 @@ export function AutomationBuilderCanvas({
           selected: n.id === selectedNodeId,
         }))}
         edges={initialEdges}
-        onNodesChange={(changes) => onNodesChange(applyNodeChanges(changes, initialNodes) as AutomationNode[])}
-        onEdgesChange={(changes) => onEdgesChange(applyEdgeChanges(changes, initialEdges) as AutomationEdge[])}
+        onNodesChange={(changes) => {
+          const graphChanges = changes.filter((change) => change.type !== "select");
+          if (graphChanges.length > 0) onNodesChange(applyNodeChanges(graphChanges, initialNodes) as AutomationNode[]);
+        }}
+        onEdgesChange={(changes) => {
+          const graphChanges = changes.filter((change) => change.type !== "select");
+          if (graphChanges.length > 0) onEdgesChange(applyEdgeChanges(graphChanges, initialEdges) as AutomationEdge[]);
+        }}
         onConnect={onConnect}
         onDrop={onDrop}
         onDragOver={onDragOver}
@@ -122,7 +158,7 @@ export function AutomationBuilderCanvas({
           maskColor="rgb(0,0,0,0.05)"
         />
       </ReactFlow>
-      <NodePalette />
+      <NodePalette definitions={nodeDefinitions} onAdd={addNodeFromPalette} />
     </div>
   );
 }

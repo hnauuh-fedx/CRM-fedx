@@ -12,6 +12,7 @@ import {
   ChevronRight,
   FilterX,
   Search,
+  Copy,
 } from "lucide-react";
 import { useNavigate } from "react-router";
 
@@ -38,10 +39,12 @@ import {
   toggleAutomationRule,
   archiveAutomationRule,
   createAutomationRule,
+  duplicateAutomationRule,
 } from "@/services/automation.service";
 import {
   SUPPORTED_AUTOMATION_TRIGGER_TYPES,
   TRIGGER_TYPE_LABELS,
+  type AutomationGraphData,
   type AutomationRuleListItem,
 } from "../automation.types";
 import {
@@ -62,6 +65,49 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 
+const RULE_TEMPLATES = [
+  { id: "blank", label: "Tự thiết kế", description: "Bắt đầu với node khởi động." },
+  { id: "new-lead-notification", label: "Thông báo Lead mới", description: "Khởi động và gửi thông báo nội bộ." },
+  { id: "lead-follow-up", label: "Follow-up Lead", description: "Chờ 60 phút rồi ghi hoạt động chăm sóc." },
+] as const;
+
+function createTemplateGraph(templateId: string): AutomationGraphData {
+  const trigger = { id: "trigger-1", type: "trigger" as const, position: { x: 80, y: 160 }, data: { label: "Khởi động" } };
+  if (templateId === "new-lead-notification") {
+    return {
+      nodes: [
+        trigger,
+        {
+          id: "notification-1",
+          type: "action_notification",
+          position: { x: 360, y: 160 },
+          data: { label: "Thông báo Lead mới", title: "Có Lead mới", content: "Lead {{system:fullName}} vừa được tạo." },
+        },
+      ],
+      edges: [{ id: "trigger-notification", source: trigger.id, target: "notification-1" }],
+    };
+  }
+  if (templateId === "lead-follow-up") {
+    return {
+      nodes: [
+        trigger,
+        { id: "delay-1", type: "delay", position: { x: 340, y: 160 }, data: { label: "Chờ 60 phút", delayMinutes: 60 } },
+        {
+          id: "activity-1",
+          type: "action_activity",
+          position: { x: 600, y: 160 },
+          data: { label: "Ghi nhận follow-up", activityType: "note", activityContent: "Tự động tạo nhắc follow-up cho {{system:fullName}}." },
+        },
+      ],
+      edges: [
+        { id: "trigger-delay", source: trigger.id, target: "delay-1" },
+        { id: "delay-activity", source: "delay-1", target: "activity-1" },
+      ],
+    };
+  }
+  return { nodes: [trigger], edges: [] };
+}
+
 export function AutomationRulesPage() {
   const auth = useAuth();
   const navigate = useNavigate();
@@ -80,6 +126,8 @@ export function AutomationRulesPage() {
     enabled: Boolean(auth.accessToken),
   });
   const programs = optionsQuery.data?.institutionPrograms ?? [];
+  const triggers = optionsQuery.data?.registry.triggers
+    ?? SUPPORTED_AUTOMATION_TRIGGER_TYPES.map((code) => ({ code, label: TRIGGER_TYPE_LABELS[code] }));
 
   const rulesQuery = useQuery({
     queryKey: ["automations", "list", { page, search, statusFilter, triggerFilter, programFilter }],
@@ -105,6 +153,14 @@ export function AutomationRulesPage() {
     onSuccess: () => queryClient.invalidateQueries({ queryKey: ["automations"] }),
   });
 
+  const duplicateMutation = useMutation({
+    mutationFn: (id: string) => duplicateAutomationRule(id, auth.accessToken!),
+    onSuccess: (rule) => {
+      queryClient.invalidateQueries({ queryKey: ["automations"] });
+      navigate(`/automations/${rule.id}/builder`);
+    },
+  });
+
   function handleSearch(e: React.FormEvent) {
     e.preventDefault();
     setSearch(draftSearch.trim());
@@ -121,7 +177,7 @@ export function AutomationRulesPage() {
   }
 
   const hasFilters = Boolean(search || statusFilter !== "all" || triggerFilter !== "all" || programFilter !== "all");
-  const mutationError = toggleMutation.error ?? archiveMutation.error;
+  const mutationError = toggleMutation.error ?? archiveMutation.error ?? duplicateMutation.error;
 
   return (
     <div className="mx-auto flex max-w-7xl flex-col gap-6">
@@ -166,7 +222,7 @@ export function AutomationRulesPage() {
             <Label htmlFor="automation-trigger-filter">Sự kiện kích hoạt</Label>
             <Select value={triggerFilter} onValueChange={(value) => { setTriggerFilter(value); setPage(1); }}>
               <SelectTrigger id="automation-trigger-filter" className="min-h-11 w-full"><SelectValue /></SelectTrigger>
-              <SelectContent><SelectItem value="all">Tất cả sự kiện</SelectItem>{SUPPORTED_AUTOMATION_TRIGGER_TYPES.map((value) => <SelectItem key={value} value={value}>{TRIGGER_TYPE_LABELS[value]}</SelectItem>)}</SelectContent>
+              <SelectContent><SelectItem value="all">Tất cả sự kiện</SelectItem>{triggers.map((trigger) => <SelectItem key={trigger.code} value={trigger.code}>{trigger.label}</SelectItem>)}</SelectContent>
             </Select>
           </div>
           <div className="grid gap-2">
@@ -218,6 +274,7 @@ export function AutomationRulesPage() {
               rule={rule}
               onToggle={(isActive) => toggleMutation.mutate({ id: rule.id, isActive })}
               onArchive={() => archiveMutation.mutate(rule.id)}
+              onDuplicate={() => duplicateMutation.mutate(rule.id)}
               onEdit={() => navigate(`/automations/${rule.id}/builder`)}
             />
           ))}
@@ -245,6 +302,7 @@ export function AutomationRulesPage() {
         onOpenChange={setCreateOpen}
         accessToken={auth.accessToken!}
         programs={programs}
+        triggers={triggers}
         canManageGlobal={auth.user?.accessScope === "ALL" && auth.can("automation.manage_global")}
         onCreated={(id) => {
           queryClient.invalidateQueries({ queryKey: ["automations"] });
@@ -259,11 +317,13 @@ function RuleCard({
   rule,
   onToggle,
   onArchive,
+  onDuplicate,
   onEdit,
 }: {
   rule: AutomationRuleListItem;
   onToggle: (isActive: boolean) => void;
   onArchive: () => void;
+  onDuplicate: () => void;
   onEdit: () => void;
 }) {
   const [confirmOpen, setConfirmOpen] = useState(false);
@@ -314,6 +374,17 @@ function RuleCard({
           {rule.isActive ? <Pause className="h-3.5 w-3.5" /> : <Play className="h-3.5 w-3.5" />}
         </Button>
         <Button
+          id={`duplicate-rule-${rule.id}`}
+          size="sm"
+          variant="ghost"
+          className="min-h-11 min-w-11"
+          aria-label={`Nhân bản rule ${rule.name}`}
+          title="Nhân bản rule"
+          onClick={onDuplicate}
+        >
+          <Copy className="h-3.5 w-3.5" />
+        </Button>
+        <Button
           id={`archive-rule-${rule.id}`}
           size="sm"
           variant="ghost"
@@ -356,6 +427,7 @@ function CreateRuleDialog({
   onOpenChange,
   accessToken,
   programs,
+  triggers,
   canManageGlobal,
   onCreated,
 }: {
@@ -363,12 +435,14 @@ function CreateRuleDialog({
   onOpenChange: (v: boolean) => void;
   accessToken: string;
   programs: Array<{ id: string; name: string; institutionName: string }>;
+  triggers: Array<{ code: string; label: string }>;
   canManageGlobal: boolean;
   onCreated: (id: string) => void;
 }) {
   const [name, setName] = useState("");
   const [description, setDescription] = useState("");
   const [triggerType, setTriggerType] = useState("lead_created");
+  const [templateId, setTemplateId] = useState("blank");
   const [programId, setProgramId] = useState("");
   const [errorMessage, setErrorMessage] = useState("");
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -383,12 +457,14 @@ function CreateRuleDialog({
         name: name.trim(),
         description: description.trim() || undefined,
         triggerType,
+        graphData: createTemplateGraph(templateId),
         institutionProgramId: programId === "global" ? undefined : programId,
       }, accessToken);
       onOpenChange(false);
       setName("");
       setDescription("");
       setTriggerType("lead_created");
+      setTemplateId("blank");
       setProgramId("");
       onCreated(rule.id);
     } catch (error) {
@@ -419,6 +495,16 @@ function CreateRuleDialog({
             />
           </Field>
           <Field>
+            <FieldLabel htmlFor="rule-template">Mẫu quy trình</FieldLabel>
+            <Select value={templateId} onValueChange={setTemplateId}>
+              <SelectTrigger id="rule-template" className="min-h-11 w-full"><SelectValue /></SelectTrigger>
+              <SelectContent>
+                {RULE_TEMPLATES.map((template) => <SelectItem key={template.id} value={template.id}>{template.label}</SelectItem>)}
+              </SelectContent>
+            </Select>
+            <FieldDescription>{RULE_TEMPLATES.find((template) => template.id === templateId)?.description}</FieldDescription>
+          </Field>
+          <Field>
             <FieldLabel htmlFor="rule-program">Chương trình tuyển sinh</FieldLabel>
             <Select value={programId} onValueChange={setProgramId} required>
               <SelectTrigger id="rule-program" className="min-h-11 w-full" aria-describedby="rule-program-help">
@@ -444,8 +530,8 @@ function CreateRuleDialog({
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>
-                {SUPPORTED_AUTOMATION_TRIGGER_TYPES.map((value) => (
-                  <SelectItem key={value} value={value}>{TRIGGER_TYPE_LABELS[value]}</SelectItem>
+                {triggers.map((trigger) => (
+                  <SelectItem key={trigger.code} value={trigger.code}>{trigger.label}</SelectItem>
                 ))}
               </SelectContent>
             </Select>

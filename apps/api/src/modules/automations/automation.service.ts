@@ -1,12 +1,18 @@
+import { Prisma } from "../../generated/prisma/client";
+
 import { prisma } from "../../database/prisma";
 import type { AuthUser } from "../auth/auth.types";
+import { getAuthUser } from "../auth/auth.service";
 import { getLeadScopeWhere } from "../leads/lead-list.service";
+import { leadUpdatePermissions } from "../leads/lead-owner-stage-mutations.service";
 import { startAutomationExecution } from "./automation-engine.service";
 import { validateAutomationGraph } from "./automation-graph.validator";
 import { ensureAutomationRuleVersionSnapshot } from "./automation-rule-version.service";
 import { SUPPORTED_AUTOMATION_TRIGGER_TYPES } from "./automation.types";
 import type { AutomationGraphData } from "./automation.types";
 import { getAutomationCustomDataFields } from "./automation-data-field.service";
+import { AUTOMATION_REGISTRY } from "./automation-registry";
+import { validateAutomationSemantics } from "./automation-semantic.validator";
 
 export type AutomationRuleListQuery = {
   page: number;
@@ -137,6 +143,7 @@ export async function getAutomationRule(user: AuthUser, id: string) {
       graph_data: true,
       version: true,
       institution_program_id: true,
+      created_by: true,
       created_at: true,
       updated_at: true,
       users: { select: { id: true, full_name: true } },
@@ -171,6 +178,50 @@ export async function createAutomationRule(user: AuthUser, input: AutomationRule
     },
   });
   return rule;
+}
+
+export async function duplicateAutomationRule(user: AuthUser, id: string, ipAddress?: string) {
+  const existing = await prisma.automation_rules.findFirst({
+    where: { id, archived_at: null, ...(await getAutomationRuleScopeWhere(user)) },
+    select: {
+      id: true,
+      name: true,
+      description: true,
+      trigger_type: true,
+      graph_data: true,
+      institution_program_id: true,
+    },
+  });
+  if (!existing) return null;
+
+  const duplicated = await prisma.$transaction(async (tx) => {
+    const rule = await tx.automation_rules.create({
+      data: {
+        name: `${existing.name} (Bản sao)`,
+        description: existing.description,
+        trigger_type: existing.trigger_type,
+        graph_data: existing.graph_data === null ? Prisma.JsonNull : existing.graph_data,
+        institution_program_id: existing.institution_program_id,
+        created_by: user.id,
+        is_active: false,
+        version: 1,
+      },
+      select: { id: true, name: true, version: true },
+    });
+    await tx.audit_logs.create({
+      data: {
+        user_id: user.id,
+        entity_type: "automation_rule",
+        entity_id: rule.id,
+        action: "duplicate",
+        old_data: { sourceRuleId: existing.id },
+        new_data: { name: rule.name, sourceRuleId: existing.id },
+        ip_address: ipAddress,
+      },
+    });
+    return rule;
+  });
+  return duplicated;
 }
 
 export async function updateAutomationRule(user: AuthUser, id: string, input: AutomationRuleUpdateInput) {
@@ -259,12 +310,19 @@ export async function toggleAutomationRule(user: AuthUser, id: string, isActive:
       graph_data: true,
       version: true,
       institution_program_id: true,
+      created_by: true,
     },
   });
   if (!existing) return null;
 
   if (isActive) {
-    const validation = validateRuleConfiguration(existing.trigger_type, existing.graph_data);
+    const executionActor = existing.created_by ? await getAuthUser(existing.created_by) : null;
+    const validation = await validateRuleConfiguration(
+      executionActor,
+      existing.trigger_type,
+      existing.graph_data,
+      existing.institution_program_id,
+    );
     if (!validation.valid) {
       const unsupportedTrigger = validation.issues.some((issue) => issue.code === "UNSUPPORTED_TRIGGER");
       return {
@@ -283,7 +341,7 @@ export async function toggleAutomationRule(user: AuthUser, id: string, isActive:
         triggerType: existing.trigger_type,
         graphData: existing.graph_data as object,
         institutionProgramId: existing.institution_program_id,
-        createdBy: user.id,
+        createdBy: existing.created_by,
       }, tx);
     }
     const changedRule = await tx.automation_rules.update({
@@ -312,27 +370,58 @@ export async function toggleAutomationRule(user: AuthUser, id: string, isActive:
 export async function validateAutomationRule(user: AuthUser, id: string) {
   const rule = await prisma.automation_rules.findFirst({
     where: { id, archived_at: null, ...(await getAutomationRuleScopeWhere(user)) },
-    select: { id: true, trigger_type: true, graph_data: true },
+    select: { id: true, trigger_type: true, graph_data: true, institution_program_id: true, created_by: true },
   });
   if (!rule) return null;
-  return validateRuleConfiguration(rule.trigger_type, rule.graph_data);
+  const executionActor = rule.created_by ? await getAuthUser(rule.created_by) : null;
+  return validateRuleConfiguration(executionActor, rule.trigger_type, rule.graph_data, rule.institution_program_id);
 }
 
-function validateRuleConfiguration(triggerType: string, graphData: unknown) {
+async function validateRuleConfiguration(
+  user: AuthUser | null,
+  triggerType: string,
+  graphData: unknown,
+  institutionProgramId: string | null,
+) {
   const graphValidation = validateAutomationGraph(graphData);
-  if (SUPPORTED_AUTOMATION_TRIGGER_TYPES.includes(triggerType as typeof SUPPORTED_AUTOMATION_TRIGGER_TYPES[number])) {
-    return graphValidation;
+  const issues = [...graphValidation.issues];
+  if (!SUPPORTED_AUTOMATION_TRIGGER_TYPES.includes(triggerType as typeof SUPPORTED_AUTOMATION_TRIGGER_TYPES[number])) {
+    issues.unshift({
+      code: "UNSUPPORTED_TRIGGER" as const,
+      message: `Sự kiện kích hoạt ${triggerType} chưa có bộ phát sự kiện trong hệ thống.`,
+    });
   }
-  return {
-    valid: false,
-    issues: [
-      {
-        code: "UNSUPPORTED_TRIGGER" as const,
-        message: `Sự kiện kích hoạt ${triggerType} chưa có bộ phát sự kiện trong hệ thống.`,
-      },
-      ...graphValidation.issues,
-    ],
-  };
+
+  if (!user) {
+    issues.push({
+      code: "INSUFFICIENT_PERMISSION" as const,
+      message: "Tài khoản thực thi của rule không còn hoạt động.",
+    });
+  }
+
+  if (graphValidation.valid && user) {
+    const options = await getAutomationOptions(user, institutionProgramId ?? undefined);
+    if (options) {
+      issues.push(...validateAutomationSemantics(graphData as AutomationGraphData, {
+        assigneeIds: new Set(options.assignees.map((assignee) => assignee.id)),
+        pipelineStageIds: new Set(options.pipelineStages.map((stage) => stage.id)),
+        targetRoleCodes: new Set(options.targetRoles.map((role) => role.code)),
+        customFieldDataTypes: new Map(options.customDataFields.map((field) => [field.reference, field.dataType])),
+        canAssign: user.permissions.includes("lead.assign") || user.permissions.includes("lead.reassign"),
+        canUpdateLead: leadUpdatePermissions.some((permission) => user.permissions.includes(permission)),
+        canWriteActivity: user.permissions.includes("lead_activity.create")
+          || leadUpdatePermissions.some((permission) => user.permissions.includes(permission)),
+        canViewSensitiveData: user.permissions.includes("lead.sensitive.view"),
+      }));
+    } else {
+      issues.push({
+        code: "INSUFFICIENT_PERMISSION" as const,
+        message: "Tài khoản thực thi không còn quyền truy cập chương trình tuyển sinh của rule.",
+      });
+    }
+  }
+
+  return { valid: issues.length === 0, issues };
 }
 
 export async function listExecutionLogs(user: AuthUser, ruleId: string, page: number, limit: number) {
@@ -500,11 +589,15 @@ export async function runAutomationTest(user: AuthUser, ruleId: string, leadId: 
       trigger_type: true,
       graph_data: true,
       institution_program_id: true,
-      created_by: true,
     },
   });
   if (!rule) return { ok: false as const, reason: "rule_not_found" as const };
-  const validation = validateRuleConfiguration(rule.trigger_type, rule.graph_data);
+  const validation = await validateRuleConfiguration(
+    user,
+    rule.trigger_type,
+    rule.graph_data,
+    rule.institution_program_id,
+  );
   if (!validation.valid) return { ok: false as const, reason: "invalid_rule" as const, validation };
 
   const lead = await prisma.leads.findFirst({
@@ -525,7 +618,7 @@ export async function runAutomationTest(user: AuthUser, ruleId: string, leadId: 
       triggerType: rule.trigger_type,
       graphData: rule.graph_data as unknown as AutomationGraphData,
       institutionProgramId: rule.institution_program_id,
-      createdBy: rule.created_by,
+      createdBy: user.id,
     },
     {
       actorId: user.id,
@@ -619,6 +712,7 @@ export async function getAutomationOptions(user: AuthUser, institutionProgramId?
     }),
   ]);
   return {
+    registry: AUTOMATION_REGISTRY,
     institutionPrograms: programs.map((p) => ({ id: p.id, name: p.name, institutionName: p.institutions.name })),
     triggerTypes: [...SUPPORTED_AUTOMATION_TRIGGER_TYPES],
     assignees: assignees.map((assignee) => ({ id: assignee.id, fullName: assignee.full_name })),
