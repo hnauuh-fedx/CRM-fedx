@@ -124,6 +124,8 @@ Trạng thái triển khai: hoàn thành lõi chức năng ngày 05/10/2026. Đ�
 
 Thời lượng dự kiến: 8–12 ngày, phụ thuộc provider.
 
+Trạng thái triển khai: hoàn thành lõi chức năng ngày 05/10/2026. Automation worker đã được tách bằng process role và script `worker:automation`; scheduler hỗ trợ múi giờ, ngày trong tuần và ngày nghỉ loại trừ; Email/SMS/ZNS dùng adapter provider có idempotency key, consent/opt-out và suppression; webhook dùng endpoint được duyệt, HTTPS allowlist, chữ ký HMAC, secret AES-GCM và giới hạn payload. Builder đã có node đa kênh/webhook, cấu hình lịch và bản xem trước template không tải dữ liệu Lead thật. Việc xác nhận end-to-end với provider thật cần cấu hình biến môi trường và Redis/PostgreSQL của môi trường triển khai.
+
 - Tách automation worker khỏi lifecycle API.
 - Scheduler tạo execution theo timezone và business calendar.
 - Message adapter cho notification, Email, ZNS và SMS.

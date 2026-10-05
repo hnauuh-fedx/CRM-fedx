@@ -22,6 +22,8 @@ test("registry exposes every supported builder node with a unique type", () => {
     "action_update_stage",
     "action_activity",
     "action_reminder",
+    "action_message",
+    "action_webhook",
     "delay",
   ]);
 });

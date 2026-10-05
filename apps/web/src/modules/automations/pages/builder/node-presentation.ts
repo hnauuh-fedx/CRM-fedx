@@ -1,4 +1,4 @@
-import { Bell, Circle, Clock3, GitBranch, NotebookPen, RefreshCw, UserPlus, Users, Zap, type LucideIcon } from "lucide-react";
+import { Bell, Circle, Clock3, GitBranch, Mail, NotebookPen, RefreshCw, UserPlus, Users, Webhook, Zap, type LucideIcon } from "lucide-react";
 import type { AutomationNodeDefinition } from "../../automation.types";
 
 const icons: Record<AutomationNodeDefinition["icon"], LucideIcon> = {
@@ -9,6 +9,8 @@ const icons: Record<AutomationNodeDefinition["icon"], LucideIcon> = {
   refresh: RefreshCw,
   "user-plus": UserPlus,
   users: Users,
+  mail: Mail,
+  webhook: Webhook,
   zap: Zap,
 };
 

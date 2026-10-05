@@ -7,6 +7,8 @@ import { createReminder } from "../leads/sale-overview.service";
 import { resolveAutomationAssignee } from "./automation-assignment.service";
 import { evaluateAutomationConditions } from "./automation-condition-evaluator";
 import { getAutomationLeadData, getAutomationTemplateReferences, renderAutomationTemplate } from "./automation-data-field.service";
+import { sendAutomationMessage } from "./automation-message-delivery.service";
+import { callAutomationWebhook } from "./automation-webhook.service";
 import type { AutomationActionResult, AutomationContext } from "./automation-execution.types";
 import type { AutomationNode } from "./automation.types";
 
@@ -21,6 +23,8 @@ const executors = {
   action_update_stage: executeUpdateStageAction,
   action_activity: executeActivityAction,
   action_reminder: executeReminderAction,
+  action_message: executeMessageAction,
+  action_webhook: executeWebhookAction,
   delay: executeDelayAction,
 } satisfies Record<Exclude<AutomationNode["type"], "trigger">, AutomationActionExecutor>;
 
@@ -174,6 +178,44 @@ async function executeReminderAction(node: AutomationNode, context: AutomationCo
     customFieldValues: [],
   }, context.institutionProgramId, undefined, async (tx) => markActionCompleted(tx, nodeExecutionId, result));
   if (!reminder.ok) throw new UnrecoverableError(`Không thể tạo nhắc việc: ${reminder.reason}`);
+  return result;
+}
+
+async function executeMessageAction(node: AutomationNode, context: AutomationContext, nodeExecutionId: string): Promise<AutomationActionResult> {
+  const { messageChannel, messageSubject, messageContent, consentPolicy } = node.data;
+  if (!context.leadId || !messageChannel || !messageContent || !consentPolicy) {
+    throw new UnrecoverableError("Node gửi đa kênh thiếu kênh, nội dung, consent policy hoặc lead context.");
+  }
+  const actor = await requireActor(context);
+  await sendAutomationMessage({
+    actor,
+    leadId: context.leadId,
+    institutionProgramId: context.institutionProgramId,
+    nodeExecutionId,
+    channel: messageChannel,
+    subject: messageSubject,
+    content: messageContent,
+    consentPolicy,
+  });
+  const result = { nextSourceHandle: "default", delayMinutes: 0 };
+  await markActionCompleted(prisma, nodeExecutionId, result);
+  return result;
+}
+
+async function executeWebhookAction(node: AutomationNode, context: AutomationContext, nodeExecutionId: string): Promise<AutomationActionResult> {
+  const { webhookEndpointId, webhookPayload } = node.data;
+  if (!webhookEndpointId || !webhookPayload) throw new UnrecoverableError("Node webhook thiếu endpoint hoặc payload.");
+  const actor = await requireActor(context);
+  await callAutomationWebhook({
+    actor,
+    leadId: context.leadId,
+    institutionProgramId: context.institutionProgramId,
+    nodeExecutionId,
+    endpointId: webhookEndpointId,
+    payloadTemplate: webhookPayload,
+  });
+  const result = { nextSourceHandle: "default", delayMinutes: 0 };
+  await markActionCompleted(prisma, nodeExecutionId, result);
   return result;
 }
 

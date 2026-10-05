@@ -19,6 +19,8 @@ import type {
 } from "../../automation.types";
 import { AutomationFieldPicker } from "./automation-field-picker";
 
+type TemplateFieldKey = "title" | "content" | "activityContent" | "reminderTitle" | "reminderContent" | "messageSubject" | "messageContent" | "webhookPayload";
+
 export type NodePropertiesPanelProps = {
   selectedNodeId: string | null;
   nodes: AutomationNode[];
@@ -56,7 +58,7 @@ export function NodePropertiesPanel({ selectedNodeId, nodes, options, isLoadingO
     onNodeUpdate(selectedNode.id, { [key]: value });
   };
 
-  const insertFieldToken = (key: "title" | "content" | "activityContent" | "reminderTitle" | "reminderContent", field: AutomationDataField) => {
+  const insertFieldToken = (key: TemplateFieldKey, field: AutomationDataField) => {
     const current = String(localData[key] ?? "");
     const separator = current.length > 0 && !/\s$/.test(current) ? " " : "";
     handleChange(key, `${current}${separator}{{${field.reference}}}`);
@@ -252,7 +254,7 @@ function RegistryNodeFields({
   dataFields: AutomationDataField[];
   isLoading: boolean;
   onChange: (key: keyof AutomationNodeData, value: unknown) => void;
-  onInsertToken: (key: "title" | "content" | "activityContent" | "reminderTitle" | "reminderContent", field: AutomationDataField) => void;
+  onInsertToken: (key: TemplateFieldKey, field: AutomationDataField) => void;
 }) {
   const definition = options?.registry.nodes.find((node) => node.type === nodeType);
   if (!definition) {
@@ -265,6 +267,8 @@ function RegistryNodeFields({
     if (field.optionsSource === "departments") return (options?.departments ?? []).map((item) => ({ code: item.id, label: item.name }));
     if (field.optionsSource === "pipelineStages") return (options?.pipelineStages ?? []).map((item) => ({ code: item.id, label: item.pipelineName ? `${item.pipelineName} — ${item.name}` : item.name }));
     if (field.optionsSource === "targetRoles") return (options?.targetRoles ?? []).map((item) => ({ code: item.code, label: item.name }));
+    if (field.optionsSource === "customerLists") return (options?.customerLists ?? []).map((item) => ({ code: item.id, label: item.name }));
+    if (field.optionsSource === "webhookEndpoints") return (options?.webhookEndpoints ?? []).map((item) => ({ code: item.id, label: item.name }));
     return [];
   };
 
@@ -274,7 +278,7 @@ function RegistryNodeFields({
         field.control !== "condition_group"
         && (!field.visibleForTriggerTypes || field.visibleForTriggerTypes.includes(data.triggerType ?? ""))).map((field) => {
         const value = data[field.key];
-        const canInsertToken = ["title", "content", "activityContent", "reminderTitle", "reminderContent"].includes(field.key);
+        const canInsertToken = ["title", "content", "activityContent", "reminderTitle", "reminderContent", "messageSubject", "messageContent", "webhookPayload"].includes(field.key);
 
         return (
           <div key={field.key} className="space-y-2">
@@ -316,15 +320,31 @@ function RegistryNodeFields({
               />
             )}
             {canInsertToken && (
-              <AutomationFieldPicker
-                fields={dataFields}
-                placeholder={`Chèn trường vào ${field.label.toLocaleLowerCase()}`}
-                onSelect={(selectedField) => onInsertToken(field.key, selectedField)}
-              />
+              <>
+                <AutomationFieldPicker
+                  fields={dataFields}
+                  placeholder={`Chèn trường vào ${field.label.toLocaleLowerCase()}`}
+                  onSelect={(selectedField) => onInsertToken(field.key as TemplateFieldKey, selectedField)}
+                />
+                <TemplatePreview value={typeof value === "string" ? value : ""} fields={dataFields} />
+              </>
             )}
           </div>
         );
       })}
+    </div>
+  );
+}
+
+function TemplatePreview({ value, fields }: { value: string; fields: AutomationDataField[] }) {
+  if (!value.trim()) return null;
+  const labels = new Map(fields.map((field) => [field.reference, field.label]));
+  const preview = value.replace(/\{\{\s*([^{}]+?)\s*\}\}/g, (_token, reference: string) => `[${labels.get(reference.trim()) ?? "Trường không hợp lệ"}]`);
+  return (
+    <div className="rounded-md border bg-muted/30 p-3" aria-label="Xem trước mẫu an toàn">
+      <p className="mb-1 text-xs font-medium">Xem trước an toàn</p>
+      <p className="whitespace-pre-wrap break-words text-xs text-muted-foreground">{preview}</p>
+      <p className="mt-2 text-[11px] text-muted-foreground">Bản xem trước chỉ hiển thị tên biến, không tải dữ liệu thật của Lead.</p>
     </div>
   );
 }

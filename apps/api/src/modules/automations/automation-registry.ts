@@ -15,7 +15,7 @@ export type AutomationConfigField = {
   label: string;
   control: AutomationConfigControl;
   required: boolean;
-  optionsSource?: "assignees" | "departments" | "pipelineStages" | "targetRoles";
+  optionsSource?: "assignees" | "customerLists" | "departments" | "pipelineStages" | "targetRoles" | "webhookEndpoints";
   options?: Array<{ code: string; label: string }>;
   min?: number;
   visibleForTriggerTypes?: string[];
@@ -26,17 +26,31 @@ export type AutomationNodeDefinition = {
   category: "trigger" | "condition" | "action" | "delay";
   label: string;
   description: string;
-  icon: "bell" | "clock" | "git-branch" | "notebook" | "refresh" | "user-plus" | "users" | "zap";
+  icon: "bell" | "clock" | "git-branch" | "mail" | "notebook" | "refresh" | "user-plus" | "users" | "webhook" | "zap";
   tone: "blue" | "green" | "indigo" | "orange" | "purple" | "teal" | "yellow";
   defaultData?: Partial<AutomationNodeData>;
-  requiredCapabilities?: Array<"assign" | "createReminder" | "updateLead" | "writeActivity">;
+  requiredCapabilities?: Array<"assign" | "callWebhook" | "createReminder" | "sendMessage" | "updateLead" | "writeActivity">;
   configFields: AutomationConfigField[];
 };
 
 const nodes: AutomationNodeDefinition[] = [
   {
     type: "trigger", category: "trigger", label: "Khởi động", description: "Điểm bắt đầu của quy trình", icon: "zap", tone: "blue",
-    configFields: [{ key: "slaMinutes", label: "Thời gian chưa xử lý (phút)", control: "number", required: true, min: 1, visibleForTriggerTypes: ["lead_unprocessed"] }],
+    configFields: [
+      { key: "slaMinutes", label: "Thời gian chưa xử lý (phút)", control: "number", required: true, min: 1, visibleForTriggerTypes: ["lead_unprocessed"] },
+      { key: "scheduleTimezone", label: "Múi giờ", control: "select", required: true, visibleForTriggerTypes: ["scheduled"], options: [
+        { code: "Asia/Ho_Chi_Minh", label: "Việt Nam (Asia/Ho_Chi_Minh)" },
+        { code: "Asia/Bangkok", label: "Bangkok (Asia/Bangkok)" },
+        { code: "UTC", label: "UTC" },
+      ] },
+      { key: "scheduleTime", label: "Giờ chạy (HH:mm)", control: "text", required: true, visibleForTriggerTypes: ["scheduled"] },
+      { key: "scheduleDays", label: "Ngày chạy", control: "multi_select", required: true, visibleForTriggerTypes: ["scheduled"], options: [
+        { code: "1", label: "Thứ Hai" }, { code: "2", label: "Thứ Ba" }, { code: "3", label: "Thứ Tư" },
+        { code: "4", label: "Thứ Năm" }, { code: "5", label: "Thứ Sáu" }, { code: "6", label: "Thứ Bảy" }, { code: "0", label: "Chủ nhật" },
+      ] },
+      { key: "scheduleExcludedDates", label: "Ngày nghỉ loại trừ (YYYY-MM-DD, cách nhau bằng dấu phẩy)", control: "text", required: false, visibleForTriggerTypes: ["scheduled"] },
+      { key: "scheduleCustomerListId", label: "Danh sách khách hàng", control: "select", required: true, visibleForTriggerTypes: ["scheduled"], optionsSource: "customerLists" },
+    ],
   },
   {
     type: "condition", category: "condition", label: "Điều kiện", description: "Kết hợp nhiều tiêu chí bằng AND hoặc OR", icon: "git-branch", tone: "orange",
@@ -96,18 +110,42 @@ const nodes: AutomationNodeDefinition[] = [
     ],
   },
   {
+    type: "action_message", category: "action", label: "Gửi đa kênh", description: "Gửi Email, SMS hoặc ZNS có kiểm tra consent và suppression", icon: "mail", tone: "green", requiredCapabilities: ["sendMessage"],
+    defaultData: { messageChannel: "email", consentPolicy: "require_consent" },
+    configFields: [
+      { key: "messageChannel", label: "Kênh gửi", control: "select", required: true, options: [
+        { code: "email", label: "Email" }, { code: "sms", label: "SMS" }, { code: "zns", label: "ZNS" },
+      ] },
+      { key: "messageSubject", label: "Tiêu đề Email (nếu dùng Email)", control: "template_text", required: false },
+      { key: "messageContent", label: "Nội dung", control: "template_textarea", required: true },
+      { key: "consentPolicy", label: "Chính sách đồng ý nhận tin", control: "select", required: true, options: [
+        { code: "require_consent", label: "Chỉ gửi khi đã đồng ý" },
+        { code: "allow_unknown", label: "Cho phép khi chưa ghi nhận, vẫn chặn opt-out" },
+      ] },
+    ],
+  },
+  {
+    type: "action_webhook", category: "action", label: "Gọi Webhook", description: "Gửi payload JSON có chữ ký đến endpoint đã được phê duyệt", icon: "webhook", tone: "indigo", requiredCapabilities: ["callWebhook"],
+    defaultData: { webhookPayload: "{\n  \"leadName\": \"{{system:fullName}}\"\n}" },
+    configFields: [
+      { key: "webhookEndpointId", label: "Webhook endpoint", control: "select", required: true, optionsSource: "webhookEndpoints" },
+      { key: "webhookPayload", label: "Payload JSON", control: "template_textarea", required: true },
+    ],
+  },
+  {
     type: "delay", category: "delay", label: "Chờ / Delay", description: "Tạm dừng trước khi thực hiện bước tiếp theo", icon: "clock", tone: "yellow", defaultData: { delayMinutes: 1 },
     configFields: [{ key: "delayMinutes", label: "Thời gian chờ (phút)", control: "number", required: true, min: 1 }],
   },
 ];
 
-export const AUTOMATION_TRIGGER_TYPES = ["lead_created", "lead_pipeline_stage_changed", "lead_assigned", "lead_unprocessed"] as const;
+export const AUTOMATION_TRIGGER_TYPES = ["lead_created", "lead_pipeline_stage_changed", "lead_assigned", "lead_unprocessed", "scheduled"] as const;
 
 const automationTriggerLabels: Record<(typeof AUTOMATION_TRIGGER_TYPES)[number], string> = {
   lead_created: "Lead được tạo mới",
   lead_pipeline_stage_changed: "Lead đổi giai đoạn pipeline",
   lead_assigned: "Lead được phân công",
   lead_unprocessed: "Lead chưa được xử lý quá SLA",
+  scheduled: "Theo lịch định kỳ",
 };
 
 export const AUTOMATION_REGISTRY = {

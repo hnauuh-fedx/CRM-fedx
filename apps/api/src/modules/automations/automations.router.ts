@@ -3,6 +3,7 @@ import { z } from "zod";
 
 import { requireAnyPermission, requireAuthentication } from "../../middlewares/auth.middleware";
 import { leadListPermissions } from "../leads/lead-list.service";
+import { leadUpdatePermissions } from "../leads/lead-owner-stage-mutations.service";
 import {
   createAutomationRule,
   duplicateAutomationRule,
@@ -22,6 +23,8 @@ import {
   validateAutomationRule,
 } from "./automation.service";
 import { AUTOMATION_TRIGGER_TYPES } from "./automation-registry";
+import { createAutomationWebhookEndpoint } from "./automation-webhook.service";
+import { setAutomationContactPreference, suppressAutomationDestination } from "./automation-message-delivery.service";
 
 export const automationsRouter = Router();
 
@@ -84,6 +87,28 @@ const bulkRunSchema = z.object({
 
 const entityIdSchema = z.string().uuid();
 
+const webhookEndpointSchema = z.object({
+  name: z.string().trim().min(2).max(255),
+  url: z.string().url().max(2048),
+  secret: z.string().min(16).max(512),
+  allowedHosts: z.array(z.string().trim().min(1).max(253)).min(1).max(20),
+  institutionProgramId: z.string().uuid().optional(),
+});
+
+const contactPreferenceSchema = z.object({
+  leadId: z.string().uuid(),
+  channel: z.enum(["email", "sms", "zns"]),
+  status: z.enum(["consented", "opted_out", "unknown"]),
+  source: z.string().trim().max(100).optional(),
+});
+
+const suppressionSchema = z.object({
+  channel: z.enum(["email", "sms", "zns"]),
+  destination: z.string().trim().min(3).max(255),
+  reason: z.string().trim().max(255).optional(),
+  institutionProgramId: z.string().uuid().optional(),
+});
+
 // GET /api/automations
 automationsRouter.get(
   "/",
@@ -124,6 +149,81 @@ automationsRouter.get(
         return;
       }
       response.json(result);
+    } catch (error) {
+      next(error);
+    }
+  },
+);
+
+// POST /api/automations/webhook-endpoints
+automationsRouter.post(
+  "/webhook-endpoints",
+  requireAnyPermission("automation.manage"),
+  async (request, response, next) => {
+    try {
+      const parsed = webhookEndpointSchema.safeParse(request.body);
+      if (!parsed.success) {
+        response.status(400).json({ message: "Cấu hình webhook endpoint không hợp lệ." });
+        return;
+      }
+      const result = await createAutomationWebhookEndpoint(request.authUser!, parsed.data);
+      if (!result) {
+        response.status(403).json({ message: "Bạn không có quyền tạo webhook endpoint trong phạm vi này." });
+        return;
+      }
+      if (!result.ok) {
+        response.status(422).json({ message: `Đích webhook không an toàn: ${result.reason}.` });
+        return;
+      }
+      response.status(201).json(result.data);
+    } catch (error) {
+      next(error);
+    }
+  },
+);
+
+automationsRouter.put(
+  "/contact-preferences",
+  requireAnyPermission("automation.manage"),
+  requireAnyPermission("lead.sensitive.view"),
+  requireAnyPermission(...leadUpdatePermissions),
+  async (request, response, next) => {
+    try {
+      const parsed = contactPreferenceSchema.safeParse(request.body);
+      if (!parsed.success) {
+        response.status(400).json({ message: "Trạng thái đồng ý nhận tin không hợp lệ." });
+        return;
+      }
+      const result = await setAutomationContactPreference(request.authUser!, parsed.data);
+      if (!result) {
+        response.status(404).json({ message: "Không tìm thấy Lead trong phạm vi truy cập." });
+        return;
+      }
+      response.json(result);
+    } catch (error) {
+      next(error);
+    }
+  },
+);
+
+automationsRouter.post(
+  "/suppressions",
+  requireAnyPermission("automation.manage"),
+  requireAnyPermission("lead.sensitive.view"),
+  requireAnyPermission(...leadUpdatePermissions),
+  async (request, response, next) => {
+    try {
+      const parsed = suppressionSchema.safeParse(request.body);
+      if (!parsed.success) {
+        response.status(400).json({ message: "Thông tin chặn gửi không hợp lệ." });
+        return;
+      }
+      const result = await suppressAutomationDestination(request.authUser!, parsed.data);
+      if (!result) {
+        response.status(403).json({ message: "Bạn không có quyền quản lý suppression trong phạm vi này." });
+        return;
+      }
+      response.status(201).json(result);
     } catch (error) {
       next(error);
     }

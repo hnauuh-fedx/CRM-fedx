@@ -3,18 +3,23 @@ import { getAutomationSystemField, normalizeAutomationFieldReference } from "./a
 import type { AutomationGraphValidationIssue } from "./automation-graph.validator";
 import { AUTOMATION_REGISTRY, getAutomationNodeDefinition } from "./automation-registry";
 import type { AutomationGraphData } from "./automation.types";
+import { isValidAutomationSchedule } from "./automation-schedule";
 
 export type AutomationSemanticCatalog = {
   assigneeIds: Set<string>;
   departmentIds: Set<string>;
   pipelineStageIds: Set<string>;
   targetRoleCodes: Set<string>;
+  customerListIds: Set<string>;
+  webhookEndpointIds: Set<string>;
   customFieldDataTypes: Map<string, string>;
   canAssign: boolean;
   canCreateReminder: boolean;
   canUpdateLead: boolean;
   canWriteActivity: boolean;
   canViewSensitiveData: boolean;
+  canSendMessage: boolean;
+  canCallWebhook: boolean;
 };
 
 export function validateAutomationSemantics(
@@ -24,6 +29,16 @@ export function validateAutomationSemantics(
   const issues: AutomationGraphValidationIssue[] = [];
 
   for (const node of graph.nodes) {
+    if (node.type === "trigger" && node.data.triggerType === "scheduled" && node.data.scheduleTimezone && node.data.scheduleTime && node.data.scheduleDays) {
+      if (!isValidAutomationSchedule({
+        timezone: node.data.scheduleTimezone,
+        time: node.data.scheduleTime,
+        days: node.data.scheduleDays,
+        excludedDates: node.data.scheduleExcludedDates,
+      })) {
+        issues.push({ code: "INVALID_NODE_CONFIG", nodeId: node.id, message: `Cấu hình lịch tại node ${node.id} không hợp lệ.` });
+      }
+    }
     if (node.type === "condition") {
       const conditions = node.data.conditions?.length
         ? node.data.conditions
@@ -92,9 +107,17 @@ const capabilityChecks = {
     allowed: (catalog: AutomationSemanticCatalog) => catalog.canWriteActivity,
     message: (nodeId: string) => `Bạn không có quyền ghi hoạt động Lead cho node ${nodeId}.`,
   },
+  sendMessage: {
+    allowed: (catalog: AutomationSemanticCatalog) => catalog.canSendMessage,
+    message: (nodeId: string) => `Tài khoản thực thi không có quyền dùng thông tin liên hệ để gửi tin tại node ${nodeId}.`,
+  },
+  callWebhook: {
+    allowed: (catalog: AutomationSemanticCatalog) => catalog.canCallWebhook,
+    message: (nodeId: string) => `Tài khoản thực thi không có quyền gọi webhook tại node ${nodeId}.`,
+  },
 };
 
-const optionReferenceChecks: Partial<Record<"assignees" | "departments" | "pipelineStages" | "targetRoles", {
+const optionReferenceChecks: Partial<Record<"assignees" | "departments" | "pipelineStages" | "targetRoles" | "customerLists" | "webhookEndpoints", {
   exists: (value: string, catalog: AutomationSemanticCatalog) => boolean;
   message: (nodeId: string) => string;
 }>> = {
@@ -113,6 +136,14 @@ const optionReferenceChecks: Partial<Record<"assignees" | "departments" | "pipel
   targetRoles: {
     exists: (value, catalog) => catalog.targetRoleCodes.has(value),
     message: (nodeId) => `Vai trò nhận thông báo tại node ${nodeId} không còn tồn tại.`,
+  },
+  customerLists: {
+    exists: (value, catalog) => catalog.customerListIds.has(value),
+    message: (nodeId) => `Danh sách khách hàng tại node ${nodeId} không tồn tại hoặc nằm ngoài phạm vi.`,
+  },
+  webhookEndpoints: {
+    exists: (value, catalog) => catalog.webhookEndpointIds.has(value),
+    message: (nodeId) => `Webhook endpoint tại node ${nodeId} không tồn tại hoặc nằm ngoài phạm vi.`,
   },
 };
 

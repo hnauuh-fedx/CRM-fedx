@@ -46,6 +46,8 @@ export type AutomationNodeType =
   | "action_update_stage"
   | "action_activity"
   | "action_reminder"
+  | "action_message"
+  | "action_webhook"
   | "delay";
 
 export type AutomationNodeData = {
@@ -76,8 +78,22 @@ export type AutomationNodeData = {
   reminderTitle?: string;
   reminderContent?: string;
   reminderDelayMinutes?: number;
+  // Action: outbound message
+  messageChannel?: "email" | "sms" | "zns";
+  messageSubject?: string;
+  messageContent?: string;
+  consentPolicy?: "require_consent" | "allow_unknown";
+  // Action: signed webhook
+  webhookEndpointId?: string;
+  webhookPayload?: string;
   // Trigger: SLA
   slaMinutes?: number;
+  // Trigger: schedule
+  scheduleTimezone?: string;
+  scheduleTime?: string;
+  scheduleDays?: string[];
+  scheduleExcludedDates?: string;
+  scheduleCustomerListId?: string;
   // Delay
   delayMinutes?: number;
 };

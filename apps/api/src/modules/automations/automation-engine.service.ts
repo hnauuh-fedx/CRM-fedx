@@ -27,6 +27,8 @@ const AUTOMATION_BULK_PREPARE_QUEUE_NAME = `${AUTOMATION_QUEUE_NAME}_bulk_prepar
 const AUTOMATION_BULK_LEAD_QUEUE_NAME = `${AUTOMATION_QUEUE_NAME}_bulk_lead`;
 const delayMsPerMinute = getDelayMsPerMinute();
 const isAutomationDisabled = process.env.DISABLE_AUTOMATION_WORKER === "true" || process.env.NODE_ENV === "test";
+const automationProcessRole = process.env.AUTOMATION_PROCESS_ROLE ?? (process.env.NODE_ENV === "integration" ? "all" : "api");
+const shouldRunAutomationWorkers = !isAutomationDisabled && (automationProcessRole === "worker" || automationProcessRole === "all");
 
 export const automationQueue = isAutomationDisabled
   ? null
@@ -287,14 +289,14 @@ async function processAutomationNode(job: Job<ExecutionJobData>) {
   }
 }
 
-export const automationWorker = isAutomationDisabled
+export const automationWorker = !shouldRunAutomationWorkers
   ? null
   : new Worker<ExecutionJobData>(AUTOMATION_QUEUE_NAME, processAutomationNode, {
       connection: redisConnection as any,
       concurrency: 5,
     });
 
-const automationBulkPrepareWorker = isAutomationDisabled
+const automationBulkPrepareWorker = !shouldRunAutomationWorkers
   ? null
   : new Worker<AutomationBulkPrepareJobData>(AUTOMATION_BULK_PREPARE_QUEUE_NAME, async (job) => {
       const { materializeAutomationBulkDispatches, prepareAutomationBulkLeadPage } = await import("./automation-bulk.service.js");
@@ -346,7 +348,7 @@ const automationBulkPrepareWorker = isAutomationDisabled
       }
     }, { connection: redisConnection as any, concurrency: 1 });
 
-const automationBulkLeadWorker = isAutomationDisabled
+const automationBulkLeadWorker = !shouldRunAutomationWorkers
   ? null
   : new Worker<AutomationBulkLeadJobData>(AUTOMATION_BULK_LEAD_QUEUE_NAME, async (job) => {
       const { executeAutomationBulkLead } = await import("./automation-bulk.service.js");
@@ -361,11 +363,14 @@ const automationBulkLeadWorker = isAutomationDisabled
 
 let slaScanTimer: NodeJS.Timeout | null = null;
 if (automationWorker) {
-  slaScanTimer = setInterval(() => {
-    void import("./automation-sla.service.js")
-      .then(({ dispatchDueSlaAutomations }) => dispatchDueSlaAutomations())
-      .catch((error) => console.error("Automation SLA scan failed", error));
-  }, 60_000);
+  const scanSchedules = () => {
+    void Promise.all([
+      import("./automation-sla.service.js").then(({ dispatchDueSlaAutomations }) => dispatchDueSlaAutomations()),
+      import("./automation-scheduler.service.js").then(({ dispatchDueScheduledAutomations }) => dispatchDueScheduledAutomations()),
+    ]).catch((error) => console.error("Automation schedule scan failed", error));
+  };
+  scanSchedules();
+  slaScanTimer = setInterval(scanSchedules, 60_000);
   slaScanTimer.unref();
 }
 

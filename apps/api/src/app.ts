@@ -30,7 +30,6 @@ import { rolesRouter } from "./modules/roles/roles.router";
 import { studentsRouter } from "./modules/students/students.router";
 import { systemRouter } from "./modules/system/system.router";
 import { automationsRouter } from "./modules/automations/automations.router";
-import "./modules/automations/automation-engine.service"; // Initialize BullMQ Worker
 import { usersRouter } from "./modules/users/users.router";
 import { customFieldsRouter } from "./modules/custom-fields/custom-fields.router";
 import { publicWebhookRouter, webhooksAdminRouter } from "./modules/webhooks/webhooks.router";

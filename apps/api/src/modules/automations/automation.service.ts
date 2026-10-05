@@ -12,6 +12,7 @@ import type { AutomationGraphData } from "./automation.types";
 import { getAutomationCustomDataFields } from "./automation-data-field.service";
 import { AUTOMATION_REGISTRY, AUTOMATION_TRIGGER_TYPES } from "./automation-registry";
 import { validateAutomationSemantics } from "./automation-semantic.validator";
+import { listAutomationWebhookEndpointOptions } from "./automation-webhook.service";
 import {
   listAccessibleAutomationCustomerLists,
   previewAutomationBulkLeads,
@@ -412,6 +413,8 @@ async function validateRuleConfiguration(
         departmentIds: new Set(options.departments.map((department) => department.id)),
         pipelineStageIds: new Set(options.pipelineStages.map((stage) => stage.id)),
         targetRoleCodes: new Set(options.targetRoles.map((role) => role.code)),
+        customerListIds: new Set(options.customerLists.map((list) => list.id)),
+        webhookEndpointIds: new Set(options.webhookEndpoints.map((endpoint) => endpoint.id)),
         customFieldDataTypes: new Map(options.customDataFields.map((field) => [field.reference, field.dataType])),
         canAssign: user.permissions.includes("lead.assign") || user.permissions.includes("lead.reassign"),
         canCreateReminder: user.permissions.includes("reminder.create"),
@@ -419,6 +422,8 @@ async function validateRuleConfiguration(
         canWriteActivity: user.permissions.includes("lead_activity.create")
           || leadUpdatePermissions.some((permission) => user.permissions.includes(permission)),
         canViewSensitiveData: user.permissions.includes("lead.sensitive.view"),
+        canSendMessage: user.permissions.includes("lead.sensitive.view"),
+        canCallWebhook: user.permissions.includes("automation.manage"),
       }));
     } else {
       issues.push({
@@ -659,7 +664,7 @@ export async function previewAutomationBulkRun(user: AuthUser, ruleId: string, f
   };
 }
 
-export async function startAutomationBulkRun(user: AuthUser, ruleId: string, filter: AutomationBulkFilter) {
+export async function startAutomationBulkRun(user: AuthUser, ruleId: string, filter: AutomationBulkFilter, idempotencyKey?: string) {
   const rule = await prisma.automation_rules.findFirst({
     where: { id: ruleId, archived_at: null, ...(await getAutomationRuleScopeWhere(user)) },
     select: {
@@ -674,6 +679,30 @@ export async function startAutomationBulkRun(user: AuthUser, ruleId: string, fil
   if (!rule) return { ok: false as const, reason: "rule_not_found" as const };
   const validation = await validateRuleConfiguration(user, rule.trigger_type, rule.graph_data, rule.institution_program_id);
   if (!validation.valid) return { ok: false as const, reason: "invalid_rule" as const, validation };
+  if (idempotencyKey) {
+    const existingJob = await prisma.automation_jobs.findFirst({
+      where: { id: idempotencyKey, rule_id: rule.id, requested_by: user.id, type: "automation_bulk_run" },
+      select: { id: true, status: true, total_count: true, processed_count: true, failed_count: true, error_message: true, created_at: true, completed_at: true },
+    });
+    if (existingJob) {
+      let resumedJob = existingJob;
+      if (existingJob.status === "failed") {
+        resumedJob = await prisma.automation_jobs.update({
+          where: { id: existingJob.id },
+          data: { status: "pending", error_message: null, completed_at: null, updated_at: new Date() },
+          select: { id: true, status: true, total_count: true, processed_count: true, failed_count: true, error_message: true, created_at: true, completed_at: true },
+        });
+      }
+      if (resumedJob.status === "pending") {
+        try {
+          if (!(await enqueueAutomationBulkRun(resumedJob.id))) return { ok: false as const, reason: "queue_unavailable" as const };
+        } catch {
+          return { ok: false as const, reason: "queue_unavailable" as const };
+        }
+      }
+      return { ok: true as const, data: serializeBulkJob(resumedJob) };
+    }
+  }
   const snapshotAt = new Date();
   const preview = await previewAutomationBulkLeads(user, rule.institution_program_id, filter, snapshotAt);
   if (!preview) return { ok: false as const, reason: "filter_not_found" as const };
@@ -682,6 +711,7 @@ export async function startAutomationBulkRun(user: AuthUser, ruleId: string, fil
   const bulkJob = await prisma.$transaction(async (tx) => {
     const job = await tx.automation_jobs.create({
       data: {
+        ...(idempotencyKey ? { id: idempotencyKey } : {}),
         type: "automation_bulk_run",
         payload: {
           customerListId: filter.customerListId,
@@ -756,7 +786,7 @@ export async function getAutomationOptions(user: AuthUser, institutionProgramId?
   }
   const canAssign = user.permissions.includes("lead.assign") || user.permissions.includes("lead.reassign");
   const scopedLeadWhere = { deleted_at: null, ...getLeadScopeWhere(user) };
-  const [programs, assignees, departments, pipelineStages, targetRoles, customDataFields, sources, majors, admissionStatuses, tags, customerLists] = await Promise.all([
+  const [programs, assignees, departments, pipelineStages, targetRoles, customDataFields, sources, majors, admissionStatuses, tags, customerLists, webhookEndpoints] = await Promise.all([
     prisma.institution_programs.findMany({
       where: {
         status: "active",
@@ -836,9 +866,22 @@ export async function getAutomationOptions(user: AuthUser, institutionProgramId?
       take: 200,
     }),
     listAccessibleAutomationCustomerLists(user, institutionProgramId),
+    listAutomationWebhookEndpointOptions(user, institutionProgramId),
   ]);
+  if (!webhookEndpoints) return null;
   return {
-    registry: AUTOMATION_REGISTRY,
+    registry: {
+      ...AUTOMATION_REGISTRY,
+      nodes: AUTOMATION_REGISTRY.nodes.filter((definition) => (definition.requiredCapabilities ?? []).every((capability) => {
+        if (capability === "assign") return canAssign;
+        if (capability === "createReminder") return user.permissions.includes("reminder.create");
+        if (capability === "updateLead") return leadUpdatePermissions.some((permission) => user.permissions.includes(permission));
+        if (capability === "writeActivity") return user.permissions.includes("lead_activity.create") || leadUpdatePermissions.some((permission) => user.permissions.includes(permission));
+        if (capability === "sendMessage") return user.permissions.includes("lead.sensitive.view");
+        if (capability === "callWebhook") return user.permissions.includes("automation.manage");
+        return false;
+      })),
+    },
     institutionPrograms: programs.map((p) => ({ id: p.id, name: p.name, institutionName: p.institutions.name })),
     triggerTypes: [...AUTOMATION_TRIGGER_TYPES],
     assignees: assignees.map((assignee) => ({ id: assignee.id, fullName: assignee.full_name })),
@@ -851,6 +894,7 @@ export async function getAutomationOptions(user: AuthUser, institutionProgramId?
     targetRoles,
     customDataFields,
     customerLists,
+    webhookEndpoints,
     systemFieldOptions: {
       lead_sources: sources.map((source) => ({ code: source.id, label: source.name })),
       majors: majors.map((major) => ({ code: major.id, label: major.name })),

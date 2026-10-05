@@ -17,12 +17,16 @@ const catalog = {
     departmentIds: new Set(["department-1"]),
   pipelineStageIds: new Set(["stage-1"]),
   targetRoleCodes: new Set(["SALE"]),
+  customerListIds: new Set(["list-1"]),
+  webhookEndpointIds: new Set(["endpoint-1"]),
   customFieldDataTypes: new Map([["custom:field-1", "TEXT"]]),
   canAssign: true,
   canCreateReminder: true,
   canUpdateLead: true,
   canWriteActivity: true,
   canViewSensitiveData: true,
+  canSendMessage: true,
+  canCallWebhook: true,
 };
 
 test("accepts references that exist in the scoped catalog", () => {
