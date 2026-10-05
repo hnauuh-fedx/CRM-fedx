@@ -9,11 +9,14 @@ import {
   archiveAutomationRule,
   getAutomationOptions,
   getAutomationExecution,
+  getAutomationBulkRun,
   getAutomationRule,
   listAutomationRules,
   listExecutionLogs,
   listAutomationTestLeads,
   runAutomationTest,
+  previewAutomationBulkRun,
+  startAutomationBulkRun,
   toggleAutomationRule,
   updateAutomationRule,
   validateAutomationRule,
@@ -73,6 +76,10 @@ const testLeadQuerySchema = z.object({
 
 const testRunSchema = z.object({
   leadId: z.string().uuid(),
+});
+
+const bulkRunSchema = z.object({
+  customerListId: z.string().uuid(),
 });
 
 const entityIdSchema = z.string().uuid();
@@ -205,6 +212,98 @@ automationsRouter.post(
         return;
       }
       response.status(202).json(result.data);
+    } catch (error) {
+      next(error);
+    }
+  },
+);
+
+// POST /api/automations/:id/bulk-preview
+automationsRouter.post(
+  "/:id/bulk-preview",
+  requireAnyPermission("automation.manage"),
+  requireAnyPermission(...leadListPermissions),
+  async (request, response, next) => {
+    try {
+      const parsedId = entityIdSchema.safeParse(request.params.id);
+      const parsedBody = bulkRunSchema.safeParse(request.body);
+      if (!parsedId.success || !parsedBody.success) {
+        response.status(400).json({ message: "Dữ liệu xem trước lượt chạy hàng loạt không hợp lệ." });
+        return;
+      }
+      const result = await previewAutomationBulkRun(request.authUser!, parsedId.data, parsedBody.data);
+      if (!result.ok) {
+        response.status(404).json({
+          message: result.reason === "rule_not_found"
+            ? "Không tìm thấy automation rule."
+            : "Không tìm thấy danh sách khách hàng trong phạm vi truy cập của rule.",
+        });
+        return;
+      }
+      response.json(result.data);
+    } catch (error) {
+      next(error);
+    }
+  },
+);
+
+// POST /api/automations/:id/bulk-run
+automationsRouter.post(
+  "/:id/bulk-run",
+  requireAnyPermission("automation.manage"),
+  requireAnyPermission(...leadListPermissions),
+  async (request, response, next) => {
+    try {
+      const parsedId = entityIdSchema.safeParse(request.params.id);
+      const parsedBody = bulkRunSchema.safeParse(request.body);
+      if (!parsedId.success || !parsedBody.success) {
+        response.status(400).json({ message: "Dữ liệu chạy automation hàng loạt không hợp lệ." });
+        return;
+      }
+      const result = await startAutomationBulkRun(request.authUser!, parsedId.data, parsedBody.data);
+      if (!result.ok) {
+        if (result.reason === "rule_not_found" || result.reason === "filter_not_found") {
+          response.status(404).json({ message: "Không tìm thấy rule hoặc danh sách khách hàng trong phạm vi truy cập." });
+          return;
+        }
+        if (result.reason === "queue_unavailable") {
+          response.status(503).json({ message: "Automation worker hiện không khả dụng." });
+          return;
+        }
+        response.status(422).json({
+          message: result.reason === "empty_filter"
+            ? "Danh sách khách hàng không có Lead phù hợp."
+            : "Rule chưa hợp lệ để chạy hàng loạt.",
+          validation: "validation" in result ? result.validation : undefined,
+        });
+        return;
+      }
+      response.status(202).json(result.data);
+    } catch (error) {
+      next(error);
+    }
+  },
+);
+
+// GET /api/automations/:id/bulk-runs/:jobId
+automationsRouter.get(
+  "/:id/bulk-runs/:jobId",
+  requireAnyPermission("automation.manage"),
+  requireAnyPermission(...leadListPermissions),
+  async (request, response, next) => {
+    try {
+      const parsedRuleId = entityIdSchema.safeParse(request.params.id);
+      const parsedJobId = entityIdSchema.safeParse(request.params.jobId);
+      if (!parsedRuleId.success || !parsedJobId.success) {
+        response.status(400).json({ message: "Mã lượt chạy hàng loạt không hợp lệ." });
+        return;
+      }
+      const job = await getAutomationBulkRun(request.authUser!, parsedRuleId.data, parsedJobId.data);
+      if (!job) {
+        response.status(404).json({ message: "Không tìm thấy lượt chạy hàng loạt." });
+        return;
+      }
+      response.json(job);
     } catch (error) {
       next(error);
     }

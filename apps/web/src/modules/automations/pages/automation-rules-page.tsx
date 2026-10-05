@@ -13,6 +13,7 @@ import {
   FilterX,
   Search,
   Copy,
+  ListStart,
 } from "lucide-react";
 import { useNavigate } from "react-router";
 
@@ -62,6 +63,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import { AutomationBulkRunDialog } from "./automation-bulk-run-dialog";
 
 const RULE_TEMPLATES = [
   { id: "blank", label: "Tự thiết kế", description: "Bắt đầu với node khởi động." },
@@ -69,8 +71,8 @@ const RULE_TEMPLATES = [
   { id: "lead-follow-up", label: "Follow-up Lead", description: "Chờ 60 phút rồi ghi hoạt động chăm sóc." },
 ] as const;
 
-function createTemplateGraph(templateId: string): AutomationGraphData {
-  const trigger = { id: "trigger-1", type: "trigger" as const, position: { x: 80, y: 160 }, data: { label: "Khởi động" } };
+function createTemplateGraph(templateId: string, triggerType: string): AutomationGraphData {
+  const trigger = { id: "trigger-1", type: "trigger" as const, position: { x: 80, y: 160 }, data: { label: "Khởi động", triggerType } };
   if (templateId === "new-lead-notification") {
     return {
       nodes: [
@@ -117,6 +119,7 @@ export function AutomationRulesPage() {
   const [programFilter, setProgramFilter] = useState("all");
   const [page, setPage] = useState(1);
   const [createOpen, setCreateOpen] = useState(false);
+  const [bulkRule, setBulkRule] = useState<AutomationRuleListItem | null>(null);
 
   const optionsQuery = useQuery({
     queryKey: ["automations", "options"],
@@ -274,6 +277,7 @@ export function AutomationRulesPage() {
               onArchive={() => archiveMutation.mutate(rule.id)}
               onDuplicate={() => duplicateMutation.mutate(rule.id)}
               onEdit={() => navigate(`/automations/${rule.id}/builder`)}
+              onBulkRun={() => setBulkRule(rule)}
             />
           ))}
         </div>
@@ -307,6 +311,14 @@ export function AutomationRulesPage() {
           navigate(`/automations/${id}/builder`);
         }}
       />
+      {bulkRule && (
+        <AutomationBulkRunDialog
+          open
+          onOpenChange={(open) => { if (!open) setBulkRule(null); }}
+          rule={bulkRule}
+          accessToken={auth.accessToken!}
+        />
+      )}
     </div>
   );
 }
@@ -318,6 +330,7 @@ function RuleCard({
   onArchive,
   onDuplicate,
   onEdit,
+  onBulkRun,
 }: {
   rule: AutomationRuleListItem;
   triggerLabel: string;
@@ -325,6 +338,7 @@ function RuleCard({
   onArchive: () => void;
   onDuplicate: () => void;
   onEdit: () => void;
+  onBulkRun: () => void;
 }) {
   const [confirmOpen, setConfirmOpen] = useState(false);
   return (
@@ -370,6 +384,17 @@ function RuleCard({
           onClick={() => onToggle(!rule.isActive)}
         >
           {rule.isActive ? <Pause className="h-3.5 w-3.5" /> : <Play className="h-3.5 w-3.5" />}
+        </Button>
+        <Button
+          id={`bulk-run-rule-${rule.id}`}
+          size="sm"
+          variant="ghost"
+          className="min-h-11 min-w-11"
+          aria-label={`Chạy rule ${rule.name} cho danh sách Lead`}
+          title="Chạy theo danh sách Lead"
+          onClick={onBulkRun}
+        >
+          <ListStart className="h-3.5 w-3.5" />
         </Button>
         <Button
           id={`duplicate-rule-${rule.id}`}
@@ -455,7 +480,7 @@ function CreateRuleDialog({
         name: name.trim(),
         description: description.trim() || undefined,
         triggerType,
-        graphData: createTemplateGraph(templateId),
+        graphData: createTemplateGraph(templateId, triggerType),
         institutionProgramId: programId === "global" ? undefined : programId,
       }, accessToken);
       onOpenChange(false);

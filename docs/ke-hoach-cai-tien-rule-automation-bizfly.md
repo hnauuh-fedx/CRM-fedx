@@ -107,6 +107,8 @@ Thời lượng dự kiến: 7–10 ngày.
 
 Thời lượng dự kiến: 7–10 ngày.
 
+Trạng thái triển khai: hoàn thành lõi chức năng ngày 05/10/2026. Đã có chia Lead theo danh sách nhân viên hoặc team/phòng ban, round-robin và least-loaded, reminder, quét SLA có phục hồi/idempotency, dry-run theo danh sách khách hàng, cố định tập Lead trước khi chạy bulk, worker có rate limit và UI theo dõi tiến độ. Integration test cần Redis cục bộ hoạt động để xác nhận toàn bộ luồng queue.
+
 - Round-robin theo danh sách nhân viên hoặc team.
 - Cursor phân công được khóa bằng transaction/row lock để tránh hai Lead nhận sai vòng.
 - Least-loaded tùy chọn dựa trên số Lead active được phân công.
@@ -193,4 +195,3 @@ Mỗi release bật bằng feature flag, chạy canary theo chương trình tuy�
 ## 8. Ước lượng tổng thể
 
 Một nhóm gồm 1 backend, 1 frontend và QA bán thời gian có thể hoàn thành nền tảng cốt lõi qua Release B trong khoảng 5–7 tuần. Toàn bộ Release A–D dự kiến 10–14 tuần, phụ thuộc Email/ZNS/SMS provider và mức độ hoàn thiện nghiệp vụ tuyển sinh.
-

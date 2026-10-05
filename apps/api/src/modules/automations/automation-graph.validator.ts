@@ -31,6 +31,16 @@ export type AutomationGraphValidationResult = {
 
 const supportedNodeTypes = new Set<AutomationNodeType>(AUTOMATION_REGISTRY.nodes.map((node) => node.type));
 
+export function withAutomationTriggerType(value: unknown, triggerType: string): AutomationGraphData {
+  if (!isGraph(value)) return value as AutomationGraphData;
+  return {
+    ...value,
+    nodes: value.nodes.map((node) => node.type === "trigger"
+      ? { ...node, data: { ...node.data, triggerType } }
+      : node),
+  };
+}
+
 export function validateAutomationGraph(value: unknown): AutomationGraphValidationResult {
   if (!isGraph(value)) {
     return invalid({ code: "INVALID_GRAPH", message: "Cấu trúc graph automation không hợp lệ." });

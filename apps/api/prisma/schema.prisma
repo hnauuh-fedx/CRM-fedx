@@ -104,13 +104,69 @@ model audit_logs {
 }
 
 model automation_jobs {
-  id           String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
-  type         String    @db.VarChar(100)
-  payload      Json?
-  status       String?   @default("pending") @db.VarChar(50)
-  run_at       DateTime? @db.Timestamp(6)
-  completed_at DateTime? @db.Timestamp(6)
-  created_at   DateTime? @default(now()) @db.Timestamp(6)
+  id              String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  type            String    @db.VarChar(100)
+  payload         Json?
+  status          String?   @default("pending") @db.VarChar(50)
+  requested_by    String?   @db.Uuid
+  rule_id         String?   @db.Uuid
+  total_count     Int       @default(0)
+  processed_count Int       @default(0)
+  failed_count    Int       @default(0)
+  error_message   String?
+  run_at          DateTime? @db.Timestamp(6)
+  completed_at    DateTime? @db.Timestamp(6)
+  prepared_at     DateTime? @db.Timestamp(6)
+  created_at      DateTime? @default(now()) @db.Timestamp(6)
+  updated_at      DateTime? @default(now()) @db.Timestamp(6)
+  users           users?    @relation(fields: [requested_by], references: [id], onDelete: SetNull, onUpdate: NoAction)
+  automation_rules automation_rules? @relation(fields: [rule_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  automation_bulk_dispatches automation_bulk_dispatches[]
+
+  @@index([requested_by, created_at, id], map: "idx_automation_jobs_requester_created")
+  @@index([rule_id, created_at, id], map: "idx_automation_jobs_rule_created")
+  @@index([status, run_at, id], map: "idx_automation_jobs_status_run")
+}
+
+model automation_assignment_cursors {
+  id               String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  rule_id          String    @db.Uuid
+  node_id          String    @db.VarChar(255)
+  last_assignee_id String?   @db.Uuid
+  updated_at       DateTime  @default(now()) @db.Timestamp(6)
+  automation_rules automation_rules @relation(fields: [rule_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  users            users?           @relation(fields: [last_assignee_id], references: [id], onDelete: SetNull, onUpdate: NoAction)
+
+  @@unique([rule_id, node_id], map: "uq_automation_assignment_cursor_rule_node")
+  @@index([last_assignee_id], map: "idx_automation_assignment_cursor_assignee")
+}
+
+model automation_sla_dispatches {
+  id            String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  rule_id       String   @db.Uuid
+  lead_id       String   @db.Uuid
+  dispatched_at DateTime @default(now()) @db.Timestamp(6)
+  automation_rules automation_rules @relation(fields: [rule_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  leads            leads            @relation(fields: [lead_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+
+  @@unique([rule_id, lead_id], map: "uq_automation_sla_dispatch_rule_lead")
+  @@index([dispatched_at, id], map: "idx_automation_sla_dispatch_time")
+}
+
+model automation_bulk_dispatches {
+  id                        String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  bulk_job_id               String   @db.Uuid
+  lead_id                   String   @db.Uuid
+  status                    String   @default("prepared") @db.VarChar(50)
+  error_message             String?
+  created_at                DateTime @default(now()) @db.Timestamp(6)
+  updated_at                DateTime @default(now()) @db.Timestamp(6)
+  automation_jobs           automation_jobs @relation(fields: [bulk_job_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  leads                     leads           @relation(fields: [lead_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  automation_execution_logs automation_execution_logs?
+
+  @@unique([bulk_job_id, lead_id], map: "uq_automation_bulk_dispatch_job_lead")
+  @@index([bulk_job_id, status, id], map: "idx_automation_bulk_dispatch_job_status")
 }
 
 model zalo_connections {
@@ -558,6 +614,8 @@ model leads {
   students                       students?
   utm_trackings                  utm_trackings[]
   lead_source_occurrences        lead_source_occurrences[]
+  automation_sla_dispatches      automation_sla_dispatches[]
+  automation_bulk_dispatches     automation_bulk_dispatches[]
 
   @@index([assigned_to], map: "idx_leads_assigned_to")
   @@index([assigned_to, created_at, id], map: "idx_leads_assignee_created_page")
@@ -1035,6 +1093,8 @@ model users {
   automation_execution_logs                            automation_execution_logs[]
   automation_rule_versions                             automation_rule_versions[]
   automation_rules                                     automation_rules[]
+  automation_jobs                                      automation_jobs[]
+  automation_assignment_cursors                        automation_assignment_cursors[]
   campaigns                                            campaigns[]
   customer_lists                                       customer_lists[]
   customer_list_members                                customer_list_members[]
@@ -1310,6 +1370,9 @@ model automation_rules {
   institution_programs      institution_programs?       @relation(fields: [institution_program_id], references: [id], onDelete: NoAction, onUpdate: NoAction)
   automation_execution_logs automation_execution_logs[]
   automation_rule_versions  automation_rule_versions[]
+  automation_sla_dispatches automation_sla_dispatches[]
+  automation_jobs           automation_jobs[]
+  automation_assignment_cursors automation_assignment_cursors[]
 
   @@index([is_active, trigger_type], map: "idx_automation_rules_active_trigger")
   @@index([archived_at, is_active, trigger_type], map: "idx_automation_rules_archive_active_trigger")
@@ -1346,8 +1409,10 @@ model automation_execution_logs {
   error_message              String?
   started_at                 DateTime?                    @default(now()) @db.Timestamp(6)
   completed_at               DateTime?                    @db.Timestamp(6)
+  bulk_dispatch_id           String?                      @unique @db.Uuid
   automation_rules           automation_rules             @relation(fields: [rule_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
   automation_rule_versions   automation_rule_versions?    @relation(fields: [rule_version_id], references: [id], onDelete: SetNull, onUpdate: NoAction)
+  automation_bulk_dispatches automation_bulk_dispatches?  @relation(fields: [bulk_dispatch_id], references: [id], onDelete: SetNull, onUpdate: NoAction)
   users                      users?                       @relation(fields: [requested_by], references: [id], onDelete: NoAction, onUpdate: NoAction)
   automation_node_executions automation_node_executions[]
 

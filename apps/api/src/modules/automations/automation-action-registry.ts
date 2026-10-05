@@ -3,6 +3,8 @@ import { UnrecoverableError } from "bullmq";
 import { prisma } from "../../database/prisma";
 import { getAuthUser } from "../auth/auth.service";
 import { assignVisibleLead, changeVisibleLeadStage, leadUpdatePermissions } from "../leads/lead-owner-stage-mutations.service";
+import { createReminder } from "../leads/sale-overview.service";
+import { resolveAutomationAssignee } from "./automation-assignment.service";
 import { evaluateAutomationConditions } from "./automation-condition-evaluator";
 import { getAutomationLeadData, getAutomationTemplateReferences, renderAutomationTemplate } from "./automation-data-field.service";
 import type { AutomationActionResult, AutomationContext } from "./automation-execution.types";
@@ -15,8 +17,10 @@ const executors = {
   condition: executeConditionAction,
   action_notification: executeNotificationAction,
   action_assign: executeAssignAction,
+  action_assign_pool: executeAssignPoolAction,
   action_update_stage: executeUpdateStageAction,
   action_activity: executeActivityAction,
+  action_reminder: executeReminderAction,
   delay: executeDelayAction,
 } satisfies Record<Exclude<AutomationNode["type"], "trigger">, AutomationActionExecutor>;
 
@@ -97,6 +101,25 @@ async function executeAssignAction(node: AutomationNode, context: AutomationCont
   return result;
 }
 
+async function executeAssignPoolAction(node: AutomationNode, context: AutomationContext, nodeExecutionId: string): Promise<AutomationActionResult> {
+  const { assignmentStrategy, assigneeIds, departmentId } = node.data;
+  if (!context.leadId || !assignmentStrategy || (!assigneeIds?.length && !departmentId)) throw new UnrecoverableError("Node chia Lead thiếu chiến lược, team/danh sách nhân viên hoặc lead context.");
+  const actor = await requireActor(context);
+  const result = { nextSourceHandle: "default", delayMinutes: 0 };
+  const mutation = await assignVisibleLead(actor, context.leadId, {
+    departmentId,
+    resolveAssigneeId: (tx) => resolveAutomationAssignee(tx, {
+      ruleId: context.ruleId,
+      nodeId: node.id,
+      candidateIds: assigneeIds ?? [],
+      departmentId,
+      strategy: assignmentStrategy,
+    }),
+  }, context.institutionProgramId, async (tx) => markActionCompleted(tx, nodeExecutionId, result));
+  if (!mutation.ok) throw new UnrecoverableError(`Không thể chia Lead tự động: ${mutation.reason}`);
+  return result;
+}
+
 async function executeUpdateStageAction(node: AutomationNode, context: AutomationContext, nodeExecutionId: string): Promise<AutomationActionResult> {
   const { stageId } = node.data;
   if (!stageId || !context.leadId) throw new UnrecoverableError("Node cập nhật pipeline thiếu giai đoạn hoặc lead context.");
@@ -127,6 +150,30 @@ async function executeActivityAction(node: AutomationNode, context: AutomationCo
     });
     await markActionCompleted(tx, nodeExecutionId, result);
   });
+  return result;
+}
+
+async function executeReminderAction(node: AutomationNode, context: AutomationContext, nodeExecutionId: string): Promise<AutomationActionResult> {
+  const { reminderTitle, reminderContent, reminderDelayMinutes } = node.data;
+  if (!context.leadId || !reminderTitle || !Number.isFinite(Number(reminderDelayMinutes)) || Number(reminderDelayMinutes) <= 0) {
+    throw new UnrecoverableError("Node nhắc việc thiếu tiêu đề, thời gian hoặc lead context.");
+  }
+  const actor = await requireActor(context);
+  if (!actor.permissions.includes("reminder.create")) throw new UnrecoverableError("Tài khoản kích hoạt không có quyền tạo nhắc việc.");
+  const references = getAutomationTemplateReferences(reminderTitle, reminderContent ?? "");
+  const leadData = references.length > 0
+    ? await getAutomationLeadData(actor, context.leadId, context.institutionProgramId, references)
+    : new Map<string, unknown>();
+  if (!leadData) throw new UnrecoverableError("Lead không tồn tại trong phạm vi của tài khoản kích hoạt.");
+  const result = { nextSourceHandle: "default", delayMinutes: 0 };
+  const reminder = await createReminder(actor, {
+    leadId: context.leadId,
+    title: renderAutomationTemplate(reminderTitle, leadData),
+    content: reminderContent ? renderAutomationTemplate(reminderContent, leadData) : undefined,
+    remindAt: new Date(Date.now() + Number(reminderDelayMinutes) * 60_000).toISOString(),
+    customFieldValues: [],
+  }, context.institutionProgramId, undefined, async (tx) => markActionCompleted(tx, nodeExecutionId, result));
+  if (!reminder.ok) throw new UnrecoverableError(`Không thể tạo nhắc việc: ${reminder.reason}`);
   return result;
 }
 

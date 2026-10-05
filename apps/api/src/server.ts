@@ -4,6 +4,7 @@ import { prisma } from "./database/prisma";
 import { processReminderNotifications } from "./modules/leads/reminder-notification.service";
 import { redisCommandConnection } from "./config/redis";
 import { getWebhookQueueAdapter } from "./modules/webhooks/webhook-queue.service";
+import { closeAutomationEngine } from "./modules/automations/automation-engine.service";
 
 const REMINDER_NOTIFICATION_INTERVAL_MS = 60_000;
 
@@ -26,7 +27,10 @@ const reminderNotificationInterval = setInterval(() => {
 
 async function shutdown() {
   clearInterval(reminderNotificationInterval);
-  server.close();
+  await new Promise<void>((resolve, reject) => {
+    server.close((error) => error ? reject(error) : resolve());
+  });
+  await closeAutomationEngine();
   await getWebhookQueueAdapter()?.close?.();
   await redisCommandConnection?.quit();
   await prisma.$disconnect();

@@ -13,6 +13,12 @@ export type LeadMutationTransactionEffect = (
   tx: Prisma.TransactionClient,
 ) => Promise<void>;
 
+type LeadAssignmentInput = {
+  assigneeId?: string;
+  departmentId?: string;
+  resolveAssigneeId?: (tx: Prisma.TransactionClient) => Promise<string>;
+};
+
 export { leadUpdatePermissions } from "./lead-authorization";
 
 export async function changeVisibleLeadStage(
@@ -72,7 +78,7 @@ export async function changeVisibleLeadStage(
 export async function assignVisibleLead(
   actor: AuthUser,
   leadId: string,
-  input: { assigneeId: string; departmentId?: string },
+  input: LeadAssignmentInput,
   institutionProgramId?: string,
   transactionEffect?: LeadMutationTransactionEffect,
   ipAddress?: string,
@@ -97,11 +103,17 @@ export async function assignVisibleLead(
     if (!lead) {
       return { ok: false as const, reason: "lead_not_found" as const };
     }
+    const assigneeId = input.resolveAssigneeId
+      ? await input.resolveAssigneeId(tx)
+      : input.assigneeId;
+    if (!assigneeId) {
+      return { ok: false as const, reason: "assignee_not_found" as const };
+    }
     const canAssignAll =
       actor.accessScope === "ALL" && actor.permissions.includes("lead.view_all");
     const assignee = await tx.users.findFirst({
       where: {
-        id: input.assigneeId,
+        id: assigneeId,
         status: "active",
         deleted_at: null,
         user_roles: {

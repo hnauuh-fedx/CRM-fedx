@@ -62,7 +62,9 @@ export function AutomationBuilderPage() {
   useEffect(() => {
     if (!ruleQuery.data || initialized) return;
     const graphData = ruleQuery.data.graphData as AutomationGraphData;
-    setNodes(graphData?.nodes ?? []);
+    setNodes((graphData?.nodes ?? []).map((node) => node.type === "trigger"
+      ? { ...node, data: { ...node.data, triggerType: ruleQuery.data.triggerType } }
+      : node));
     setEdges(graphData?.edges ?? []);
     setInitialized(true);
   }, [initialized, ruleQuery.data]);

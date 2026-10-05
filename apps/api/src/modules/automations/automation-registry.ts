@@ -3,6 +3,7 @@ import type { AutomationNode, AutomationNodeData, AutomationNodeType } from "./a
 
 export type AutomationConfigControl =
   | "condition_group"
+  | "multi_select"
   | "number"
   | "select"
   | "template_text"
@@ -14,9 +15,10 @@ export type AutomationConfigField = {
   label: string;
   control: AutomationConfigControl;
   required: boolean;
-  optionsSource?: "assignees" | "pipelineStages" | "targetRoles";
+  optionsSource?: "assignees" | "departments" | "pipelineStages" | "targetRoles";
   options?: Array<{ code: string; label: string }>;
   min?: number;
+  visibleForTriggerTypes?: string[];
 };
 
 export type AutomationNodeDefinition = {
@@ -24,15 +26,18 @@ export type AutomationNodeDefinition = {
   category: "trigger" | "condition" | "action" | "delay";
   label: string;
   description: string;
-  icon: "bell" | "clock" | "git-branch" | "notebook" | "refresh" | "user-plus" | "zap";
+  icon: "bell" | "clock" | "git-branch" | "notebook" | "refresh" | "user-plus" | "users" | "zap";
   tone: "blue" | "green" | "indigo" | "orange" | "purple" | "teal" | "yellow";
   defaultData?: Partial<AutomationNodeData>;
-  requiredCapabilities?: Array<"assign" | "updateLead" | "writeActivity">;
+  requiredCapabilities?: Array<"assign" | "createReminder" | "updateLead" | "writeActivity">;
   configFields: AutomationConfigField[];
 };
 
 const nodes: AutomationNodeDefinition[] = [
-  { type: "trigger", category: "trigger", label: "Khởi động", description: "Điểm bắt đầu của quy trình", icon: "zap", tone: "blue", configFields: [] },
+  {
+    type: "trigger", category: "trigger", label: "Khởi động", description: "Điểm bắt đầu của quy trình", icon: "zap", tone: "blue",
+    configFields: [{ key: "slaMinutes", label: "Thời gian chưa xử lý (phút)", control: "number", required: true, min: 1, visibleForTriggerTypes: ["lead_unprocessed"] }],
+  },
   {
     type: "condition", category: "condition", label: "Điều kiện", description: "Kết hợp nhiều tiêu chí bằng AND hoặc OR", icon: "git-branch", tone: "orange",
     defaultData: { conditionCombinator: "AND", conditions: [{ field: "", operator: "equals", value: "" }] },
@@ -49,6 +54,18 @@ const nodes: AutomationNodeDefinition[] = [
   {
     type: "action_assign", category: "action", label: "Phân công Sale", description: "Gán nhân viên phụ trách cho lead", icon: "user-plus", tone: "purple", requiredCapabilities: ["assign"],
     configFields: [{ key: "assignToUserId", label: "Nhân viên phụ trách", control: "select", required: true, optionsSource: "assignees" }],
+  },
+  {
+    type: "action_assign_pool", category: "action", label: "Chia Lead tự động", description: "Chia vòng hoặc chọn nhân viên đang có ít Lead nhất", icon: "users", tone: "purple", requiredCapabilities: ["assign"],
+    defaultData: { assignmentStrategy: "round_robin", assigneeIds: [] },
+    configFields: [
+      { key: "assignmentStrategy", label: "Chiến lược phân công", control: "select", required: true, options: [
+        { code: "round_robin", label: "Chia vòng (Round-robin)" },
+        { code: "least_loaded", label: "Ít Lead đang phụ trách nhất" },
+      ] },
+      { key: "departmentId", label: "Team / phòng ban (tuỳ chọn)", control: "select", required: false, optionsSource: "departments" },
+      { key: "assigneeIds", label: "Danh sách nhân viên (tuỳ chọn)", control: "multi_select", required: false, optionsSource: "assignees" },
+    ],
   },
   {
     type: "action_update_stage", category: "action", label: "Cập nhật Pipeline", description: "Chuyển lead sang giai đoạn khác", icon: "refresh", tone: "teal", requiredCapabilities: ["updateLead"],
@@ -70,17 +87,27 @@ const nodes: AutomationNodeDefinition[] = [
     ],
   },
   {
+    type: "action_reminder", category: "action", label: "Tạo nhắc việc", description: "Tạo nhắc việc chăm sóc Lead sau một khoảng thời gian", icon: "clock", tone: "yellow", requiredCapabilities: ["createReminder"],
+    defaultData: { reminderDelayMinutes: 60 },
+    configFields: [
+      { key: "reminderTitle", label: "Tiêu đề nhắc việc", control: "template_text", required: true },
+      { key: "reminderContent", label: "Nội dung", control: "template_textarea", required: false },
+      { key: "reminderDelayMinutes", label: "Nhắc sau (phút)", control: "number", required: true, min: 1 },
+    ],
+  },
+  {
     type: "delay", category: "delay", label: "Chờ / Delay", description: "Tạm dừng trước khi thực hiện bước tiếp theo", icon: "clock", tone: "yellow", defaultData: { delayMinutes: 1 },
     configFields: [{ key: "delayMinutes", label: "Thời gian chờ (phút)", control: "number", required: true, min: 1 }],
   },
 ];
 
-export const AUTOMATION_TRIGGER_TYPES = ["lead_created", "lead_pipeline_stage_changed", "lead_assigned"] as const;
+export const AUTOMATION_TRIGGER_TYPES = ["lead_created", "lead_pipeline_stage_changed", "lead_assigned", "lead_unprocessed"] as const;
 
 const automationTriggerLabels: Record<(typeof AUTOMATION_TRIGGER_TYPES)[number], string> = {
   lead_created: "Lead được tạo mới",
   lead_pipeline_stage_changed: "Lead đổi giai đoạn pipeline",
   lead_assigned: "Lead được phân công",
+  lead_unprocessed: "Lead chưa được xử lý quá SLA",
 };
 
 export const AUTOMATION_REGISTRY = {
@@ -140,10 +167,17 @@ export function validateRegisteredAutomationNode(node: AutomationNode): string[]
     return issues;
   }
 
+  if (node.type === "action_assign_pool" && !node.data.departmentId && !node.data.assigneeIds?.length) {
+    missing(`Node chia Lead ${node.id} phải chọn team/phòng ban hoặc ít nhất một nhân viên.`);
+  }
+
   for (const field of getAutomationNodeDefinition(node.type)?.configFields ?? []) {
+    if (field.visibleForTriggerTypes && !field.visibleForTriggerTypes.includes(node.data.triggerType ?? "")) continue;
     const value = node.data[field.key];
     if (!field.required) continue;
-    const valid = field.control === "number" ? Number.isFinite(Number(value)) && Number(value) >= (field.min ?? Number.NEGATIVE_INFINITY) : hasText(value);
+    const valid = field.control === "number"
+      ? Number.isFinite(Number(value)) && Number(value) >= (field.min ?? Number.NEGATIVE_INFINITY)
+      : field.control === "multi_select" ? Array.isArray(value) && value.length > 0 : hasText(value);
     if (!valid) {
       const messages: Partial<Record<AutomationNodeType, string>> = {
         action_notification: `Node thông báo ${node.id} phải có tiêu đề, nội dung và vai trò nhận.`,

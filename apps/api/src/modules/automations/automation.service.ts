@@ -5,13 +5,18 @@ import type { AuthUser } from "../auth/auth.types";
 import { getAuthUser } from "../auth/auth.service";
 import { getLeadScopeWhere } from "../leads/lead-list.service";
 import { leadUpdatePermissions } from "../leads/lead-owner-stage-mutations.service";
-import { startAutomationExecution } from "./automation-engine.service";
-import { validateAutomationGraph } from "./automation-graph.validator";
+import { enqueueAutomationBulkRun, startAutomationExecution } from "./automation-engine.service";
+import { validateAutomationGraph, withAutomationTriggerType } from "./automation-graph.validator";
 import { ensureAutomationRuleVersionSnapshot } from "./automation-rule-version.service";
 import type { AutomationGraphData } from "./automation.types";
 import { getAutomationCustomDataFields } from "./automation-data-field.service";
 import { AUTOMATION_REGISTRY, AUTOMATION_TRIGGER_TYPES } from "./automation-registry";
 import { validateAutomationSemantics } from "./automation-semantic.validator";
+import {
+  listAccessibleAutomationCustomerLists,
+  previewAutomationBulkLeads,
+  type AutomationBulkFilter,
+} from "./automation-bulk.service";
 
 export type AutomationRuleListQuery = {
   page: number;
@@ -382,7 +387,8 @@ async function validateRuleConfiguration(
   graphData: unknown,
   institutionProgramId: string | null,
 ) {
-  const graphValidation = validateAutomationGraph(graphData);
+  const normalizedGraphData = withAutomationTriggerType(graphData, triggerType);
+  const graphValidation = validateAutomationGraph(normalizedGraphData);
   const issues = [...graphValidation.issues];
   if (!AUTOMATION_TRIGGER_TYPES.includes(triggerType as typeof AUTOMATION_TRIGGER_TYPES[number])) {
     issues.unshift({
@@ -401,12 +407,14 @@ async function validateRuleConfiguration(
   if (graphValidation.valid && user) {
     const options = await getAutomationOptions(user, institutionProgramId ?? undefined);
     if (options) {
-      issues.push(...validateAutomationSemantics(graphData as AutomationGraphData, {
+      issues.push(...validateAutomationSemantics(normalizedGraphData, {
         assigneeIds: new Set(options.assignees.map((assignee) => assignee.id)),
+        departmentIds: new Set(options.departments.map((department) => department.id)),
         pipelineStageIds: new Set(options.pipelineStages.map((stage) => stage.id)),
         targetRoleCodes: new Set(options.targetRoles.map((role) => role.code)),
         customFieldDataTypes: new Map(options.customDataFields.map((field) => [field.reference, field.dataType])),
         canAssign: user.permissions.includes("lead.assign") || user.permissions.includes("lead.reassign"),
+        canCreateReminder: user.permissions.includes("reminder.create"),
         canUpdateLead: leadUpdatePermissions.some((permission) => user.permissions.includes(permission)),
         canWriteActivity: user.permissions.includes("lead_activity.create")
           || leadUpdatePermissions.some((permission) => user.permissions.includes(permission)),
@@ -631,6 +639,116 @@ export async function runAutomationTest(user: AuthUser, ruleId: string, leadId: 
   return execution;
 }
 
+export async function previewAutomationBulkRun(user: AuthUser, ruleId: string, filter: AutomationBulkFilter) {
+  const rule = await prisma.automation_rules.findFirst({
+    where: { id: ruleId, archived_at: null, ...(await getAutomationRuleScopeWhere(user)) },
+    select: { id: true, institution_program_id: true, graph_data: true },
+  });
+  if (!rule) return { ok: false as const, reason: "rule_not_found" as const };
+  const preview = await previewAutomationBulkLeads(user, rule.institution_program_id, filter);
+  if (!preview) return { ok: false as const, reason: "filter_not_found" as const };
+  const graph = rule.graph_data as unknown as AutomationGraphData;
+  return {
+    ok: true as const,
+    data: {
+      ...preview,
+      actions: graph.nodes
+        .filter((node) => node.type.startsWith("action_"))
+        .map((node) => ({ nodeId: node.id, type: node.type, label: node.data.label })),
+    },
+  };
+}
+
+export async function startAutomationBulkRun(user: AuthUser, ruleId: string, filter: AutomationBulkFilter) {
+  const rule = await prisma.automation_rules.findFirst({
+    where: { id: ruleId, archived_at: null, ...(await getAutomationRuleScopeWhere(user)) },
+    select: {
+      id: true,
+      version: true,
+      trigger_type: true,
+      graph_data: true,
+      institution_program_id: true,
+      created_by: true,
+    },
+  });
+  if (!rule) return { ok: false as const, reason: "rule_not_found" as const };
+  const validation = await validateRuleConfiguration(user, rule.trigger_type, rule.graph_data, rule.institution_program_id);
+  if (!validation.valid) return { ok: false as const, reason: "invalid_rule" as const, validation };
+  const snapshotAt = new Date();
+  const preview = await previewAutomationBulkLeads(user, rule.institution_program_id, filter, snapshotAt);
+  if (!preview) return { ok: false as const, reason: "filter_not_found" as const };
+  if (preview.total === 0) return { ok: false as const, reason: "empty_filter" as const };
+
+  const bulkJob = await prisma.$transaction(async (tx) => {
+    const job = await tx.automation_jobs.create({
+      data: {
+        type: "automation_bulk_run",
+        payload: {
+          customerListId: filter.customerListId,
+          ruleVersion: rule.version,
+          triggerType: rule.trigger_type,
+          graphData: rule.graph_data,
+          institutionProgramId: rule.institution_program_id,
+          snapshotAt: snapshotAt.toISOString(),
+          targetSnapshot: preview.targetSnapshot,
+        },
+        status: "pending",
+        requested_by: user.id,
+        rule_id: rule.id,
+        total_count: preview.total,
+        run_at: new Date(),
+      },
+      select: { id: true, status: true, total_count: true, processed_count: true, failed_count: true },
+    });
+    await tx.audit_logs.create({
+      data: {
+        user_id: user.id,
+        entity_type: "automation_rule",
+        entity_id: rule.id,
+        action: "bulk_run_started",
+        new_data: { bulkJobId: job.id, customerListId: filter.customerListId, total: preview.total },
+      },
+    });
+    return job;
+  });
+  try {
+    if (await enqueueAutomationBulkRun(bulkJob.id)) return { ok: true as const, data: serializeBulkJob(bulkJob) };
+  } catch (error) {
+    await prisma.automation_jobs.update({
+      where: { id: bulkJob.id },
+      data: { status: "failed", error_message: error instanceof Error ? error.message : String(error), completed_at: new Date() },
+    });
+    return { ok: false as const, reason: "queue_unavailable" as const };
+  }
+  await prisma.automation_jobs.update({
+    where: { id: bulkJob.id },
+    data: { status: "failed", error_message: "Automation worker hiện không khả dụng.", completed_at: new Date() },
+  });
+  return { ok: false as const, reason: "queue_unavailable" as const };
+}
+
+export async function getAutomationBulkRun(user: AuthUser, ruleId: string, jobId: string) {
+  const rule = await prisma.automation_rules.findFirst({
+    where: { id: ruleId, archived_at: null, ...(await getAutomationRuleScopeWhere(user)) },
+    select: { id: true },
+  });
+  if (!rule) return null;
+  const job = await prisma.automation_jobs.findFirst({
+    where: { id: jobId, rule_id: ruleId, type: "automation_bulk_run", requested_by: user.id },
+    select: {
+      id: true,
+      status: true,
+      total_count: true,
+      processed_count: true,
+      failed_count: true,
+      error_message: true,
+      created_at: true,
+      completed_at: true,
+    },
+  });
+  return job ? serializeBulkJob(job) : null;
+}
+
 export async function getAutomationOptions(user: AuthUser, institutionProgramId?: string) {
   const accessibleProgramIds = await getAccessibleAutomationProgramIds(user);
   if (institutionProgramId && accessibleProgramIds !== null && !accessibleProgramIds.includes(institutionProgramId)) {
@@ -638,7 +756,7 @@ export async function getAutomationOptions(user: AuthUser, institutionProgramId?
   }
   const canAssign = user.permissions.includes("lead.assign") || user.permissions.includes("lead.reassign");
   const scopedLeadWhere = { deleted_at: null, ...getLeadScopeWhere(user) };
-  const [programs, assignees, pipelineStages, targetRoles, customDataFields, sources, majors, admissionStatuses, tags] = await Promise.all([
+  const [programs, assignees, departments, pipelineStages, targetRoles, customDataFields, sources, majors, admissionStatuses, tags, customerLists] = await Promise.all([
     prisma.institution_programs.findMany({
       where: {
         status: "active",
@@ -669,6 +787,14 @@ export async function getAutomationOptions(user: AuthUser, institutionProgramId?
             where: { id: user.id, status: "active", deleted_at: null },
             select: { id: true, full_name: true },
           }),
+    canAssign
+      ? prisma.departments.findMany({
+          where: accessibleProgramIds === null ? undefined : { id: { in: user.departmentIds } },
+          select: { id: true, name: true },
+          orderBy: { name: "asc" },
+          take: 500,
+        })
+      : Promise.resolve([]),
     prisma.pipeline_stages.findMany({
       select: { id: true, name: true, pipelines: { select: { name: true } } },
       orderBy: [{ pipelines: { name: "asc" } }, { position: "asc" }, { name: "asc" }],
@@ -709,12 +835,14 @@ export async function getAutomationOptions(user: AuthUser, institutionProgramId?
       orderBy: { name: "asc" },
       take: 200,
     }),
+    listAccessibleAutomationCustomerLists(user, institutionProgramId),
   ]);
   return {
     registry: AUTOMATION_REGISTRY,
     institutionPrograms: programs.map((p) => ({ id: p.id, name: p.name, institutionName: p.institutions.name })),
     triggerTypes: [...AUTOMATION_TRIGGER_TYPES],
     assignees: assignees.map((assignee) => ({ id: assignee.id, fullName: assignee.full_name })),
+    departments,
     pipelineStages: pipelineStages.map((stage) => ({
       id: stage.id,
       name: stage.name,
@@ -722,6 +850,7 @@ export async function getAutomationOptions(user: AuthUser, institutionProgramId?
     })),
     targetRoles,
     customDataFields,
+    customerLists,
     systemFieldOptions: {
       lead_sources: sources.map((source) => ({ code: source.id, label: source.name })),
       majors: majors.map((major) => ({ code: major.id, label: major.name })),
@@ -741,6 +870,28 @@ export async function getAutomationOptions(user: AuthUser, institutionProgramId?
         { code: "lost", label: "Không phù hợp" },
       ],
     },
+  };
+}
+
+function serializeBulkJob(job: {
+  id: string;
+  status: string | null;
+  total_count: number;
+  processed_count: number;
+  failed_count: number;
+  error_message?: string | null;
+  created_at?: Date | null;
+  completed_at?: Date | null;
+}) {
+  return {
+    id: job.id,
+    status: job.status ?? "pending",
+    totalCount: job.total_count,
+    processedCount: job.processed_count,
+    failedCount: job.failed_count,
+    errorMessage: job.error_message ?? null,
+    createdAt: job.created_at?.toISOString() ?? null,
+    completedAt: job.completed_at?.toISOString() ?? null,
   };
 }
 

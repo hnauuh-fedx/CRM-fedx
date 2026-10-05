@@ -6,10 +6,12 @@ import type { AutomationGraphData } from "./automation.types";
 
 export type AutomationSemanticCatalog = {
   assigneeIds: Set<string>;
+  departmentIds: Set<string>;
   pipelineStageIds: Set<string>;
   targetRoleCodes: Set<string>;
   customFieldDataTypes: Map<string, string>;
   canAssign: boolean;
+  canCreateReminder: boolean;
   canUpdateLead: boolean;
   canWriteActivity: boolean;
   canViewSensitiveData: boolean;
@@ -50,11 +52,13 @@ export function validateAutomationSemantics(
 
     for (const field of definition?.configFields ?? []) {
       const value = node.data[field.key];
-      if (field.optionsSource && typeof value === "string" && value && !optionReferenceChecks[field.optionsSource]?.exists(value, catalog)) {
+      const references = Array.isArray(value) ? value.filter((item): item is string => typeof item === "string") : typeof value === "string" && value ? [value] : [];
+      const optionCheck = field.optionsSource ? optionReferenceChecks[field.optionsSource] : undefined;
+      if (optionCheck && references.some((reference) => !optionCheck.exists(reference, catalog))) {
         issues.push({
           code: "INVALID_REFERENCE",
           nodeId: node.id,
-          message: optionReferenceChecks[field.optionsSource]?.message(node.id) ?? `Giá trị tham chiếu tại node ${node.id} không còn tồn tại.`,
+          message: optionCheck.message(node.id),
         });
       }
     }
@@ -76,6 +80,10 @@ const capabilityChecks = {
     allowed: (catalog: AutomationSemanticCatalog) => catalog.canAssign,
     message: (nodeId: string) => `Bạn không có quyền phân công Lead cho node ${nodeId}.`,
   },
+  createReminder: {
+    allowed: (catalog: AutomationSemanticCatalog) => catalog.canCreateReminder,
+    message: (nodeId: string) => `Bạn không có quyền tạo nhắc việc cho node ${nodeId}.`,
+  },
   updateLead: {
     allowed: (catalog: AutomationSemanticCatalog) => catalog.canUpdateLead,
     message: (nodeId: string) => `Bạn không có quyền cập nhật Lead cho node ${nodeId}.`,
@@ -86,13 +94,17 @@ const capabilityChecks = {
   },
 };
 
-const optionReferenceChecks: Partial<Record<"assignees" | "pipelineStages" | "targetRoles", {
+const optionReferenceChecks: Partial<Record<"assignees" | "departments" | "pipelineStages" | "targetRoles", {
   exists: (value: string, catalog: AutomationSemanticCatalog) => boolean;
   message: (nodeId: string) => string;
 }>> = {
   assignees: {
     exists: (value, catalog) => catalog.assigneeIds.has(value),
     message: (nodeId) => `Nhân viên được chọn tại node ${nodeId} không còn khả dụng trong phạm vi của rule.`,
+  },
+  departments: {
+    exists: (value, catalog) => catalog.departmentIds.has(value),
+    message: (nodeId) => `Team/phòng ban tại node ${nodeId} không còn tồn tại hoặc nằm ngoài phạm vi.`,
   },
   pipelineStages: {
     exists: (value, catalog) => catalog.pipelineStageIds.has(value),

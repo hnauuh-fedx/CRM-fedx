@@ -155,12 +155,12 @@ export function resolveRelativeDateRange(range: CustomerListRelativeRange, now =
   return { from: bangkokDate(current.year - 1, 0, 1), to: bangkokDate(current.year, 0, 1) };
 }
 
-function dateWhere(column: "date_of_birth" | "created_at", condition: CustomerListFilterCondition): Prisma.leadsWhereInput {
+function dateWhere(column: "date_of_birth" | "created_at", condition: CustomerListFilterCondition, now: Date): Prisma.leadsWhereInput {
   if (condition.operator === "isEmpty") return { [column]: null };
   if (condition.operator === "isNotEmpty") return { [column]: { not: null } };
   const parse = column === "created_at" ? createdAtDate : birthDate;
   if (condition.operator === "relative") {
-    const range = resolveRelativeDateRange(condition.relativeRange!);
+    const range = resolveRelativeDateRange(condition.relativeRange!, now);
     return { [column]: { gte: range.from, lt: range.to } };
   }
   if (condition.operator === "between") return { [column]: { gte: parse(condition.from!), lt: parse(condition.to!, true) } };
@@ -169,11 +169,11 @@ function dateWhere(column: "date_of_birth" | "created_at", condition: CustomerLi
   return { [column]: { gte: parse(condition.value!), lt: parse(condition.value!, true) } };
 }
 
-function conditionWhere(condition: CustomerListFilterCondition): Prisma.leadsWhereInput {
+function conditionWhere(condition: CustomerListFilterCondition, now: Date): Prisma.leadsWhereInput {
   const textColumns = { fullName: "full_name", leadCode: "lead_code", phone: "phone", email: "email" } as const;
   if (condition.field in textColumns) return textWhere(textColumns[condition.field as keyof typeof textColumns], condition);
-  if (condition.field === "dateOfBirth") return dateWhere("date_of_birth", condition);
-  if (condition.field === "createdAt") return dateWhere("created_at", condition);
+  if (condition.field === "dateOfBirth") return dateWhere("date_of_birth", condition, now);
+  if (condition.field === "createdAt") return dateWhere("created_at", condition, now);
   const column = condition.field === "pipelineStageId" ? "pipeline_stage_id"
     : condition.field === "sourceId" ? "source_id"
       : condition.field === "assigneeId" ? "assigned_to"
@@ -184,9 +184,9 @@ function conditionWhere(condition: CustomerListFilterCondition): Prisma.leadsWhe
   return condition.operator === "notEquals" ? { NOT: { [column]: condition.value } } : { [column]: condition.value };
 }
 
-export function customerListDynamicWhere(config: CustomerListFilterConfig): Prisma.leadsWhereInput | null {
+export function customerListDynamicWhere(config: CustomerListFilterConfig, now = new Date()): Prisma.leadsWhereInput | null {
   if (!hasCustomerListFilters(config)) return null;
-  const conditions = config.conditions.map(conditionWhere);
+  const conditions = config.conditions.map((condition) => conditionWhere(condition, now));
   return config.combinator === "OR" ? { OR: conditions } : { AND: conditions };
 }
 

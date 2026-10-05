@@ -42,8 +42,10 @@ export type AutomationNodeType =
   | "condition"
   | "action_notification"
   | "action_assign"
+  | "action_assign_pool"
   | "action_update_stage"
   | "action_activity"
+  | "action_reminder"
   | "delay";
 
 export type AutomationNodeData = {
@@ -62,11 +64,20 @@ export type AutomationNodeData = {
   targetRole?: string;
   // Action: assign
   assignToUserId?: string;
+  assignmentStrategy?: "round_robin" | "least_loaded";
+  assigneeIds?: string[];
+  departmentId?: string;
   // Action: update stage
   stageId?: string;
   // Action: activity
   activityType?: string;
   activityContent?: string;
+  // Action: reminder
+  reminderTitle?: string;
+  reminderContent?: string;
+  reminderDelayMinutes?: number;
+  // Trigger: SLA
+  slaMinutes?: number;
   // Delay
   delayMinutes?: number;
 };
@@ -80,11 +91,12 @@ export type AutomationCondition = {
 export type AutomationConfigField = {
   key: keyof AutomationNodeData;
   label: string;
-  control: "condition_group" | "number" | "select" | "template_text" | "template_textarea" | "text";
+  control: "condition_group" | "multi_select" | "number" | "select" | "template_text" | "template_textarea" | "text";
   required: boolean;
-  optionsSource?: "assignees" | "pipelineStages" | "targetRoles";
+  optionsSource?: "assignees" | "departments" | "pipelineStages" | "targetRoles";
   options?: Array<{ code: string; label: string }>;
   min?: number;
+  visibleForTriggerTypes?: string[];
 };
 
 export type AutomationNodeDefinition = {
@@ -92,10 +104,10 @@ export type AutomationNodeDefinition = {
   category: "trigger" | "condition" | "action" | "delay";
   label: string;
   description: string;
-  icon: "bell" | "clock" | "git-branch" | "notebook" | "refresh" | "user-plus" | "zap";
+  icon: "bell" | "clock" | "git-branch" | "notebook" | "refresh" | "user-plus" | "users" | "zap";
   tone: "blue" | "green" | "indigo" | "orange" | "purple" | "teal" | "yellow";
   defaultData?: Partial<AutomationNodeData>;
-  requiredCapabilities?: Array<"assign" | "updateLead" | "writeActivity">;
+  requiredCapabilities?: Array<"assign" | "createReminder" | "updateLead" | "writeActivity">;
   configFields: AutomationConfigField[];
 };
 
@@ -128,10 +140,29 @@ export type AutomationOptions = {
   institutionPrograms: Array<{ id: string; name: string; institutionName: string }>;
   triggerTypes: string[];
   assignees: Array<{ id: string; fullName: string }>;
+  departments: Array<{ id: string; name: string }>;
   pipelineStages: Array<{ id: string; name: string; pipelineName: string | null }>;
   targetRoles: Array<{ id: string; code: string; name: string }>;
   customDataFields: AutomationCustomDataField[];
+  customerLists: Array<{ id: string; name: string }>;
   systemFieldOptions: Record<string, AutomationDataFieldOption[]>;
+};
+
+export type AutomationBulkPreview = {
+  total: number;
+  sample: Array<{ id: string; leadCode: string | null; fullName: string }>;
+  actions: Array<{ nodeId: string; type: string; label: string }>;
+};
+
+export type AutomationBulkJob = {
+  id: string;
+  status: string;
+  totalCount: number;
+  processedCount: number;
+  failedCount: number;
+  errorMessage: string | null;
+  createdAt: string | null;
+  completedAt: string | null;
 };
 
 export type AutomationDataFieldOption = {

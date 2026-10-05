@@ -3,6 +3,8 @@ import type { AuthUser } from "../auth/auth.types";
 import { getLeadScopeWhere } from "./lead-list.service";
 import { saveSaleCustomFieldValues, type SaleCustomFieldInput } from "./sale-custom-fields.service";
 
+type TransactionClient = Parameters<Parameters<typeof prisma.$transaction>[0]>[0];
+
 export type AssignmentListQuery = {
   page: number;
   limit: number;
@@ -458,7 +460,13 @@ export async function listReminders(user: AuthUser, query: ReminderListQuery) {
   };
 }
 
-export async function createReminder(user: AuthUser, input: ReminderInput, institutionProgramId?: string, ip?: string) {
+export async function createReminder(
+  user: AuthUser,
+  input: ReminderInput,
+  institutionProgramId?: string,
+  ip?: string,
+  transactionEffect?: (tx: TransactionClient) => Promise<void>,
+) {
   const lead = await prisma.leads.findFirst({
     where: { id: input.leadId, deleted_at: null, ...getLeadScopeWhere(user, institutionProgramId), ...(institutionProgramId ? { institution_program_id: institutionProgramId } : {}) },
     select: { id: true, full_name: true, institution_program_id: true },
@@ -493,6 +501,7 @@ export async function createReminder(user: AuthUser, input: ReminderInput, insti
     });
       const customFieldsResult = await saveSaleCustomFieldValues(tx, user, "SALE_REMINDER", reminder.id, lead.institution_program_id, input.customFieldValues ?? [], ip);
       if (!customFieldsResult.ok) throw customFieldError(customFieldsResult.reason);
+      await transactionEffect?.(tx);
       return { ok: true as const, data: reminder };
     });
   } catch (error) {

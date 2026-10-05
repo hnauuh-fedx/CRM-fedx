@@ -42,8 +42,10 @@ export type AutomationNodeType =
   | "condition"
   | "action_notification"
   | "action_assign"
+  | "action_assign_pool"
   | "action_update_stage"
   | "action_activity"
+  | "action_reminder"
   | "delay";
 
 export type AutomationNodeData = {
@@ -62,11 +64,20 @@ export type AutomationNodeData = {
   targetRole?: string;
   // Action: assign
   assignToUserId?: string;
+  assignmentStrategy?: "round_robin" | "least_loaded";
+  assigneeIds?: string[];
+  departmentId?: string;
   // Action: update stage
   stageId?: string;
   // Action: activity
   activityType?: string;
   activityContent?: string;
+  // Action: reminder
+  reminderTitle?: string;
+  reminderContent?: string;
+  reminderDelayMinutes?: number;
+  // Trigger: SLA
+  slaMinutes?: number;
   // Delay
   delayMinutes?: number;
 };

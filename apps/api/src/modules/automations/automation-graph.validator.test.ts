@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 
 import type { AutomationGraphData, AutomationNode } from "./automation.types";
-import { validateAutomationGraph } from "./automation-graph.validator";
+import { validateAutomationGraph, withAutomationTriggerType } from "./automation-graph.validator";
 
 function node(id: string, type: AutomationNode["type"], data: AutomationNode["data"]): AutomationNode {
   return { id, type, data, position: { x: 0, y: 0 } };
@@ -128,4 +128,20 @@ test("reports a malformed condition item instead of throwing", () => {
 
   assert.equal(result.valid, false);
   assert.ok(result.issues.some((issue) => issue.code === "INVALID_NODE_CONFIG" && issue.nodeId === condition.id));
+});
+
+test("derives trigger configuration from the rule trigger type before validation", () => {
+  const graph: AutomationGraphData = {
+    nodes: [
+      node("root", "trigger", { label: "Khởi động" }),
+      node("delay", "delay", { label: "Chờ", delayMinutes: 1 }),
+    ],
+    edges: [{ id: "root-delay", source: "root", target: "delay" }],
+  };
+  const normalized = withAutomationTriggerType(graph, "lead_unprocessed");
+
+  assert.equal(normalized.nodes[0]?.data.triggerType, "lead_unprocessed");
+  const result = validateAutomationGraph(normalized);
+  assert.equal(result.valid, false);
+  assert.ok(result.issues.some((issue) => issue.nodeId === normalized.nodes[0]?.id && issue.code === "INVALID_NODE_CONFIG"));
 });

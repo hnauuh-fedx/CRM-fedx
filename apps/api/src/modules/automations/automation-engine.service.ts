@@ -5,7 +5,7 @@ import { prisma } from "../../database/prisma";
 import { executeRegisteredAutomationNode } from "./automation-action-registry";
 import { decideNodeExecution } from "./automation-execution-state";
 import type { AutomationContext, AutomationExecutionSource, ExecutableAutomationRule } from "./automation-execution.types";
-import { validateAutomationGraph } from "./automation-graph.validator";
+import { validateAutomationGraph, withAutomationTriggerType } from "./automation-graph.validator";
 import { ensureAutomationRuleVersionSnapshot } from "./automation-rule-version.service";
 import type { AutomationEdge, AutomationGraphData } from "./automation.types";
 
@@ -16,17 +16,39 @@ export type ExecutionJobData = {
   graph: AutomationGraphData;
   logId: string;
 };
+type AutomationBulkPrepareJobData = { bulkJobId: string };
+type AutomationBulkLeadJobData = { bulkJobId: string; leadId: string };
 
 const DEFAULT_AUTOMATION_QUEUE_NAME = "automation_engine_queue";
 const DEFAULT_DELAY_MS_PER_MINUTE = 60_000;
 
 export const AUTOMATION_QUEUE_NAME = getAutomationQueueName();
+const AUTOMATION_BULK_PREPARE_QUEUE_NAME = `${AUTOMATION_QUEUE_NAME}_bulk_prepare`;
+const AUTOMATION_BULK_LEAD_QUEUE_NAME = `${AUTOMATION_QUEUE_NAME}_bulk_lead`;
 const delayMsPerMinute = getDelayMsPerMinute();
 const isAutomationDisabled = process.env.DISABLE_AUTOMATION_WORKER === "true" || process.env.NODE_ENV === "test";
 
 export const automationQueue = isAutomationDisabled
   ? null
   : new Queue<ExecutionJobData>(AUTOMATION_QUEUE_NAME, { connection: redisConnection as any });
+const automationBulkPrepareQueue = isAutomationDisabled
+  ? null
+  : new Queue<AutomationBulkPrepareJobData>(AUTOMATION_BULK_PREPARE_QUEUE_NAME, { connection: redisConnection as any });
+const automationBulkLeadQueue = isAutomationDisabled
+  ? null
+  : new Queue<AutomationBulkLeadJobData>(AUTOMATION_BULK_LEAD_QUEUE_NAME, { connection: redisConnection as any });
+
+export async function enqueueAutomationBulkRun(bulkJobId: string) {
+  if (!automationBulkPrepareQueue) return false;
+  await automationBulkPrepareQueue.add("prepare_bulk_run", { bulkJobId }, {
+    attempts: 3,
+    backoff: { type: "exponential", delay: 5_000 },
+    jobId: bulkJobId,
+    removeOnComplete: true,
+    removeOnFail: false,
+  });
+  return true;
+}
 
 async function enqueueAutomationJob(data: ExecutionJobData, delay = 0) {
   if (!automationQueue) throw new UnrecoverableError("Automation worker hiện không khả dụng.");
@@ -103,26 +125,47 @@ export async function startAutomationExecution(
   context: Omit<AutomationContext, "ruleId">,
   source: AutomationExecutionSource,
   requestedBy: string | null,
+  bulkDispatchId?: string,
+  executionIdempotencyKey?: string,
 ) {
-  const validation = validateAutomationGraph(rule.graphData);
+  const graph = withAutomationTriggerType(rule.graphData, rule.triggerType);
+  const validation = validateAutomationGraph(graph);
   if (!validation.valid) return { ok: false as const, reason: "invalid_graph" as const, validation };
   if (!automationQueue) return { ok: false as const, reason: "queue_unavailable" as const };
-  const triggerNode = rule.graphData.nodes.find((node) => node.type === "trigger");
+  const triggerNode = graph.nodes.find((node) => node.type === "trigger");
   if (!triggerNode) return { ok: false as const, reason: "invalid_graph" as const, validation };
 
   const version = await ensureAutomationRuleVersionSnapshot({
     ruleId: rule.id,
     version: rule.version,
     triggerType: rule.triggerType,
-    graphData: rule.graphData,
+    graphData: graph,
     institutionProgramId: rule.institutionProgramId,
     createdBy: rule.createdBy ?? requestedBy,
   });
   const executionActorId = rule.createdBy ?? context.actorId;
   const executionContext: AutomationContext = { ...context, actorId: executionActorId, ruleId: rule.id };
-  const log = await prisma.$transaction(async (tx) => {
-    const createdLog = await tx.automation_execution_logs.create({
+  const existingLog = bulkDispatchId
+    ? await prisma.automation_execution_logs.findUnique({
+        where: { bulk_dispatch_id: bulkDispatchId },
+        select: { id: true, status: true },
+      })
+    : executionIdempotencyKey
+      ? await prisma.automation_execution_logs.findUnique({
+          where: { id: executionIdempotencyKey },
+          select: { id: true, status: true },
+        })
+      : null;
+  if (existingLog?.status === "failed") {
+    return { ok: false as const, reason: "existing_execution_failed" as const };
+  }
+  let log = existingLog;
+  if (!log) {
+    try {
+      log = await prisma.$transaction(async (tx) => {
+        const createdLog = await tx.automation_execution_logs.create({
       data: {
+        ...(executionIdempotencyKey ? { id: executionIdempotencyKey } : {}),
         rule_id: rule.id,
         rule_version_id: version.id,
         requested_by: requestedBy,
@@ -130,11 +173,12 @@ export async function startAutomationExecution(
         source,
         status: "processing",
         context_data: JSON.parse(JSON.stringify(executionContext)),
+        bulk_dispatch_id: bulkDispatchId,
       },
       select: { id: true, status: true },
-    });
-    if (source === "manual_test" && requestedBy) {
-      await tx.audit_logs.create({
+        });
+        if (source === "manual_test" && requestedBy) {
+          await tx.audit_logs.create({
         data: {
           user_id: requestedBy,
           entity_type: "automation_rule",
@@ -147,13 +191,22 @@ export async function startAutomationExecution(
             version: version.version,
           },
         },
+          });
+        }
+        return createdLog;
       });
+    } catch (error) {
+      if (!executionIdempotencyKey || !isPrismaUniqueConstraintError(error)) throw error;
+      log = await prisma.automation_execution_logs.findUnique({
+        where: { id: executionIdempotencyKey },
+        select: { id: true, status: true },
+      });
+      if (!log) throw error;
     }
-    return createdLog;
-  });
+  }
   try {
-    for (const { nextNodeId } of getNextNodes(triggerNode.id, rule.graphData, null)) {
-      await enqueueAutomationJob({ context: executionContext, nodeId: nextNodeId, graph: rule.graphData, logId: log.id });
+    for (const { nextNodeId } of getNextNodes(triggerNode.id, graph, null)) {
+      await enqueueAutomationJob({ context: executionContext, nodeId: nextNodeId, graph, logId: log.id });
     }
     return { ok: true as const, data: { executionId: log.id, status: log.status, version: version.version } };
   } catch (error) {
@@ -241,6 +294,102 @@ export const automationWorker = isAutomationDisabled
       concurrency: 5,
     });
 
+const automationBulkPrepareWorker = isAutomationDisabled
+  ? null
+  : new Worker<AutomationBulkPrepareJobData>(AUTOMATION_BULK_PREPARE_QUEUE_NAME, async (job) => {
+      const { materializeAutomationBulkDispatches, prepareAutomationBulkLeadPage } = await import("./automation-bulk.service.js");
+      await prisma.automation_jobs.update({
+        where: { id: job.data.bulkJobId },
+        data: { status: "processing", updated_at: new Date() },
+      });
+      const materializedTotal = await materializeAutomationBulkDispatches(job.data.bulkJobId, 500);
+      if (materializedTotal === null) throw new UnrecoverableError("Không thể cố định tập lead cho lượt chạy hàng loạt.");
+      let cursor: string | undefined;
+      do {
+        const page = await prepareAutomationBulkLeadPage(job.data.bulkJobId, cursor, 500);
+        if (!page) throw new UnrecoverableError("Không thể đọc tập lead cho lượt chạy hàng loạt.");
+        if (page.leadIds.length > 0) {
+          await automationBulkLeadQueue!.addBulk(page.leadIds.map((leadId) => ({
+            name: "execute_bulk_lead",
+            data: { bulkJobId: job.data.bulkJobId, leadId },
+            opts: {
+              attempts: 3,
+              backoff: { type: "exponential", delay: 5_000 },
+              jobId: `${job.data.bulkJobId}-${leadId}`,
+              removeOnComplete: true,
+              removeOnFail: false,
+            },
+          })));
+        }
+        cursor = page.nextCursor;
+        if (!page.hasMore) break;
+      } while (cursor);
+      const total = materializedTotal;
+      const updated = await prisma.automation_jobs.update({
+        where: { id: job.data.bulkJobId },
+        data: {
+          total_count: total,
+          prepared_at: new Date(),
+          updated_at: new Date(),
+        },
+        select: { processed_count: true, failed_count: true },
+      });
+      if (updated.processed_count + updated.failed_count >= total) {
+        await prisma.automation_jobs.update({
+          where: { id: job.data.bulkJobId },
+          data: {
+            status: updated.failed_count > 0 ? "completed_with_errors" : "completed",
+            completed_at: new Date(),
+            updated_at: new Date(),
+          },
+        });
+      }
+    }, { connection: redisConnection as any, concurrency: 1 });
+
+const automationBulkLeadWorker = isAutomationDisabled
+  ? null
+  : new Worker<AutomationBulkLeadJobData>(AUTOMATION_BULK_LEAD_QUEUE_NAME, async (job) => {
+      const { executeAutomationBulkLead } = await import("./automation-bulk.service.js");
+      const result = await executeAutomationBulkLead(job.data.bulkJobId, job.data.leadId);
+      if (!result.ok) throw new UnrecoverableError(`Không thể chạy automation cho lead: ${result.reason}.`);
+      await completeAutomationBulkDispatch(job.data.bulkJobId, job.data.leadId, false);
+    }, {
+      connection: redisConnection as any,
+      concurrency: 5,
+      limiter: { max: 100, duration: 60_000 },
+    });
+
+let slaScanTimer: NodeJS.Timeout | null = null;
+if (automationWorker) {
+  slaScanTimer = setInterval(() => {
+    void import("./automation-sla.service.js")
+      .then(({ dispatchDueSlaAutomations }) => dispatchDueSlaAutomations())
+      .catch((error) => console.error("Automation SLA scan failed", error));
+  }, 60_000);
+  slaScanTimer.unref();
+}
+
+function isPrismaUniqueConstraintError(error: unknown) {
+  return typeof error === "object" && error !== null && "code" in error && error.code === "P2002";
+}
+
+export async function closeAutomationEngine() {
+  if (slaScanTimer) {
+    clearInterval(slaScanTimer);
+    slaScanTimer = null;
+  }
+  await Promise.all([
+    automationBulkLeadWorker?.close(),
+    automationBulkPrepareWorker?.close(),
+    automationWorker?.close(),
+  ]);
+  await Promise.all([
+    automationBulkLeadQueue?.close(),
+    automationBulkPrepareQueue?.close(),
+    automationQueue?.close(),
+  ]);
+}
+
 automationWorker?.on("failed", async (job, error) => {
   console.error(`Automation Job failed: ${job?.id}`, error);
   if (!job?.data.logId) return;
@@ -251,6 +400,49 @@ automationWorker?.on("failed", async (job, error) => {
     data: { status: "failed", error_message: toErrorMessage(error), completed_at: new Date() },
   }).catch((updateError) => console.error("Không thể cập nhật execution log thất bại", updateError));
 });
+
+automationBulkPrepareWorker?.on("failed", async (job, error) => {
+  if (!job || (!(error instanceof UnrecoverableError) && job.attemptsMade < (job.opts.attempts ?? 1))) return;
+  await prisma.automation_jobs.update({
+    where: { id: job.data.bulkJobId },
+    data: { status: "failed", error_message: toErrorMessage(error), completed_at: new Date(), updated_at: new Date() },
+  }).catch((updateError) => console.error("Không thể cập nhật bulk job thất bại", updateError));
+});
+
+automationBulkLeadWorker?.on("failed", async (job, error) => {
+  if (!job || (!(error instanceof UnrecoverableError) && job.attemptsMade < (job.opts.attempts ?? 1))) return;
+  console.error(`Automation bulk lead job failed: ${job.id}`, error);
+  await completeAutomationBulkDispatch(job.data.bulkJobId, job.data.leadId, true, toErrorMessage(error));
+});
+
+async function completeAutomationBulkDispatch(bulkJobId: string, leadId: string, failed: boolean, errorMessage?: string) {
+  await prisma.$transaction(async (tx) => {
+    const completed = await tx.automation_bulk_dispatches.updateMany({
+      where: { bulk_job_id: bulkJobId, lead_id: leadId, status: { notIn: ["dispatched", "failed"] } },
+      data: { status: failed ? "failed" : "dispatched", error_message: errorMessage ?? null, updated_at: new Date() },
+    });
+    if (completed.count === 0) return;
+    const updated = await tx.automation_jobs.update({
+      where: { id: bulkJobId },
+      data: {
+        ...(failed ? { failed_count: { increment: 1 } } : { processed_count: { increment: 1 } }),
+        ...(errorMessage ? { error_message: errorMessage } : {}),
+        updated_at: new Date(),
+      },
+      select: { total_count: true, processed_count: true, failed_count: true, prepared_at: true },
+    });
+    if (updated.prepared_at && updated.processed_count + updated.failed_count >= updated.total_count) {
+      await tx.automation_jobs.update({
+        where: { id: bulkJobId },
+        data: {
+          status: updated.failed_count > 0 ? "completed_with_errors" : "completed",
+          completed_at: new Date(),
+          updated_at: new Date(),
+        },
+      });
+    }
+  });
+}
 
 function getNextNodes(nodeId: string, graph: AutomationGraphData, sourceHandle: string | null) {
   const outgoingEdges = graph.edges.filter((edge: AutomationEdge) => edge.source === nodeId);

@@ -1,6 +1,7 @@
 import { useMemo } from "react";
 import { Plus, Trash2, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { Checkbox } from "@/components/ui/checkbox";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
@@ -55,7 +56,7 @@ export function NodePropertiesPanel({ selectedNodeId, nodes, options, isLoadingO
     onNodeUpdate(selectedNode.id, { [key]: value });
   };
 
-  const insertFieldToken = (key: "title" | "content" | "activityContent", field: AutomationDataField) => {
+  const insertFieldToken = (key: "title" | "content" | "activityContent" | "reminderTitle" | "reminderContent", field: AutomationDataField) => {
     const current = String(localData[key] ?? "");
     const separator = current.length > 0 && !/\s$/.test(current) ? " " : "";
     handleChange(key, `${current}${separator}{{${field.reference}}}`);
@@ -219,7 +220,7 @@ export function NodePropertiesPanel({ selectedNodeId, nodes, options, isLoadingO
           </div>
         )}
 
-        {!['trigger', 'condition'].includes(selectedNode.type) && (
+        {selectedNode.type !== 'condition' && (
           <RegistryNodeFields
             nodeType={selectedNode.type}
             data={localData}
@@ -251,7 +252,7 @@ function RegistryNodeFields({
   dataFields: AutomationDataField[];
   isLoading: boolean;
   onChange: (key: keyof AutomationNodeData, value: unknown) => void;
-  onInsertToken: (key: "title" | "content" | "activityContent", field: AutomationDataField) => void;
+  onInsertToken: (key: "title" | "content" | "activityContent" | "reminderTitle" | "reminderContent", field: AutomationDataField) => void;
 }) {
   const definition = options?.registry.nodes.find((node) => node.type === nodeType);
   if (!definition) {
@@ -261,6 +262,7 @@ function RegistryNodeFields({
   const getSelectOptions = (field: AutomationConfigField) => {
     if (field.options) return field.options;
     if (field.optionsSource === "assignees") return (options?.assignees ?? []).map((item) => ({ code: item.id, label: item.fullName }));
+    if (field.optionsSource === "departments") return (options?.departments ?? []).map((item) => ({ code: item.id, label: item.name }));
     if (field.optionsSource === "pipelineStages") return (options?.pipelineStages ?? []).map((item) => ({ code: item.id, label: item.pipelineName ? `${item.pipelineName} — ${item.name}` : item.name }));
     if (field.optionsSource === "targetRoles") return (options?.targetRoles ?? []).map((item) => ({ code: item.code, label: item.name }));
     return [];
@@ -268,16 +270,36 @@ function RegistryNodeFields({
 
   return (
     <div className="space-y-4">
-      {definition.configFields.filter((field) => field.control !== "condition_group").map((field) => {
+      {definition.configFields.filter((field) =>
+        field.control !== "condition_group"
+        && (!field.visibleForTriggerTypes || field.visibleForTriggerTypes.includes(data.triggerType ?? ""))).map((field) => {
         const value = data[field.key];
-        const canInsertToken = field.key === "title" || field.key === "content" || field.key === "activityContent";
+        const canInsertToken = ["title", "content", "activityContent", "reminderTitle", "reminderContent"].includes(field.key);
 
         return (
           <div key={field.key} className="space-y-2">
             <Label htmlFor={`node-field-${field.key}`}>
               {field.label}{field.required ? <span className="text-destructive"> *</span> : null}
             </Label>
-            {field.control === "select" ? (
+            {field.control === "multi_select" ? (
+              <div className="max-h-52 space-y-1 overflow-y-auto rounded-md border p-2" aria-label={field.label}>
+                {getSelectOptions(field).map((option) => {
+                  const selectedValues = Array.isArray(value) ? value.filter((item): item is string => typeof item === "string") : [];
+                  const checked = selectedValues.includes(option.code);
+                  return (
+                    <label key={option.code} className="flex min-h-11 cursor-pointer items-center gap-3 rounded px-2 py-1.5 hover:bg-muted">
+                      <Checkbox
+                        checked={checked}
+                        onCheckedChange={(nextChecked) => onChange(field.key, nextChecked
+                          ? [...selectedValues, option.code]
+                          : selectedValues.filter((item) => item !== option.code))}
+                      />
+                      <span className="text-sm">{option.label}</span>
+                    </label>
+                  );
+                })}
+              </div>
+            ) : field.control === "select" ? (
               <Select value={typeof value === "string" ? value : ""} onValueChange={(nextValue) => onChange(field.key, nextValue)}>
                 <SelectTrigger id={`node-field-${field.key}`}><SelectValue placeholder={isLoading ? "Đang tải..." : `Chọn ${field.label.toLocaleLowerCase()}...`} /></SelectTrigger>
                 <SelectContent>{getSelectOptions(field).map((option) => <SelectItem key={option.code} value={option.code}>{option.label}</SelectItem>)}</SelectContent>

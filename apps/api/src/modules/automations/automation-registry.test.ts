@@ -18,8 +18,10 @@ test("registry exposes every supported builder node with a unique type", () => {
     "condition",
     "action_notification",
     "action_assign",
+    "action_assign_pool",
     "action_update_stage",
     "action_activity",
+    "action_reminder",
     "delay",
   ]);
 });
@@ -64,6 +66,38 @@ test("registry owns node config validation", () => {
   };
 
   assert.deepEqual(validateRegisteredAutomationNode(invalidAssign), ["Node phân công assign-1 chưa chọn nhân viên."]);
+});
+
+test("registry validates the phase 3 assignment pool configuration", () => {
+  const invalidPool: AutomationNode = {
+    id: "pool-1",
+    type: "action_assign_pool",
+    position: { x: 0, y: 0 },
+    data: { label: "Chia Lead", assignmentStrategy: "round_robin", assigneeIds: [] },
+  };
+  const validPool: AutomationNode = {
+    ...invalidPool,
+    data: { ...invalidPool.data, assigneeIds: ["user-1", "user-2"] },
+  };
+
+  assert.equal(validateRegisteredAutomationNode(invalidPool).length, 1);
+  assert.deepEqual(validateRegisteredAutomationNode(validPool), []);
+});
+
+test("SLA duration is required only for the unprocessed-lead trigger", () => {
+  const leadCreated: AutomationNode = {
+    id: "trigger-1",
+    type: "trigger",
+    position: { x: 0, y: 0 },
+    data: { label: "Lead mới", triggerType: "lead_created" },
+  };
+  const unprocessed: AutomationNode = {
+    ...leadCreated,
+    data: { label: "Lead chưa xử lý", triggerType: "lead_unprocessed" },
+  };
+
+  assert.deepEqual(validateRegisteredAutomationNode(leadCreated), []);
+  assert.equal(validateRegisteredAutomationNode(unprocessed).length, 1);
 });
 
 test("registry publishes system fields and sensitive metadata for the builder", () => {

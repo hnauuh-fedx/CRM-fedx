@@ -5,6 +5,8 @@ import type {
   AutomationRuleListResponse,
   AutomationTestLeadResponse,
   AutomationTestRunResponse,
+  AutomationBulkJob,
+  AutomationBulkPreview,
 } from "@/modules/automations/automation.types";
 import { apiRequest } from "./api";
 
@@ -71,6 +73,24 @@ export function runAutomationTest(id: string, leadId: string, accessToken: strin
     method: "POST",
     body: JSON.stringify({ leadId }),
   }, accessToken);
+}
+
+export function previewAutomationBulkRun(id: string, customerListId: string, accessToken: string) {
+  return apiRequest<AutomationBulkPreview>(`/automations/${id}/bulk-preview`, {
+    method: "POST",
+    body: JSON.stringify({ customerListId }),
+  }, accessToken);
+}
+
+export function startAutomationBulkRun(id: string, customerListId: string, accessToken: string) {
+  return apiRequest<AutomationBulkJob>(`/automations/${id}/bulk-run`, {
+    method: "POST",
+    body: JSON.stringify({ customerListId }),
+  }, accessToken);
+}
+
+export function getAutomationBulkRun(id: string, jobId: string, accessToken: string) {
+  return apiRequest<AutomationBulkJob>(`/automations/${id}/bulk-runs/${jobId}`, {}, accessToken);
 }
 
 export function getAutomationExecution(id: string, executionId: string, accessToken: string) {

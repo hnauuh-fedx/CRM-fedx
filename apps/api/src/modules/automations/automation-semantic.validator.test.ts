@@ -13,11 +13,13 @@ const node = (id: string, type: AutomationGraphData["nodes"][number]["type"], da
 });
 
 const catalog = {
-  assigneeIds: new Set(["user-1"]),
+    assigneeIds: new Set(["user-1"]),
+    departmentIds: new Set(["department-1"]),
   pipelineStageIds: new Set(["stage-1"]),
   targetRoleCodes: new Set(["SALE"]),
   customFieldDataTypes: new Map([["custom:field-1", "TEXT"]]),
   canAssign: true,
+  canCreateReminder: true,
   canUpdateLead: true,
   canWriteActivity: true,
   canViewSensitiveData: true,
