@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
-import { REGISTERED_AUTOMATION_EXECUTOR_TYPES } from "./automation-action-registry";
+import { extendCausation, REGISTERED_AUTOMATION_EXECUTOR_TYPES } from "./automation-action-registry";
 import {
   AUTOMATION_REGISTRY,
   getAutomationNodeDefinition,
@@ -24,6 +24,10 @@ test("registry exposes every supported builder node with a unique type", () => {
     "action_reminder",
     "action_message",
     "action_webhook",
+    "action_create_admission",
+    "action_request_document",
+    "action_update_admission_status",
+    "action_convert_student",
     "delay",
   ]);
 });
@@ -109,4 +113,28 @@ test("registry publishes system fields and sensitive metadata for the builder", 
   assert.equal(phone?.dataType, "PHONE");
   assert.equal(phone?.isSensitive, true);
   assert.equal(pipelineStage?.optionSource, "pipelineStages");
+});
+
+test("phase 5 registry exposes admission triggers and actions without hardcoded statuses", () => {
+  assert.ok(AUTOMATION_REGISTRY.triggers.some((trigger) => trigger.code === "admission_profile_created"));
+  assert.ok(AUTOMATION_REGISTRY.triggers.some((trigger) => trigger.code === "admission_profile_expiring"));
+  assert.equal(getAutomationNodeDefinition("action_update_admission_status")?.configFields[0]?.optionsSource, "admissionStatuses");
+  assert.equal(getAutomationNodeDefinition("action_create_admission")?.configFields[0]?.optionsSource, "majors");
+});
+
+test("admission expiry trigger requires a non-negative lead time", () => {
+  const trigger: AutomationNode = {
+    id: "trigger-expiry",
+    type: "trigger",
+    position: { x: 0, y: 0 },
+    data: { label: "Hồ sơ sắp hết hạn", triggerType: "admission_profile_expiring" },
+  };
+
+  assert.equal(validateRegisteredAutomationNode(trigger).length, 1);
+  assert.deepEqual(validateRegisteredAutomationNode({ ...trigger, data: { ...trigger.data, expiryLeadDays: 7 } }), []);
+});
+
+test("admission actions preserve downstream events without re-entering prior rules", () => {
+  assert.deepEqual(extendCausation({ ruleId: "rule-b", causationRuleIds: ["rule-a", "rule-b"] }), ["rule-a", "rule-b"]);
+  assert.deepEqual(extendCausation({ ruleId: "rule-c", causationRuleIds: ["rule-a", "rule-b"] }), ["rule-a", "rule-b", "rule-c"]);
 });

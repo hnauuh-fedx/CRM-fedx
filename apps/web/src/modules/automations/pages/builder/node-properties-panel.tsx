@@ -269,6 +269,9 @@ function RegistryNodeFields({
     if (field.optionsSource === "targetRoles") return (options?.targetRoles ?? []).map((item) => ({ code: item.code, label: item.name }));
     if (field.optionsSource === "customerLists") return (options?.customerLists ?? []).map((item) => ({ code: item.id, label: item.name }));
     if (field.optionsSource === "webhookEndpoints") return (options?.webhookEndpoints ?? []).map((item) => ({ code: item.id, label: item.name }));
+    if (field.optionsSource === "majors") return (options?.majors ?? []).map((item) => ({ code: item.id, label: item.name }));
+    if (field.optionsSource === "admissionStatuses") return (options?.admissionStatuses ?? []).map((item) => ({ code: item.id, label: item.name }));
+    if (field.optionsSource === "admissionClasses") return (options?.admissionClasses ?? []).map((item) => ({ code: item.id, label: item.code ? `${item.code} — ${item.name}` : item.name }));
     return [];
   };
 

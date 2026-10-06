@@ -15,7 +15,7 @@ export type AutomationConfigField = {
   label: string;
   control: AutomationConfigControl;
   required: boolean;
-  optionsSource?: "assignees" | "customerLists" | "departments" | "pipelineStages" | "targetRoles" | "webhookEndpoints";
+  optionsSource?: "admissionClasses" | "admissionStatuses" | "assignees" | "customerLists" | "departments" | "majors" | "pipelineStages" | "targetRoles" | "webhookEndpoints";
   options?: Array<{ code: string; label: string }>;
   min?: number;
   visibleForTriggerTypes?: string[];
@@ -26,10 +26,10 @@ export type AutomationNodeDefinition = {
   category: "trigger" | "condition" | "action" | "delay";
   label: string;
   description: string;
-  icon: "bell" | "clock" | "git-branch" | "mail" | "notebook" | "refresh" | "user-plus" | "users" | "webhook" | "zap";
+  icon: "bell" | "clock" | "file-plus" | "git-branch" | "graduation-cap" | "mail" | "notebook" | "refresh" | "user-plus" | "users" | "webhook" | "zap";
   tone: "blue" | "green" | "indigo" | "orange" | "purple" | "teal" | "yellow";
   defaultData?: Partial<AutomationNodeData>;
-  requiredCapabilities?: Array<"assign" | "callWebhook" | "createReminder" | "sendMessage" | "updateLead" | "writeActivity">;
+  requiredCapabilities?: Array<"assign" | "callWebhook" | "convertStudent" | "createAdmission" | "createReminder" | "requestAdmissionDocument" | "sendMessage" | "updateAdmissionStatus" | "updateLead" | "writeActivity">;
   configFields: AutomationConfigField[];
 };
 
@@ -50,6 +50,7 @@ const nodes: AutomationNodeDefinition[] = [
       ] },
       { key: "scheduleExcludedDates", label: "Ngày nghỉ loại trừ (YYYY-MM-DD, cách nhau bằng dấu phẩy)", control: "text", required: false, visibleForTriggerTypes: ["scheduled"] },
       { key: "scheduleCustomerListId", label: "Danh sách khách hàng", control: "select", required: true, visibleForTriggerTypes: ["scheduled"], optionsSource: "customerLists" },
+      { key: "expiryLeadDays", label: "Nhắc trước ngày hết hạn", control: "number", required: true, min: 0, visibleForTriggerTypes: ["admission_profile_expiring"] },
     ],
   },
   {
@@ -133,12 +134,49 @@ const nodes: AutomationNodeDefinition[] = [
     ],
   },
   {
+    type: "action_create_admission", category: "action", label: "Tạo hồ sơ tuyển sinh", description: "Tạo hồ sơ cho Lead trong đúng chương trình của rule", icon: "file-plus", tone: "blue", requiredCapabilities: ["createAdmission"],
+    configFields: [
+      { key: "admissionMajorId", label: "Ngành đăng ký", control: "select", required: true, optionsSource: "majors" },
+      { key: "admissionStatusId", label: "Trạng thái hồ sơ ban đầu", control: "select", required: true, optionsSource: "admissionStatuses" },
+    ],
+  },
+  {
+    type: "action_request_document", category: "action", label: "Yêu cầu tài liệu", description: "Ghi nhận tài liệu còn thiếu và thông báo người phụ trách", icon: "file-plus", tone: "orange", requiredCapabilities: ["requestAdmissionDocument"],
+    configFields: [
+      { key: "admissionDocumentType", label: "Loại tài liệu cần bổ sung", control: "text", required: true },
+    ],
+  },
+  {
+    type: "action_update_admission_status", category: "action", label: "Cập nhật trạng thái hồ sơ", description: "Chuyển trạng thái theo luồng tuyển sinh đã cấu hình", icon: "refresh", tone: "teal", requiredCapabilities: ["updateAdmissionStatus"],
+    configFields: [
+      { key: "admissionStatusId", label: "Trạng thái hồ sơ", control: "select", required: true, optionsSource: "admissionStatuses" },
+    ],
+  },
+  {
+    type: "action_convert_student", category: "action", label: "Chuyển thành sinh viên", description: "Gọi use case nhập học hiện có sau khi hồ sơ đủ điều kiện", icon: "graduation-cap", tone: "green", requiredCapabilities: ["convertStudent"],
+    configFields: [
+      { key: "admissionClassId", label: "Lớp sinh viên (tuỳ chọn)", control: "select", required: false, optionsSource: "admissionClasses" },
+    ],
+  },
+  {
     type: "delay", category: "delay", label: "Chờ / Delay", description: "Tạm dừng trước khi thực hiện bước tiếp theo", icon: "clock", tone: "yellow", defaultData: { delayMinutes: 1 },
     configFields: [{ key: "delayMinutes", label: "Thời gian chờ (phút)", control: "number", required: true, min: 1 }],
   },
 ];
 
-export const AUTOMATION_TRIGGER_TYPES = ["lead_created", "lead_pipeline_stage_changed", "lead_assigned", "lead_unprocessed", "scheduled"] as const;
+export const AUTOMATION_TRIGGER_TYPES = [
+  "lead_created",
+  "lead_pipeline_stage_changed",
+  "lead_assigned",
+  "lead_unprocessed",
+  "scheduled",
+  "admission_profile_created",
+  "admission_status_changed",
+  "admission_document_missing",
+  "admission_profile_expiring",
+  "admission_approved",
+  "student_enrolled",
+] as const;
 
 const automationTriggerLabels: Record<(typeof AUTOMATION_TRIGGER_TYPES)[number], string> = {
   lead_created: "Lead được tạo mới",
@@ -146,10 +184,16 @@ const automationTriggerLabels: Record<(typeof AUTOMATION_TRIGGER_TYPES)[number],
   lead_assigned: "Lead được phân công",
   lead_unprocessed: "Lead chưa được xử lý quá SLA",
   scheduled: "Theo lịch định kỳ",
+  admission_profile_created: "Hồ sơ tuyển sinh được tạo",
+  admission_status_changed: "Hồ sơ tuyển sinh đổi trạng thái",
+  admission_document_missing: "Hồ sơ thiếu tài liệu",
+  admission_profile_expiring: "Hồ sơ sắp hết hạn",
+  admission_approved: "Hồ sơ được duyệt",
+  student_enrolled: "Thí sinh đã nhập học",
 };
 
 export const AUTOMATION_REGISTRY = {
-  version: 1,
+  version: 2,
   triggers: AUTOMATION_TRIGGER_TYPES.map((code) => ({ code, label: automationTriggerLabels[code] })),
   nodes,
   fields: AUTOMATION_SYSTEM_FIELDS,

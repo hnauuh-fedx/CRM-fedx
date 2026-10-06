@@ -494,6 +494,7 @@ function AdmissionProfileForm(props: {
     score3: profile?.score3 ?? "",
     admissionScore: profile?.admissionScore ?? "",
     applicationReceivedDate: toDateInput(profile?.applicationReceivedDate ?? null),
+    expiresAt: toDateInput(profile?.expiresAt ?? null),
     enrollmentBatch: profile?.enrollmentBatch ?? "",
     trainingCode: profile?.trainingCode ?? "",
     registrationStation: profile?.registrationStation ?? "",
@@ -542,6 +543,7 @@ function AdmissionProfileForm(props: {
         </Field>
         <TextInput id="admission-form-training-type" label="Hình thức đào tạo" value={form.trainingType ?? ""} onChange={(value) => setValue("trainingType", value)} />
         <TextInput id="admission-form-received" label="Ngày tiếp nhận" type="date" value={form.applicationReceivedDate ?? ""} onChange={(value) => setValue("applicationReceivedDate", value)} />
+        <TextInput id="admission-form-expires" label="Ngày hết hạn hồ sơ" type="date" value={form.expiresAt ?? ""} onChange={(value) => setValue("expiresAt", value)} />
         <TextInput id="admission-form-class" label="Mã lớp dự kiến" value={form.classCode ?? ""} onChange={(value) => setValue("classCode", value)} />
         <TextInput id="admission-form-batch" label="Đợt nhập học" value={form.enrollmentBatch ?? ""} onChange={(value) => setValue("enrollmentBatch", value)} />
         <TextInput id="admission-form-score" label="Điểm xét tuyển" value={form.admissionScore ?? ""} onChange={(value) => setValue("admissionScore", value)} />

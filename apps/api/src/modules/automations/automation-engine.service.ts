@@ -84,6 +84,7 @@ export async function triggerAutomation(triggerType: string, context: Omit<Autom
       is_active: true,
       archived_at: null,
       trigger_type: triggerType,
+      ...(context.causationRuleIds?.length ? { id: { notIn: context.causationRuleIds.slice(-20) } } : {}),
       OR: resolvedContext.institutionProgramId
         ? [{ institution_program_id: null }, { institution_program_id: resolvedContext.institutionProgramId }]
         : [{ institution_program_id: null }],
@@ -129,6 +130,7 @@ export async function startAutomationExecution(
   requestedBy: string | null,
   bulkDispatchId?: string,
   executionIdempotencyKey?: string,
+  retryFailedIdempotentExecution = false,
 ) {
   const graph = withAutomationTriggerType(rule.graphData, rule.triggerType);
   const validation = validateAutomationGraph(graph);
@@ -158,8 +160,18 @@ export async function startAutomationExecution(
           select: { id: true, status: true },
         })
       : null;
-  if (existingLog?.status === "failed") {
+  if (existingLog?.status === "failed" && !retryFailedIdempotentExecution) {
     return { ok: false as const, reason: "existing_execution_failed" as const };
+  }
+  if (existingLog?.status === "failed" && retryFailedIdempotentExecution) {
+    await prisma.automation_execution_logs.update({
+      where: { id: existingLog.id },
+      data: { status: "processing", error_message: null, completed_at: null },
+    });
+    existingLog.status = "processing";
+  }
+  if (existingLog?.status === "completed") {
+    return { ok: true as const, data: { executionId: existingLog.id, status: existingLog.status, version: version.version } };
   }
   let log = existingLog;
   if (!log) {
@@ -367,6 +379,7 @@ if (automationWorker) {
     void Promise.all([
       import("./automation-sla.service.js").then(({ dispatchDueSlaAutomations }) => dispatchDueSlaAutomations()),
       import("./automation-scheduler.service.js").then(({ dispatchDueScheduledAutomations }) => dispatchDueScheduledAutomations()),
+      import("./automation-scheduler.service.js").then(({ dispatchExpiringAdmissionAutomations }) => dispatchExpiringAdmissionAutomations()),
     ]).catch((error) => console.error("Automation schedule scan failed", error));
   };
   scanSchedules();

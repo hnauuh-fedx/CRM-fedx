@@ -139,6 +139,8 @@ Trạng thái triển khai: hoàn thành lõi chức năng ngày 05/10/2026. Aut
 
 Thời lượng dự kiến: 7–10 ngày.
 
+Trạng thái triển khai: hoàn thành lõi chức năng ngày 06/10/2026. Đã có trigger theo vòng đời hồ sơ tuyển sinh và sinh viên, quét hồ sơ sắp hết hạn có idempotency/phục hồi lỗi enqueue, action tạo hồ sơ, yêu cầu tài liệu, cập nhật trạng thái và chuyển đổi sinh viên bằng use case nghiệp vụ hiện có. Builder có dữ liệu ngành, trạng thái, lớp và các rule mẫu theo hành trình tuyển sinh; chuỗi trigger giữ causation để ngăn vòng lặp nhưng vẫn cho phép rule hạ nguồn chạy. Integration test cần PostgreSQL và Redis cục bộ hoạt động để xác nhận toàn bộ luồng queue.
+
 - Trigger hồ sơ được tạo, đổi trạng thái, thiếu tài liệu, sắp hết hạn và được duyệt.
 - Action tạo hồ sơ, yêu cầu tài liệu, cập nhật trạng thái và thông báo chuyên viên.
 - Action chuyển Lead thành sinh viên chỉ gọi conversion use case hiện có và phải thỏa điều kiện hồ sơ.

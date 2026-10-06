@@ -43,6 +43,33 @@ AUTOMATION_SYSTEM_FIELDS.push({
   optionSource: "assignees",
 });
 
+AUTOMATION_SYSTEM_FIELDS.push(
+  {
+    reference: "system:institutionProgramName", key: "institutionProgramName", label: "Chương trình tuyển sinh", description: "Tên chương trình tuyển sinh của Lead.", dataType: "TEXT", groupKey: "admission", groupLabel: "Hồ sơ tuyển sinh", source: "system", isSensitive: false,
+  },
+  {
+    reference: "system:institutionName", key: "institutionName", label: "Đơn vị tuyển sinh", description: "Tên trường hoặc đơn vị quản lý chương trình.", dataType: "TEXT", groupKey: "admission", groupLabel: "Hồ sơ tuyển sinh", source: "system", isSensitive: false,
+  },
+  {
+    reference: "system:majorName", key: "majorName", label: "Tên ngành đăng ký", description: "Tên ngành trong hồ sơ tuyển sinh.", dataType: "TEXT", groupKey: "admission", groupLabel: "Hồ sơ tuyển sinh", source: "system", isSensitive: false,
+  },
+  {
+    reference: "system:admissionStatusName", key: "admissionStatusName", label: "Tên trạng thái hồ sơ", description: "Tên trạng thái tuyển sinh hiện tại.", dataType: "TEXT", groupKey: "admission", groupLabel: "Hồ sơ tuyển sinh", source: "system", isSensitive: false,
+  },
+  {
+    reference: "system:admissionCode", key: "admissionCode", label: "Mã hồ sơ", description: "Mã hồ sơ tuyển sinh.", dataType: "TEXT", groupKey: "admission", groupLabel: "Hồ sơ tuyển sinh", source: "system", isSensitive: false,
+  },
+  {
+    reference: "system:admissionExpiresAt", key: "admissionExpiresAt", label: "Ngày hết hạn hồ sơ", description: "Ngày hồ sơ cần hoàn tất.", dataType: "DATE", groupKey: "admission", groupLabel: "Hồ sơ tuyển sinh", source: "system", isSensitive: false,
+  },
+  {
+    reference: "system:feeStatus", key: "feeStatus", label: "Trạng thái lệ phí", description: "Trạng thái thanh toán lệ phí tuyển sinh.", dataType: "SELECT", groupKey: "admission", groupLabel: "Hồ sơ tuyển sinh", source: "system", isSensitive: false, optionSource: "payment_statuses",
+  },
+  {
+    reference: "system:tuitionStatus", key: "tuitionStatus", label: "Trạng thái học phí", description: "Trạng thái thanh toán học phí.", dataType: "SELECT", groupKey: "admission", groupLabel: "Hồ sơ tuyển sinh", source: "system", isSensitive: false, optionSource: "payment_statuses",
+  },
+);
+
 export const LEGACY_AUTOMATION_FIELD_REFERENCES = new Map([
   ["source_id", "system:sourceId"], ["pipeline_stage_id", "system:pipelineStageId"],
   ["status", "system:pipelineStageId"], ["assigned_to", "system:assigneeId"],

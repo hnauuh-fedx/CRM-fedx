@@ -546,6 +546,10 @@ export async function getLeadDetail(user: AuthUser, leadId: string, institutionP
       },
       admission_profiles: {
         select: {
+          admission_code: true,
+          expires_at: true,
+          fee_status: true,
+          tuition_status: true,
           institution_program_id: true,
           major_id: true,
           admission_status_id: true,
@@ -562,6 +566,8 @@ export async function getLeadDetail(user: AuthUser, leadId: string, institutionP
           decision_number: true,
           decision_signed_date: true,
           monthly_revenue: true,
+          majors: { select: { name: true } },
+          admission_statuses: { select: { name: true } },
         },
       },
       utm_trackings: { select: { gclid: true }, orderBy: { created_at: "asc" }, take: 1 },
@@ -696,6 +702,12 @@ export async function getLeadDetail(user: AuthUser, leadId: string, institutionP
     institutionProgram: lead.institution_programs
       ? { id: lead.institution_programs.id, name: lead.institution_programs.name, institutionName: lead.institution_programs.institutions.name }
       : null,
+    admissionCode: admission?.admission_code ?? null,
+    admissionExpiresAt: admission?.expires_at?.toISOString().slice(0, 10) ?? null,
+    feeStatus: admission?.fee_status ?? null,
+    tuitionStatus: admission?.tuition_status ?? null,
+    majorName: admission?.majors?.name ?? null,
+    admissionStatusName: admission?.admission_statuses?.name ?? null,
     pipelineStage: lead.pipeline_stages
       ? {
           id: lead.pipeline_stages.id,

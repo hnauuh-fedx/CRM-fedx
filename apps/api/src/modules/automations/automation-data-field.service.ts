@@ -27,6 +27,8 @@ const derivedSystemFieldPaths: Record<string, string> = {
   sourceId: "source.id",
   pipelineStageId: "pipelineStage.id",
   assigneeId: "assignee.id",
+  institutionProgramName: "institutionProgram.name",
+  institutionName: "institutionProgram.institutionName",
 };
 
 const createTemplateTokenPattern = () => /\{\{\s*([^{}]+?)\s*\}\}/g;

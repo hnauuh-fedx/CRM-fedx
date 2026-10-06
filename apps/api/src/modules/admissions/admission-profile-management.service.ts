@@ -3,6 +3,10 @@ import { prisma } from "../../database/prisma";
 import type { Prisma } from "../../generated/prisma/client";
 
 type TransactionClient = Parameters<Parameters<typeof prisma.$transaction>[0]>[0];
+type AdmissionMutationOptions = {
+  causationRuleIds?: string[];
+  afterMutation?: (tx: TransactionClient) => Promise<void>;
+};
 
 export type AdmissionProfileInput = {
   leadId: string;
@@ -26,6 +30,7 @@ export type AdmissionProfileInput = {
   monthlyRevenue?: string;
   feeStatus?: string;
   tuitionStatus?: string;
+  expiresAt?: string;
 };
 
 const emptyToNull = (value?: string) => value?.trim() || null;
@@ -53,10 +58,12 @@ async function getProfileForAction(
       institution_program_id: true,
       major_id: true,
       admission_status_id: true,
+      admission_statuses: { select: { code: true } },
       admission_code: true,
       training_type: true,
       fee_status: true,
       tuition_status: true,
+      expires_at: true,
       monthly_revenue: true,
       leads: { select: { id: true, full_name: true, assigned_to: true } },
       majors: { select: { id: true, faculty_id: true } },
@@ -129,6 +136,7 @@ function toProfileData(input: AdmissionProfileInput, institutionProgramId: strin
     monthly_revenue: toDecimalString(input.monthlyRevenue) ?? 0,
     fee_status: emptyToNull(input.feeStatus),
     tuition_status: emptyToNull(input.tuitionStatus),
+    expires_at: toDate(input.expiresAt),
     updated_at: new Date(),
   };
 }
@@ -200,8 +208,9 @@ export async function createAdmissionProfile(
   input: AdmissionProfileInput,
   ipAddress?: string,
   scopedProgramId?: string,
+  options: AdmissionMutationOptions = {},
 ) {
-  return prisma.$transaction(async (tx) => {
+  const result = await prisma.$transaction(async (tx) => {
     const references = await ensureReferences(tx, input, scopedProgramId);
     if (!references.ok) return references;
 
@@ -232,8 +241,19 @@ export async function createAdmissionProfile(
         ip_address: ipAddress,
       },
     });
+    await options.afterMutation?.(tx);
     return { ok: true as const, data: { id: profile.id } };
   });
+  if (result.ok) {
+    await emitAdmissionAutomation("admission_profile_created", {
+      actorId: user.id,
+      leadId: input.leadId,
+      admissionProfileId: result.data.id,
+      institutionProgramId: scopedProgramId ?? input.institutionProgramId,
+      causationRuleIds: options.causationRuleIds,
+    });
+  }
+  return result;
 }
 
 export async function updateAdmissionProfile(
@@ -246,7 +266,7 @@ export async function updateAdmissionProfile(
   const existing = await getProfileForAction(user, profileId, scopedProgramId);
   if (!existing) return { ok: false as const, reason: "profile_not_found" as const };
 
-  return prisma.$transaction(async (tx) => {
+  const result = await prisma.$transaction(async (tx) => {
     const references = await ensureReferences(tx, input, scopedProgramId);
     if (!references.ok) return references;
 
@@ -276,6 +296,16 @@ export async function updateAdmissionProfile(
     });
     return { ok: true as const, data: { id: profileId } };
   });
+  if (result.ok && existing.admission_status_id !== input.admissionStatusId) {
+    await emitAdmissionAutomation("admission_status_changed", {
+      actorId: user.id,
+      leadId: input.leadId,
+      admissionProfileId: profileId,
+      institutionProgramId: scopedProgramId ?? input.institutionProgramId,
+      payload: { previousStatusId: existing.admission_status_id, statusId: input.admissionStatusId },
+    });
+  }
+  return result;
 }
 
 export async function changeAdmissionStatus(
@@ -284,11 +314,12 @@ export async function changeAdmissionStatus(
   statusId: string,
   ipAddress?: string,
   scopedProgramId?: string,
+  options: AdmissionMutationOptions = {},
 ) {
   const existing = await getProfileForAction(user, profileId, scopedProgramId);
   if (!existing) return { ok: false as const, reason: "profile_not_found" as const };
 
-  return prisma.$transaction(async (tx) => {
+  const result = await prisma.$transaction(async (tx) => {
     const status = await tx.admission_statuses.findUnique({ where: { id: statusId }, select: { id: true, name: true } });
     if (!status) return { ok: false as const, reason: "status_not_found" as const };
     if (existing.admission_status_id) {
@@ -322,8 +353,20 @@ export async function changeAdmissionStatus(
         ip_address: ipAddress,
       },
     });
+    await options.afterMutation?.(tx);
     return { ok: true as const, data: { id: profileId, statusId: status.id } };
   });
+  if (result.ok && existing.admission_status_id !== result.data.statusId) {
+    await emitAdmissionAutomation("admission_status_changed", {
+      actorId: user.id,
+      leadId: existing.lead_id ?? undefined,
+      admissionProfileId: profileId,
+      institutionProgramId: existing.institution_program_id ?? undefined,
+      causationRuleIds: options.causationRuleIds,
+      payload: { previousStatusId: existing.admission_status_id, statusId: result.data.statusId },
+    });
+  }
+  return result;
 }
 
 function parseStatusFlow(value?: string | null) {
@@ -350,11 +393,12 @@ export async function approveAdmissionProfile(
   statusId?: string,
   ipAddress?: string,
   scopedProgramId?: string,
+  options: AdmissionMutationOptions = {},
 ) {
   const existing = await getProfileForAction(user, profileId, scopedProgramId);
   if (!existing) return { ok: false as const, reason: "profile_not_found" as const };
 
-  return prisma.$transaction(async (tx) => {
+  const result = await prisma.$transaction(async (tx) => {
     const status = statusId
       ? await tx.admission_statuses.findUnique({ where: { id: statusId }, select: { id: true, name: true } })
       : await tx.admission_statuses.upsert({
@@ -394,8 +438,20 @@ export async function approveAdmissionProfile(
         ip_address: ipAddress,
       },
     });
+    await options.afterMutation?.(tx);
     return { ok: true as const, data: { id: profileId, statusId: status.id } };
   });
+  if (result.ok && existing.admission_status_id !== result.data.statusId) {
+    await emitAdmissionAutomation("admission_approved", {
+      actorId: user.id,
+      leadId: existing.lead_id ?? undefined,
+      admissionProfileId: profileId,
+      institutionProgramId: existing.institution_program_id ?? undefined,
+      causationRuleIds: options.causationRuleIds,
+      payload: { previousStatusId: existing.admission_status_id, statusId: result.data.statusId },
+    });
+  }
+  return result;
 }
 
 export async function convertAdmissionToStudent(
@@ -404,20 +460,35 @@ export async function convertAdmissionToStudent(
   input: { classId?: string },
   ipAddress?: string,
   scopedProgramId?: string,
+  options: AdmissionMutationOptions = {},
 ) {
   const profile = await getProfileForAction(user, profileId, scopedProgramId);
   if (!profile) return { ok: false as const, reason: "profile_not_found" as const };
   if (profile.students) return { ok: false as const, reason: "student_already_exists" as const };
+  if (profile.admission_statuses?.code !== "APPROVED") {
+    return { ok: false as const, reason: "profile_not_approved" as const };
+  }
   if (!profile.lead_id || !profile.institution_program_id || !profile.major_id) {
     return { ok: false as const, reason: "profile_incomplete" as const };
   }
 
-  return prisma.$transaction(async (tx) => {
+  const result = await prisma.$transaction(async (tx) => {
     const major = await tx.majors.findUnique({ where: { id: profile.major_id! }, select: { faculty_id: true } });
     const classItem = input.classId
       ? await tx.student_classes.findUnique({ where: { id: input.classId }, select: { id: true, faculty_id: true } })
       : null;
     if (input.classId && !classItem) return { ok: false as const, reason: "class_not_found" as const };
+
+    const eligibilityClaim = await tx.admission_profiles.updateMany({
+      where: {
+        id: profile.id,
+        admission_statuses: { is: { code: "APPROVED" } },
+      },
+      data: { updated_at: new Date() },
+    });
+    if (eligibilityClaim.count === 0) {
+      return { ok: false as const, reason: "profile_not_approved" as const };
+    }
 
     const student = await tx.students.create({
       data: {
@@ -458,6 +529,26 @@ export async function convertAdmissionToStudent(
         ip_address: ipAddress,
       },
     });
+    await options.afterMutation?.(tx);
     return { ok: true as const, data: { id: student.id, studentCode: student.student_code } };
   });
+  if (result.ok) {
+    await emitAdmissionAutomation("student_enrolled", {
+      actorId: user.id,
+      leadId: profile.lead_id ?? undefined,
+      admissionProfileId: profile.id,
+      studentId: result.data.id,
+      institutionProgramId: profile.institution_program_id ?? undefined,
+      causationRuleIds: options.causationRuleIds,
+    });
+  }
+  return result;
+}
+
+async function emitAdmissionAutomation(
+  triggerType: string,
+  context: Omit<import("../automations/automation-execution.types").AutomationContext, "ruleId">,
+) {
+  const { triggerAutomation } = await import("../automations/automation-engine.service.js");
+  await triggerAutomation(triggerType, context);
 }

@@ -29,3 +29,16 @@ test("renderAutomationTemplate supports legacy lead placeholders", () => {
   const values = new Map<string, unknown>([["system:fullName", "Lead cũ"]]);
   assert.equal(renderAutomationTemplate("{{lead.fullName}}", values), "Lead cũ");
 });
+
+test("renderAutomationTemplate supports admission program and major variables", () => {
+  const values = new Map<string, unknown>([
+    ["system:institutionProgramName", "Chương trình chính quy"],
+    ["system:majorName", "Công nghệ thông tin"],
+    ["system:admissionCode", "HS-001"],
+  ]);
+
+  assert.equal(
+    renderAutomationTemplate("{{system:admissionCode}} · {{system:majorName}} · {{system:institutionProgramName}}", values),
+    "HS-001 · Công nghệ thông tin · Chương trình chính quy",
+  );
+});

@@ -48,6 +48,10 @@ export type AutomationNodeType =
   | "action_reminder"
   | "action_message"
   | "action_webhook"
+  | "action_create_admission"
+  | "action_request_document"
+  | "action_update_admission_status"
+  | "action_convert_student"
   | "delay";
 
 export type AutomationNodeData = {
@@ -86,6 +90,11 @@ export type AutomationNodeData = {
   // Action: signed webhook
   webhookEndpointId?: string;
   webhookPayload?: string;
+  // Action: admission
+  admissionMajorId?: string;
+  admissionStatusId?: string;
+  admissionDocumentType?: string;
+  admissionClassId?: string;
   // Trigger: SLA
   slaMinutes?: number;
   // Trigger: schedule
@@ -94,6 +103,7 @@ export type AutomationNodeData = {
   scheduleDays?: string[];
   scheduleExcludedDates?: string;
   scheduleCustomerListId?: string;
+  expiryLeadDays?: number;
   // Delay
   delayMinutes?: number;
 };
@@ -109,7 +119,7 @@ export type AutomationConfigField = {
   label: string;
   control: "condition_group" | "multi_select" | "number" | "select" | "template_text" | "template_textarea" | "text";
   required: boolean;
-  optionsSource?: "assignees" | "customerLists" | "departments" | "pipelineStages" | "targetRoles" | "webhookEndpoints";
+  optionsSource?: "admissionClasses" | "admissionStatuses" | "assignees" | "customerLists" | "departments" | "majors" | "pipelineStages" | "targetRoles" | "webhookEndpoints";
   options?: Array<{ code: string; label: string }>;
   min?: number;
   visibleForTriggerTypes?: string[];
@@ -120,10 +130,10 @@ export type AutomationNodeDefinition = {
   category: "trigger" | "condition" | "action" | "delay";
   label: string;
   description: string;
-  icon: "bell" | "clock" | "git-branch" | "mail" | "notebook" | "refresh" | "user-plus" | "users" | "webhook" | "zap";
+  icon: "bell" | "clock" | "file-plus" | "git-branch" | "graduation-cap" | "mail" | "notebook" | "refresh" | "user-plus" | "users" | "webhook" | "zap";
   tone: "blue" | "green" | "indigo" | "orange" | "purple" | "teal" | "yellow";
   defaultData?: Partial<AutomationNodeData>;
-  requiredCapabilities?: Array<"assign" | "callWebhook" | "createReminder" | "sendMessage" | "updateLead" | "writeActivity">;
+  requiredCapabilities?: Array<"assign" | "callWebhook" | "convertStudent" | "createAdmission" | "createReminder" | "requestAdmissionDocument" | "sendMessage" | "updateAdmissionStatus" | "updateLead" | "writeActivity">;
   configFields: AutomationConfigField[];
 };
 
@@ -162,6 +172,9 @@ export type AutomationOptions = {
   customDataFields: AutomationCustomDataField[];
   customerLists: Array<{ id: string; name: string }>;
   webhookEndpoints: Array<{ id: string; name: string }>;
+  majors: Array<{ id: string; name: string }>;
+  admissionStatuses: Array<{ id: string; name: string; code: string | null }>;
+  admissionClasses: Array<{ id: string; name: string; code: string | null }>;
   systemFieldOptions: Record<string, AutomationDataFieldOption[]>;
 };
 

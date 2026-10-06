@@ -12,6 +12,12 @@ export type AutomationSemanticCatalog = {
   targetRoleCodes: Set<string>;
   customerListIds: Set<string>;
   webhookEndpointIds: Set<string>;
+  majorIds: Set<string>;
+  admissionStatusIds: Set<string>;
+  approvedAdmissionStatusIds: Set<string>;
+  enrolledAdmissionStatusIds: Set<string>;
+  restrictedAdmissionCreationStatusIds: Set<string>;
+  admissionClassIds: Set<string>;
   customFieldDataTypes: Map<string, string>;
   canAssign: boolean;
   canCreateReminder: boolean;
@@ -20,6 +26,12 @@ export type AutomationSemanticCatalog = {
   canViewSensitiveData: boolean;
   canSendMessage: boolean;
   canCallWebhook: boolean;
+  canCreateAdmission: boolean;
+  canRequestAdmissionDocument: boolean;
+  canUpdateAdmissionStatus: boolean;
+  canChangeAdmissionStatus: boolean;
+  canApproveAdmission: boolean;
+  canConvertStudent: boolean;
 };
 
 export function validateAutomationSemantics(
@@ -78,6 +90,42 @@ export function validateAutomationSemantics(
       }
     }
 
+    if (node.type === "action_update_admission_status" && node.data.admissionStatusId) {
+      const targetsApprovedStatus = catalog.approvedAdmissionStatusIds.has(node.data.admissionStatusId);
+      if (catalog.enrolledAdmissionStatusIds.has(node.data.admissionStatusId)) {
+        issues.push({
+          code: "INVALID_NODE_CONFIG",
+          nodeId: node.id,
+          message: `Node ${node.id} phải dùng bước chuyển thành sinh viên thay vì đặt trực tiếp trạng thái đã nhập học.`,
+        });
+      }
+      if (targetsApprovedStatus && !catalog.canApproveAdmission) {
+        issues.push({
+          code: "INSUFFICIENT_PERMISSION",
+          nodeId: node.id,
+          message: `Bạn không có quyền duyệt hồ sơ tại node ${node.id}.`,
+        });
+      }
+      if (!targetsApprovedStatus && !catalog.canChangeAdmissionStatus) {
+        issues.push({
+          code: "INSUFFICIENT_PERMISSION",
+          nodeId: node.id,
+          message: `Bạn không có quyền cập nhật trạng thái hồ sơ tại node ${node.id}.`,
+        });
+      }
+    }
+    if (
+      node.type === "action_create_admission"
+      && node.data.admissionStatusId
+      && catalog.restrictedAdmissionCreationStatusIds.has(node.data.admissionStatusId)
+    ) {
+      issues.push({
+        code: "INVALID_NODE_CONFIG",
+        nodeId: node.id,
+        message: `Node ${node.id} không được tạo hồ sơ trực tiếp ở trạng thái đã duyệt hoặc đã nhập học.`,
+      });
+    }
+
     const templates = (definition?.configFields ?? [])
       .filter((field) => field.control === "template_text" || field.control === "template_textarea")
       .map((field) => node.data[field.key])
@@ -115,9 +163,25 @@ const capabilityChecks = {
     allowed: (catalog: AutomationSemanticCatalog) => catalog.canCallWebhook,
     message: (nodeId: string) => `Tài khoản thực thi không có quyền gọi webhook tại node ${nodeId}.`,
   },
+  createAdmission: {
+    allowed: (catalog: AutomationSemanticCatalog) => catalog.canCreateAdmission,
+    message: (nodeId: string) => `Bạn không có quyền tạo hồ sơ tuyển sinh tại node ${nodeId}.`,
+  },
+  requestAdmissionDocument: {
+    allowed: (catalog: AutomationSemanticCatalog) => catalog.canRequestAdmissionDocument,
+    message: (nodeId: string) => `Bạn không có quyền yêu cầu tài liệu tuyển sinh tại node ${nodeId}.`,
+  },
+  updateAdmissionStatus: {
+    allowed: (catalog: AutomationSemanticCatalog) => catalog.canUpdateAdmissionStatus,
+    message: (nodeId: string) => `Bạn không có quyền cập nhật trạng thái hồ sơ tại node ${nodeId}.`,
+  },
+  convertStudent: {
+    allowed: (catalog: AutomationSemanticCatalog) => catalog.canConvertStudent,
+    message: (nodeId: string) => `Bạn không có quyền chuyển hồ sơ thành sinh viên tại node ${nodeId}.`,
+  },
 };
 
-const optionReferenceChecks: Partial<Record<"assignees" | "departments" | "pipelineStages" | "targetRoles" | "customerLists" | "webhookEndpoints", {
+const optionReferenceChecks: Partial<Record<"admissionClasses" | "admissionStatuses" | "assignees" | "departments" | "majors" | "pipelineStages" | "targetRoles" | "customerLists" | "webhookEndpoints", {
   exists: (value: string, catalog: AutomationSemanticCatalog) => boolean;
   message: (nodeId: string) => string;
 }>> = {
@@ -144,6 +208,18 @@ const optionReferenceChecks: Partial<Record<"assignees" | "departments" | "pipel
   webhookEndpoints: {
     exists: (value, catalog) => catalog.webhookEndpointIds.has(value),
     message: (nodeId) => `Webhook endpoint tại node ${nodeId} không tồn tại hoặc nằm ngoài phạm vi.`,
+  },
+  majors: {
+    exists: (value, catalog) => catalog.majorIds.has(value),
+    message: (nodeId) => `Ngành tuyển sinh tại node ${nodeId} không còn tồn tại hoặc nằm ngoài phạm vi rule.`,
+  },
+  admissionStatuses: {
+    exists: (value, catalog) => catalog.admissionStatusIds.has(value),
+    message: (nodeId) => `Trạng thái hồ sơ tại node ${nodeId} không còn tồn tại.`,
+  },
+  admissionClasses: {
+    exists: (value, catalog) => catalog.admissionClassIds.has(value),
+    message: (nodeId) => `Lớp sinh viên tại node ${nodeId} không còn tồn tại.`,
   },
 };
 

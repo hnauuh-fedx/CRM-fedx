@@ -3,7 +3,15 @@ import { UnrecoverableError } from "bullmq";
 import { prisma } from "../../database/prisma";
 import { getAuthUser } from "../auth/auth.service";
 import { assignVisibleLead, changeVisibleLeadStage, leadUpdatePermissions } from "../leads/lead-owner-stage-mutations.service";
+import { getLeadScopeWhere } from "../leads/lead-list.service";
 import { createReminder } from "../leads/sale-overview.service";
+import { uploadAdmissionDocument } from "../admissions/admission-document-management.service";
+import {
+  approveAdmissionProfile,
+  changeAdmissionStatus,
+  convertAdmissionToStudent,
+  createAdmissionProfile,
+} from "../admissions/admission-profile-management.service";
 import { resolveAutomationAssignee } from "./automation-assignment.service";
 import { evaluateAutomationConditions } from "./automation-condition-evaluator";
 import { getAutomationLeadData, getAutomationTemplateReferences, renderAutomationTemplate } from "./automation-data-field.service";
@@ -25,6 +33,10 @@ const executors = {
   action_reminder: executeReminderAction,
   action_message: executeMessageAction,
   action_webhook: executeWebhookAction,
+  action_create_admission: executeCreateAdmissionAction,
+  action_request_document: executeRequestDocumentAction,
+  action_update_admission_status: executeUpdateAdmissionStatusAction,
+  action_convert_student: executeConvertStudentAction,
   delay: executeDelayAction,
 } satisfies Record<Exclude<AutomationNode["type"], "trigger">, AutomationActionExecutor>;
 
@@ -219,6 +231,120 @@ async function executeWebhookAction(node: AutomationNode, context: AutomationCon
   return result;
 }
 
+async function executeCreateAdmissionAction(node: AutomationNode, context: AutomationContext, nodeExecutionId: string): Promise<AutomationActionResult> {
+  const { admissionMajorId, admissionStatusId } = node.data;
+  if (!context.leadId || !context.institutionProgramId || !admissionMajorId || !admissionStatusId) {
+    throw new UnrecoverableError("Node tạo hồ sơ thiếu Lead, chương trình, ngành hoặc trạng thái ban đầu.");
+  }
+  const actor = await requireActorWithPermission(context, "admission.update", "Tài khoản kích hoạt không có quyền tạo hồ sơ tuyển sinh.");
+  if (!(await isLeadInActorScope(context, actor))) throw new UnrecoverableError("Lead không tồn tại trong phạm vi của tài khoản kích hoạt.");
+  const initialStatus = await prisma.admission_statuses.findUnique({ where: { id: admissionStatusId }, select: { code: true } });
+  if (!initialStatus) throw new UnrecoverableError("Trạng thái hồ sơ ban đầu không còn tồn tại.");
+  if (initialStatus.code === "APPROVED" || initialStatus.code === "ENROLLED") {
+    throw new UnrecoverableError("Không thể tạo hồ sơ trực tiếp ở trạng thái đã duyệt hoặc đã nhập học.");
+  }
+  const result = { nextSourceHandle: "default", delayMinutes: 0 };
+  const mutation = await createAdmissionProfile(actor, {
+    leadId: context.leadId,
+    institutionProgramId: context.institutionProgramId,
+    majorId: admissionMajorId,
+    admissionStatusId,
+  }, undefined, context.institutionProgramId, {
+    causationRuleIds: extendCausation(context),
+    afterMutation: (tx) => markActionCompleted(tx, nodeExecutionId, result),
+  });
+  if (!mutation.ok) throw new UnrecoverableError(`Không thể tạo hồ sơ tuyển sinh: ${mutation.reason}`);
+  return result;
+}
+
+async function executeRequestDocumentAction(node: AutomationNode, context: AutomationContext, nodeExecutionId: string): Promise<AutomationActionResult> {
+  const { admissionDocumentType } = node.data;
+  if (!context.leadId || !admissionDocumentType) throw new UnrecoverableError("Node yêu cầu tài liệu thiếu loại tài liệu hoặc Lead context.");
+  const actor = await requireActorWithPermission(context, "admission_document.upload", "Tài khoản kích hoạt không có quyền yêu cầu tài liệu hồ sơ.");
+  if (!(await isLeadInActorScope(context, actor))) throw new UnrecoverableError("Lead không tồn tại trong phạm vi của tài khoản kích hoạt.");
+  const result = { nextSourceHandle: "default", delayMinutes: 0 };
+  const mutation = await uploadAdmissionDocument(actor, {
+    leadId: context.leadId,
+    documentType: admissionDocumentType,
+  }, undefined, context.institutionProgramId, {
+    causationRuleIds: extendCausation(context),
+    afterMutation: (tx) => markActionCompleted(tx, nodeExecutionId, result),
+  });
+  if (!mutation.ok) throw new UnrecoverableError(`Không thể yêu cầu tài liệu hồ sơ: ${mutation.reason}`);
+  return result;
+}
+
+async function executeUpdateAdmissionStatusAction(node: AutomationNode, context: AutomationContext, nodeExecutionId: string): Promise<AutomationActionResult> {
+  const { admissionStatusId } = node.data;
+  if (!admissionStatusId) throw new UnrecoverableError("Node cập nhật hồ sơ chưa chọn trạng thái.");
+  const actor = await requireActor(context);
+  const profileId = await resolveAdmissionProfileId(context, actor);
+  if (!profileId) throw new UnrecoverableError("Không tìm thấy hồ sơ tuyển sinh trong context của automation.");
+  const targetStatus = await prisma.admission_statuses.findUnique({ where: { id: admissionStatusId }, select: { code: true } });
+  if (!targetStatus) throw new UnrecoverableError("Trạng thái hồ sơ không còn tồn tại.");
+  if (targetStatus.code === "ENROLLED") {
+    throw new UnrecoverableError("Không thể chuyển trạng thái trực tiếp sang đã nhập học; hãy dùng bước chuyển thành sinh viên.");
+  }
+  const result = { nextSourceHandle: "default", delayMinutes: 0 };
+  const mutationOptions = {
+    causationRuleIds: extendCausation(context),
+    afterMutation: (tx: TransactionClient) => markActionCompleted(tx, nodeExecutionId, result),
+  };
+  const mutation = targetStatus.code === "APPROVED"
+    ? actor.permissions.includes("admission.approve")
+      ? await approveAdmissionProfile(actor, profileId, admissionStatusId, undefined, context.institutionProgramId, mutationOptions)
+      : { ok: false as const, reason: "approval_permission_required" as const }
+    : actor.permissions.includes("admission_status.update") || actor.permissions.includes("admission.update")
+      ? await changeAdmissionStatus(actor, profileId, admissionStatusId, undefined, context.institutionProgramId, mutationOptions)
+      : { ok: false as const, reason: "status_permission_required" as const };
+  if (!mutation.ok) throw new UnrecoverableError(`Không thể cập nhật trạng thái hồ sơ: ${mutation.reason}`);
+  return result;
+}
+
+async function executeConvertStudentAction(node: AutomationNode, context: AutomationContext, nodeExecutionId: string): Promise<AutomationActionResult> {
+  const actor = await requireActorWithPermission(context, "student.create_from_admission", "Tài khoản kích hoạt không có quyền chuyển hồ sơ thành sinh viên.");
+  const profileId = await resolveAdmissionProfileId(context, actor);
+  if (!profileId) throw new UnrecoverableError("Không tìm thấy hồ sơ tuyển sinh trong context của automation.");
+  const result = { nextSourceHandle: "default", delayMinutes: 0 };
+  const mutation = await convertAdmissionToStudent(actor, profileId, { classId: node.data.admissionClassId }, undefined, context.institutionProgramId, {
+    causationRuleIds: extendCausation(context),
+    afterMutation: (tx) => markActionCompleted(tx, nodeExecutionId, result),
+  });
+  if (!mutation.ok) throw new UnrecoverableError(`Không thể chuyển hồ sơ thành sinh viên: ${mutation.reason}`);
+  return result;
+}
+
+async function resolveAdmissionProfileId(context: AutomationContext, actor: Awaited<ReturnType<typeof requireActor>>) {
+  if (!context.admissionProfileId && !context.leadId) return null;
+  const profile = await prisma.admission_profiles.findFirst({
+    where: {
+      ...(context.admissionProfileId ? { id: context.admissionProfileId } : { lead_id: context.leadId }),
+      ...(context.institutionProgramId ? { institution_program_id: context.institutionProgramId } : {}),
+      leads: { is: { deleted_at: null, ...getLeadScopeWhere(actor, context.institutionProgramId) } },
+    },
+    select: { id: true },
+  });
+  return profile?.id ?? null;
+}
+
+async function isLeadInActorScope(context: AutomationContext, actor: Awaited<ReturnType<typeof requireActor>>) {
+  if (!context.leadId) return false;
+  const lead = await prisma.leads.findFirst({
+    where: {
+      id: context.leadId,
+      deleted_at: null,
+      ...getLeadScopeWhere(actor, context.institutionProgramId),
+      ...(context.institutionProgramId ? { institution_program_id: context.institutionProgramId } : {}),
+    },
+    select: { id: true },
+  });
+  return Boolean(lead);
+}
+
+export function extendCausation(context: Pick<AutomationContext, "causationRuleIds" | "ruleId">) {
+  return [...new Set([...(context.causationRuleIds ?? []), context.ruleId])].slice(-20);
+}
+
 async function markActionCompleted(tx: TransactionClient | typeof prisma, nodeExecutionId: string, result: AutomationActionResult) {
   await tx.automation_node_executions.update({
     where: { id: nodeExecutionId },
@@ -230,6 +356,12 @@ async function requireActor(context: AutomationContext) {
   if (!context.actorId) throw new UnrecoverableError("Automation context không có tài khoản kích hoạt.");
   const actor = await getAuthUser(context.actorId);
   if (!actor) throw new UnrecoverableError("Tài khoản kích hoạt automation không còn hoạt động.");
+  return actor;
+}
+
+async function requireActorWithPermission(context: AutomationContext, permission: string, message: string) {
+  const actor = await requireActor(context);
+  if (!actor.permissions.includes(permission)) throw new UnrecoverableError(message);
   return actor;
 }
 

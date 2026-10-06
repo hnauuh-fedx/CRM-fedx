@@ -415,6 +415,12 @@ async function validateRuleConfiguration(
         targetRoleCodes: new Set(options.targetRoles.map((role) => role.code)),
         customerListIds: new Set(options.customerLists.map((list) => list.id)),
         webhookEndpointIds: new Set(options.webhookEndpoints.map((endpoint) => endpoint.id)),
+        majorIds: new Set(options.majors.map((major) => major.id)),
+        admissionStatusIds: new Set(options.admissionStatuses.map((status) => status.id)),
+        approvedAdmissionStatusIds: new Set(options.admissionStatuses.filter((status) => status.code === "APPROVED").map((status) => status.id)),
+        enrolledAdmissionStatusIds: new Set(options.admissionStatuses.filter((status) => status.code === "ENROLLED").map((status) => status.id)),
+        restrictedAdmissionCreationStatusIds: new Set(options.admissionStatuses.filter((status) => status.code === "APPROVED" || status.code === "ENROLLED").map((status) => status.id)),
+        admissionClassIds: new Set(options.admissionClasses.map((item) => item.id)),
         customFieldDataTypes: new Map(options.customDataFields.map((field) => [field.reference, field.dataType])),
         canAssign: user.permissions.includes("lead.assign") || user.permissions.includes("lead.reassign"),
         canCreateReminder: user.permissions.includes("reminder.create"),
@@ -424,6 +430,12 @@ async function validateRuleConfiguration(
         canViewSensitiveData: user.permissions.includes("lead.sensitive.view"),
         canSendMessage: user.permissions.includes("lead.sensitive.view"),
         canCallWebhook: user.permissions.includes("automation.manage"),
+        canCreateAdmission: user.permissions.includes("admission.update"),
+        canRequestAdmissionDocument: user.permissions.includes("admission_document.upload"),
+        canUpdateAdmissionStatus: user.permissions.includes("admission_status.update") || user.permissions.includes("admission.update") || user.permissions.includes("admission.approve"),
+        canChangeAdmissionStatus: user.permissions.includes("admission_status.update") || user.permissions.includes("admission.update"),
+        canApproveAdmission: user.permissions.includes("admission.approve"),
+        canConvertStudent: user.permissions.includes("student.create_from_admission"),
       }));
     } else {
       issues.push({
@@ -786,7 +798,7 @@ export async function getAutomationOptions(user: AuthUser, institutionProgramId?
   }
   const canAssign = user.permissions.includes("lead.assign") || user.permissions.includes("lead.reassign");
   const scopedLeadWhere = { deleted_at: null, ...getLeadScopeWhere(user) };
-  const [programs, assignees, departments, pipelineStages, targetRoles, customDataFields, sources, majors, admissionStatuses, tags, customerLists, webhookEndpoints] = await Promise.all([
+  const [programs, assignees, departments, pipelineStages, targetRoles, customDataFields, sources, majors, admissionStatuses, admissionClasses, tags, customerLists, webhookEndpoints] = await Promise.all([
     prisma.institution_programs.findMany({
       where: {
         status: "active",
@@ -852,11 +864,21 @@ export async function getAutomationOptions(user: AuthUser, institutionProgramId?
         ? { OR: [{ institution_program_id: institutionProgramId }, { institution_program_id: null }] }
         : accessibleProgramIds === null
           ? undefined
-          : { admission_profiles: { some: { leads: { is: scopedLeadWhere } } } },
+          : { OR: [{ institution_program_id: { in: accessibleProgramIds } }, { institution_program_id: null }] },
       select: { id: true, name: true },
       orderBy: { name: "asc" },
     }),
-    prisma.admission_statuses.findMany({ select: { id: true, name: true }, orderBy: { name: "asc" } }),
+    prisma.admission_statuses.findMany({ select: { id: true, name: true, code: true }, orderBy: { name: "asc" } }),
+    prisma.student_classes.findMany({
+      where: institutionProgramId
+        ? { faculties: { is: { majors: { some: { institution_program_id: institutionProgramId } } } } }
+        : accessibleProgramIds === null
+          ? undefined
+          : { faculties: { is: { majors: { some: { institution_program_id: { in: accessibleProgramIds } } } } } },
+      select: { id: true, name: true, code: true },
+      orderBy: { name: "asc" },
+      take: 500,
+    }),
     prisma.tags.findMany({
       where: accessibleProgramIds === null
         ? undefined
@@ -879,6 +901,10 @@ export async function getAutomationOptions(user: AuthUser, institutionProgramId?
         if (capability === "writeActivity") return user.permissions.includes("lead_activity.create") || leadUpdatePermissions.some((permission) => user.permissions.includes(permission));
         if (capability === "sendMessage") return user.permissions.includes("lead.sensitive.view");
         if (capability === "callWebhook") return user.permissions.includes("automation.manage");
+        if (capability === "createAdmission") return user.permissions.includes("admission.update");
+        if (capability === "requestAdmissionDocument") return user.permissions.includes("admission_document.upload");
+        if (capability === "updateAdmissionStatus") return user.permissions.includes("admission_status.update") || user.permissions.includes("admission.update") || user.permissions.includes("admission.approve");
+        if (capability === "convertStudent") return user.permissions.includes("student.create_from_admission");
         return false;
       })),
     },
@@ -895,12 +921,22 @@ export async function getAutomationOptions(user: AuthUser, institutionProgramId?
     customDataFields,
     customerLists,
     webhookEndpoints,
+    majors,
+    admissionStatuses,
+    admissionClasses,
     systemFieldOptions: {
       lead_sources: sources.map((source) => ({ code: source.id, label: source.name })),
       majors: majors.map((major) => ({ code: major.id, label: major.name })),
       admission_statuses: admissionStatuses.map((status) => ({ code: status.id, label: status.name })),
       tags: tags.map((tag) => ({ code: tag.name, label: tag.name })),
       institution_programs: programs.map((program) => ({ code: program.id, label: `${program.institutions.name} - ${program.name}` })),
+      payment_statuses: [
+        { code: "pending", label: "Chờ thanh toán" },
+        { code: "partial", label: "Thanh toán một phần" },
+        { code: "paid", label: "Đã thanh toán" },
+        { code: "overdue", label: "Quá hạn" },
+        { code: "waived", label: "Miễn giảm" },
+      ],
       "Danh sách cố định": [
         { code: "male", label: "Nam" },
         { code: "female", label: "Nữ" },

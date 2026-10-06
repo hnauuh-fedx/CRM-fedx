@@ -141,6 +141,7 @@ const profileBodySchema = z.object({
   score3: z.string().trim().max(10).optional(),
   admissionScore: z.string().trim().max(10).optional(),
   applicationReceivedDate: z.string().trim().max(30).optional(),
+  expiresAt: z.string().trim().max(30).optional(),
   enrollmentBatch: z.string().trim().max(150).optional(),
   trainingCode: z.string().trim().max(100).optional(),
   registrationStation: z.string().trim().max(150).optional(),

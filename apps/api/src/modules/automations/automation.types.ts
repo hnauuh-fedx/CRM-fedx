@@ -48,6 +48,10 @@ export type AutomationNodeType =
   | "action_reminder"
   | "action_message"
   | "action_webhook"
+  | "action_create_admission"
+  | "action_request_document"
+  | "action_update_admission_status"
+  | "action_convert_student"
   | "delay";
 
 export type AutomationNodeData = {
@@ -86,6 +90,11 @@ export type AutomationNodeData = {
   // Action: signed webhook
   webhookEndpointId?: string;
   webhookPayload?: string;
+  // Action: admission
+  admissionMajorId?: string;
+  admissionStatusId?: string;
+  admissionDocumentType?: string;
+  admissionClassId?: string;
   // Trigger: SLA
   slaMinutes?: number;
   // Trigger: schedule
@@ -94,6 +103,7 @@ export type AutomationNodeData = {
   scheduleDays?: string[];
   scheduleExcludedDates?: string;
   scheduleCustomerListId?: string;
+  expiryLeadDays?: number;
   // Delay
   delayMinutes?: number;
 };
@@ -126,5 +136,8 @@ export type AutomationOptions = {
   assignees: Array<{ id: string; fullName: string }>;
   pipelineStages: Array<{ id: string; name: string; pipelineName: string | null }>;
   targetRoles: Array<{ id: string; code: string; name: string }>;
+  majors: Array<{ id: string; name: string }>;
+  admissionStatuses: Array<{ id: string; name: string }>;
+  admissionClasses: Array<{ id: string; name: string; code: string | null }>;
   systemFieldOptions: Record<string, Array<{ code: string; label: string }>>;
 };

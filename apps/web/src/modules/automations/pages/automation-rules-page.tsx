@@ -66,9 +66,13 @@ import {
 import { AutomationBulkRunDialog } from "./automation-bulk-run-dialog";
 
 const RULE_TEMPLATES = [
-  { id: "blank", label: "Tự thiết kế", description: "Bắt đầu với node khởi động." },
-  { id: "new-lead-notification", label: "Thông báo Lead mới", description: "Khởi động và gửi thông báo nội bộ." },
-  { id: "lead-follow-up", label: "Follow-up Lead", description: "Chờ 60 phút rồi ghi hoạt động chăm sóc." },
+  { id: "blank", label: "Tự thiết kế", description: "Bắt đầu với node khởi động.", triggerType: "lead_created" },
+  { id: "new-lead-notification", label: "Thông báo Lead mới", description: "Khởi động và gửi thông báo nội bộ.", triggerType: "lead_created" },
+  { id: "lead-follow-up", label: "Follow-up Lead", description: "Chờ 60 phút rồi ghi hoạt động chăm sóc.", triggerType: "lead_created" },
+  { id: "missing-documents", label: "Nhắc bổ sung hồ sơ", description: "Thông báo chuyên viên ngay khi hồ sơ thiếu tài liệu.", triggerType: "admission_document_missing" },
+  { id: "fee-reminder", label: "Nhắc phí nhập học", description: "Chờ một ngày rồi gửi Email nhắc hoàn tất phí.", triggerType: "admission_status_changed" },
+  { id: "enrollment", label: "Hoàn tất nhập học", description: "Chuyển hồ sơ đã duyệt thành sinh viên qua use case tuyển sinh.", triggerType: "admission_approved" },
+  { id: "student-support", label: "Bàn giao hỗ trợ sinh viên", description: "Thông báo bộ phận dịch vụ sinh viên sau nhập học.", triggerType: "student_enrolled" },
 ] as const;
 
 function createTemplateGraph(templateId: string, triggerType: string): AutomationGraphData {
@@ -81,7 +85,7 @@ function createTemplateGraph(templateId: string, triggerType: string): Automatio
           id: "notification-1",
           type: "action_notification",
           position: { x: 360, y: 160 },
-          data: { label: "Thông báo Lead mới", title: "Có Lead mới", content: "Lead {{system:fullName}} vừa được tạo." },
+          data: { label: "Thông báo Lead mới", targetRole: "SALE_MANAGER", title: "Có Lead mới", content: "Lead {{system:fullName}} vừa được tạo." },
         },
       ],
       edges: [{ id: "trigger-notification", source: trigger.id, target: "notification-1" }],
@@ -91,18 +95,56 @@ function createTemplateGraph(templateId: string, triggerType: string): Automatio
     return {
       nodes: [
         trigger,
-        { id: "delay-1", type: "delay", position: { x: 340, y: 160 }, data: { label: "Chờ 60 phút", delayMinutes: 60 } },
         {
-          id: "activity-1",
-          type: "action_activity",
-          position: { x: 600, y: 160 },
-          data: { label: "Ghi nhận follow-up", activityType: "note", activityContent: "Tự động tạo nhắc follow-up cho {{system:fullName}}." },
+          id: "reminder-1",
+          type: "action_reminder",
+          position: { x: 360, y: 160 },
+          data: { label: "Nhắc follow-up", reminderTitle: "Follow-up {{system:fullName}}", reminderContent: "Liên hệ và cập nhật kết quả chăm sóc Lead.", reminderDelayMinutes: 60 },
         },
+      ],
+      edges: [{ id: "trigger-reminder", source: trigger.id, target: "reminder-1" }],
+    };
+  }
+  if (templateId === "missing-documents") {
+    return {
+      nodes: [
+        trigger,
+        { id: "notification-1", type: "action_notification", position: { x: 360, y: 160 }, data: { label: "Báo quản lý tuyển sinh", targetRole: "SALE_MANAGER", title: "Hồ sơ {{system:admissionCode}} cần bổ sung", content: "Hồ sơ của {{system:fullName}} — ngành {{system:majorName}}, chương trình {{system:institutionProgramName}} — đang thiếu tài liệu. Vui lòng kiểm tra và liên hệ thí sinh." } },
+      ],
+      edges: [{ id: "trigger-notification", source: trigger.id, target: "notification-1" }],
+    };
+  }
+  if (templateId === "fee-reminder") {
+    return {
+      nodes: [
+        trigger,
+        { id: "delay-1", type: "delay", position: { x: 330, y: 160 }, data: { label: "Chờ 1 ngày", delayMinutes: 1440 } },
+        { id: "fee-condition", type: "condition", position: { x: 590, y: 160 }, data: { label: "Học phí chưa hoàn tất", conditionCombinator: "AND", conditions: [{ field: "system:tuitionStatus", operator: "not_equals", value: "paid" }] } },
+        { id: "message-1", type: "action_message", position: { x: 850, y: 160 }, data: { label: "Gửi Email nhắc phí", messageChannel: "email", consentPolicy: "require_consent", messageSubject: "Nhắc hoàn tất phí nhập học — {{system:institutionProgramName}}", messageContent: "Xin chào {{system:fullName}}, vui lòng hoàn tất khoản phí cho ngành {{system:majorName}} theo hướng dẫn của chương trình tuyển sinh." } },
       ],
       edges: [
         { id: "trigger-delay", source: trigger.id, target: "delay-1" },
-        { id: "delay-activity", source: "delay-1", target: "activity-1" },
+        { id: "delay-condition", source: "delay-1", target: "fee-condition" },
+        { id: "condition-message", source: "fee-condition", target: "message-1", sourceHandle: "default" },
       ],
+    };
+  }
+  if (templateId === "enrollment") {
+    return {
+      nodes: [
+        trigger,
+        { id: "convert-1", type: "action_convert_student", position: { x: 360, y: 160 }, data: { label: "Chuyển thành sinh viên" } },
+      ],
+      edges: [{ id: "trigger-convert", source: trigger.id, target: "convert-1" }],
+    };
+  }
+  if (templateId === "student-support") {
+    return {
+      nodes: [
+        trigger,
+        { id: "notification-1", type: "action_notification", position: { x: 360, y: 160 }, data: { label: "Bàn giao sinh viên", targetRole: "STUDENT_SERVICE", title: "Sinh viên mới cần hỗ trợ", content: "{{system:fullName}} vừa hoàn tất nhập học. Vui lòng bắt đầu quy trình hỗ trợ sinh viên." } },
+      ],
+      edges: [{ id: "trigger-notification", source: trigger.id, target: "notification-1" }],
     };
   }
   return { nodes: [trigger], edges: [] };
@@ -519,7 +561,11 @@ function CreateRuleDialog({
           </Field>
           <Field>
             <FieldLabel htmlFor="rule-template">Mẫu quy trình</FieldLabel>
-            <Select value={templateId} onValueChange={setTemplateId}>
+            <Select value={templateId} onValueChange={(value) => {
+              setTemplateId(value);
+              const template = RULE_TEMPLATES.find((item) => item.id === value);
+              if (template) setTriggerType(template.triggerType);
+            }}>
               <SelectTrigger id="rule-template" className="min-h-11 w-full"><SelectValue /></SelectTrigger>
               <SelectContent>
                 {RULE_TEMPLATES.map((template) => <SelectItem key={template.id} value={template.id}>{template.label}</SelectItem>)}

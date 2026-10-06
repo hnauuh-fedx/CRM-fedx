@@ -4,8 +4,11 @@ export type AutomationContext = {
   ruleId: string;
   actorId?: string;
   leadId?: string;
+  admissionProfileId?: string;
+  admissionDocumentId?: string;
   studentId?: string;
   institutionProgramId?: string;
+  causationRuleIds?: string[];
   payload?: unknown;
 };
 

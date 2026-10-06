@@ -2,6 +2,10 @@ import type { AuthUser } from "../auth/auth.types";
 import { prisma } from "../../database/prisma";
 
 type TransactionClient = Parameters<Parameters<typeof prisma.$transaction>[0]>[0];
+type AdmissionDocumentMutationOptions = {
+  causationRuleIds?: string[];
+  afterMutation?: (tx: TransactionClient) => Promise<void>;
+};
 
 export type AdmissionDocumentInput = {
   leadId: string;
@@ -133,8 +137,9 @@ export async function uploadAdmissionDocument(
   input: AdmissionDocumentInput,
   ipAddress?: string,
   scopedProgramId?: string,
+  options: AdmissionDocumentMutationOptions = {},
 ) {
-  return prisma.$transaction(async (tx) => {
+  const result = await prisma.$transaction(async (tx) => {
     const profile = await findVisibleProfileByLead(tx, input.leadId, scopedProgramId);
     if (!profile || !profile.leads) {
       return { ok: false as const, reason: "profile_not_found" as const };
@@ -195,8 +200,26 @@ export async function uploadAdmissionDocument(
         ip_address: ipAddress,
       },
     });
+    await options.afterMutation?.(tx);
     return { ok: true as const, data: { id: document.id } };
   });
+  if (result.ok && !input.fileUrl) {
+    const profile = await prisma.admission_profiles.findUnique({
+      where: { lead_id: input.leadId },
+      select: { id: true, institution_program_id: true },
+    });
+    const { triggerAutomation } = await import("../automations/automation-engine.service.js");
+    await triggerAutomation("admission_document_missing", {
+      actorId: user.id,
+      leadId: input.leadId,
+      admissionProfileId: profile?.id,
+      admissionDocumentId: result.data.id,
+      institutionProgramId: profile?.institution_program_id ?? undefined,
+      causationRuleIds: options.causationRuleIds,
+      payload: { documentType: input.documentType.trim() },
+    });
+  }
+  return result;
 }
 
 export async function updateAdmissionDocumentStatus(
@@ -212,7 +235,7 @@ export async function updateAdmissionDocumentStatus(
     return { ok: false as const, reason: "document_not_found" as const };
   }
 
-  return prisma.$transaction(async (tx) => {
+  const result = await prisma.$transaction(async (tx) => {
     await tx.admission_documents.update({
       where: { id: documentId },
       data: { status, uploaded_at: status === "pending" ? new Date() : existing.status === "missing" ? new Date() : undefined },
@@ -250,4 +273,17 @@ export async function updateAdmissionDocumentStatus(
     });
     return { ok: true as const, data: { id: documentId, status } };
   });
+  if (result.ok && (status === "missing" || status === "supplement_requested")) {
+    const profile = existing.leads?.admission_profiles;
+    const { triggerAutomation } = await import("../automations/automation-engine.service.js");
+    await triggerAutomation("admission_document_missing", {
+      actorId: user.id,
+      leadId: existing.lead_id ?? undefined,
+      admissionProfileId: profile?.id,
+      admissionDocumentId: documentId,
+      institutionProgramId: profile?.institution_program_id ?? undefined,
+      payload: { documentType: existing.document_type, status },
+    });
+  }
+  return result;
 }

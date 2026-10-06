@@ -51,6 +51,7 @@ model admission_profiles {
   tuition_status            String?               @db.VarChar(100)
   student_card_status       String?               @db.VarChar(100)
   application_received_date DateTime?             @db.Date
+  expires_at                DateTime?             @db.Date
   telesale_received_date    DateTime?             @db.Date
   enrollment_batch          String?               @db.VarChar(150)
   training_code             String?               @db.VarChar(100)
@@ -72,6 +73,7 @@ model admission_profiles {
   @@index([admission_status_id], map: "idx_admission_profiles_status_id")
   @@index([created_at, id], map: "idx_admission_profiles_created_page")
   @@index([application_received_date, id], map: "idx_admission_profiles_received_page")
+  @@index([expires_at, id], map: "idx_admission_profiles_expires_page")
 }
 
 model admission_statuses {

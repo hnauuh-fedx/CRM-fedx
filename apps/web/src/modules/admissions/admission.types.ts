@@ -21,6 +21,7 @@ export type AdmissionListItem = {
   tuitionStatus: string | null;
   monthlyRevenue: string | null;
   applicationReceivedDate: string | null;
+  expiresAt: string | null;
   enrollmentBatch: string | null;
   trainingCode: string | null;
   registrationStation: string | null;
@@ -65,6 +66,7 @@ export type AdmissionProfileInput = {
   score3?: string;
   admissionScore?: string;
   applicationReceivedDate?: string;
+  expiresAt?: string;
   enrollmentBatch?: string;
   trainingCode?: string;
   registrationStation?: string;
