@@ -377,6 +377,7 @@ model institution_programs {
   personal_dashboard_widgets personal_dashboard_widgets[]
   personal_dashboard_settings personal_dashboard_settings[]
   role_institution_programs role_institution_programs[]
+  user_program_access_scopes user_program_access_scopes[]
   students                  students[]
   majors                    majors[]
   webhooks                  webhooks[]
@@ -528,8 +529,7 @@ model leads {
   pipeline_stage_id              String?                      @db.Uuid
   owner_id                       String?                      @db.Uuid
   assigned_to                    String?                      @db.Uuid
-  /// Deprecated compatibility column. Application code uses pipeline_stage_id as the workflow source of truth.
-  status                         String?                      @db.VarChar(50)
+  status                         String                       @default("ACTIVE") @db.VarChar(50)
   lead_score                     Int?                         @default(0)
   temperature                    String?                      @db.VarChar(50)
   note                           String?
@@ -568,6 +568,7 @@ model leads {
   @@index([owner_id], map: "idx_leads_owner_id")
   @@index([phone], map: "idx_leads_phone")
   @@index([pipeline_stage_id], map: "idx_leads_pipeline_stage")
+  @@index([status, pipeline_stage_id], map: "idx_leads_status_pipeline_stage")
   @@index([source_id], map: "idx_leads_source_id")
   @@index([origin_id], map: "idx_leads_origin_id")
   @@index([source_id, created_at, id], map: "idx_leads_source_created_page")
@@ -1061,6 +1062,7 @@ model users {
   personal_reports                                     personal_reports[]
   personal_dashboard_widgets                           personal_dashboard_widgets[]
   personal_dashboard_settings                          personal_dashboard_settings[]
+  user_program_access_scopes                           user_program_access_scopes[]
   webhooks_created_by                                  webhooks[]                    @relation("webhooks_created_by")
 
   @@index([email], map: "idx_users_email")
@@ -1258,6 +1260,20 @@ model user_access_scopes {
   users      users     @relation(fields: [user_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
 
   @@index([scope], map: "idx_user_access_scopes_scope")
+}
+
+model user_program_access_scopes {
+  id                     String               @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  user_id                String               @db.Uuid
+  institution_program_id String               @db.Uuid
+  scope                  String               @db.VarChar(50)
+  created_at             DateTime?            @default(now()) @db.Timestamp(6)
+  updated_at             DateTime?            @default(now()) @db.Timestamp(6)
+  users                  users                @relation(fields: [user_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  institution_programs   institution_programs @relation(fields: [institution_program_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+
+  @@unique([user_id, institution_program_id])
+  @@index([institution_program_id, scope], map: "idx_user_program_access_scopes_program_scope")
 }
 
 model utm_trackings {

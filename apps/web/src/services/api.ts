@@ -2,6 +2,14 @@ import { readSelectedInstitutionProgramId } from "@/modules/institutions/institu
 
 const apiUrl = import.meta.env.VITE_API_URL ?? "http://localhost:3000/api";
 
+export const unauthorizedApiEvent = "admission-crm:api-unauthorized";
+
+function notifyUnauthorizedRequest(response: Response, accessToken?: string | null) {
+  if (response.status === 401 && accessToken) {
+    window.dispatchEvent(new Event(unauthorizedApiEvent));
+  }
+}
+
 function authorizedHeaders(accessToken?: string | null) {
   const headers = new Headers();
   if (accessToken) {
@@ -47,6 +55,7 @@ export async function apiRequest<T>(
     message?: string;
   };
   if (!response.ok) {
+    notifyUnauthorizedRequest(response, accessToken);
     throw new ApiError(
       payload.message ?? "Không thể kết nối đến máy chủ.",
       response.status,
@@ -80,6 +89,7 @@ export async function apiFormRequest<T>(
     message?: string;
   };
   if (!response.ok) {
+    notifyUnauthorizedRequest(response, accessToken);
     throw new ApiError(
       payload.message ?? "Không thể kết nối đến máy chủ.",
       response.status,
@@ -94,6 +104,7 @@ export async function apiDownload(path: string, accessToken: string) {
     headers: authorizedHeaders(accessToken),
   });
   if (!response.ok) {
+    notifyUnauthorizedRequest(response, accessToken);
     const payload = (await response.json().catch(() => ({}))) as {
       message?: string;
     };

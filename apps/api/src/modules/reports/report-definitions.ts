@@ -6,8 +6,8 @@ export type PersonalReportMode = "SUMMARY" | "SINGLE" | "PIVOT";
 export type PersonalReportSingleDisplay = "TABLE" | "LINE";
 export type PersonalReportTimePreset = "LAST_7_DAYS" | "THIS_WEEK" | "LAST_WEEK" | "THIS_MONTH" | "LAST_MONTH" | "THIS_QUARTER" | "LAST_QUARTER" | "CUSTOM";
 export type PersonalReportDateGranularity = "DAY" | "WEEK" | "MONTH" | "QUARTER";
-export type PersonalReportDatasetKey = "LEADS" | "ADMISSION_CANDIDATES" | "STUDENTS";
-export type PersonalReportFilterOperator = "EQUALS" | "NOT_EQUALS" | "DATE_PRESET" | "DATE_BETWEEN";
+export type PersonalReportDatasetKey = "LEADS" | "QUALIFIED_LEADS" | "STUDENTS";
+export type PersonalReportFilterOperator = "EQUALS" | "NOT_EQUALS" | "GREATER_THAN_OR_EQUAL" | "DATE_PRESET" | "DATE_BETWEEN";
 export type PersonalReportFilterCondition = { fieldKey: string; operator: PersonalReportFilterOperator; value?: string; fromDate?: string; toDate?: string };
 
 type MetricDefinition = { key: string; label: string; format: "NUMBER" | "PERCENT" | "CURRENCY" };
@@ -31,8 +31,8 @@ function dataset<TModule extends PersonalReportModule>(definition: {
 
 export const personalReportDatasetDefinitions = {
   LEADS: dataset({
-    key: "LEADS", label: "Khách hàng tiềm năng", module: "SALE", countMetricKey: "totalLeads", primaryDateField: "CREATED_DATE",
-    measure: { key: "LEAD_COUNT", label: "Số lượng khách hàng" },
+    key: "LEADS", label: "Tổng data", module: "SALE", countMetricKey: "totalLeads", primaryDateField: "CREATED_DATE",
+    measure: { key: "LEAD_COUNT", label: "Số lượng lead" },
     fields: [
       { key: "SOURCE", label: "Nguồn khách hàng", type: "CATEGORY", allowedAsOutput: true, allowedAsFilter: true },
       { key: "ASSIGNEE", label: "Nhân viên phụ trách", type: "CATEGORY", allowedAsOutput: true, allowedAsFilter: true },
@@ -40,15 +40,14 @@ export const personalReportDatasetDefinitions = {
       { key: "CREATED_DATE", label: "Ngày tạo", type: "DATE", allowedAsOutput: true, allowedAsFilter: true },
     ],
   }),
-  ADMISSION_CANDIDATES: dataset({
-    key: "ADMISSION_CANDIDATES", label: "Ứng viên / hồ sơ tuyển sinh", module: "ADMISSION", countMetricKey: "totalApplications", primaryDateField: "RECEIVED_DATE",
-    measure: { key: "APPLICATION_COUNT", label: "Số lượng ứng viên" },
+  QUALIFIED_LEADS: dataset({
+    key: "QUALIFIED_LEADS", label: "Tổng data đúng đối tượng (L2)", module: "SALE", countMetricKey: "totalLeads", primaryDateField: "CREATED_DATE",
+    measure: { key: "QUALIFIED_LEAD_COUNT", label: "Số lượng data đúng đối tượng" },
     fields: [
-      { key: "ADMISSION_STATUS", label: "Trạng thái hồ sơ", type: "CATEGORY", allowedAsOutput: true, allowedAsFilter: true },
-      { key: "MAJOR", label: "Ngành đăng ký", type: "CATEGORY", allowedAsOutput: true, allowedAsFilter: true },
-      { key: "FEE_STATUS", label: "Trạng thái lệ phí", type: "CATEGORY", allowedAsOutput: true, allowedAsFilter: true },
-      { key: "TUITION_STATUS", label: "Trạng thái học phí", type: "CATEGORY", allowedAsOutput: true, allowedAsFilter: true },
-      { key: "RECEIVED_DATE", label: "Ngày tiếp nhận hồ sơ", type: "DATE", allowedAsOutput: true, allowedAsFilter: true },
+      { key: "SOURCE", label: "Nguồn khách hàng", type: "CATEGORY", allowedAsOutput: true, allowedAsFilter: true },
+      { key: "ASSIGNEE", label: "Nhân viên phụ trách", type: "CATEGORY", allowedAsOutput: true, allowedAsFilter: true },
+      { key: "PIPELINE_STAGE", label: "Giai đoạn pipeline", type: "CATEGORY", allowedAsOutput: true, allowedAsFilter: true },
+      { key: "CREATED_DATE", label: "Ngày tạo", type: "DATE", allowedAsOutput: true, allowedAsFilter: true },
     ],
   }),
   STUDENTS: dataset({

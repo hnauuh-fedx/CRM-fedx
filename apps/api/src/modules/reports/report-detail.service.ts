@@ -3,6 +3,7 @@ import { Prisma } from "../../generated/prisma/client";
 import type { AuthUser } from "../auth/auth.types";
 import type { CampaignViewer } from "../campaigns/campaign-list.service";
 import { getLeadScopeWhere } from "../leads/lead-list.service";
+import { ACTIVE_LEAD_STATUS } from "../leads/domain/lead-lifecycle-status";
 import { APPLICATION_PIPELINE_STAGE_LIKE, applicationStageLeadWhere } from "../leads/pipeline-stage-semantics";
 
 export type ReportDateRange = {
@@ -166,7 +167,7 @@ export async function getSaleDetailReport(user: AuthUser, query: ReportDateRange
       prisma.reminders.count({ where: { status: "pending", remind_at: { lt: new Date() }, leads: { is: scopedLeadWhere } } }),
       prisma.leads.groupBy({
         by: ["pipeline_stage_id"],
-        where: leadWhere,
+        where: { AND: [...leadWhere.AND, { status: ACTIVE_LEAD_STATUS }] },
         _count: { _all: true },
         orderBy: { _count: { pipeline_stage_id: "desc" } },
         take: 10,

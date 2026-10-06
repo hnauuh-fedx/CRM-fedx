@@ -74,9 +74,10 @@ async function ensureAccessScopeCatalog() {
   `);
 }
 
-export async function listRoles() {
+export async function listRoles(institutionProgramId: string) {
   await ensureAccessScopeCatalog();
   const roles = await prisma.roles.findMany({
+    where: { role_institution_programs: { some: { institution_program_id: institutionProgramId } } },
     select: {
       id: true,
       code: true,
@@ -117,7 +118,7 @@ export async function listRoles() {
   };
 }
 
-export async function getRoleManagementOptions() {
+export async function getRoleManagementOptions(actor: AuthUser) {
   await ensureAccessScopeCatalog();
   const [permissions, scopes, programs] = await Promise.all([
     prisma.permissions.findMany({
@@ -127,7 +128,11 @@ export async function getRoleManagementOptions() {
     }),
     listAccessScopes(),
     prisma.institution_programs.findMany({
-      where: { status: "active", institutions: { is: { status: "active" } } },
+      where: {
+        id: { in: actor.institutionProgramIds },
+        status: "active",
+        institutions: { is: { status: "active" } },
+      },
       select: { id: true, code: true, name: true, institutions: { select: { name: true } } },
       orderBy: [{ institutions: { name: "asc" } }, { name: "asc" }],
     }),
@@ -169,7 +174,7 @@ export async function listAccessScopes() {
 }
 
 export async function createRole(actor: AuthUser, input: RoleInput, ipAddress?: string) {
-  const validation = await validateRoleInput(input);
+  const validation = await validateRoleInput(input, actor.institutionProgramIds);
   if (!validation.ok) return validation;
   const code = normalizeRoleCode(input.code);
   if (await prisma.roles.findUnique({ where: { code }, select: { id: true } })) {
@@ -210,12 +215,15 @@ export async function createRole(actor: AuthUser, input: RoleInput, ipAddress?: 
   });
 }
 
-export async function updateRole(actor: AuthUser, roleId: string, input: RoleInput, ipAddress?: string) {
-  const validation = await validateRoleInput(input);
+export async function updateRole(actor: AuthUser, roleId: string, input: RoleInput, institutionProgramId: string, ipAddress?: string) {
+  const validation = await validateRoleInput(input, actor.institutionProgramIds);
   if (!validation.ok) return validation;
   const code = normalizeRoleCode(input.code);
   const existing = await prisma.roles.findUnique({
-    where: { id: roleId },
+    where: {
+      id: roleId,
+      role_institution_programs: { some: { institution_program_id: institutionProgramId } },
+    },
     select: {
       id: true,
       code: true,
@@ -277,9 +285,12 @@ export async function updateRole(actor: AuthUser, roleId: string, input: RoleInp
   });
 }
 
-export async function deleteRole(actor: AuthUser, roleId: string, ipAddress?: string) {
+export async function deleteRole(actor: AuthUser, roleId: string, institutionProgramId: string, ipAddress?: string) {
   const role = await prisma.roles.findUnique({
-    where: { id: roleId },
+    where: {
+      id: roleId,
+      role_institution_programs: { some: { institution_program_id: institutionProgramId } },
+    },
     select: { id: true, code: true, name: true, _count: { select: { user_roles: true } } },
   });
   if (!role) return { ok: false as const, reason: "role_not_found" as const };
@@ -328,7 +339,7 @@ export async function updateAccessScope(actor: AuthUser, code: AccessScopeCode, 
   return { ok: true as const, data: { code } };
 }
 
-async function validateRoleInput(input: RoleInput) {
+async function validateRoleInput(input: RoleInput, accessibleProgramIds: string[]) {
   await ensureAccessScopeCatalog();
   const permissionIds = unique(input.permissionIds);
   const programIds = unique(input.programIds);
@@ -340,6 +351,9 @@ async function validateRoleInput(input: RoleInput) {
   const permissionCount = await prisma.permissions.count({ where: { id: { in: permissionIds } } });
   if (permissionCount !== permissionIds.length) return { ok: false as const, reason: "permission_not_found" as const };
   if (programIds.length === 0) return { ok: false as const, reason: "program_required" as const };
+  if (programIds.some((programId) => !accessibleProgramIds.includes(programId))) {
+    return { ok: false as const, reason: "program_not_found" as const };
+  }
   const programCount = await prisma.institution_programs.count({
     where: { id: { in: programIds }, status: "active", institutions: { is: { status: "active" } } },
   });

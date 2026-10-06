@@ -2,6 +2,8 @@ import { prisma } from "../../../database/prisma";
 import type { AuthUser } from "../../auth/auth.types";
 import type { LeadFileInput } from "../domain/lead-input";
 import { canUpdateLead } from "./lead-authorization";
+import { isFailedLeadStatus } from "../domain/lead-lifecycle-status";
+import { formatLeadNote } from "../transition-note.service";
 import {
   emptyToNull,
   findVisibleLeadForMutation,
@@ -30,8 +32,12 @@ export async function addLeadNote(
     if (!lead) {
       return { ok: false as const, reason: "lead_not_found" as const };
     }
+    const stage = lead.pipeline_stage_id
+      ? await tx.pipeline_stages.findUnique({ where: { id: lead.pipeline_stage_id }, select: { name: true } })
+      : null;
+    const formattedContent = formatLeadNote(isFailedLeadStatus(lead.status) ? "Fail" : stage?.name ?? "Chưa chọn tiến trình", content);
     const note = await tx.lead_notes.create({
-      data: { lead_id: leadId, user_id: actor.id, content: content.trim() },
+      data: { lead_id: leadId, user_id: actor.id, content: formattedContent },
       select: { id: true },
     });
     await tx.lead_activities.create({
@@ -49,7 +55,7 @@ export async function addLeadNote(
         entity_id: leadId,
         action: "note_created",
         ip_address: ipAddress,
-        new_data: { noteId: note.id },
+        new_data: { noteId: note.id, content: formattedContent },
       },
     });
     return { ok: true as const, data: { id: note.id } };

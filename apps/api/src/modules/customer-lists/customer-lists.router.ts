@@ -33,9 +33,14 @@ const leadQuerySchema = z.object({
   search: z.string().trim().max(100).optional().transform((value) => value || undefined),
   pipelineStageId: z.uuid().optional().or(z.literal("")).transform((value) => value || undefined),
   sourceId: z.uuid().optional().or(z.literal("")).transform((value) => value || undefined),
+  majorId: z.uuid().optional().or(z.literal("")).transform((value) => value || undefined),
   assigneeId: z.uuid().optional().or(z.literal("")).transform((value) => value || undefined),
+  fromDate: z.iso.date().optional().or(z.literal("")).transform((value) => value || undefined),
+  toDate: z.iso.date().optional().or(z.literal("")).transform((value) => value || undefined),
   sortBy: z.enum(["createdAt", "fullName", "leadCode", "pipelineStage"]).default("createdAt"),
   sortOrder: z.enum(["asc", "desc"]).default("desc"),
+}).refine((input) => !input.fromDate || !input.toDate || input.fromDate <= input.toDate, {
+  message: "Khoảng ngày tạo không hợp lệ.",
 });
 const filterConditionSchema = z.object({
   field: z.enum(customerListFilterFields),

@@ -29,7 +29,9 @@ import {
   updateLeadCustomFields,
 } from "@/services/lead.service";
 import { LeadForm } from "../components/lead-form";
+import { LeadOpenInitialization } from "../components/lead-open-initialization";
 import { LeadCustomFieldsCard } from "../components/lead-custom-fields-card";
+import { useLeadWorkflowTransition } from "../components/transition-note-dialog";
 import { toLeadFormOptions, toLeadFormValues } from "../lead-form.helpers";
 import type { LeadActionOptions, LeadDetail, LeadFormInput } from "../lead.types";
 
@@ -83,7 +85,9 @@ const activityLabels: Record<string, string> = {
 };
 
 function getLeadWorkflowLabel(lead: LeadDetail) {
-  return lead.pipelineStage?.name ?? "Chưa chọn tiến trình";
+  return lead.lifecycleStatus.value === "FAIL"
+    ? lead.lifecycleStatus.label
+    : lead.pipelineStage?.name ?? "Chưa chọn tiến trình";
 }
 
 function formatDate(value: string | null) {
@@ -122,6 +126,7 @@ export function LeadDetailPage({
     queryFn: () => getLeadActionOptions(auth.accessToken!),
     enabled: canAct,
   });
+  const transition = useLeadWorkflowTransition(leadQuery.data?.data);
   const [isEditing, setIsEditing] = useState(false);
 
   if (leadQuery.isLoading) {
@@ -161,7 +166,20 @@ export function LeadDetailPage({
         actions={<div className="flex flex-wrap items-center gap-2"><Badge variant="secondary">{getLeadWorkflowLabel(lead)}</Badge>{canUpdate && <Button type="button" size="sm" variant={isEditing ? "secondary" : "default"} onClick={() => setIsEditing((value) => !value)}><Pencil aria-hidden="true" />{isEditing ? "Đóng chỉnh sửa" : "Chỉnh sửa"}</Button>}</div>}
       />
 
-      <PipelineProgressCard lead={lead} options={options} />
+      <LeadOpenInitialization key={lead.id} lead={lead} />
+      <PipelineProgressCard
+        lead={lead}
+        options={options}
+        onStageChange={canUpdate ? transition.changeStage : undefined}
+        onStatusChange={canUpdate ? transition.changeStatus : undefined}
+        isChanging={transition.isPending}
+      />
+      {transition.dialog}
+      {transition.error && (
+        <p role="alert" className="-mt-4 text-sm text-destructive">
+          {transition.error.message}
+        </p>
+      )}
       {isEditing && canUpdate && <Card className="border-primary/30 shadow-xs"><CardHeader><CardTitle>Cập nhật hồ sơ ứng viên</CardTitle><CardDescription>Cập nhật thông tin cá nhân, học vấn, tuyển sinh và chăm sóc trong cùng hồ sơ.</CardDescription></CardHeader><CardContent><EditLeadForm lead={lead} options={options} accessToken={auth.accessToken!} /></CardContent></Card>}
 
       <div className="grid items-start gap-6 xl:grid-cols-[minmax(320px,0.82fr)_minmax(0,1.48fr)]">
@@ -192,6 +210,7 @@ export function PipelineProgressCard({
   options,
   fallbackStages = [],
   onStageChange,
+  onStatusChange,
   isChanging = false,
   isLoading = false,
   hasLoadError = false,
@@ -200,6 +219,7 @@ export function PipelineProgressCard({
   options?: LeadActionOptions;
   fallbackStages?: PipelineStageView[];
   onStageChange?: (stageId: string) => void;
+  onStatusChange?: (status: "ACTIVE" | "FAIL") => void;
   isChanging?: boolean;
   isLoading?: boolean;
   hasLoadError?: boolean;
@@ -207,7 +227,8 @@ export function PipelineProgressCard({
   const availableStages: PipelineStageView[] = options?.stages.length
     ? options.stages
     : fallbackStages;
-  const currentStage = availableStages.find((stage) => stage.id === lead.pipelineStage?.id);
+  const workflowStageId = lead.pipelineStage?.id ?? lead.lifecycleStatus.failedStageId;
+  const currentStage = availableStages.find((stage) => stage.id === workflowStageId);
   const stagesInCurrentPipeline = currentStage?.pipelineId
     ? availableStages.filter((stage) => stage.pipelineId === currentStage.pipelineId)
     : availableStages;
@@ -216,7 +237,9 @@ export function PipelineProgressCard({
     : lead.pipelineStage
       ? [{ ...lead.pipelineStage, pipelineId: null, pipelineName: null }]
       : [];
-  const currentIndex = visibleStages.findIndex((stage) => stage.id === lead.pipelineStage?.id);
+  const currentIndex = lead.lifecycleStatus.value === "ACTIVE"
+    ? visibleStages.findIndex((stage) => stage.id === lead.pipelineStage?.id)
+    : -1;
   const pipelineName = currentStage?.pipelineName;
 
   return (
@@ -242,7 +265,7 @@ export function PipelineProgressCard({
           <ol className="grid gap-2 sm:grid-cols-2 lg:grid-cols-3 2xl:grid-cols-6" aria-label="Tiến trình xử lý lead">
             {visibleStages.map((stage, index) => {
               const isCurrent = index === currentIndex;
-              const canSelect = Boolean(onStageChange) && !isCurrent && !isChanging;
+              const canSelect = lead.lifecycleStatus.value === "ACTIVE" && Boolean(onStageChange) && !isCurrent && !isChanging;
               const stageColor = normalizePipelineStageColor(
                 stage.color,
                 pipelineStageFallbackColors[index % pipelineStageFallbackColors.length],
@@ -271,7 +294,7 @@ export function PipelineProgressCard({
                     aria-current={isCurrent ? "step" : undefined}
                     aria-pressed={isCurrent}
                     aria-disabled={!canSelect}
-                    disabled={isChanging}
+                    disabled={isChanging || lead.lifecycleStatus.value === "FAIL"}
                     onClick={() => {
                       if (canSelect) onStageChange?.(stage.id);
                     }}
@@ -292,8 +315,61 @@ export function PipelineProgressCard({
                 : "Chưa chọn tiến trình hiện tại."}
           </p>
         )}
+        <LeadLifecycleStatusField
+          lead={lead}
+          onStatusChange={onStatusChange}
+          isChanging={isChanging}
+        />
       </CardContent>
     </Card>
+  );
+}
+
+function getStageMarker(stageName: string | null | undefined) {
+  return stageName?.match(/\bL\d+\b/i)?.[0]?.toUpperCase() ?? null;
+}
+
+function LeadLifecycleStatusField({
+  lead,
+  onStatusChange,
+  isChanging,
+}: {
+  lead: LeadDetail;
+  onStatusChange?: (status: "ACTIVE" | "FAIL") => void;
+  isChanging: boolean;
+}) {
+  const currentMarker = getStageMarker(lead.pipelineStage?.name);
+  const failedStatusLabel = lead.lifecycleStatus.value === "FAIL"
+    ? lead.lifecycleStatus.label
+    : `Fail${currentMarker ? ` | ${currentMarker}` : ""}`;
+  const description = lead.lifecycleStatus.value === "FAIL"
+    ? `${lead.lifecycleStatus.label} · Lead đang được tách khỏi pipeline; chuyển về Active để khôi phục tiến trình cũ.`
+    : lead.pipelineStage
+      ? "Khi chuyển sang Fail, tiến trình hiện tại sẽ được lưu để có thể khôi phục sau."
+      : "Hãy chọn tiến trình trước khi chuyển lead sang Fail.";
+
+  return (
+    <div className="grid gap-2 border-t pt-4 sm:grid-cols-[minmax(0,20rem)_minmax(0,1fr)] sm:items-end">
+      <Field className="gap-2">
+        <FieldLabel htmlFor={`lead-status-${lead.id}`}>Trạng thái</FieldLabel>
+        <Select
+          value={lead.lifecycleStatus.value}
+          disabled={!onStatusChange || isChanging || (lead.lifecycleStatus.value === "ACTIVE" && !lead.pipelineStage)}
+          onValueChange={(value) => onStatusChange?.(value as "ACTIVE" | "FAIL")}
+        >
+          <SelectTrigger id={`lead-status-${lead.id}`} className="w-full" aria-label="Trạng thái lead">
+            <SelectValue />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectGroup>
+              <SelectItem value="ACTIVE">Active</SelectItem>
+              <SelectItem value="FAIL">{failedStatusLabel}</SelectItem>
+            </SelectGroup>
+          </SelectContent>
+        </Select>
+      </Field>
+      <p className="pb-2 text-sm text-muted-foreground">{description}</p>
+    </div>
   );
 }
 
@@ -315,7 +391,7 @@ function ActivityPanel({ lead }: { lead: LeadDetail }) {
 }
 
 function NotesPanel({ lead, canNote, accessToken }: { lead: LeadDetail; canNote: boolean; accessToken: string }) {
-  return <div className="flex flex-col gap-5">{canNote && <NoteComposer leadId={lead.id} accessToken={accessToken} />}{lead.notes.length === 0 ? <p className="text-sm text-muted-foreground">Chưa có ghi chú chăm sóc.</p> : <ol className="flex flex-col gap-4">{lead.notes.map((note) => <li key={note.id} className="rounded-lg border bg-muted/20 p-4"><p className="whitespace-pre-wrap text-sm">{note.content}</p><p className="mt-2 text-xs text-muted-foreground">{note.author?.fullName ?? "Hệ thống"} · {formatDateTime(note.createdAt)}</p></li>)}</ol>}</div>;
+  return <div className="flex flex-col gap-5">{canNote && <NoteComposer lead={lead} accessToken={accessToken} />}{lead.notes.length === 0 ? <p className="text-sm text-muted-foreground">Chưa có ghi chú chăm sóc.</p> : <ol className="flex flex-col gap-4">{lead.notes.map((note) => <li key={note.id} className="rounded-lg border bg-muted/20 p-4"><p className="whitespace-pre-wrap text-sm">{note.content}</p><p className="mt-2 text-xs text-muted-foreground">{note.author?.fullName ?? "Hệ thống"} · {formatDateTime(note.createdAt)}</p></li>)}</ol>}</div>;
 }
 
 function RecentChangesPanel({ lead }: { lead: LeadDetail }) {
@@ -480,7 +556,8 @@ function DeleteLeadCard({ lead, accessToken, listPath }: { lead: LeadDetail; acc
   );
 }
 
-function NoteComposer({ leadId, accessToken }: { leadId: string; accessToken: string }) {
+function NoteComposer({ lead, accessToken }: { lead: LeadDetail; accessToken: string }) {
+  const leadId = lead.id;
   const queryClient = useQueryClient();
   const [content, setContent] = useState("");
   const mutation = useMutation({ mutationFn: () => addLeadNote(leadId, content, accessToken), onSuccess: () => {
@@ -491,7 +568,7 @@ function NoteComposer({ leadId, accessToken }: { leadId: string; accessToken: st
   return (
     <form className="flex flex-col gap-3" onSubmit={(event) => { event.preventDefault(); if (content.trim()) mutation.mutate(); }}>
       {mutation.isError && <MutationError error={mutation.error} />}
-      <Field><FieldLabel htmlFor="lead-care-note">Thêm ghi chú chăm sóc</FieldLabel><Textarea id="lead-care-note" value={content} onChange={(event) => setContent(event.target.value)} placeholder="Nội dung cuộc gọi, nhu cầu hoặc bước tiếp theo..." rows={3} /></Field>
+      <Field><FieldLabel htmlFor="lead-care-note">Thêm ghi chú chăm sóc</FieldLabel><Textarea id="lead-care-note" value={content} onChange={(event) => setContent(event.target.value)} placeholder="Nội dung cuộc gọi, nhu cầu hoặc bước tiếp theo..." rows={3} maxLength={4000} disabled={mutation.isPending} /></Field>
       <Button className="self-end" type="submit" disabled={!content.trim() || mutation.isPending}>Lưu ghi chú</Button>
     </form>
   );

@@ -36,7 +36,7 @@ export async function assignLeads(
       return { ok: false as const, reason: "lead_not_found" as const };
     }
 
-    const assignee = await findActiveAssignableSale(tx, input.assigneeId);
+    const assignee = await findActiveAssignableSale(tx, input.assigneeId, undefined, institutionProgramId);
     const assigneeInScope =
       assignee && isAssigneeInScope(actor, assignee.user_departments);
     if (!assignee || !assigneeInScope) {

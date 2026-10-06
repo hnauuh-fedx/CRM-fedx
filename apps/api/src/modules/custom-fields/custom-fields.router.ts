@@ -8,6 +8,8 @@ import { customFieldEntityTypes } from "./custom-fields.types";
 import { getInstitutionProgramScope } from "../institutions/institution-program-scope";
 import { getRuntimeCustomFieldDefinitions, getRuntimeCustomFields, saveRuntimeCustomFields, type RuntimeCustomFieldEntityType } from "../leads/sale-custom-fields.service";
 import { getSystemFieldRequirements, setSystemFieldRequirement } from "./system-field-requirements.service";
+import { getTransitionNoteConfiguration, setTransitionNoteTemplates } from "../leads/transition-note.service";
+import { transitionNoteTargetSchema, transitionNoteTemplatesSchema } from "../leads/transition-note.schema";
 export const customFieldsRouter = Router(); customFieldsRouter.use(requireAuthentication);
 const id = z.uuid(); const message: Record<string, string> = { scope_denied: "Bạn không có quyền truy cập chương trình tuyển sinh này.", not_found: "Không tìm thấy trường dữ liệu.", duplicate_key: "Mã trường đã tồn tại trong phạm vi áp dụng.", program_not_found: "Không tìm thấy chương trình tuyển sinh.", group_not_found: "Không tìm thấy nhóm trường dữ liệu đang hoạt động.", duplicate_group_key: "Mã nhóm trường đã tồn tại.", system_group_locked: "Nhóm hệ thống không thể chỉnh sửa cấu hình.", group_archived: "Nhóm trường dữ liệu đã được lưu trữ.", group_not_empty: "Hãy chuyển hoặc lưu trữ các trường trong nhóm trước khi lưu trữ nhóm.", data_type_locked: "Không thể đổi kiểu dữ liệu khi trường đã có giá trị.", scope_locked: "Không thể đổi phạm vi của trường đã tạo.", already_archived: "Trường dữ liệu đã được lưu trữ.", different_group: "Chỉ có thể sắp xếp lại các trường cùng nhóm." };
 function fail(response: any, result: any) { response.status(result.reason === "scope_denied" ? 403 : ["duplicate_key", "duplicate_group_key"].includes(result.reason) ? 409 : ["not_found", "group_not_found"].includes(result.reason) ? 404 : 400).json({ message: message[result.reason] ?? "Không thể xử lý trường dữ liệu." }); }
@@ -18,6 +20,19 @@ const runtimeValuesSchema = z.object({ values: z.record(z.uuid(), z.unknown().nu
 const systemFieldRequirementSchema = z.object({
   fieldKey: z.string().trim().min(1).max(150).regex(/^[A-Za-z][A-Za-z0-9_.-]*$/),
   isRequired: z.boolean(),
+});
+customFieldsRouter.get("/system/LEAD/note-templates", requireAnyPermission("custom_field.view"), async (_req, res, next) => {
+  try { res.json(await getTransitionNoteConfiguration()); } catch (error) { next(error); }
+});
+customFieldsRouter.put("/system/LEAD/note-templates/:target", requireAnyPermission("custom_field.update"), requireAnyPermission("custom_field.manage_options"), async (req, res, next) => {
+  try {
+    const target = transitionNoteTargetSchema.safeParse(req.params.target);
+    const body = z.object({ templates: transitionNoteTemplatesSchema }).safeParse(req.body);
+    if (!target.success || !body.success) return res.status(400).json({ message: "Cấu hình mẫu ghi chú không hợp lệ.", issues: body.success ? undefined : body.error.issues });
+    const result = await setTransitionNoteTemplates(req.authUser!, target.data, body.data.templates, req.ip);
+    if (!result.ok) return res.status(404).json({ message: "Không tìm thấy tiến trình cần cấu hình." });
+    res.json(result.data);
+  } catch (error) { next(error); }
 });
 customFieldsRouter.get("/system/:entityType/requirements", requireAnyPermission("custom_field.view"), async (req, res, next) => {
   try {

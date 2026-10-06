@@ -2,6 +2,7 @@ import { Router } from "express";
 import { z } from "zod";
 
 import { requireAnyPermission, requireAuthentication } from "../../middlewares/auth.middleware";
+import { getInstitutionProgramScope } from "../institutions/institution-program-scope";
 import {
   createRole,
   deleteRole,
@@ -43,17 +44,17 @@ function resultMessage(reason: string) {
   return "Không tìm thấy vai trò hoặc scope cần cập nhật.";
 }
 
-rolesRouter.get("/", async (_request, response, next) => {
+rolesRouter.get("/", async (request, response, next) => {
   try {
-    response.json(await listRoles());
+    response.json(await listRoles(getInstitutionProgramScope(request)!));
   } catch (error) {
     next(error);
   }
 });
 
-rolesRouter.get("/options", async (_request, response, next) => {
+rolesRouter.get("/options", async (request, response, next) => {
   try {
-    response.json(await getRoleManagementOptions());
+    response.json(await getRoleManagementOptions(request.authUser!));
   } catch (error) {
     next(error);
   }
@@ -93,7 +94,7 @@ rolesRouter.patch("/:id", async (request, response, next) => {
       response.status(400).json({ message: "Dữ liệu cập nhật vai trò không hợp lệ." });
       return;
     }
-    const result = await updateRole(request.authUser!, parsedId.data, parsedBody.data, request.ip);
+    const result = await updateRole(request.authUser!, parsedId.data, parsedBody.data, getInstitutionProgramScope(request)!, request.ip);
     if (!result.ok) {
       response.status(result.reason === "role_not_found" ? 404 : result.reason === "code_exists" ? 409 : 400).json({ message: resultMessage(result.reason) });
       return;
@@ -111,7 +112,7 @@ rolesRouter.delete("/:id", async (request, response, next) => {
       response.status(400).json({ message: "Mã vai trò không hợp lệ." });
       return;
     }
-    const result = await deleteRole(request.authUser!, parsedId.data, request.ip);
+    const result = await deleteRole(request.authUser!, parsedId.data, getInstitutionProgramScope(request)!, request.ip);
     if (!result.ok) {
       response.status(result.reason === "role_not_found" ? 404 : 409).json({ message: resultMessage(result.reason) });
       return;

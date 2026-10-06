@@ -77,7 +77,10 @@ export type LeadListFilters = {
   search: string;
   pipelineStageId: string;
   sourceId: string;
+  majorId: string;
   assigneeId: string;
+  fromDate: string;
+  toDate: string;
 };
 
 export type LeadListResponse = {
@@ -130,6 +133,11 @@ export type DuplicateLeadResponse = {
 };
 
 export type LeadDetail = LeadListItem & {
+  lifecycleStatus: {
+    value: "ACTIVE" | "FAIL";
+    label: string;
+    failedStageId: string | null;
+  };
   sourceOccurrences: Array<{
     id: string;
     sourceGroup: { id: string; name: string };
@@ -253,6 +261,8 @@ export type LeadFormInput = {
   sourceId: string;
   assigneeId: string;
   pipelineStageId: string;
+  noteTemplateId?: string;
+  noteContent?: string;
   email: string;
   gender: string;
   dateOfBirth: string;

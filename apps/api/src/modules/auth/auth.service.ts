@@ -37,6 +37,9 @@ const principalInclude = {
               },
             },
           },
+          role_access_scopes: {
+            select: { scope_code: true },
+          },
           id: true,
         },
       },
@@ -52,8 +55,29 @@ function inferAccessScope(roles: string[]): AccessScope {
   return "DEPARTMENT";
 }
 
-async function getStoredAccessScope(userId: string): Promise<AccessScope | null> {
+async function getStoredAccessScope(userId: string, institutionProgramId?: string): Promise<AccessScope | null> {
   try {
+    if (institutionProgramId) {
+      const programRows = await prisma.$queryRaw<Array<{ scope: AccessScope | null; has_any: boolean }>>(Prisma.sql`
+        SELECT
+          (
+            SELECT scope
+            FROM user_program_access_scopes
+            WHERE user_id = ${userId}::uuid
+              AND institution_program_id = ${institutionProgramId}::uuid
+            LIMIT 1
+          ) AS scope,
+          EXISTS (
+            SELECT 1
+            FROM user_program_access_scopes
+            WHERE user_id = ${userId}::uuid
+          ) AS has_any
+      `).catch((error: unknown) => {
+        if (isMissingAccessScopeTable(error)) return [{ scope: null, has_any: false }];
+        throw error;
+      });
+      if (programRows[0]?.has_any) return programRows[0].scope;
+    }
     const rows = await prisma.$queryRaw<Array<{ scope: AccessScope }>>(Prisma.sql`
       SELECT scope
       FROM user_access_scopes
@@ -62,14 +86,14 @@ async function getStoredAccessScope(userId: string): Promise<AccessScope | null>
     `);
     return rows[0]?.scope ?? null;
   } catch (error) {
-    if (isMissingUserAccessScopesTable(error)) {
+    if (isMissingAccessScopeTable(error)) {
       return null;
     }
     throw error;
   }
 }
 
-function isMissingUserAccessScopesTable(error: unknown) {
+function isMissingAccessScopeTable(error: unknown) {
   return (
     typeof error === "object" &&
     error !== null &&
@@ -98,13 +122,29 @@ async function serializeUser(user: {
         institution_program_id: string;
         institution_programs: { status: string | null };
       }>;
+      role_access_scopes: { scope_code: string } | null;
     } | null;
   }>;
-}): Promise<AuthUser> {
-  const roles = user.user_roles.flatMap((assignment) =>
+}, requestedProgramId?: string): Promise<AuthUser> {
+  const institutionProgramIds = [
+    ...new Set(
+      user.user_roles.flatMap((assignment) =>
+        assignment.roles?.role_institution_programs.flatMap((grant) =>
+          grant.institution_programs.status === "active" ? [grant.institution_program_id] : [],
+        ) ?? [],
+      ),
+    ),
+  ].sort();
+  const selectedProgramId = requestedProgramId ?? institutionProgramIds[0];
+  const applicableAssignments = selectedProgramId
+    ? user.user_roles.filter((assignment) => assignment.roles?.role_institution_programs.some(
+        (grant) => grant.institution_program_id === selectedProgramId && grant.institution_programs.status === "active",
+      ))
+    : [];
+  const roles = applicableAssignments.flatMap((assignment) =>
     assignment.roles ? [assignment.roles.code] : [],
   );
-  const permissions = user.user_roles.flatMap(
+  const permissions = applicableAssignments.flatMap(
     (assignment) =>
       assignment.roles?.role_permissions.flatMap((grant) =>
         grant.permissions && (grant.permissions.is_active ?? true) ? [grant.permissions.code] : [],
@@ -112,9 +152,11 @@ async function serializeUser(user: {
   );
 
   const uniqueRoles = [...new Set(roles)].sort();
-  const roleIds = [
-    ...new Set(user.user_roles.flatMap((assignment) => assignment.roles ? [assignment.roles.id] : [])),
-  ];
+  const roleIds = [...new Set(applicableAssignments.flatMap((assignment) => assignment.roles ? [assignment.roles.id] : []))];
+  const roleScope = applicableAssignments
+    .flatMap((assignment) => assignment.roles?.role_access_scopes?.scope_code ?? [])
+    .map((scope) => scope as AccessScope)
+    .sort((left, right) => scopePriority(left) - scopePriority(right))[0];
   return {
     id: user.id,
     email: user.email,
@@ -129,17 +171,13 @@ async function serializeUser(user: {
         ),
       ),
     ],
-    institutionProgramIds: [
-      ...new Set(
-        user.user_roles.flatMap((assignment) =>
-          assignment.roles?.role_institution_programs.flatMap((grant) =>
-            grant.institution_programs.status === "active" ? [grant.institution_program_id] : [],
-          ) ?? [],
-        ),
-      ),
-    ].sort(),
-    accessScope: (await getStoredAccessScope(user.id)) ?? (await getRoleAccessScope(roleIds)) ?? inferAccessScope(uniqueRoles),
+    institutionProgramIds,
+    accessScope: (await getStoredAccessScope(user.id, selectedProgramId)) ?? roleScope ?? (await getRoleAccessScope(roleIds)) ?? inferAccessScope(uniqueRoles),
   };
+}
+
+function scopePriority(scope: AccessScope) {
+  return ["ALL", "DEPARTMENT", "ASSIGNED_ONLY", "OWNED_ONLY", "READ_ONLY"].indexOf(scope);
 }
 
 async function getRoleAccessScope(roleIds: string[]): Promise<AccessScope | null> {
@@ -161,14 +199,14 @@ async function getRoleAccessScope(roleIds: string[]): Promise<AccessScope | null
     `);
     return rows[0]?.scope_code ?? null;
   } catch (error) {
-    if (isMissingUserAccessScopesTable(error)) {
+    if (isMissingAccessScopeTable(error)) {
       return null;
     }
     throw error;
   }
 }
 
-export async function getAuthUser(userId: string): Promise<AuthUser | null> {
+export async function getAuthUser(userId: string, institutionProgramId?: string): Promise<AuthUser | null> {
   const user = await prisma.users.findFirst({
     where: {
       id: userId,
@@ -184,10 +222,10 @@ export async function getAuthUser(userId: string): Promise<AuthUser | null> {
     },
   });
 
-  return user ? serializeUser(user) : null;
+  return user ? serializeUser(user, institutionProgramId) : null;
 }
 
-export async function loginWithPassword(email: string, password: string, ipAddress?: string) {
+export async function loginWithPassword(email: string, password: string, ipAddress?: string, institutionProgramId?: string) {
   const user = await prisma.users.findFirst({
     where: {
       email: email.trim().toLowerCase(),
@@ -213,7 +251,7 @@ export async function loginWithPassword(email: string, password: string, ipAddre
     return null;
   }
 
-  const authUser = await serializeUser(user);
+  const authUser = await serializeUser(user, institutionProgramId);
   await prisma.$transaction([
     prisma.users.update({
       where: { id: user.id },

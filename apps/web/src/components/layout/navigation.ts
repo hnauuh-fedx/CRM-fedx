@@ -295,18 +295,18 @@ const navigationSections: NavigationSection[] = [
   {
     id: "report",
     label: "Báo cáo",
-    href: "/bao-cao/kpi-ca-nhan",
+    href: "/bao-cao/dashboard",
     items: [
-      {
-        label: "KPI cá nhân",
-        href: "/bao-cao/kpi-ca-nhan",
-        icon: ListPlus,
-        permissions: ["report.personal.view"],
-      },
       {
         label: "Dashboard thống kê",
         href: "/bao-cao/dashboard",
         icon: BarChart3,
+        permissions: ["report.personal.view"],
+      },
+      {
+        label: "KPI cá nhân",
+        href: "/bao-cao/kpi-ca-nhan",
+        icon: ListPlus,
         permissions: ["report.personal.view"],
       },
       {

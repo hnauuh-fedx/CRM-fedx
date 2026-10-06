@@ -12,6 +12,7 @@ import { useInstitutionProgram } from "@/modules/institutions/institution-progra
 import { useAuth } from "@/modules/auth/auth-context";
 import { getLeadCustomFieldDefinitions, getLeadCustomFields } from "@/services/lead.service";
 import { DynamicFieldRenderer } from "./dynamic-field-renderer";
+import { useTransitionNotePrompt } from "./transition-note-dialog";
 import { leadFormSchema } from "../lead.schema";
 import type { LeadActionOptions, LeadCustomField, LeadCustomFieldValue, LeadFormInput } from "../lead.types";
 
@@ -64,8 +65,19 @@ export function LeadForm({ defaultValues, options, leadId, submitLabel, isPendin
     for (const field of customFields) if (!field.group.isSystem) groups.set(field.group.id, field.group);
     return [...groups.values()].sort((left, right) => left.displayOrder - right.displayOrder);
   }, [customFields]);
-  const syncStageFields = (stageId: string) => {
+  const transition = useTransitionNotePrompt<string>((stageId, selection) => {
     form.setValue("pipelineStageId", stageId, { shouldDirty: true, shouldValidate: true });
+    form.setValue("noteTemplateId", stageId !== defaultValues.pipelineStageId ? selection.templateId : undefined, { shouldDirty: true });
+    form.setValue("noteContent", stageId !== defaultValues.pipelineStageId ? selection.noteContent : undefined, { shouldDirty: true });
+  });
+  const syncStageFields = (stageId: string) => {
+    if (isPending || transition.isPending || transition.dialog || stageId === form.getValues("pipelineStageId")) return;
+    if (leadId && stageId && stageId !== defaultValues.pipelineStageId) transition.request(leadId, stageId, stageId);
+    else {
+      form.setValue("pipelineStageId", stageId, { shouldDirty: true, shouldValidate: true });
+      form.setValue("noteTemplateId", undefined, { shouldDirty: true });
+      form.setValue("noteContent", undefined, { shouldDirty: true });
+    }
   };
   const previousCustomFieldIds = useRef<string[]>([]);
   const [hiddenCustomValueWarning, setHiddenCustomValueWarning] = useState(false);
@@ -92,14 +104,21 @@ export function LeadForm({ defaultValues, options, leadId, submitLabel, isPendin
   useEffect(() => { const currentIds = new Set(customFields.map((field) => field.id)); if (previousCustomFieldIds.current.some((fieldId) => !currentIds.has(fieldId) && form.getFieldState(`customFieldValues.${fieldId}`).isDirty)) setHiddenCustomValueWarning(true); previousCustomFieldIds.current = [...currentIds]; }, [customFields, form]);
 
   return (
+    <>
+    {transition.dialog}
     <form
       ref={formRef}
       className={cn("flex flex-col", dialogLayout ? "min-h-0 flex-1 gap-0" : "gap-6")}
       noValidate
-      onSubmit={(event) => void handleFormSubmit(event)}
+      onSubmit={(event) => {
+        if (transition.isPending || transition.dialog || isPending) { event.preventDefault(); return; }
+        void handleFormSubmit(event);
+      }}
     >
       <div className={cn("flex flex-col gap-6", dialogLayout && "min-h-0 flex-1 overflow-y-auto px-6 py-5")}>
       <FormSection title="Tiến trình" description="Chọn bước xử lý hiện tại của học viên. Mỗi lần thay đổi sẽ được lưu vào lịch sử và nhật ký hệ thống.">
+        {transition.isPending && <p role="status" className="text-sm text-muted-foreground">Đang tải ghi chú theo tiến trình…</p>}
+        {transition.error && <p role="alert" className="text-sm text-destructive">{transition.error.message}</p>}
         <LeadProgressSelector
           value={form.watch("pipelineStageId")}
           stages={options.stages}
@@ -295,9 +314,10 @@ export function LeadForm({ defaultValues, options, leadId, submitLabel, isPendin
       ))}
       </div>
       <div className={cn("flex shrink-0 justify-end", dialogLayout && "border-t bg-background px-6 py-4")}>
-        <Button type="submit" disabled={isPending}>{isPending ? "Đang lưu..." : submitLabel}</Button>
+        <Button type="submit" disabled={isPending || transition.isPending || Boolean(transition.dialog)}>{isPending ? "Đang lưu..." : submitLabel}</Button>
       </div>
     </form>
+    </>
   );
 }
 
@@ -434,7 +454,13 @@ export function LeadProgressSelector({
 
   return (
     <div className="flex flex-col gap-3">
-      <fieldset className={singleRowDesktop ? `grid grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-4 ${allOptionLabel ? "2xl:grid-cols-9" : "2xl:grid-cols-8"}` : "flex flex-wrap gap-2"}>
+      <fieldset
+        className={cn(
+          singleRowDesktop
+            ? "grid grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-4 2xl:grid-cols-[repeat(auto-fit,minmax(9rem,1fr))]"
+            : "flex flex-wrap gap-2",
+        )}
+      >
         <legend className="sr-only">Chọn tiến trình học viên</legend>
         {allOptionLabel && (
           <button

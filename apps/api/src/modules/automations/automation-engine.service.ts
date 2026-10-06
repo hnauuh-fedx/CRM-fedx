@@ -306,7 +306,21 @@ async function executeNotificationAction(node: AutomationNode, context: Automati
       ? { user_departments: { some: { department_id: { in: actor.departmentIds } } } }
       : { id: actor.id };
   const users = await prisma.users.findMany({
-    where: { status: "active", deleted_at: null, user_roles: { some: { roles: { code: targetRole } } }, ...scopeWhere },
+    where: {
+      status: "active",
+      deleted_at: null,
+      user_roles: {
+        some: {
+          roles: {
+            code: targetRole,
+            ...(context.institutionProgramId
+              ? { role_institution_programs: { some: { institution_program_id: context.institutionProgramId } } }
+              : {}),
+          },
+        },
+      },
+      ...scopeWhere,
+    },
     select: { id: true },
   });
   const result = { nextSourceHandle: "default", delayMinutes: 0 };

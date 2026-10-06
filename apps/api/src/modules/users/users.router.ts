@@ -2,6 +2,7 @@ import { Router } from "express";
 import { z } from "zod";
 
 import { requireAnyPermission, requireAuthentication } from "../../middlewares/auth.middleware";
+import { getInstitutionProgramScope } from "../institutions/institution-program-scope";
 import {
   createManagedUser,
   getUserManagementOptions,
@@ -51,15 +52,15 @@ usersRouter.get("/", async (request, response, next) => {
       response.status(400).json({ message: "Tham số danh sách người dùng không hợp lệ." });
       return;
     }
-    response.json(await listManagedUsers(parsed.data));
+    response.json(await listManagedUsers(parsed.data, getInstitutionProgramScope(request)!));
   } catch (error) {
     next(error);
   }
 });
 
-usersRouter.get("/options", async (_request, response, next) => {
+usersRouter.get("/options", async (request, response, next) => {
   try {
-    response.json(await getUserManagementOptions());
+    response.json(await getUserManagementOptions(getInstitutionProgramScope(request)!));
   } catch (error) {
     next(error);
   }
@@ -72,7 +73,7 @@ usersRouter.post("/", async (request, response, next) => {
       response.status(400).json({ message: "Dữ liệu tạo người dùng không hợp lệ." });
       return;
     }
-    const result = await createManagedUser(request.authUser!, parsed.data, request.ip);
+    const result = await createManagedUser(request.authUser!, parsed.data, getInstitutionProgramScope(request)!, request.ip);
     if (!result.ok) {
       response.status(result.reason === "email_exists" ? 409 : 400).json({ message: resultMessage(result.reason) });
       return;
@@ -91,7 +92,7 @@ usersRouter.patch("/:id", async (request, response, next) => {
       response.status(400).json({ message: "Dữ liệu cập nhật người dùng không hợp lệ." });
       return;
     }
-    const result = await updateManagedUser(request.authUser!, parsedId.data, parsedBody.data, request.ip);
+    const result = await updateManagedUser(request.authUser!, parsedId.data, parsedBody.data, getInstitutionProgramScope(request)!, request.ip);
     if (!result.ok) {
       response.status(result.reason === "user_not_found" ? 404 : result.reason === "email_exists" ? 409 : 400).json({ message: resultMessage(result.reason) });
       return;

@@ -1,6 +1,11 @@
 import type { Prisma } from "../../generated/prisma/client";
 import type { AuthUser } from "../auth/auth.types";
 import { prisma } from "../../database/prisma";
+import {
+  ACTIVE_LEAD_STATUS,
+  getFailedLeadStageId,
+  toLeadLifecycleStatus,
+} from "./domain/lead-lifecycle-status";
 
 export const leadListPermissions = [
   "lead.view_all",
@@ -21,8 +26,11 @@ export type LeadListQuery = {
   search?: string;
   pipelineStageId?: string;
   sourceId?: string;
+  majorId?: string;
   institutionProgramId?: string;
   assigneeId?: string;
+  fromDate?: string;
+  toDate?: string;
   sortBy: "createdAt" | "fullName" | "leadCode" | "pipelineStage";
   sortOrder: "asc" | "desc";
 };
@@ -115,14 +123,30 @@ export async function listLeads(
               OR: [
                 { full_name: { contains: query.search, mode: "insensitive" as const } },
                 { lead_code: { contains: query.search, mode: "insensitive" as const } },
+                ...(canViewSensitive
+                  ? [
+                      { phone: { contains: query.search, mode: "insensitive" as const } },
+                      { email: { contains: query.search, mode: "insensitive" as const } },
+                    ]
+                  : []),
               ],
             },
           ]
         : []),
       ...(query.pipelineStageId ? [{ pipeline_stage_id: query.pipelineStageId }] : []),
       ...(query.sourceId ? [{ source_id: query.sourceId }] : []),
+      ...(query.majorId
+        ? [{
+            OR: [
+              { major_id: query.majorId },
+              { admission_profiles: { is: { major_id: query.majorId } } },
+            ],
+          }]
+        : []),
       ...(query.institutionProgramId ? [{ institution_program_id: query.institutionProgramId }] : []),
       ...(query.assigneeId ? [{ assigned_to: query.assigneeId }] : []),
+      ...(query.fromDate ? [{ created_at: { gte: new Date(`${query.fromDate}T00:00:00.000Z`) } }] : []),
+      ...(query.toDate ? [{ created_at: { lte: new Date(`${query.toDate}T23:59:59.999Z`) } }] : []),
       ...(additionalWhere ? [additionalWhere] : []),
     ],
   };
@@ -369,8 +393,11 @@ export async function listLeads(
       search: query.search ?? "",
       pipelineStageId: query.pipelineStageId ?? "",
       sourceId: query.sourceId ?? "",
+      majorId: query.majorId ?? "",
       institutionProgramId: query.institutionProgramId ?? "",
       assigneeId: query.assigneeId ?? "",
+      fromDate: query.fromDate ?? "",
+      toDate: query.toDate ?? "",
     },
   };
 }
@@ -413,13 +440,18 @@ export async function getLeadFilterOptions(user: AuthUser, institutionProgramId?
       orderBy: [{ position: "asc" }, { id: "asc" }],
     }),
     prisma.majors.findMany({
-      where: { leads: { some: scopeWhere } },
+      where: {
+        OR: [
+          { leads: { some: scopeWhere } },
+          { admission_profiles: { some: { leads: { is: scopeWhere } } } },
+        ],
+      },
       select: { id: true, name: true },
       orderBy: { name: "asc" },
     }),
     prisma.leads.groupBy({
       by: ["pipeline_stage_id"],
-      where: scopeWhere,
+      where: { AND: [scopeWhere, { status: ACTIVE_LEAD_STATUS }] },
       _count: { _all: true },
     }),
     prisma.leads.count({ where: scopeWhere }),
@@ -468,6 +500,7 @@ function describeLeadChange(action: string, newData: unknown) {
   if (action === "reassign") return "Thay đổi nhân viên phụ trách";
   if (action === "unassign") return "Thu hồi nhân viên phụ trách";
   if (action === "pipeline_stage_changed") return "Thay đổi tiến trình Lead";
+  if (action === "lead_status_changed") return "Thay đổi trạng thái Lead";
   if (action === "webhook_update") return "Webhook cập nhật dữ liệu Lead";
   if (action === "note_created") return "Thêm ghi chú chăm sóc";
   if (action === "file_attached") return "Đính kèm tệp vào Lead";
@@ -500,6 +533,7 @@ export async function getLeadDetail(user: AuthUser, leadId: string, institutionP
       note: true,
       lead_score: true,
       temperature: true,
+      status: true,
       created_at: true,
       updated_at: true,
       major_id: true,
@@ -633,6 +667,7 @@ export async function getLeadDetail(user: AuthUser, leadId: string, institutionP
   if (!lead) {
     return null;
   }
+  const failedStageId = getFailedLeadStageId(lead.status);
   const [relatedFiles, relatedTags, recentChanges] = await prisma.$transaction([
     prisma.file_relations.findMany({
       where: { entity_type: "lead", entity_id: leadId },
@@ -672,6 +707,12 @@ export async function getLeadDetail(user: AuthUser, leadId: string, institutionP
       take: 50,
     }),
   ]);
+  const failedStage = failedStageId
+    ? await prisma.pipeline_stages.findUnique({
+        where: { id: failedStageId },
+        select: { id: true, name: true },
+      })
+    : null;
   const profile = lead.student_profiles;
   const specificAddress = lead.addresses.find((address) => address.type === "specific");
   const permanentAddress = lead.addresses.find((address) => address.type === "permanent");
@@ -695,6 +736,7 @@ export async function getLeadDetail(user: AuthUser, leadId: string, institutionP
     temperature: lead.temperature,
     createdAt: lead.created_at?.toISOString() ?? null,
     updatedAt: lead.updated_at?.toISOString() ?? null,
+    lifecycleStatus: toLeadLifecycleStatus(lead.status, failedStage?.name),
     source: lead.lead_sources
       ? { id: lead.lead_sources.id, name: lead.lead_sources.name }
       : null,

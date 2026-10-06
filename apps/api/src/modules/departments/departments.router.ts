@@ -2,6 +2,7 @@ import { Router } from "express";
 import { z } from "zod";
 
 import { requireAnyPermission, requireAuthentication } from "../../middlewares/auth.middleware";
+import { getInstitutionProgramScope } from "../institutions/institution-program-scope";
 import {
   createManagedDepartment,
   deleteManagedDepartment,
@@ -44,15 +45,15 @@ departmentsRouter.get("/", async (request, response, next) => {
       response.status(400).json({ message: "Tham số danh sách phòng ban không hợp lệ." });
       return;
     }
-    response.json(await listManagedDepartments(parsed.data));
+    response.json(await listManagedDepartments(parsed.data, getInstitutionProgramScope(request)!));
   } catch (error) {
     next(error);
   }
 });
 
-departmentsRouter.get("/options", async (_request, response, next) => {
+departmentsRouter.get("/options", async (request, response, next) => {
   try {
-    response.json(await getDepartmentManagementOptions());
+    response.json(await getDepartmentManagementOptions(getInstitutionProgramScope(request)!));
   } catch (error) {
     next(error);
   }
@@ -65,7 +66,7 @@ departmentsRouter.post("/", async (request, response, next) => {
       response.status(400).json({ message: "Dữ liệu tạo phòng ban không hợp lệ." });
       return;
     }
-    const result = await createManagedDepartment(request.authUser!, parsed.data, request.ip);
+    const result = await createManagedDepartment(request.authUser!, parsed.data, getInstitutionProgramScope(request)!, request.ip);
     if (!result.ok) {
       response.status(result.reason === "code_exists" ? 409 : 400).json({ message: resultMessage(result.reason) });
       return;
@@ -84,7 +85,7 @@ departmentsRouter.patch("/:id", async (request, response, next) => {
       response.status(400).json({ message: "Dữ liệu cập nhật phòng ban không hợp lệ." });
       return;
     }
-    const result = await updateManagedDepartment(request.authUser!, parsedId.data, parsedBody.data, request.ip);
+    const result = await updateManagedDepartment(request.authUser!, parsedId.data, parsedBody.data, getInstitutionProgramScope(request)!, request.ip);
     if (!result.ok) {
       response.status(result.reason === "department_not_found" ? 404 : result.reason === "code_exists" ? 409 : 400).json({ message: resultMessage(result.reason) });
       return;

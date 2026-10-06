@@ -50,6 +50,9 @@ export async function getLeadActionOptions(
           where: {
             status: "active",
             deleted_at: null,
+            ...(institutionProgramId
+              ? { user_roles: { some: { roles: { role_institution_programs: { some: { institution_program_id: institutionProgramId } } } } } }
+              : {}),
             ...(!canAssignAll
               ? {
                   user_departments: {
@@ -70,7 +73,18 @@ export async function getLeadActionOptions(
         ...(!canAssign ? { id: actor.id } : {}),
         status: "active",
         deleted_at: null,
-        ...assignableSaleWhere,
+        ...(institutionProgramId
+          ? {
+              user_roles: {
+                some: {
+                  roles: {
+                    ...assignableSaleWhere.user_roles.some.roles,
+                    role_institution_programs: { some: { institution_program_id: institutionProgramId } },
+                  },
+                },
+              },
+            }
+          : assignableSaleWhere),
         ...(canAssign && !canAssignAll
           ? {
               user_departments: {

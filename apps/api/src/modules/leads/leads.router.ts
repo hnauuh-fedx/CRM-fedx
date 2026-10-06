@@ -17,6 +17,7 @@ import {
   assignLead,
   assignLeads,
   attachLeadFile,
+  changeLeadStatus,
   changeLeadStage,
   createLead,
   deleteLead,
@@ -30,6 +31,9 @@ import { importLeadsFromWorkbook, InvalidLeadImportFileError } from "./lead-impo
 import { getLeadCustomFieldDefinitions, getLeadCustomFields, patchLeadCustomFields } from "./lead-custom-fields.service";
 import { canCheckSensitiveDuplicates, listDuplicateGroupMembers, listDuplicateLeads } from "./lead-duplicates.service";
 import { getSystemFieldRequirements } from "../custom-fields/system-field-requirements.service";
+import { getVisibleTransitionNoteOptions } from "./transition-note.service";
+import { transitionNoteTargetSchema } from "./transition-note.schema";
+import { initializeLeadOnOpen } from "./application/open-lead.use-case";
 
 const leadListQuerySchema = z.object({
   page: z.coerce.number().int().min(1).default(1),
@@ -37,10 +41,15 @@ const leadListQuerySchema = z.object({
   search: z.string().trim().max(100).optional().transform((value) => value || undefined),
   pipelineStageId: z.uuid().optional().or(z.literal("")).transform((value) => value || undefined),
   sourceId: z.uuid().optional().or(z.literal("")).transform((value) => value || undefined),
+  majorId: z.uuid().optional().or(z.literal("")).transform((value) => value || undefined),
   institutionProgramId: z.uuid().optional().or(z.literal("")).transform((value) => value || undefined),
   assigneeId: z.uuid().optional().or(z.literal("")).transform((value) => value || undefined),
+  fromDate: z.iso.date().optional().or(z.literal("")).transform((value) => value || undefined),
+  toDate: z.iso.date().optional().or(z.literal("")).transform((value) => value || undefined),
   sortBy: z.enum(["createdAt", "fullName", "leadCode", "pipelineStage"]).default("createdAt"),
   sortOrder: z.enum(["asc", "desc"]).default("desc"),
+}).refine((input) => !input.fromDate || !input.toDate || input.fromDate <= input.toDate, {
+  message: "Khoảng ngày tạo không hợp lệ.",
 });
 const leadIdSchema = z.uuid();
 const duplicateQuerySchema = z.object({
@@ -67,6 +76,8 @@ const leadBodySchema = z.object({
   assigneeId: z.union([z.uuid(), z.literal(""), z.null()]).optional()
     .transform((value) => value === "" ? null : value),
   pipelineStageId: z.uuid().optional().or(z.literal("")),
+  noteTemplateId: z.uuid().optional(),
+  noteContent: z.string().trim().min(1).max(1800).optional(),
   email: z.email().max(255).optional().or(z.literal("")).transform((value) => value || undefined),
   gender: optionalText(20),
   dateOfBirth: optionalDate,
@@ -157,7 +168,8 @@ async function hasAllRequiredLeadFields(input: Record<string, unknown>) {
     return Array.isArray(value) ? value.length > 0 : value !== undefined && value !== null && value !== "";
   });
 }
-const stageBodySchema = z.object({ stageId: z.uuid() });
+const stageBodySchema = z.object({ stageId: z.uuid(), noteTemplateId: z.uuid().optional(), noteContent: z.string().trim().min(1).max(1800).optional() });
+const lifecycleStatusBodySchema = z.object({ status: z.enum(["ACTIVE", "FAIL"]), noteTemplateId: z.uuid().optional(), noteContent: z.string().trim().min(1).max(1800).optional() });
 const noteBodySchema = z.object({ content: z.string().trim().min(1).max(4000) });
 const fileBodySchema = z.object({
   fileName: z.string().trim().min(1).max(255),
@@ -502,6 +514,10 @@ leadsRouter.patch(
           response.status(403).json({ message: "Bạn không có quyền thay đổi Sale phụ trách." });
           return;
         }
+        if (result.reason === "note_template_invalid") {
+          response.status(400).json({ message: "Mẫu ghi chú không còn hoạt động hoặc không thuộc tiến trình đích. Hãy chọn lại hoặc bỏ qua ghi chú." });
+          return;
+        }
         response.status(result.reason === "phone_already_exists" ? 409 : 400).json({
           message: result.reason === "phone_already_exists"
             ? "Số điện thoại đã tồn tại trong danh sách lead."
@@ -519,6 +535,30 @@ leadsRouter.patch(
     } catch (error) {
       next(error);
     }
+  },
+);
+
+leadsRouter.post(
+  "/:id/open",
+  requireAuthentication,
+  requireAnyPermission(...leadListPermissions),
+  requireAnyPermission(...leadUpdatePermissions),
+  async (request, response, next) => {
+    try {
+      const parsedId = leadIdSchema.safeParse(request.params.id);
+      if (!parsedId.success) {
+        response.status(400).json({ message: "Mã lead không hợp lệ." });
+        return;
+      }
+      const result = await initializeLeadOnOpen(request.authUser!, parsedId.data, getInstitutionProgramScope(request), request.ip);
+      if (!result.ok) {
+        response.status(result.reason === "permission_denied" ? 403 : result.reason === "lead_not_found" ? 404 : 409).json({ message:
+          result.reason === "initial_stage_unavailable" ? "Không thể tự chuyển tiến trình: cần cấu hình duy nhất một tiến trình L0 cho CRM Sale."
+          : result.reason === "lead_not_found" ? "Không tìm thấy lead trong phạm vi truy cập." : "Bạn không có quyền cập nhật lead." });
+        return;
+      }
+      response.json(result.data);
+    } catch (error) { next(error); }
   },
 );
 
@@ -540,13 +580,65 @@ leadsRouter.patch(
         parsedBody.data.stageId,
         getInstitutionProgramScope(request),
         request.ip,
+        parsedBody.data.noteTemplateId,
+        parsedBody.data.noteContent,
       );
       if (!result.ok) {
-        response.status(404).json({
-          message: result.reason === "lead_not_found"
-            ? "Không tìm thấy lead trong phạm vi truy cập."
-            : "Không tìm thấy giai đoạn pipeline.",
-        });
+        if (result.reason === "lead_failed") {
+          response.status(409).json({ message: "Lead đang ở trạng thái Fail. Hãy chuyển về Active trước khi đổi tiến trình." });
+          return;
+        }
+        if (result.reason === "note_template_invalid") {
+          response.status(400).json({ message: "Mẫu ghi chú không còn hoạt động hoặc không thuộc tiến trình đích. Hãy chọn lại hoặc bỏ qua ghi chú." });
+          return;
+        }
+        response.status(404).json({ message: result.reason === "lead_not_found"
+          ? "Không tìm thấy lead trong phạm vi truy cập."
+          : "Không tìm thấy giai đoạn pipeline." });
+        return;
+      }
+      response.json(result.data);
+    } catch (error) {
+      next(error);
+    }
+  },
+);
+
+leadsRouter.patch(
+  "/:id/status",
+  requireAuthentication,
+  requireAnyPermission(...leadUpdatePermissions),
+  async (request, response, next) => {
+    try {
+      const parsedId = leadIdSchema.safeParse(request.params.id);
+      const parsedBody = lifecycleStatusBodySchema.safeParse(request.body);
+      if (!parsedId.success || !parsedBody.success) {
+        response.status(400).json({ message: "Dữ liệu trạng thái lead không hợp lệ." });
+        return;
+      }
+      const result = await changeLeadStatus(
+        request.authUser!,
+        parsedId.data,
+        parsedBody.data.status,
+        getInstitutionProgramScope(request),
+        request.ip,
+        parsedBody.data.noteTemplateId,
+        parsedBody.data.noteContent,
+      );
+      if (!result.ok) {
+        const messages = {
+          lead_not_found: "Không tìm thấy lead trong phạm vi truy cập.",
+          stage_required: "Lead cần có tiến trình trước khi chuyển sang Fail.",
+          stage_not_found: "Không thể tìm thấy tiến trình cần lưu hoặc khôi phục.",
+          permission_denied: "Bạn không có quyền cập nhật trạng thái lead.",
+          note_template_invalid: "Mẫu ghi chú không còn hoạt động hoặc không thuộc trạng thái đích. Hãy chọn lại hoặc bỏ qua ghi chú.",
+        } as const;
+        const statusCode = result.reason === "permission_denied"
+          ? 403
+          : result.reason === "lead_not_found"
+            ? 404
+            : result.reason === "note_template_invalid" ? 400 : 409;
+        response.status(statusCode).json({ message: messages[result.reason] });
         return;
       }
       response.json(result.data);
@@ -677,6 +769,17 @@ leadsRouter.post(
     }
   },
 );
+
+leadsRouter.get("/:id/transition-note-options", requireAuthentication, requireAnyPermission(...leadUpdatePermissions), async (request, response, next) => {
+  try {
+    const id = leadIdSchema.safeParse(request.params.id);
+    const target = transitionNoteTargetSchema.safeParse(request.query.target);
+    if (!id.success || !target.success) return response.status(400).json({ message: "Tiến trình hoặc trạng thái đích không hợp lệ." });
+    const result = await getVisibleTransitionNoteOptions(request.authUser!, id.data, target.data, getInstitutionProgramScope(request));
+    if (!result.ok) return response.status(404).json({ message: result.reason === "lead_not_found" ? "Không tìm thấy lead trong phạm vi truy cập." : "Không tìm thấy tiến trình đích." });
+    response.json(result.data);
+  } catch (error) { next(error); }
+});
 
 leadsRouter.get(
   "/:id/custom-fields",

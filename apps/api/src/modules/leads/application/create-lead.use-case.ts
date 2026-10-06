@@ -85,7 +85,7 @@ async function persistLeadInTransaction(
   }
 
   const assignee = input.assigneeId
-    ? await findActiveAssignableSale(tx, input.assigneeId)
+    ? await findActiveAssignableSale(tx, input.assigneeId, undefined, input.institutionProgramId)
     : null;
   const assigneeInScope =
     assignee && isAssigneeInScope(actor, assignee.user_departments);

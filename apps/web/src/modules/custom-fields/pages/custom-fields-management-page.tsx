@@ -69,6 +69,7 @@ import {
   type CustomFieldUpdateInput,
 } from "../custom-field.types";
 import type { SystemFormFieldGroup } from "../form-field-catalog.types";
+import { TransitionNoteSettings } from "../components/transition-note-settings";
 
 const allFilterValue = "__all__";
 type FieldSourceFilter = typeof allFilterValue | "system" | "custom";
@@ -407,7 +408,7 @@ export function CustomFieldsManagementPage({ config }: { config: CustomFieldsMan
                               </div>}
                             </TableCell>
                             <TableCell><Badge>Đang dùng</Badge></TableCell>
-                            <TableCell><div className="flex justify-end"><Tooltip><TooltipTrigger asChild><span className="inline-flex size-8 items-center justify-center text-muted-foreground" aria-label="Trường hệ thống được khóa"><LockKeyhole className="size-4" aria-hidden="true" /></span></TooltipTrigger><TooltipContent>Trường hệ thống được khai báo trong form và cơ sở dữ liệu.</TooltipContent></Tooltip></div></TableCell>
+                            <TableCell><div className="flex justify-end">{config.entityType === "LEAD" && item.key === "note" ? <TransitionNoteSettings /> : <Tooltip><TooltipTrigger asChild><span className="inline-flex size-8 items-center justify-center text-muted-foreground" aria-label="Trường hệ thống được khóa"><LockKeyhole className="size-4" aria-hidden="true" /></span></TooltipTrigger><TooltipContent>Trường hệ thống được khai báo trong form và cơ sở dữ liệu.</TooltipContent></Tooltip>}</div></TableCell>
                           </TableRow>
                         ))}
                         {group.customFields.map((field) => {

@@ -538,7 +538,13 @@ export async function getAutomationOptions(user: AuthUser, institutionProgramId?
     }),
     canAssign && accessibleProgramIds === null
       ? prisma.users.findMany({
-          where: { status: "active", deleted_at: null },
+          where: {
+            status: "active",
+            deleted_at: null,
+            ...(institutionProgramId
+              ? { user_roles: { some: { roles: { role_institution_programs: { some: { institution_program_id: institutionProgramId } } } } } }
+              : {}),
+          },
           select: { id: true, full_name: true },
           orderBy: { full_name: "asc" },
           take: 500,
@@ -548,6 +554,9 @@ export async function getAutomationOptions(user: AuthUser, institutionProgramId?
             where: {
               status: "active",
               deleted_at: null,
+              ...(institutionProgramId
+                ? { user_roles: { some: { roles: { role_institution_programs: { some: { institution_program_id: institutionProgramId } } } } } }
+                : {}),
               user_departments: { some: { department_id: { in: user.departmentIds } } },
             },
             select: { id: true, full_name: true },
@@ -564,6 +573,9 @@ export async function getAutomationOptions(user: AuthUser, institutionProgramId?
       take: 500,
     }),
     prisma.roles.findMany({
+      where: institutionProgramId
+        ? { role_institution_programs: { some: { institution_program_id: institutionProgramId } } }
+        : undefined,
       select: { id: true, code: true, name: true },
       orderBy: { name: "asc" },
       take: 100,

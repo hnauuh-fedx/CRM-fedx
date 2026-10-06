@@ -6,7 +6,14 @@ import type { AuthUser } from "../../auth/auth.types";
 import { triggerAutomation } from "../../automations/automation-engine.service";
 import { decryptZaloSecret, encryptZaloSecret } from "./zalo-crypto";
 import { getZaloOaInfo, getZaloUserProfile, refreshZaloOaToken } from "./zalo-api.service";
-import { extractLeadInformation, mayContainLeadInformation, normalizeVietnamPhone } from "./zalo-extraction.service";
+import {
+  extractLeadInformation,
+  extractVietnamPhoneFromText,
+  mayContainLeadInformation,
+  normalizeVietnamPhone,
+  resolveInboundLeadName,
+  usedProfileNameFallback,
+} from "./zalo-extraction.service";
 
 const refreshSafetyMs = 60 * 60 * 1000;
 const leadExtractionContextWindowMs = 15 * 60 * 1000;
@@ -423,7 +430,7 @@ export async function processZaloMessage(messageId: string) {
   if (!message || message.processing_status !== "pending") return;
   const connection = await prisma.zalo_connections.findUnique({ where: { id: message.connection_id } });
   if (!connection || connection.status === "disconnected") return;
-  await syncZaloUserProfile(connection, message.zalo_user_id);
+  const profileDisplayName = await syncZaloUserProfile(connection, message.zalo_user_id);
   const text = message.message_text?.trim() ?? "";
   if (!text) {
     await prisma.zalo_messages.update({ where: { id: message.id }, data: { processing_status: "ignored", processed_at: new Date() } });
@@ -431,6 +438,19 @@ export async function processZaloMessage(messageId: string) {
   }
 
   try {
+    const latestLeadExtraction = await prisma.zalo_lead_extractions.findFirst({
+      where: {
+        connection_id: connection.id,
+        zalo_user_id: message.zalo_user_id,
+        lead_id: { not: null },
+      },
+      orderBy: { created_at: "desc" },
+      select: { lead_id: true, extracted_data: true },
+    });
+    const awaitingExplicitName = Boolean(
+      latestLeadExtraction?.lead_id
+      && usedProfileNameFallback(latestLeadExtraction.extracted_data),
+    );
     const recent = await prisma.zalo_messages.findMany({
       where: {
         connection_id: connection.id,
@@ -453,7 +473,7 @@ export async function processZaloMessage(messageId: string) {
       && (item.processing_status === "pending" || item.processing_status === "needs_review")
       && mayContainLeadInformation(item.message_text ?? ""),
     );
-    if (!mayContainLeadInformation(text) && !hasUnresolvedPhoneContext) {
+    if (!mayContainLeadInformation(text) && !hasUnresolvedPhoneContext && !awaitingExplicitName) {
       await prisma.zalo_messages.update({
         where: { id: message.id },
         data: { processing_status: "ignored", processed_at: new Date() },
@@ -464,8 +484,70 @@ export async function processZaloMessage(messageId: string) {
       `${item.direction === "inbound" ? "Ứng viên" : "Nhân viên"}: ${item.message_text ?? ""}`,
     ).join("\n");
     const extracted = await extractLeadInformation(conversation);
-    const phone = normalizeVietnamPhone(extracted.phone);
-    if (!extracted.isLeadInformation || !extracted.fullName?.trim() || !phone || extracted.confidence < 0.7) {
+    const explicitName = extracted.fullName?.trim() || null;
+
+    if (
+      awaitingExplicitName
+      && latestLeadExtraction?.lead_id
+      && explicitName
+      && extracted.fullNameFromLatestInboundMessage
+      && extracted.confidence >= 0.7
+    ) {
+      const leadId = latestLeadExtraction.lead_id;
+      const updated = await prisma.$transaction(async (tx) => {
+        const currentLead = await tx.leads.findFirst({
+          where: { id: leadId, deleted_at: null },
+          select: { full_name: true },
+        });
+        if (!currentLead) return false;
+        await tx.leads.update({
+          where: { id: leadId },
+          data: { full_name: explicitName, updated_at: new Date() },
+        });
+        await tx.lead_activities.create({
+          data: {
+            lead_id: leadId,
+            user_id: connection.created_by,
+            type: "zalo_information_received",
+            content: "Cập nhật họ tên lead từ tin nhắn Zalo OA.",
+          },
+        });
+        await tx.audit_logs.create({
+          data: {
+            user_id: connection.created_by,
+            entity_type: "lead",
+            entity_id: leadId,
+            action: "update_name_from_zalo",
+            old_data: { fullName: currentLead.full_name },
+            new_data: { fullName: explicitName, zaloUserId: message.zalo_user_id },
+          },
+        });
+        await tx.zalo_lead_extractions.create({
+          data: {
+            connection_id: connection.id,
+            zalo_user_id: message.zalo_user_id,
+            source_message_id: message.id,
+            extracted_data: { ...extracted, usedProfileNameFallback: false },
+            confidence: extracted.confidence,
+            status: "updated",
+            lead_id: leadId,
+          },
+        });
+        await tx.zalo_messages.update({
+          where: { id: message.id },
+          data: { processing_status: "completed", lead_id: leadId, processed_at: new Date() },
+        });
+        return true;
+      });
+      if (updated) return;
+    }
+
+    const inboundConversation = recent
+      .filter((item) => item.direction === "inbound")
+      .map((item) => item.message_text ?? "")
+      .join("\n");
+    const phone = normalizeVietnamPhone(extracted.phone) ?? extractVietnamPhoneFromText(inboundConversation);
+    if (!phone) {
       await prisma.$transaction([
         prisma.zalo_lead_extractions.create({
           data: {
@@ -481,6 +563,8 @@ export async function processZaloMessage(messageId: string) {
       ]);
       return;
     }
+
+    const resolvedName = resolveInboundLeadName(explicitName, profileDisplayName, phone);
 
     const existing = await prisma.leads.findFirst({ where: { phone, deleted_at: null }, select: { id: true } });
     let leadId = existing?.id;
@@ -499,7 +583,7 @@ export async function processZaloMessage(messageId: string) {
         const created = await tx.leads.create({
           data: {
             lead_code: `LD-${Date.now().toString(36).toUpperCase()}`,
-            full_name: extracted.fullName!.trim(),
+            full_name: resolvedName.fullName,
             phone,
             email: extracted.email?.trim() || null,
             source_id: connection.lead_source_id,
@@ -536,7 +620,11 @@ export async function processZaloMessage(messageId: string) {
           connection_id: connection.id,
           zalo_user_id: message.zalo_user_id,
           source_message_id: message.id,
-          extracted_data: extracted,
+          extracted_data: {
+            ...extracted,
+            resolvedFullName: resolvedName.fullName,
+            usedProfileNameFallback: existing ? false : resolvedName.usedProfileNameFallback,
+          },
           confidence: extracted.confidence,
           status: existing ? "linked_existing" : "created",
           lead_id: leadId,

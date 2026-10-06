@@ -11,6 +11,17 @@ import type {
 } from "@/modules/custom-fields/custom-field.types";
 import { apiRequest } from "./api";
 import type { LeadCustomFieldsResponse, LeadCustomFieldValue } from "@/modules/leads/lead.types";
+import type { TransitionNoteConfiguration, TransitionNoteTemplate } from "@/modules/leads/transition-note.types";
+
+export function getTransitionNoteConfiguration(accessToken: string) {
+  return apiRequest<TransitionNoteConfiguration[]>("/custom-fields/system/LEAD/note-templates", {}, accessToken);
+}
+
+export function setTransitionNoteTemplates(target: string, templates: TransitionNoteTemplate[], accessToken: string) {
+  return apiRequest<TransitionNoteTemplate[]>(`/custom-fields/system/LEAD/note-templates/${target}`, {
+    method: "PUT", body: JSON.stringify({ templates }),
+  }, accessToken);
+}
 
 export function getCustomFields(
   params: {

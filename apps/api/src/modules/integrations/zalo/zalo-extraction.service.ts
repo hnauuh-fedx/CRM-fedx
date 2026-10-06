@@ -5,6 +5,7 @@ import { env, gptApiKey } from "../../../config/env";
 const extractionSchema = z.object({
   isLeadInformation: z.boolean(),
   fullName: z.string().nullable(),
+  fullNameFromLatestInboundMessage: z.boolean(),
   phone: z.string().nullable(),
   email: z.string().nullable(),
   majorText: z.string().nullable(),
@@ -67,13 +68,14 @@ export async function extractLeadInformation(conversation: string): Promise<Zalo
             properties: {
               isLeadInformation: { type: "boolean" },
               fullName: { type: ["string", "null"] },
+              fullNameFromLatestInboundMessage: { type: "boolean" },
               phone: { type: ["string", "null"] },
               email: { type: ["string", "null"] },
               majorText: { type: ["string", "null"] },
               address: { type: ["string", "null"] },
               confidence: { type: "number", minimum: 0, maximum: 1 },
             },
-            required: ["isLeadInformation", "fullName", "phone", "email", "majorText", "address", "confidence"],
+            required: ["isLeadInformation", "fullName", "fullNameFromLatestInboundMessage", "phone", "email", "majorText", "address", "confidence"],
           },
         },
       },
@@ -86,4 +88,37 @@ export async function extractLeadInformation(conversation: string): Promise<Zalo
     throw new Error(message || `OpenAI API trả về HTTP ${response.status}.`);
   }
   return extractionSchema.parse(JSON.parse(responseText(payload)));
+}
+
+export function extractVietnamPhoneFromText(value: string) {
+  const candidates = value.match(/(?:\+?84|0)(?:[\s.()-]*\d){9,10}/g) ?? [];
+  for (const candidate of candidates) {
+    const normalized = normalizeVietnamPhone(candidate);
+    if (normalized) return normalized;
+  }
+  return null;
+}
+
+export function resolveInboundLeadName(
+  extractedName: string | null,
+  profileDisplayName: string | null,
+  phone: string,
+) {
+  const explicitName = extractedName?.trim();
+  if (explicitName) return { fullName: explicitName, usedProfileNameFallback: false };
+
+  const displayName = profileDisplayName?.trim();
+  return {
+    fullName: displayName || `Khách hàng ${phone}`,
+    usedProfileNameFallback: true,
+  };
+}
+
+export function usedProfileNameFallback(extractedData: unknown) {
+  return Boolean(
+    extractedData
+    && typeof extractedData === "object"
+    && "usedProfileNameFallback" in extractedData
+    && (extractedData as { usedProfileNameFallback?: unknown }).usedProfileNameFallback === true,
+  );
 }

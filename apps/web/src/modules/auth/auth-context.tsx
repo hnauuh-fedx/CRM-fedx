@@ -8,7 +8,7 @@ import {
 } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 
-import { ApiError } from "@/services/api";
+import { ApiError, unauthorizedApiEvent } from "@/services/api";
 import { getCurrentUser, login } from "@/services/auth.service";
 import type { AuthUser, LoginInput } from "@/types/auth";
 import { clearAccessToken, persistAccessToken, readAccessToken } from "./auth-storage";
@@ -39,8 +39,21 @@ export function AuthProvider({ children }: PropsWithChildren) {
       clearAccessToken();
       setAccessToken(null);
       setSignedInUser(null);
+      queryClient.clear();
     }
-  }, [profileQuery.error]);
+  }, [profileQuery.error, queryClient]);
+
+  useEffect(() => {
+    function handleUnauthorizedRequest() {
+      clearAccessToken();
+      setAccessToken(null);
+      setSignedInUser(null);
+      queryClient.clear();
+    }
+
+    window.addEventListener(unauthorizedApiEvent, handleUnauthorizedRequest);
+    return () => window.removeEventListener(unauthorizedApiEvent, handleUnauthorizedRequest);
+  }, [queryClient]);
 
   const user = profileQuery.data?.user ?? signedInUser;
 
@@ -56,7 +69,7 @@ export function AuthProvider({ children }: PropsWithChildren) {
     clearAccessToken();
     setAccessToken(null);
     setSignedInUser(null);
-    queryClient.removeQueries({ queryKey: ["auth"] });
+    queryClient.clear();
   }
 
   const value = useMemo<AuthContextValue>(

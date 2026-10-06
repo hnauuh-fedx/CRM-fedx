@@ -23,6 +23,7 @@ authRouter.post("/login", async (request, response, next) => {
       parsed.data.email,
       parsed.data.password,
       request.ip,
+      z.uuid().safeParse(request.header("x-institution-program-id")).data,
     );
     if (!session) {
       response.status(401).json({ message: "Email hoặc mật khẩu không chính xác." });
