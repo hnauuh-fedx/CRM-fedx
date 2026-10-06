@@ -9,7 +9,6 @@ export type StudentListQuery = {
   status?: string;
   institutionProgramId?: string;
   majorId?: string;
-  facultyId?: string;
   classId?: string;
   sortBy: "enrolledAt" | "studentCode" | "status";
   sortOrder: "asc" | "desc";
@@ -17,7 +16,6 @@ export type StudentListQuery = {
 
 export type StudentUpdateInput = {
   status: string;
-  facultyId?: string;
   classId?: string;
 };
 
@@ -48,7 +46,6 @@ export async function listStudents(user: AuthUser, query: StudentListQuery) {
       ...(query.status ? [{ status: query.status }] : []),
       ...(query.institutionProgramId ? [{ institution_program_id: query.institutionProgramId }] : []),
       ...(query.majorId ? [{ major_id: query.majorId }] : []),
-      ...(query.facultyId ? [{ faculty_id: query.facultyId }] : []),
       ...(query.classId ? [{ class_id: query.classId }] : []),
     ],
   };
@@ -66,9 +63,8 @@ export async function listStudents(user: AuthUser, query: StudentListQuery) {
         created_at: true,
         leads: { select: { id: true, lead_code: true, full_name: true } },
         admission_profiles: { select: { id: true, admission_code: true } },
-        institution_programs: { select: { id: true, name: true, institutions: { select: { name: true } } } },
+        institution_programs: { select: { id: true, name: true, institution_name: true } },
         majors: { select: { id: true, name: true } },
-        faculties: { select: { id: true, name: true } },
         student_classes: { select: { id: true, name: true } },
       },
       orderBy: [orderBy, { id: "asc" }],
@@ -99,10 +95,9 @@ export async function listStudents(user: AuthUser, query: StudentListQuery) {
           }
         : null,
       institutionProgram: student.institution_programs
-        ? { id: student.institution_programs.id, name: student.institution_programs.name, institutionName: student.institution_programs.institutions.name }
+        ? { id: student.institution_programs.id, name: student.institution_programs.name, institutionName: student.institution_programs.institution_name }
         : null,
       major: student.majors,
-      faculty: student.faculties,
       studentClass: student.student_classes,
     })),
     pagination: {
@@ -117,7 +112,6 @@ export async function listStudents(user: AuthUser, query: StudentListQuery) {
       status: query.status ?? "",
       institutionProgramId: query.institutionProgramId ?? "",
       majorId: query.majorId ?? "",
-      facultyId: query.facultyId ?? "",
       classId: query.classId ?? "",
     },
   };
@@ -169,10 +163,9 @@ function findStudentDetail(user: AuthUser, id: string, institutionProgramId?: st
           tuition_status: true,
         },
       },
-      institution_programs: { select: { id: true, name: true, institutions: { select: { name: true } } } },
+      institution_programs: { select: { id: true, name: true, institution_name: true } },
       majors: { select: { id: true, name: true } },
-      faculties: { select: { id: true, name: true } },
-      student_classes: { select: { id: true, name: true, code: true, faculties: { select: { id: true, name: true } } } },
+      student_classes: { select: { id: true, name: true, code: true } },
       student_services: {
         select: {
           id: true,
@@ -204,36 +197,24 @@ export async function updateStudentAcademicInfo(
     select: {
       id: true,
       status: true,
-      faculty_id: true,
       class_id: true,
       institution_program_id: true,
     },
   });
   if (!existing) return { ok: false as const, reason: "student_not_found" as const };
 
-  const [faculty, classItem] = await Promise.all([
-    input.facultyId
-      ? prisma.faculties.findUnique({ where: { id: input.facultyId }, select: { id: true } })
-      : Promise.resolve(null),
-    input.classId
-      ? prisma.student_classes.findUnique({ where: { id: input.classId }, select: { id: true, faculty_id: true } })
-      : Promise.resolve(null),
-  ]);
+  const classItem = input.classId
+    ? await prisma.student_classes.findUnique({ where: { id: input.classId }, select: { id: true } })
+    : null;
 
-  if (input.facultyId && !faculty) return { ok: false as const, reason: "faculty_not_found" as const };
   if (input.classId && !classItem) return { ok: false as const, reason: "class_not_found" as const };
-  if (classItem?.faculty_id && input.facultyId && classItem.faculty_id !== input.facultyId) {
-    return { ok: false as const, reason: "class_faculty_mismatch" as const };
-  }
 
-  const nextFacultyId = input.facultyId ?? classItem?.faculty_id ?? null;
 
   await prisma.$transaction(async (tx) => {
     await tx.students.update({
       where: { id },
       data: {
         status: input.status,
-        faculty_id: nextFacultyId,
         class_id: input.classId ?? null,
       },
     });
@@ -245,12 +226,10 @@ export async function updateStudentAcademicInfo(
         action: "update_academic_info",
         old_data: {
           status: existing.status,
-          facultyId: existing.faculty_id,
           classId: existing.class_id,
         },
         new_data: {
           status: input.status,
-          facultyId: nextFacultyId,
           classId: input.classId ?? null,
         },
         ip_address: ipAddress,
@@ -266,8 +245,8 @@ export async function getStudentFilterOptions(user: AuthUser, institutionProgram
     leads: { is: getLeadScopeWhere(user) },
     ...(institutionProgramId ? { institution_program_id: institutionProgramId } : {}),
   };
-  const [institutionPrograms, majors, faculties, classes, statuses] = await prisma.$transaction([
-    prisma.institution_programs.findMany({ where: { status: "active", students: { some: { leads: { is: getLeadScopeWhere(user) } } } }, select: { id: true, name: true, institutions: { select: { name: true } } }, orderBy: { name: "asc" } }),
+  const [institutionPrograms, majors, classes, statuses] = await prisma.$transaction([
+    prisma.institution_programs.findMany({ where: { status: "active", students: { some: { leads: { is: getLeadScopeWhere(user) } } } }, select: { id: true, name: true, institution_name: true }, orderBy: { name: "asc" } }),
     prisma.majors.findMany({
       where: institutionProgramId
         ? { OR: [{ institution_program_id: institutionProgramId }, { institution_program_id: null }] }
@@ -275,9 +254,8 @@ export async function getStudentFilterOptions(user: AuthUser, institutionProgram
       select: { id: true, name: true },
       orderBy: { name: "asc" },
     }),
-    prisma.faculties.findMany({ select: { id: true, name: true }, orderBy: { name: "asc" } }),
     prisma.student_classes.findMany({
-      select: { id: true, name: true, faculties: { select: { name: true } } },
+      select: { id: true, name: true },
       orderBy: { name: "asc" },
     }),
     prisma.students.findMany({
@@ -289,13 +267,11 @@ export async function getStudentFilterOptions(user: AuthUser, institutionProgram
   ]);
 
   return {
-    institutionPrograms: institutionPrograms.map((program) => ({ id: program.id, name: program.name, institutionName: program.institutions.name })),
+    institutionPrograms: institutionPrograms.map((program) => ({ id: program.id, name: program.name, institutionName: program.institution_name })),
     majors,
-    faculties,
     classes: classes.map((studentClass) => ({
       id: studentClass.id,
       name: studentClass.name,
-      facultyName: studentClass.faculties?.name ?? null,
     })),
     statuses: statuses.flatMap((student) => (student.status ? [student.status] : [])).sort(),
   };
@@ -338,16 +314,14 @@ function serializeStudentDetail(student: StudentDetailRecord) {
         }
       : null,
     institutionProgram: student.institution_programs
-      ? { id: student.institution_programs.id, name: student.institution_programs.name, institutionName: student.institution_programs.institutions.name }
+      ? { id: student.institution_programs.id, name: student.institution_programs.name, institutionName: student.institution_programs.institution_name }
       : null,
     major: student.majors,
-    faculty: student.faculties,
     studentClass: student.student_classes
       ? {
           id: student.student_classes.id,
           name: student.student_classes.name,
           code: student.student_classes.code,
-          faculty: student.student_classes.faculties,
         }
       : null,
     recentServices: student.student_services.map((service) => ({

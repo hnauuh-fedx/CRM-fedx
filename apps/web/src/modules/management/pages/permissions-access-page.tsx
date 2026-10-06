@@ -1,3 +1,4 @@
+import { customFieldPermissionDefinitions } from "@/modules/custom-fields/custom-field-permissions";
 import { useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { ChevronLeft, ChevronRight, Pencil, Plus, Search, ShieldCheck, Trash2 } from "lucide-react";
@@ -30,6 +31,7 @@ const pageSize = 20;
 const emptyFilters = { search: "", module: "", status: "" };
 const emptyForm: PermissionInput = { code: "", name: "", module: "", description: "", isActive: true };
 const permissionCodeOptions = [
+  ...customFieldPermissionDefinitions,
   { code: "dashboard.view_all", name: "Xem dashboard điều hành", module: "dashboard" },
   { code: "dashboard.view", name: "Xem dashboard", module: "dashboard" },
   { code: "report.view_all", name: "Xem toàn bộ báo cáo", module: "report" },
@@ -86,8 +88,8 @@ const permissionCodeOptions = [
   { code: "admission_status.update", name: "Chuyển trạng thái hồ sơ tuyển sinh", module: "admission" },
   { code: "admission_document.view", name: "Xem tài liệu hồ sơ", module: "admission" },
   { code: "admission_document.upload", name: "Upload tài liệu hồ sơ", module: "admission" },
-  { code: "admission_major.manage", name: "Quản lý ngành tuyển sinh", module: "admission" },
-  { code: "institution_program.manage", name: "Quản lý chương trình tuyển sinh", module: "admission" },
+  { code: "admission_major.manage", name: "Quản lý ngành tuyển sinh", module: "system" },
+  { code: "institution_program.manage", name: "Quản lý chương trình tuyển sinh", module: "system" },
   { code: "student.create_from_admission", name: "Chuyển hồ sơ thành sinh viên", module: "student" },
   { code: "student.view_all", name: "Xem toàn bộ sinh viên", module: "student" },
   { code: "student.view", name: "Xem sinh viên", module: "student" },

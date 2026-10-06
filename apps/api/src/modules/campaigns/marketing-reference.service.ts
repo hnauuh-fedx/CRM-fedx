@@ -88,7 +88,7 @@ export async function listLeadSources(query: LeadSourceListQuery) {
         name: true,
         type: true,
         created_at: true,
-        institution_programs: { select: { id: true, name: true, institutions: { select: { name: true } } } },
+        institution_programs: { select: { id: true, name: true, institution_name: true } },
         _count: { select: { leads: { where: { deleted_at: null } } } },
       },
       orderBy: [{ [leadSourceSortFields[query.sortBy]]: query.sortOrder }, { id: "asc" }],
@@ -104,7 +104,7 @@ export async function listLeadSources(query: LeadSourceListQuery) {
       name: source.name,
       type: source.type,
       institutionProgram: source.institution_programs
-        ? { id: source.institution_programs.id, name: source.institution_programs.name, institutionName: source.institution_programs.institutions.name }
+        ? { id: source.institution_programs.id, name: source.institution_programs.name, institutionName: source.institution_programs.institution_name }
         : null,
       createdAt: source.created_at?.toISOString() ?? null,
       activeLeadCount: source._count.leads,
@@ -118,11 +118,11 @@ export async function listLeadSources(query: LeadSourceListQuery) {
 export async function getLeadSourceFilterOptions() {
   const [types, institutionPrograms] = await prisma.$transaction([
     prisma.lead_sources.findMany({ select: { type: true }, distinct: ["type"], take: 100 }),
-    prisma.institution_programs.findMany({ where: { status: "active" }, select: { id: true, name: true, institutions: { select: { name: true } } }, orderBy: { name: "asc" } }),
+    prisma.institution_programs.findMany({ where: { status: "active" }, select: { id: true, name: true, institution_name: true }, orderBy: { name: "asc" } }),
   ]);
   return {
     types: types.flatMap((source) => (source.type ? [source.type] : [])).sort(),
-    institutionPrograms: institutionPrograms.map((program) => ({ id: program.id, name: program.name, institutionName: program.institutions.name })),
+    institutionPrograms: institutionPrograms.map((program) => ({ id: program.id, name: program.name, institutionName: program.institution_name })),
   };
 }
 

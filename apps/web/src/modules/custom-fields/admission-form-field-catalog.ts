@@ -83,7 +83,6 @@ export const admissionMajorFormFieldCatalog: SystemFormFieldGroup[] = [
     fields: [
       field("code", "M\u00e3 ng\u00e0nh", "TEXT", "majors.code", { isRequired: true }),
       field("name", "T\u00ean ng\u00e0nh", "TEXT", "majors.name", { isRequired: true }),
-      field("facultyId", "Khoa ph\u1ee5 tr\u00e1ch", "SELECT", "majors.faculty_id", { optionSource: "Khoa" }),
     ],
   },
   additional("C\u00e1c tr\u01b0\u1eddng t\u1ef1 c\u1ea5u h\u00ecnh cho form ng\u00e0nh tuy\u1ec3n sinh."),

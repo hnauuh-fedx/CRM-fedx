@@ -1,5 +1,6 @@
-import { useMemo } from "react";
-import { useSearchParams } from "react-router-dom";
+import { useAuth } from "@/modules/auth/auth-context";
+import { customFieldPermission } from "../custom-field-permissions";
+import { Navigate, useSearchParams } from "react-router-dom";
 
 import { Field, FieldLabel } from "@/components/ui/field";
 import { Select, SelectContent, SelectGroup, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
@@ -22,11 +23,13 @@ const marketingFormConfigs: MarketingFormConfig[] = [
 
 export function MarketingCustomFieldsPage() {
   const [searchParams, setSearchParams] = useSearchParams();
+  const auth = useAuth();
+  const visibleForms = marketingFormConfigs.filter((form) => auth.can(customFieldPermission(form.entityType, "view")));
   const requestedForm = searchParams.get("form") as MarketingFormConfig["key"] | null;
-  const selectedFormKey = marketingFormConfigs.some((item) => item.key === requestedForm) ? requestedForm! : "campaign";
-  const selectedForm = marketingFormConfigs.find((item) => item.key === selectedFormKey) ?? marketingFormConfigs[0];
-  const formSelector = useMemo(() => (
-    <Field className="min-w-48 gap-1"><FieldLabel className="sr-only">Ch\u1ecdn form CRM Marketing</FieldLabel><Select value={selectedForm.key} onValueChange={(value) => setSearchParams({ form: value })}><SelectTrigger className="h-9 w-56"><SelectValue /></SelectTrigger><SelectContent><SelectGroup>{marketingFormConfigs.map((form) => <SelectItem key={form.key} value={form.key}>{form.label}</SelectItem>)}</SelectGroup></SelectContent></Select></Field>
-  ), [selectedForm.key, setSearchParams]);
+  const selectedForm = visibleForms.find((item) => item.key === requestedForm) ?? visibleForms[0];
+  if (!selectedForm) return <Navigate to="/khong-co-quyen" replace />;
+  const formSelector = (
+    <Field className="min-w-48 gap-1"><FieldLabel className="sr-only">Ch\u1ecdn form CRM Marketing</FieldLabel><Select value={selectedForm.key} onValueChange={(value) => setSearchParams({ form: value })}><SelectTrigger className="h-9 w-56"><SelectValue /></SelectTrigger><SelectContent><SelectGroup>{visibleForms.map((form) => <SelectItem key={form.key} value={form.key}>{form.label}</SelectItem>)}</SelectGroup></SelectContent></Select></Field>
+  );
   return <CustomFieldsManagementPage key={selectedForm.key} config={{ entityType: selectedForm.entityType, eyebrow: "CRM Marketing", title: "C\u1ea5u h\u00ecnh tr\u01b0\u1eddng d\u1eef li\u1ec7u", description: selectedForm.description, subjectLabel: selectedForm.label, systemFieldGroups: selectedForm.systemFieldGroups, customFieldGroupId: "additional", inlineCustomFieldGroupKey: "basic", formSelector }} />;
 }

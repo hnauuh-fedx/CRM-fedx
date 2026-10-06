@@ -1,3 +1,4 @@
+import { expandLegacyCustomFieldPermission } from "../modules/custom-fields/custom-field-permissions";
 import { prisma } from "./prisma";
 
 const directorEmail = "director@tvu.edu.vn";
@@ -39,8 +40,8 @@ const directorPermissions = [
   { code: "document.sensitive.view", name: "Xem tệp tài liệu hồ sơ tuyển sinh", module: "admission" },
   { code: "admission_document.upload", name: "Upload và cập nhật tài liệu hồ sơ tuyển sinh", module: "admission" },
   { code: "student.create_from_admission", name: "Chuyển hồ sơ tuyển sinh sang sinh viên", module: "student" },
-  { code: "admission_major.manage", name: "Quản lý ngành theo chương trình", module: "admission" },
-  { code: "institution_program.manage", name: "Quản lý chương trình tuyển sinh", module: "admission" },
+  { code: "admission_major.manage", name: "Quản lý ngành theo chương trình", module: "system" },
+  { code: "institution_program.manage", name: "Quản lý chương trình tuyển sinh", module: "system" },
   { code: "student.view_all", name: "Xem toàn bộ sinh viên", module: "student" },
   { code: "student.update_all", name: "Cập nhật toàn bộ sinh viên", module: "student" },
   { code: "student_service.view", name: "Xem dịch vụ sinh viên", module: "student" },
@@ -85,7 +86,7 @@ async function seedDirectorAccess() {
     }
 
     const permissions = await Promise.all(
-      directorPermissions.map((permission) =>
+      directorPermissions.flatMap(expandLegacyCustomFieldPermission).map((permission) =>
         transaction.permissions.upsert({
           where: { code: permission.code },
           update: {
@@ -108,7 +109,7 @@ async function seedDirectorAccess() {
       skipDuplicates: true,
     });
     const programs = await transaction.institution_programs.findMany({
-      where: { status: "active", institutions: { is: { status: "active" } } },
+      where: { status: "active" },
       select: { id: true },
     });
     const programAssignments = await transaction.role_institution_programs.createMany({

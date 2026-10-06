@@ -1,3 +1,4 @@
+import { customFieldPermission } from "../custom-field-permissions";
 import { useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useFieldArray, useForm } from "react-hook-form";
@@ -34,7 +35,7 @@ export function TransitionNoteSettings() {
     enabled: open && Boolean(auth.accessToken),
   });
   const configuration = query.data?.find((item) => item.target === target);
-  const canEdit = auth.can("custom_field.update") && auth.can("custom_field.manage_options");
+  const canEdit = auth.can(customFieldPermission("LEAD", "update")) && auth.can(customFieldPermission("LEAD", "manage_options"));
 
   return <Dialog open={open} onOpenChange={(value) => {
     if (isSaving) return;

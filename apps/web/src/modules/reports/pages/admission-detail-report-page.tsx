@@ -95,7 +95,6 @@ function RecentApplicationsTable({ applications }: { applications: AdmissionRepo
                   </TableCell>
                   <TableCell>
                     <p>{application.majorName}</p>
-                    <p className="text-sm text-muted-foreground">{application.facultyName ?? "-"}</p>
                   </TableCell>
                   <TableCell>{application.statusName}</TableCell>
                   <TableCell>{formatStatus(application.tuitionStatus)}</TableCell>

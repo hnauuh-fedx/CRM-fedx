@@ -1,7 +1,6 @@
 import type {
   InstitutionProgramInput,
   InstitutionProgramListResponse,
-  InstitutionProgramManagementOptions,
 } from "@/modules/institutions/institution-program-management.types";
 import { apiRequest } from "./api";
 
@@ -11,8 +10,7 @@ export function getManagedInstitutionPrograms(
     limit: number;
     search: string;
     status: string;
-    institutionId: string;
-    programTypeId: string;
+    institutionName: string;
     sortBy: "createdAt" | "name" | "code" | "status";
     sortOrder: "asc" | "desc";
   },
@@ -23,16 +21,11 @@ export function getManagedInstitutionPrograms(
     limit: String(params.limit),
     search: params.search,
     status: params.status,
-    institutionId: params.institutionId,
-    programTypeId: params.programTypeId,
+    institutionName: params.institutionName,
     sortBy: params.sortBy,
     sortOrder: params.sortOrder,
   });
   return apiRequest<InstitutionProgramListResponse>(`/institution-programs?${query.toString()}`, {}, accessToken);
-}
-
-export function getInstitutionProgramManagementOptions(accessToken: string) {
-  return apiRequest<InstitutionProgramManagementOptions>("/institution-programs/management-options", {}, accessToken);
 }
 
 export function createManagedInstitutionProgram(input: InstitutionProgramInput, accessToken: string) {

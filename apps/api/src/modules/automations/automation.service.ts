@@ -533,7 +533,7 @@ export async function getAutomationOptions(user: AuthUser, institutionProgramId?
         status: "active",
         ...(accessibleProgramIds === null ? {} : { id: { in: accessibleProgramIds } }),
       },
-      select: { id: true, name: true, institutions: { select: { name: true } } },
+      select: { id: true, name: true, institution_name: true },
       orderBy: { name: "asc" },
     }),
     canAssign && accessibleProgramIds === null
@@ -612,7 +612,7 @@ export async function getAutomationOptions(user: AuthUser, institutionProgramId?
     }),
   ]);
   return {
-    institutionPrograms: programs.map((p) => ({ id: p.id, name: p.name, institutionName: p.institutions.name })),
+    institutionPrograms: programs.map((p) => ({ id: p.id, name: p.name, institutionName: p.institution_name })),
     triggerTypes: [...SUPPORTED_AUTOMATION_TRIGGER_TYPES],
     assignees: assignees.map((assignee) => ({ id: assignee.id, fullName: assignee.full_name })),
     pipelineStages: pipelineStages.map((stage) => ({
@@ -627,7 +627,7 @@ export async function getAutomationOptions(user: AuthUser, institutionProgramId?
       majors: majors.map((major) => ({ code: major.id, label: major.name })),
       admission_statuses: admissionStatuses.map((status) => ({ code: status.id, label: status.name })),
       tags: tags.map((tag) => ({ code: tag.name, label: tag.name })),
-      institution_programs: programs.map((program) => ({ code: program.id, label: `${program.institutions.name} - ${program.name}` })),
+      institution_programs: programs.map((program) => ({ code: program.id, label: `${program.institution_name} - ${program.name}` })),
       "Danh sách cố định": [
         { code: "male", label: "Nam" },
         { code: "female", label: "Nữ" },

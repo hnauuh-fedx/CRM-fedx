@@ -364,7 +364,6 @@ export function rawFieldExpression(datasetKey: PersonalReportDatasetKey, fieldKe
   }
   if (datasetKey === "STUDENTS") {
     if (fieldKey === "STATUS") return Prisma.sql`fact.student_status`;
-    if (fieldKey === "FACULTY") return Prisma.sql`fact.faculty_name`;
     if (fieldKey === "MAJOR") return Prisma.sql`fact.major_name`;
     if (fieldKey === "CLASS") return Prisma.sql`fact.class_name`;
     if (fieldKey === "ENROLLED_DATE") return Prisma.sql`fact.enrolled_date`;

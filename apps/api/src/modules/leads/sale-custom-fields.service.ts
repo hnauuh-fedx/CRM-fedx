@@ -1,3 +1,4 @@
+import { hasCustomFieldPermission } from "../custom-fields/custom-field-permissions";
 import { Prisma } from "../../generated/prisma/client";
 import { prisma } from "../../database/prisma";
 import type { AuthUser } from "../auth/auth.types";
@@ -319,9 +320,7 @@ function serializeField(
   user: AuthUser,
   canEdit: boolean,
 ) {
-  const viewSensitive = user.permissions.includes(
-    "custom_field.view_sensitive",
-  );
+  const viewSensitive = hasCustomFieldPermission(user.permissions, field.entity_type ?? "", "view_sensitive");
   return {
     id: field.id,
     code: field.field_key,
@@ -341,7 +340,7 @@ function serializeField(
     canEdit:
       canEdit &&
       (!field.is_sensitive ||
-        user.permissions.includes("custom_field.edit_sensitive")),
+        hasCustomFieldPermission(user.permissions, field.entity_type ?? "", "edit_sensitive")),
   };
 }
 
@@ -443,7 +442,7 @@ export async function saveSaleCustomFieldValues(
     prepared.some(
       (item) =>
         item.field.is_sensitive &&
-        !user.permissions.includes("custom_field.edit_sensitive"),
+        !hasCustomFieldPermission(user.permissions, item.field.entity_type ?? "", "edit_sensitive"),
     )
   )
     return { ok: false as const, reason: "sensitive_forbidden" as const };

@@ -102,6 +102,6 @@ export function getRuntimeCustomFields(entityType: RuntimeCustomFieldEntityType,
   return apiRequest<LeadCustomFieldsResponse>(`/custom-fields/runtime/${entityType}${query}`, {}, accessToken);
 }
 
-export function saveRuntimeCustomFields(entityType: RuntimeCustomFieldEntityType, entityId: string, values: Record<string, LeadCustomFieldValue>, accessToken: string) {
-  return apiRequest<{ message: string }>(`/custom-fields/runtime/${entityType}/${entityId}`, { method: "PATCH", body: JSON.stringify({ values }) }, accessToken);
+export function saveRuntimeCustomFields(entityType: RuntimeCustomFieldEntityType, entityId: string, values: Record<string, LeadCustomFieldValue>, accessToken: string, institutionProgramId?: string) {
+  return apiRequest<{ message: string }>(`/custom-fields/runtime/${entityType}/${entityId}`, { method: "PATCH", body: JSON.stringify({ values }), ...(institutionProgramId ? { headers: { "X-Institution-Program-Id": institutionProgramId } } : {}) }, accessToken);
 }

@@ -4,8 +4,6 @@ export type ManagedMajor = {
   id: string;
   name: string;
   code: string | null;
-  facultyId: string | null;
-  facultyName: string | null;
   leadCount: number;
   admissionCount: number;
   studentCount: number;
@@ -19,14 +17,9 @@ export type MajorListResponse = {
   filters: { search: string };
 };
 
-export type MajorManagementOptions = {
-  faculties: Array<{ id: string; name: string }>;
-};
-
 export type MajorInput = {
   name: string;
   code: string;
-  facultyId: string;
   customFieldValues?: Record<string, LeadCustomFieldValue>;
 };
 import type { LeadCustomFieldValue } from "@/modules/leads/lead.types";

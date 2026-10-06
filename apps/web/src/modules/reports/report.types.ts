@@ -7,7 +7,6 @@ export type OverviewReportResponse = {
     monthlyRevenue: number;
   };
   applicationsByStatus: ReportBreakdownItem[];
-  studentsByFaculty: ReportBreakdownItem[];
   applicationsByMajor: ReportBreakdownItem[];
 };
 
@@ -163,7 +162,6 @@ export type PersonalDashboardResponse = {
 } & Omit<PersonalDashboardConfig, "kpiWidgets">;
 export type ReportBreakdownWithMeta = ReportBreakdownItem & {
   color?: string | null;
-  facultyName?: string | null;
 };
 
 export type OverviewReportOptions = {
@@ -261,7 +259,6 @@ export type AdmissionReportApplication = {
   statusName: string;
   statusColor: string | null;
   majorName: string;
-  facultyName: string | null;
   applicationReceivedDate: string | null;
   feeStatus: string | null;
   tuitionStatus: string | null;
@@ -279,7 +276,6 @@ export type StudentDetailReportResponse = {
     classAssignmentRate: number;
   };
   studentsByStatus: ReportBreakdownItem[];
-  studentsByFaculty: ReportBreakdownItem[];
   studentsByMajor: ReportBreakdownWithMeta[];
   studentsByClass: ReportBreakdownItem[];
   serviceTypes: ReportBreakdownItem[];
@@ -292,7 +288,6 @@ export type StudentReportStudent = {
   leadName: string;
   status: string | null;
   majorName: string;
-  facultyName: string | null;
   className: string | null;
   enrolledAt: string | null;
 };

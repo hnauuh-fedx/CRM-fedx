@@ -294,9 +294,13 @@ export function AppRoutes() {
               <Route path="/sale/nhac-viec" element={<SaleRemindersPage />} />
               <Route path="/sale/kpi" element={<SaleKpiPage />} />
             </Route>
-            <Route element={<ProtectedRoute anyPermissions={["custom_field.view"]} />}>
+            <Route element={<ProtectedRoute anyPermissions={["custom_field.lead.manage", "custom_field.sale_activity.manage", "custom_field.sale_reminder.manage"]} />}>
               <Route path="/sale/cau-hinh-truong" element={<SaleCustomFieldsPage />} />
+            </Route>
+            <Route element={<ProtectedRoute anyPermissions={["custom_field.marketing_campaign.manage", "custom_field.marketing_form.manage"]} />}>
               <Route path="/marketing/cau-hinh-truong" element={<MarketingCustomFieldsPage />} />
+            </Route>
+            <Route element={<ProtectedRoute anyPermissions={["custom_field.admission_profile.manage", "custom_field.admission_document.manage", "custom_field.admission_status.manage"]} />}>
               <Route path="/tuyen-sinh/cau-hinh-truong" element={<AdmissionCustomFieldsPage />} />
             </Route>
 
@@ -307,7 +311,8 @@ export function AppRoutes() {
               <Route path="/tuyen-sinh/phi-hoc-phi" element={<AdmissionFeesPage />} />
             </Route>
             <Route element={<ProtectedRoute anyPermissions={["admission_major.manage"]} />}>
-              <Route path="/tuyen-sinh/nganh" element={<MajorsManagementPage />} />
+              <Route path="/quan-ly/nganh" element={<MajorsManagementPage />} />
+              <Route path="/tuyen-sinh/nganh" element={<Navigate to="/quan-ly/nganh" replace />} />
             </Route>
 
             <Route element={<ProtectedRoute anyPermissions={["student.view_all", "student.view"]} />}>

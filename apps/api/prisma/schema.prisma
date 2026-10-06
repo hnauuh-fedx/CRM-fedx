@@ -314,16 +314,6 @@ model entity_tags {
   @@index([entity_type, entity_id], map: "idx_entity_tags_entity")
 }
 
-model faculties {
-  id              String            @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
-  name            String            @db.VarChar(255)
-  code            String?           @unique @db.VarChar(100)
-  created_at      DateTime?         @default(now()) @db.Timestamp(6)
-  majors          majors[]
-  student_classes student_classes[]
-  students        students[]
-}
-
 model file_relations {
   id          String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
   file_id     String?   @db.Uuid
@@ -335,56 +325,40 @@ model file_relations {
   @@index([entity_type, entity_id], map: "idx_file_relations_entity")
 }
 
-model institutions {
-  id                   String                 @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
-  name                 String                 @db.VarChar(255)
-  code                 String                 @unique @db.VarChar(100)
-  status               String?                @default("active") @db.VarChar(50)
-  created_at           DateTime?              @default(now()) @db.Timestamp(6)
-  updated_at           DateTime?              @default(now()) @db.Timestamp(6)
-  institution_programs institution_programs[]
-}
-
 model program_types {
-  id                   String                 @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
-  name                 String                 @db.VarChar(150)
-  code                 String                 @unique @db.VarChar(100)
-  created_at           DateTime?              @default(now()) @db.Timestamp(6)
-  institution_programs institution_programs[]
+  id         String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  name       String    @db.VarChar(150)
+  code       String    @unique @db.VarChar(100)
+  created_at DateTime? @default(now()) @db.Timestamp(6)
 }
 
 model institution_programs {
-  id                        String                      @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
-  institution_id            String                      @db.Uuid
-  program_type_id           String                      @db.Uuid
-  name                      String                      @db.VarChar(255)
-  code                      String                      @unique @db.VarChar(100)
-  status                    String?                     @default("active") @db.VarChar(50)
-  created_at                DateTime?                   @default(now()) @db.Timestamp(6)
-  updated_at                DateTime?                   @default(now()) @db.Timestamp(6)
-  institutions              institutions                @relation(fields: [institution_id], references: [id], onDelete: NoAction, onUpdate: NoAction)
-  program_types             program_types               @relation(fields: [program_type_id], references: [id], onDelete: NoAction, onUpdate: NoAction)
-  admission_profiles        admission_profiles[]
-  automation_rules          automation_rules[]
-  campaigns                 campaigns[]
-  customer_lists            customer_lists[]
-  custom_fields             custom_fields[]
-  kpi_targets               kpi_targets[]
-  lead_sources              lead_sources[]
-  lead_origins              lead_origins[]
-  leads                     leads[]
-  report_configs            report_configs[]
-  personal_dashboard_widgets personal_dashboard_widgets[]
+  id                          String                        @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  institution_name            String                        @db.VarChar(255)
+  name                        String                        @db.VarChar(255)
+  code                        String                        @unique @db.VarChar(100)
+  status                      String?                       @default("active") @db.VarChar(50)
+  created_at                  DateTime?                     @default(now()) @db.Timestamp(6)
+  updated_at                  DateTime?                     @default(now()) @db.Timestamp(6)
+  admission_profiles          admission_profiles[]
+  automation_rules            automation_rules[]
+  campaigns                   campaigns[]
+  customer_lists              customer_lists[]
+  custom_fields               custom_fields[]
+  kpi_targets                 kpi_targets[]
+  lead_sources                lead_sources[]
+  lead_origins                lead_origins[]
+  leads                       leads[]
+  report_configs              report_configs[]
+  personal_dashboard_widgets  personal_dashboard_widgets[]
   personal_dashboard_settings personal_dashboard_settings[]
-  role_institution_programs role_institution_programs[]
-  user_program_access_scopes user_program_access_scopes[]
-  students                  students[]
-  majors                    majors[]
-  webhooks                  webhooks[]
+  role_institution_programs   role_institution_programs[]
+  user_program_access_scopes  user_program_access_scopes[]
+  students                    students[]
+  majors                      majors[]
+  webhooks                    webhooks[]
 
-  @@unique([institution_id, program_type_id, name])
-  @@index([institution_id, status, name], map: "idx_institution_programs_institution_status")
-  @@index([program_type_id, status, name], map: "idx_institution_programs_type_status")
+  @@index([institution_name, status, name], map: "idx_institution_programs_institution_status")
 }
 
 model files {
@@ -581,12 +555,10 @@ model majors {
   institution_program_id String?               @db.Uuid
   name                   String                @db.VarChar(255)
   code                   String?               @db.VarChar(100)
-  faculty_id             String?               @db.Uuid
   created_at             DateTime?             @default(now()) @db.Timestamp(6)
   admission_profiles     admission_profiles[]
   leads                  leads[]
   students               students[]
-  faculties              faculties?            @relation(fields: [faculty_id], references: [id], onDelete: NoAction, onUpdate: NoAction)
   institution_programs   institution_programs? @relation(fields: [institution_program_id], references: [id], onDelete: NoAction, onUpdate: NoAction)
 
   @@unique([institution_program_id, code])
@@ -904,9 +876,7 @@ model student_classes {
   id         String     @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
   name       String     @db.VarChar(150)
   code       String?    @unique @db.VarChar(100)
-  faculty_id String?    @db.Uuid
   created_at DateTime?  @default(now()) @db.Timestamp(6)
-  faculties  faculties? @relation(fields: [faculty_id], references: [id], onDelete: NoAction, onUpdate: NoAction)
   students   students[]
 }
 
@@ -961,7 +931,6 @@ model students {
   admission_profile_id   String?               @unique @db.Uuid
   institution_program_id String?               @db.Uuid
   major_id               String?               @db.Uuid
-  faculty_id             String?               @db.Uuid
   class_id               String?               @db.Uuid
   status                 String?               @default("active") @db.VarChar(50)
   enrolled_at            DateTime?             @default(now()) @db.Timestamp(6)
@@ -971,7 +940,6 @@ model students {
   institution_programs   institution_programs? @relation(fields: [institution_program_id], references: [id], onDelete: NoAction, onUpdate: NoAction)
   majors                 majors?               @relation(fields: [major_id], references: [id], onDelete: NoAction, onUpdate: NoAction)
   student_classes        student_classes?      @relation(fields: [class_id], references: [id], onDelete: NoAction, onUpdate: NoAction)
-  faculties              faculties?            @relation(fields: [faculty_id], references: [id], onDelete: NoAction, onUpdate: NoAction)
   leads                  leads?                @relation(fields: [lead_id], references: [id], onDelete: NoAction, onUpdate: NoAction)
 
   @@index([lead_id], map: "idx_students_lead_id")
@@ -980,7 +948,6 @@ model students {
   @@index([status, enrolled_at, id], map: "idx_students_status_enrolled_page")
   @@index([institution_program_id, enrolled_at, id], map: "idx_students_program_enrolled_page")
   @@index([major_id, enrolled_at, id], map: "idx_students_major_enrolled_page")
-  @@index([faculty_id, enrolled_at, id], map: "idx_students_faculty_enrolled_page")
   @@index([class_id, enrolled_at, id], map: "idx_students_class_enrolled_page")
 }
 

@@ -88,7 +88,7 @@ export async function listRoles(institutionProgramId: string) {
       role_institution_programs: {
         select: {
           institution_programs: {
-            select: { id: true, code: true, name: true, institutions: { select: { name: true } } },
+            select: { id: true, code: true, name: true, institution_name: true },
           },
         },
       },
@@ -111,7 +111,7 @@ export async function listRoles(institutionProgramId: string) {
         id: grant.institution_programs.id,
         code: grant.institution_programs.code,
         name: grant.institution_programs.name,
-        institutionName: grant.institution_programs.institutions.name,
+        institutionName: grant.institution_programs.institution_name,
       })),
       createdAt: role.created_at?.toISOString() ?? null,
     })),
@@ -131,10 +131,9 @@ export async function getRoleManagementOptions(actor: AuthUser) {
       where: {
         id: { in: actor.institutionProgramIds },
         status: "active",
-        institutions: { is: { status: "active" } },
       },
-      select: { id: true, code: true, name: true, institutions: { select: { name: true } } },
-      orderBy: [{ institutions: { name: "asc" } }, { name: "asc" }],
+      select: { id: true, code: true, name: true, institution_name: true },
+      orderBy: [{ institution_name: "asc" }, { name: "asc" }],
     }),
   ]);
   return {
@@ -144,7 +143,7 @@ export async function getRoleManagementOptions(actor: AuthUser) {
       id: program.id,
       code: program.code,
       name: program.name,
-      institutionName: program.institutions.name,
+      institutionName: program.institution_name,
     })),
   };
 }
@@ -348,14 +347,14 @@ async function validateRoleInput(input: RoleInput, accessibleProgramIds: string[
   if (!activeScopes.data.some((scope) => scope.code === input.scopeCode && scope.isActive)) {
     return { ok: false as const, reason: "scope_inactive" as const };
   }
-  const permissionCount = await prisma.permissions.count({ where: { id: { in: permissionIds } } });
+  const permissionCount = await prisma.permissions.count({ where: { id: { in: permissionIds }, is_active: true } });
   if (permissionCount !== permissionIds.length) return { ok: false as const, reason: "permission_not_found" as const };
   if (programIds.length === 0) return { ok: false as const, reason: "program_required" as const };
   if (programIds.some((programId) => !accessibleProgramIds.includes(programId))) {
     return { ok: false as const, reason: "program_not_found" as const };
   }
   const programCount = await prisma.institution_programs.count({
-    where: { id: { in: programIds }, status: "active", institutions: { is: { status: "active" } } },
+    where: { id: { in: programIds }, status: "active" },
   });
   if (programCount !== programIds.length) return { ok: false as const, reason: "program_not_found" as const };
   return { ok: true as const, permissionIds, programIds };

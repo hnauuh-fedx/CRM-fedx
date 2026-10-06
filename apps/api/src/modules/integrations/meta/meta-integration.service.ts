@@ -93,13 +93,13 @@ export async function getMetaConnectionOptions(user: AuthUser) {
     }),
     prisma.institution_programs.findMany({
       where: programWhere,
-      select: { id: true, name: true, institutions: { select: { name: true } } },
+      select: { id: true, name: true, institution_name: true },
       orderBy: { name: "asc" }, take: 500,
     }),
   ]);
   return {
     leadSources: leadSources.map((source) => ({ id: source.id, name: source.name, type: source.type, institutionProgramId: source.institution_program_id })),
-    institutionPrograms: programs.map((program) => ({ id: program.id, name: program.name, institutionName: program.institutions.name })),
+    institutionPrograms: programs.map((program) => ({ id: program.id, name: program.name, institutionName: program.institution_name })),
   };
 }
 

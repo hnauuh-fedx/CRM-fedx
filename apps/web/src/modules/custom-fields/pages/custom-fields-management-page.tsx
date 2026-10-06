@@ -1,3 +1,4 @@
+import { customFieldPermission } from "../custom-field-permissions";
 import { useMemo, useRef, useState, type FormEvent, type ReactNode } from "react";
 import { useFieldArray, useForm, type Path } from "react-hook-form";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
@@ -162,12 +163,12 @@ export function CustomFieldsManagementPage({ config }: { config: CustomFieldsMan
   const [programFilter, setProgramFilter] = useState(selectedProgramId ?? allFilterValue);
   const [successMessage, setSuccessMessage] = useState("");
 
-  const canCreate = auth.can("custom_field.create");
-  const canUpdate = auth.can("custom_field.update");
-  const canArchive = auth.can("custom_field.archive");
-  const canManageOptions = auth.can("custom_field.manage_options");
-  const canEditSensitive = auth.can("custom_field.edit_sensitive");
-  const canManageGroups = auth.can("custom_field.manage_groups") || canCreate;
+  const canCreate = auth.can(customFieldPermission(config.entityType, "create"));
+  const canUpdate = auth.can(customFieldPermission(config.entityType, "update"));
+  const canArchive = auth.can(customFieldPermission(config.entityType, "archive"));
+  const canManageOptions = auth.can(customFieldPermission(config.entityType, "manage_options"));
+  const canEditSensitive = auth.can(customFieldPermission(config.entityType, "edit_sensitive"));
+  const canManageGroups = auth.can(customFieldPermission(config.entityType, "manage_groups")) || canCreate;
   const canConfigureSystemRequirements = config.entityType === "LEAD";
 
   const query = useQuery({

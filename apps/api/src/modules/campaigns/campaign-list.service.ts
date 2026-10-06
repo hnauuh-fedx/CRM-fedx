@@ -76,7 +76,7 @@ export async function listCampaigns(user: CampaignViewer, query: CampaignListQue
         end_date: true,
         created_at: true,
         users: { select: { id: true, full_name: true } },
-        institution_programs: { select: { id: true, name: true, institutions: { select: { name: true } } } },
+        institution_programs: { select: { id: true, name: true, institution_name: true } },
         _count: { select: { marketing_forms: true, utm_trackings: true } },
       },
       orderBy: [orderBy, { id: "asc" }],
@@ -101,7 +101,7 @@ export async function listCampaigns(user: CampaignViewer, query: CampaignListQue
         ? { id: campaign.users.id, fullName: campaign.users.full_name }
         : null,
       institutionProgram: campaign.institution_programs
-        ? { id: campaign.institution_programs.id, name: campaign.institution_programs.name, institutionName: campaign.institution_programs.institutions.name }
+        ? { id: campaign.institution_programs.id, name: campaign.institution_programs.name, institutionName: campaign.institution_programs.institution_name }
         : null,
       formCount: campaign._count.marketing_forms,
       utmTrackingCount: campaign._count.utm_trackings,
@@ -139,7 +139,7 @@ export async function getCampaignFilterOptions(user: CampaignViewer, institution
     }),
     prisma.institution_programs.findMany({
       where: { status: "active" },
-      select: { id: true, name: true, institutions: { select: { name: true } } },
+      select: { id: true, name: true, institution_name: true },
       orderBy: { name: "asc" },
     }),
     prisma.campaigns.findMany({
@@ -153,7 +153,7 @@ export async function getCampaignFilterOptions(user: CampaignViewer, institution
   return {
     statuses: statuses.flatMap((campaign) => (campaign.status ? [campaign.status] : [])).sort(),
     types: types.flatMap((campaign) => (campaign.type ? [campaign.type] : [])).sort(),
-    institutionPrograms: institutionPrograms.map((program) => ({ id: program.id, name: program.name, institutionName: program.institutions.name })),
+    institutionPrograms: institutionPrograms.map((program) => ({ id: program.id, name: program.name, institutionName: program.institution_name })),
   };
 }
 

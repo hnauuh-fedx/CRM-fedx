@@ -333,8 +333,8 @@ export type LeadActionOptions = {
   assignees: Array<{ id: string; fullName: string }>;
   telesales: Array<{ id: string; fullName: string }>;
   departments: Array<{ id: string; name: string }>;
-  institutionPrograms: Array<{ id: string; name: string; code: string; institutionName: string; programTypeName: string }>;
-  majors: Array<{ id: string; name: string; code: string | null; facultyName: string | null }>;
+  institutionPrograms: Array<{ id: string; name: string; code: string; institutionName: string }>;
+  majors: Array<{ id: string; name: string; code: string | null }>;
   admissionStatuses: Array<{ id: string; name: string }>;
   tags: string[];
   systemFieldRequirements: Record<string, boolean>;

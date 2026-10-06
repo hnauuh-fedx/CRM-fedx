@@ -30,7 +30,6 @@ const querySchema = z.object({
   status: z.string().trim().max(50).optional().transform((value) => value || undefined),
   institutionProgramId: z.uuid().optional().or(z.literal("")).transform((value) => value || undefined),
   majorId: z.uuid().optional().or(z.literal("")).transform((value) => value || undefined),
-  facultyId: z.uuid().optional().or(z.literal("")).transform((value) => value || undefined),
   classId: z.uuid().optional().or(z.literal("")).transform((value) => value || undefined),
   sortBy: z.enum(["enrolledAt", "studentCode", "status"]).default("enrolledAt"),
   sortOrder: z.enum(["asc", "desc"]).default("desc"),
@@ -64,7 +63,6 @@ const serviceUpdateBodySchema = z.object({
 
 const studentUpdateSchema = z.object({
   status: z.string().trim().min(1).max(50),
-  facultyId: z.uuid().optional().or(z.literal("")).transform((value) => value || undefined),
   classId: z.uuid().optional().or(z.literal("")).transform((value) => value || undefined),
 });
 
@@ -283,9 +281,7 @@ studentsRouter.patch(
 
 function studentActionMessage(reason: string) {
   const messages: Record<string, string> = {
-    class_faculty_mismatch: "Lớp sinh viên không thuộc khoa đã chọn.",
     class_not_found: "Lớp sinh viên không hợp lệ.",
-    faculty_not_found: "Khoa không hợp lệ.",
     student_not_found: "Không tìm thấy sinh viên trong phạm vi truy cập.",
   };
   return messages[reason] ?? "Không thể cập nhật sinh viên.";

@@ -42,7 +42,6 @@ type ServiceRecord = BusinessRecord & {
   studentId: string | null;
   studentCode: string | null;
   studentName: string | null;
-  facultyName: string | null;
   className: string | null;
   type: string | null;
   status: string | null;
@@ -184,7 +183,7 @@ export function StudentServicesPage() {
               <TableHeader className="bg-muted/55 text-xs uppercase tracking-wide text-muted-foreground">
                 <TableRow className="hover:bg-muted/55">
                   <TableHead className="px-5">Sinh viên</TableHead>
-                  <TableHead className="px-5">Khoa / Lớp</TableHead>
+                  <TableHead className="px-5">Lớp</TableHead>
                   <TableHead className="px-5">Loại dịch vụ</TableHead>
                   <TableHead className="px-5">Nội dung</TableHead>
                   <TableHead className="px-5">Trạng thái</TableHead>
@@ -197,7 +196,7 @@ export function StudentServicesPage() {
                 {records.map((record) => (
                   <TableRow key={record.id}>
                     <TableCell className="px-5 py-4"><span className="font-medium">{record.studentName ?? "-"}</span><br /><span className="text-xs text-muted-foreground">{record.studentCode ?? "-"}</span></TableCell>
-                    <TableCell className="px-5 py-4">{record.facultyName ?? "-"} / {record.className ?? "-"}</TableCell>
+                    <TableCell className="px-5 py-4">{record.className ?? "-"}</TableCell>
                     <TableCell className="px-5 py-4">{record.type ?? "-"}</TableCell>
                     <TableCell className="max-w-80 px-5 py-4">{record.content ?? "-"}</TableCell>
                     <TableCell className="px-5 py-4"><Badge variant="secondary">{displayStatus(record.status)}</Badge></TableCell>

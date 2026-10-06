@@ -4,7 +4,6 @@ export type StudentListFilters = {
   search: string;
   status: string;
   majorId: string;
-  facultyId: string;
   classId: string;
 };
 
@@ -18,7 +17,6 @@ export type StudentListItem = {
   admissionProfile: { id: string; admissionCode: string | null } | null;
   institutionProgram: { id: string; name: string; institutionName: string } | null;
   major: { id: string; name: string } | null;
-  faculty: { id: string; name: string } | null;
   studentClass: { id: string; name: string } | null;
 };
 
@@ -43,7 +41,6 @@ export type StudentDetail = StudentListItem & {
     id: string;
     name: string;
     code: string | null;
-    faculty: { id: string; name: string } | null;
   } | null;
   recentServices: Array<{
     id: string;
@@ -56,7 +53,6 @@ export type StudentDetail = StudentListItem & {
 
 export type StudentUpdateInput = {
   status: string;
-  facultyId?: string;
   classId?: string;
 };
 
@@ -79,6 +75,7 @@ export type StudentServiceUpdateInput = {
 
 export type StudentServiceOptions = {
   types: string[];
+  classes: Array<{ id: string; name: string }>;
   statuses: string[];
   students: Array<{ id: string; studentCode: string; fullName: string | null }>;
   assignees: Array<{ id: string; fullName: string }>;
@@ -94,7 +91,6 @@ export type StudentListResponse = {
 export type StudentFilterOptions = {
   institutionPrograms: Array<{ id: string; name: string; institutionName: string }>;
   majors: Array<{ id: string; name: string }>;
-  faculties: Array<{ id: string; name: string }>;
-  classes: Array<{ id: string; name: string; facultyName: string | null }>;
+  classes: Array<{ id: string; name: string }>;
   statuses: string[];
 };

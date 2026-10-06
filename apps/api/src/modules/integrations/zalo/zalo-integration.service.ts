@@ -118,7 +118,7 @@ export async function getZaloConnectionOptions(user: AuthUser) {
     }),
     prisma.institution_programs.findMany({
       where: programWhere,
-      select: { id: true, name: true, institutions: { select: { name: true } } },
+      select: { id: true, name: true, institution_name: true },
       orderBy: { name: "asc" },
       take: 500,
     }),
@@ -133,7 +133,7 @@ export async function getZaloConnectionOptions(user: AuthUser) {
     institutionPrograms: programs.map((program) => ({
       id: program.id,
       name: program.name,
-      institutionName: program.institutions.name,
+      institutionName: program.institution_name,
     })),
   };
 }

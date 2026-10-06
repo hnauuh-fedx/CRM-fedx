@@ -13,26 +13,24 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Field, FieldError, FieldGroup, FieldLabel } from "@/components/ui/field";
 import { Input } from "@/components/ui/input";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Select, SelectContent, SelectGroup, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { useAuth } from "@/modules/auth/auth-context";
 import { ApiError } from "@/services/api";
 import {
   createManagedInstitutionProgram,
   deleteManagedInstitutionProgram,
-  getInstitutionProgramManagementOptions,
   getManagedInstitutionPrograms,
   updateManagedInstitutionProgram,
 } from "@/services/institution-program-management.service";
 import type {
   InstitutionProgramInput,
-  InstitutionProgramManagementOptions,
   ManagedInstitutionProgram,
 } from "../institution-program-management.types";
 
 const pageSize = 20;
-const emptyFilters = { search: "", status: "", institutionId: "", programTypeId: "" };
-const emptyForm: InstitutionProgramInput = { institutionId: "", programTypeId: "", name: "", code: "", status: "active" };
+const emptyFilters = { search: "", status: "", institutionName: "" };
+const emptyForm: InstitutionProgramInput = { institutionName: "", name: "", code: "", status: "active" };
 const statusLabels = { active: "Đang tuyển", inactive: "Tạm ngưng", archived: "Lưu trữ" } as const;
 
 type DialogState =
@@ -55,10 +53,6 @@ export function InstitutionProgramsManagementPage() {
     queryKey: ["institution-programs", "management", page, appliedFilters],
     queryFn: () => getManagedInstitutionPrograms({ page, limit: pageSize, sortBy: "name", sortOrder: "asc", ...appliedFilters }, auth.accessToken!),
     placeholderData: (previousData) => previousData,
-  });
-  const optionsQuery = useQuery({
-    queryKey: ["institution-programs", "management", "options"],
-    queryFn: () => getInstitutionProgramManagementOptions(auth.accessToken!),
   });
   const createMutation = useMutation({
     mutationFn: (input: InstitutionProgramInput) => createManagedInstitutionProgram(input, auth.accessToken!),
@@ -90,18 +84,18 @@ export function InstitutionProgramsManagementPage() {
         eyebrow="Tuyển sinh"
         title="Chương trình tuyển sinh"
         scopeLabel="Quyền quản trị"
-        description="Quản lý chương trình theo trường, loại chương trình, mã tuyển sinh và trạng thái sử dụng trong lead, hồ sơ, sinh viên và báo cáo."
+        description="Quản lý chương trình theo trường, mã tuyển sinh và trạng thái sử dụng trong lead, hồ sơ, sinh viên và báo cáo."
         actions={<Button type="button" onClick={() => { createMutation.reset(); setDialog({ type: "create" }); }}><Plus aria-hidden="true" />Thêm chương trình</Button>}
       />
 
       <Card className="gap-4 border-border/70 py-5 shadow-xs">
         <CardHeader className="gap-1 px-5">
           <CardTitle className="flex items-center gap-2"><GraduationCap className="size-5 text-muted-foreground" aria-hidden="true" />Bộ lọc chương trình</CardTitle>
-          <CardDescription>Tìm theo mã, tên chương trình, trường hoặc loại chương trình.</CardDescription>
+          <CardDescription>Tìm theo mã, tên chương trình hoặc trường.</CardDescription>
         </CardHeader>
         <CardContent className="px-5">
           <form
-            className="grid gap-3 lg:grid-cols-[minmax(220px,1fr)_220px_220px_180px_auto_auto] lg:items-end"
+            className="grid gap-3 lg:grid-cols-[minmax(220px,1fr)_minmax(220px,1fr)_180px_auto] lg:items-end"
             onSubmit={(event) => {
               event.preventDefault();
               setAppliedFilters({ ...filters, search: filters.search.trim() });
@@ -109,8 +103,7 @@ export function InstitutionProgramsManagementPage() {
             }}
           >
             <Field><FieldLabel htmlFor="program-search">Tìm kiếm</FieldLabel><div className="relative"><Search className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" aria-hidden="true" /><Input id="program-search" className="pl-9" value={filters.search} onChange={(event) => setFilters((value) => ({ ...value, search: event.target.value }))} placeholder="Mã hoặc tên chương trình" /></div></Field>
-            <FilterSelect label="Trường" value={filters.institutionId} allLabel="Tất cả" options={(optionsQuery.data?.institutions ?? []).map((item) => ({ value: item.id, label: item.name }))} onChange={(institutionId) => setFilters((value) => ({ ...value, institutionId }))} />
-            <FilterSelect label="Loại" value={filters.programTypeId} allLabel="Tất cả" options={(optionsQuery.data?.programTypes ?? []).map((item) => ({ value: item.id, label: item.name }))} onChange={(programTypeId) => setFilters((value) => ({ ...value, programTypeId }))} />
+            <Field><FieldLabel htmlFor="program-institution-filter">Trường</FieldLabel><Input id="program-institution-filter" value={filters.institutionName} onChange={(event) => setFilters((value) => ({ ...value, institutionName: event.target.value }))} placeholder="Nhập tên trường" /></Field>
             <FilterSelect label="Trạng thái" value={filters.status} allLabel="Tất cả" options={Object.entries(statusLabels).map(([value, label]) => ({ value, label }))} onChange={(status) => setFilters((value) => ({ ...value, status }))} />
             <AutoFilterActions snapshot={filters} onApply={() => { setAppliedFilters({ ...filters, search: filters.search.trim() }); setPage(1); }} onReset={() => { setFilters(emptyFilters); setAppliedFilters(emptyFilters); setPage(1); }} />
           </form>
@@ -127,13 +120,12 @@ export function InstitutionProgramsManagementPage() {
             <div className="overflow-x-auto">
               <Table>
                 <caption className="sr-only">Danh sách chương trình tuyển sinh</caption>
-                <TableHeader className="bg-muted/55"><TableRow><TableHead className="min-w-72 px-5">Chương trình</TableHead><TableHead>Trường</TableHead><TableHead>Loại</TableHead><TableHead>Dữ liệu liên quan</TableHead><TableHead className="text-right">Thao tác</TableHead></TableRow></TableHeader>
+                <TableHeader className="bg-muted/55"><TableRow><TableHead className="min-w-72 px-5">Chương trình</TableHead><TableHead>Trường</TableHead><TableHead>Dữ liệu liên quan</TableHead><TableHead className="text-right">Thao tác</TableHead></TableRow></TableHeader>
                 <TableBody>
                   {data.map((program) => (
                     <TableRow key={program.id}>
                       <TableCell className="px-5"><div className="font-medium">{program.name}</div><div className="text-sm text-muted-foreground">{program.code}</div><Badge className="mt-2" variant={program.status === "active" ? "default" : "outline"}>{statusLabels[program.status]}</Badge></TableCell>
-                      <TableCell><div className="font-medium">{program.institution.name}</div><div className="text-sm text-muted-foreground">{program.institution.code}</div></TableCell>
-                      <TableCell><div className="font-medium">{program.programType.name}</div><div className="text-sm text-muted-foreground">{program.programType.code}</div></TableCell>
+                      <TableCell><div className="font-medium">{program.institutionName}</div></TableCell>
                       <TableCell><div className="flex flex-wrap gap-1.5"><Badge variant="secondary">{program.counts.total} tổng</Badge><Badge variant="outline">{program.counts.leads} lead</Badge><Badge variant="outline">{program.counts.admissions} hồ sơ</Badge><Badge variant="outline">{program.counts.students} SV</Badge><Badge variant="outline">{program.counts.majors} ngành</Badge></div></TableCell>
                       <TableCell className="text-right"><div className="inline-flex gap-2"><Button type="button" size="sm" variant="outline" onClick={() => { updateMutation.reset(); setDialog({ type: "edit", program }); }}><Pencil aria-hidden="true" />Sửa</Button><Button type="button" size="sm" variant="outline" disabled={program.counts.total > 0} onClick={() => { deleteMutation.reset(); setDialog({ type: "delete", program }); }}><Trash2 aria-hidden="true" />Xóa</Button></div></TableCell>
                     </TableRow>
@@ -149,8 +141,8 @@ export function InstitutionProgramsManagementPage() {
 
       <Dialog open={dialog?.type === "create" || dialog?.type === "edit"} onOpenChange={(open) => !open && setDialog(null)}>
         <DialogContent className="sm:max-w-2xl">
-          <DialogHeader><DialogTitle>{editingProgram ? "Cập nhật chương trình" : "Thêm chương trình"}</DialogTitle><DialogDescription>Chọn trường, loại chương trình và mã tuyển sinh duy nhất.</DialogDescription></DialogHeader>
-          <ProgramForm initialValues={editingProgram ? toFormValues(editingProgram) : emptyForm} options={optionsQuery.data} isPending={createMutation.isPending || updateMutation.isPending} error={createMutation.error ?? updateMutation.error} onSubmit={(input) => editingProgram ? updateMutation.mutate(input) : createMutation.mutate(input)} />
+          <DialogHeader><DialogTitle>{editingProgram ? "Cập nhật chương trình" : "Thêm chương trình"}</DialogTitle><DialogDescription>Nhập tên trường, tên chương trình và mã tuyển sinh duy nhất.</DialogDescription></DialogHeader>
+          <ProgramForm initialValues={editingProgram ? toFormValues(editingProgram) : emptyForm} isPending={createMutation.isPending || updateMutation.isPending} error={createMutation.error ?? updateMutation.error} onSubmit={(input) => editingProgram ? updateMutation.mutate(input) : createMutation.mutate(input)} />
         </DialogContent>
       </Dialog>
 
@@ -162,28 +154,23 @@ export function InstitutionProgramsManagementPage() {
 }
 
 function FilterSelect({ label, value, allLabel, options, onChange }: { label: string; value: string; allLabel: string; options: Array<{ value: string; label: string }>; onChange: (value: string) => void }) {
-  return <Field><FieldLabel>{label}</FieldLabel><Select value={value || "__all__"} onValueChange={(next) => onChange(next === "__all__" ? "" : next)}><SelectTrigger className="w-full"><SelectValue /></SelectTrigger><SelectContent><SelectItem value="__all__">{allLabel}</SelectItem>{options.map((item) => <SelectItem key={item.value} value={item.value}>{item.label}</SelectItem>)}</SelectContent></Select></Field>;
+  return <Field><FieldLabel>{label}</FieldLabel><Select value={value || "__all__"} onValueChange={(next) => onChange(next === "__all__" ? "" : next)}><SelectTrigger className="w-full"><SelectValue /></SelectTrigger><SelectContent><SelectGroup><SelectItem value="__all__">{allLabel}</SelectItem>{options.map((item) => <SelectItem key={item.value} value={item.value}>{item.label}</SelectItem>)}</SelectGroup></SelectContent></Select></Field>;
 }
 
-function ProgramForm({ initialValues, options, isPending, error, onSubmit }: { initialValues: InstitutionProgramInput; options?: InstitutionProgramManagementOptions; isPending: boolean; error: Error | null; onSubmit: (input: InstitutionProgramInput) => void }) {
+function ProgramForm({ initialValues, isPending, error, onSubmit }: { initialValues: InstitutionProgramInput; isPending: boolean; error: Error | null; onSubmit: (input: InstitutionProgramInput) => void }) {
   const [values, setValues] = useState(initialValues);
   const [errors, setErrors] = useState<Partial<Record<keyof InstitutionProgramInput, string>>>({});
   function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     const nextErrors: Partial<Record<keyof InstitutionProgramInput, string>> = {};
-    if (!values.institutionId) nextErrors.institutionId = "Vui lòng chọn trường.";
-    if (!values.programTypeId) nextErrors.programTypeId = "Vui lòng chọn loại chương trình.";
+    if (values.institutionName.trim().length < 2) nextErrors.institutionName = "Tên trường cần tối thiểu 2 ký tự.";
     if (values.name.trim().length < 2) nextErrors.name = "Tên chương trình cần tối thiểu 2 ký tự.";
     if (values.code.trim().length < 2) nextErrors.code = "Mã chương trình cần tối thiểu 2 ký tự.";
     setErrors(nextErrors);
     if (Object.keys(nextErrors).length > 0) return;
-    onSubmit({ ...values, name: values.name.trim(), code: values.code.trim() });
+    onSubmit({ ...values, institutionName: values.institutionName.trim(), name: values.name.trim(), code: values.code.trim() });
   }
-  return <form className="grid gap-5" onSubmit={submit}>{error && <MutationError error={error} />}<FieldGroup className="grid gap-4 sm:grid-cols-2"><SelectField label="Trường *" value={values.institutionId} error={errors.institutionId} options={(options?.institutions ?? []).map((item) => ({ value: item.id, label: `${item.name} - ${item.code}` }))} onChange={(institutionId) => setValues((current) => ({ ...current, institutionId }))} /><SelectField label="Loại chương trình *" value={values.programTypeId} error={errors.programTypeId} options={(options?.programTypes ?? []).map((item) => ({ value: item.id, label: `${item.name} - ${item.code}` }))} onChange={(programTypeId) => setValues((current) => ({ ...current, programTypeId }))} /><TextField id="program-name" label="Tên chương trình *" value={values.name} error={errors.name} onChange={(name) => setValues((current) => ({ ...current, name }))} /><TextField id="program-code" label="Mã chương trình *" value={values.code} error={errors.code} onChange={(code) => setValues((current) => ({ ...current, code }))} /><Field><FieldLabel>Trạng thái</FieldLabel><Select value={values.status} onValueChange={(status: InstitutionProgramInput["status"]) => setValues((current) => ({ ...current, status }))}><SelectTrigger><SelectValue /></SelectTrigger><SelectContent>{Object.entries(statusLabels).map(([value, label]) => <SelectItem key={value} value={value}>{label}</SelectItem>)}</SelectContent></Select></Field></FieldGroup><DialogFooter showCloseButton><Button type="submit" disabled={isPending}>{isPending ? "Đang lưu..." : "Lưu chương trình"}</Button></DialogFooter></form>;
-}
-
-function SelectField({ label, value, error, options, onChange }: { label: string; value: string; error?: string; options: Array<{ value: string; label: string }>; onChange: (value: string) => void }) {
-  return <Field data-invalid={Boolean(error)}><FieldLabel>{label}</FieldLabel><Select value={value || undefined} onValueChange={onChange}><SelectTrigger className="w-full"><SelectValue placeholder="Chọn" /></SelectTrigger><SelectContent>{options.map((item) => <SelectItem key={item.value} value={item.value}>{item.label}</SelectItem>)}</SelectContent></Select><FieldError>{error}</FieldError></Field>;
+  return <form className="grid gap-5" onSubmit={submit}>{error && <MutationError error={error} />}<FieldGroup className="grid gap-4 sm:grid-cols-2"><TextField id="program-institution-name" label="Trường *" value={values.institutionName} error={errors.institutionName} onChange={(institutionName) => setValues((current) => ({ ...current, institutionName }))} /><TextField id="program-name" label="Tên chương trình *" value={values.name} error={errors.name} onChange={(name) => setValues((current) => ({ ...current, name }))} /><TextField id="program-code" label="Mã chương trình *" value={values.code} error={errors.code} onChange={(code) => setValues((current) => ({ ...current, code }))} /><Field><FieldLabel>Trạng thái</FieldLabel><Select value={values.status} onValueChange={(status: InstitutionProgramInput["status"]) => setValues((current) => ({ ...current, status }))}><SelectTrigger><SelectValue /></SelectTrigger><SelectContent><SelectGroup>{Object.entries(statusLabels).map(([value, label]) => <SelectItem key={value} value={value}>{label}</SelectItem>)}</SelectGroup></SelectContent></Select></Field></FieldGroup><DialogFooter showCloseButton><Button type="submit" disabled={isPending}>{isPending ? "Đang lưu..." : "Lưu chương trình"}</Button></DialogFooter></form>;
 }
 
 function TextField({ id, label, value, error, onChange }: { id: string; label: string; value: string; error?: string; onChange: (value: string) => void }) {
@@ -195,5 +182,5 @@ function MutationError({ error }: { error: Error }) {
 }
 
 function toFormValues(program: ManagedInstitutionProgram): InstitutionProgramInput {
-  return { institutionId: program.institution.id, programTypeId: program.programType.id, name: program.name, code: program.code, status: program.status };
+  return { institutionName: program.institutionName, name: program.name, code: program.code, status: program.status };
 }

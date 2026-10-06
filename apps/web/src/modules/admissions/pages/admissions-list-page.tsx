@@ -320,11 +320,11 @@ function useAdmissionColumns(props: {
       },
       {
         id: "major",
-        header: "Ngành / Khoa",
+        header: "Ngành",
         enableSorting: false,
         cell: ({ row }) =>
           row.original.major
-            ? `${row.original.major.name}${row.original.major.faculty ? ` / ${row.original.major.faculty.name}` : ""}`
+            ? row.original.major.name
             : "-",
       },
       {
@@ -402,7 +402,7 @@ function AdmissionFilters({ filters, options, onChange, onApply, onReset }: Filt
               </div>
             </Field>
             <FilterSelect id="admission-status" label="Trạng thái" value={filters.statusId} onChange={(value) => onChange("statusId", value)} options={(options?.statuses ?? []).map((item) => ({ value: item.id, label: item.name }))} />
-            <FilterSelect id="admission-major" label="Ngành đăng ký" value={filters.majorId} onChange={(value) => onChange("majorId", value)} options={(options?.majors ?? []).map((item) => ({ value: item.id, label: item.facultyName ? `${item.name} - ${item.facultyName}` : item.name }))} />
+            <FilterSelect id="admission-major" label="Ngành đăng ký" value={filters.majorId} onChange={(value) => onChange("majorId", value)} options={(options?.majors ?? []).map((item) => ({ value: item.id, label: item.name }))} />
             <AutoFilterActions snapshot={filters} onApply={onApply} onReset={onReset} />
           </FieldGroup>
         </form>
@@ -530,7 +530,7 @@ function AdmissionProfileForm(props: {
           <FieldLabel htmlFor="admission-form-major">Ngành đăng ký</FieldLabel>
           <Select value={form.majorId} onValueChange={(value) => setValue("majorId", value)}>
             <SelectTrigger id="admission-form-major" className="w-full"><SelectValue placeholder="Chọn ngành" /></SelectTrigger>
-            <SelectContent>{(options?.majors ?? []).map((major) => <SelectItem key={major.id} value={major.id}>{major.facultyName ? `${major.name} - ${major.facultyName}` : major.name}</SelectItem>)}</SelectContent>
+            <SelectContent>{(options?.majors ?? []).map((major) => <SelectItem key={major.id} value={major.id}>{major.name}</SelectItem>)}</SelectContent>
           </Select>
         </Field>
         <Field>

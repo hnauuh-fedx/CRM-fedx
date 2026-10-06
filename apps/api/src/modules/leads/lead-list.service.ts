@@ -172,7 +172,7 @@ export async function listLeads(
         created_at: true,
         majors: { select: { id: true, name: true } },
         institution_programs: {
-          select: { id: true, name: true, institutions: { select: { name: true } } },
+          select: { id: true, name: true, institution_name: true },
         },
         lead_sources: {
           select: {
@@ -336,7 +336,7 @@ export async function listLeads(
           ? {
               id: lead.institution_programs.id,
               name: lead.institution_programs.name,
-              institutionName: lead.institution_programs.institutions.name,
+              institutionName: lead.institution_programs.institution_name,
             }
           : null,
         admissionStatusName: admission?.admission_statuses?.name ?? null,
@@ -417,7 +417,7 @@ export async function getLeadFilterOptions(user: AuthUser, institutionProgramId?
     }),
     prisma.institution_programs.findMany({
       where: { leads: { some: scopeWhere } },
-      select: { id: true, name: true, institutions: { select: { name: true } } },
+      select: { id: true, name: true, institution_name: true },
       orderBy: { name: "asc" },
     }),
     prisma.users.findMany({
@@ -465,7 +465,7 @@ export async function getLeadFilterOptions(user: AuthUser, institutionProgramId?
     institutionPrograms: institutionPrograms.map((program) => ({
       id: program.id,
       name: program.name,
-      institutionName: program.institutions.name,
+      institutionName: program.institution_name,
     })),
     assignees: assignees.map((userItem) => ({
       id: userItem.id,
@@ -538,7 +538,7 @@ export async function getLeadDetail(user: AuthUser, leadId: string, institutionP
       updated_at: true,
       major_id: true,
       majors: { select: { id: true, name: true } },
-      institution_programs: { select: { id: true, name: true, institutions: { select: { name: true } } } },
+      institution_programs: { select: { id: true, name: true, institution_name: true } },
       lead_sources: { select: { id: true, name: true } },
       lead_origins: { select: { id: true, name: true } },
       lead_source_occurrences: {
@@ -751,7 +751,7 @@ export async function getLeadDetail(user: AuthUser, leadId: string, institutionP
       receivedAt: occurrence.received_at.toISOString(),
     })),
     institutionProgram: lead.institution_programs
-      ? { id: lead.institution_programs.id, name: lead.institution_programs.name, institutionName: lead.institution_programs.institutions.name }
+      ? { id: lead.institution_programs.id, name: lead.institution_programs.name, institutionName: lead.institution_programs.institution_name }
       : null,
     pipelineStage: lead.pipeline_stages
       ? {

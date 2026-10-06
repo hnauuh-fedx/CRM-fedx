@@ -59,7 +59,7 @@ async function getProfileForAction(
       tuition_status: true,
       monthly_revenue: true,
       leads: { select: { id: true, full_name: true, assigned_to: true } },
-      majors: { select: { id: true, faculty_id: true } },
+      majors: { select: { id: true } },
       students: { select: { id: true, student_code: true } },
     },
   });
@@ -162,16 +162,16 @@ export async function getAdmissionActionOptions(scopedProgramId?: string) {
     prisma.admission_statuses.findMany({ select: { id: true, name: true, code: true }, orderBy: { name: "asc" } }),
     prisma.institution_programs.findMany({
       where: scopedProgramId ? { id: scopedProgramId, status: "active" } : { status: "active" },
-      select: { id: true, name: true, institutions: { select: { name: true } } },
+      select: { id: true, name: true, institution_name: true },
       orderBy: { name: "asc" },
     }),
     prisma.majors.findMany({
       where: scopedProgramId ? { OR: [{ institution_program_id: scopedProgramId }, { institution_program_id: null }] } : undefined,
-      select: { id: true, name: true, faculties: { select: { id: true, name: true } } },
+      select: { id: true, name: true },
       orderBy: { name: "asc" },
     }),
     prisma.student_classes.findMany({
-      select: { id: true, code: true, name: true, faculty_id: true },
+      select: { id: true, code: true, name: true },
       orderBy: { name: "asc" },
       take: 200,
     }),
@@ -183,15 +183,13 @@ export async function getAdmissionActionOptions(scopedProgramId?: string) {
     institutionPrograms: institutionPrograms.map((program) => ({
       id: program.id,
       name: program.name,
-      institutionName: program.institutions.name,
+      institutionName: program.institution_name,
     })),
     majors: majors.map((major) => ({
       id: major.id,
       name: major.name,
-      facultyId: major.faculties?.id ?? null,
-      facultyName: major.faculties?.name ?? null,
     })),
-    classes: classes.map((item) => ({ id: item.id, code: item.code, name: item.name, facultyId: item.faculty_id })),
+    classes: classes.map((item) => ({ id: item.id, code: item.code, name: item.name})),
   };
 }
 
@@ -413,9 +411,8 @@ export async function convertAdmissionToStudent(
   }
 
   return prisma.$transaction(async (tx) => {
-    const major = await tx.majors.findUnique({ where: { id: profile.major_id! }, select: { faculty_id: true } });
     const classItem = input.classId
-      ? await tx.student_classes.findUnique({ where: { id: input.classId }, select: { id: true, faculty_id: true } })
+      ? await tx.student_classes.findUnique({ where: { id: input.classId }, select: { id: true } })
       : null;
     if (input.classId && !classItem) return { ok: false as const, reason: "class_not_found" as const };
 
@@ -426,7 +423,6 @@ export async function convertAdmissionToStudent(
         admission_profile_id: profile.id,
         institution_program_id: profile.institution_program_id,
         major_id: profile.major_id,
-        faculty_id: classItem?.faculty_id ?? major?.faculty_id ?? null,
         class_id: classItem?.id ?? null,
         status: "active",
         enrolled_at: new Date(),
