@@ -153,6 +153,8 @@ Trạng thái triển khai: hoàn thành lõi chức năng ngày 06/10/2026. Đ�
 
 Thời lượng dự kiến: 5–7 ngày.
 
+Trạng thái triển khai: hoàn thành lõi chức năng ngày 06/10/2026. Đã có trang giám sát theo scope với lịch sử execution/node, bộ lọc server-side, queue health, số Lead/hồ sơ/sinh viên bị tác động và tỷ lệ thành công theo rule. Execution lỗi hoặc thực sự bị kẹt có thể retry/replay sau bước xác nhận; heartbeat `last_progress_at` và lịch chạy `next_run_at` giúp không báo nhầm delay hợp lệ. Recovery dùng claim có điều kiện, dựng lại node frontier và idempotency key; snapshot lịch sử tiếp tục được kiểm tra phạm vi truy cập. Quản trị viên có thể so sánh/rollback phiên bản, chuyển owner có kiểm tra quyền/phạm vi. Worker chạy retention hằng ngày với PostgreSQL advisory lock, xóa context/error cũ ở cả execution và node. Metrics từ PostgreSQL vẫn xem được khi Redis chưa chạy; queue health sẽ hiển thị trạng thái chưa khả dụng. Kiểm thử tích hợp recovery thực tế vẫn cần PostgreSQL và Redis cục bộ.
+
 - UI lịch sử execution và node, filter server-side, retry/replay có xác nhận.
 - Metrics queue depth, latency, throughput, failure rate và tỷ lệ thành công theo rule.
 - Dashboard hiệu quả rule gắn với chỉ số nghiệp vụ, không chỉ số lần chạy.

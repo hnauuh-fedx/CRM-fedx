@@ -12,7 +12,7 @@ export type AutomationContext = {
   payload?: unknown;
 };
 
-export type AutomationExecutionSource = "bulk" | "event" | "manual_test";
+export type AutomationExecutionSource = "bulk" | "event" | "manual_test" | "replay";
 
 export type ExecutableAutomationRule = {
   id: string;

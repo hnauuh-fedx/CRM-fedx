@@ -123,6 +123,31 @@ export async function triggerAutomation(triggerType: string, context: Omit<Autom
   }
 }
 
+export async function reenqueueAutomationExecutionNodes(
+  data: Omit<ExecutionJobData, "nodeId">,
+  nodeIds: string[],
+) {
+  if (!automationQueue) return { ok: false as const, reason: "queue_unavailable" as const };
+  const queued: string[] = [];
+  const skipped: string[] = [];
+
+  for (const nodeId of [...new Set(nodeIds)]) {
+    const jobId = `${data.logId}-${nodeId}`;
+    const existingJob = await automationQueue.getJob(jobId);
+    if (existingJob) {
+      const state = await existingJob.getState();
+      if (["active", "waiting", "delayed", "prioritized", "waiting-children"].includes(state)) {
+        skipped.push(nodeId);
+        continue;
+      }
+      await existingJob.remove();
+    }
+    await enqueueAutomationJob({ ...data, nodeId });
+    queued.push(nodeId);
+  }
+  return { ok: true as const, queued, skipped };
+}
+
 export async function startAutomationExecution(
   rule: ExecutableAutomationRule,
   context: Omit<AutomationContext, "ruleId">,
@@ -131,6 +156,12 @@ export async function startAutomationExecution(
   bulkDispatchId?: string,
   executionIdempotencyKey?: string,
   retryFailedIdempotentExecution = false,
+  creationAudit?: {
+    userId: string;
+    action: string;
+    ipAddress?: string;
+    newData: Record<string, unknown>;
+  },
 ) {
   const graph = withAutomationTriggerType(rule.graphData, rule.triggerType);
   const validation = validateAutomationGraph(graph);
@@ -166,14 +197,15 @@ export async function startAutomationExecution(
   if (existingLog?.status === "failed" && retryFailedIdempotentExecution) {
     await prisma.automation_execution_logs.update({
       where: { id: existingLog.id },
-      data: { status: "processing", error_message: null, completed_at: null },
+      data: { status: "processing", error_message: null, completed_at: null, last_progress_at: new Date(), next_run_at: null },
     });
     existingLog.status = "processing";
   }
   if (existingLog?.status === "completed") {
-    return { ok: true as const, data: { executionId: existingLog.id, status: existingLog.status, version: version.version } };
+    return { ok: true as const, data: { executionId: existingLog.id, status: existingLog.status, version: version.version, created: false } };
   }
   let log = existingLog;
+  let created = false;
   if (!log) {
     try {
       log = await prisma.$transaction(async (tx) => {
@@ -207,8 +239,21 @@ export async function startAutomationExecution(
         },
           });
         }
+        if (creationAudit) {
+          await tx.audit_logs.create({
+            data: {
+              user_id: creationAudit.userId,
+              entity_type: "automation_execution",
+              entity_id: createdLog.id,
+              action: creationAudit.action,
+              ip_address: creationAudit.ipAddress,
+              new_data: JSON.parse(JSON.stringify(creationAudit.newData)),
+            },
+          });
+        }
         return createdLog;
       });
+      created = true;
     } catch (error) {
       if (!executionIdempotencyKey || !isPrismaUniqueConstraintError(error)) throw error;
       log = await prisma.automation_execution_logs.findUnique({
@@ -222,11 +267,11 @@ export async function startAutomationExecution(
     for (const { nextNodeId } of getNextNodes(triggerNode.id, graph, null)) {
       await enqueueAutomationJob({ context: executionContext, nodeId: nextNodeId, graph, logId: log.id });
     }
-    return { ok: true as const, data: { executionId: log.id, status: log.status, version: version.version } };
+    return { ok: true as const, data: { executionId: log.id, status: log.status, version: version.version, created } };
   } catch (error) {
     await prisma.automation_execution_logs.update({
       where: { id: log.id },
-      data: { status: "failed", error_message: toErrorMessage(error), completed_at: new Date() },
+      data: { status: "failed", error_message: toErrorMessage(error), completed_at: new Date(), last_progress_at: new Date(), next_run_at: null },
     });
     throw error;
   }
@@ -236,6 +281,12 @@ async function processAutomationNode(job: Job<ExecutionJobData>) {
   const { context, nodeId, graph, logId } = job.data;
   const node = graph.nodes.find((candidate) => candidate.id === nodeId);
   if (!node) throw new UnrecoverableError(`Không tìm thấy node ${nodeId} trong snapshot.`);
+
+  const progressAt = new Date();
+  await prisma.automation_execution_logs.updateMany({
+    where: { id: logId, status: "processing" },
+    data: { last_progress_at: progressAt, next_run_at: null },
+  });
 
   const persisted = await prisma.automation_node_executions.findUnique({
     where: { execution_log_id_node_id: { execution_log_id: logId, node_id: nodeId } },
@@ -266,6 +317,11 @@ async function processAutomationNode(job: Job<ExecutionJobData>) {
       ? { nextSourceHandle: decision.nextSourceHandle, delayMinutes: decision.delayMinutes }
       : await executeRegisteredAutomationNode(node, context, nodeExecution.id);
     const nextNodes = getNextNodes(node.id, graph, actionResult.nextSourceHandle);
+    // Valid graphs have one runtime path: trigger has one edge, other nodes cannot fan out,
+    // and a condition selects exactly one handle. An execution-level next run is therefore unambiguous.
+    const nextRunAt = nextNodes.length > 0 && actionResult.delayMinutes > 0
+      ? new Date(Date.now() + actionResult.delayMinutes * delayMsPerMinute)
+      : null;
     for (const { nextNodeId } of nextNodes) {
       await enqueueAutomationJob(
         { context, nodeId: nextNodeId, graph, logId },
@@ -280,7 +336,12 @@ async function processAutomationNode(job: Job<ExecutionJobData>) {
       if (nextNodes.length === 0) {
         await tx.automation_execution_logs.update({
           where: { id: logId },
-          data: { status: "completed", completed_at: new Date(), error_message: null },
+          data: { status: "completed", completed_at: new Date(), error_message: null, last_progress_at: new Date(), next_run_at: null },
+        });
+      } else {
+        await tx.automation_execution_logs.updateMany({
+          where: { id: logId, status: "processing" },
+          data: { last_progress_at: new Date(), next_run_at: nextRunAt },
         });
       }
     });
@@ -295,6 +356,8 @@ async function processAutomationNode(job: Job<ExecutionJobData>) {
         status: error instanceof UnrecoverableError ? "failed" : "processing",
         error_message: toErrorMessage(error),
         ...(error instanceof UnrecoverableError ? { completed_at: new Date() } : {}),
+        last_progress_at: new Date(),
+        next_run_at: null,
       },
     });
     throw error;
@@ -415,7 +478,7 @@ automationWorker?.on("failed", async (job, error) => {
   if (!(error instanceof UnrecoverableError) && job.attemptsMade < attempts) return;
   await prisma.automation_execution_logs.update({
     where: { id: job.data.logId },
-    data: { status: "failed", error_message: toErrorMessage(error), completed_at: new Date() },
+    data: { status: "failed", error_message: toErrorMessage(error), completed_at: new Date(), last_progress_at: new Date(), next_run_at: null },
   }).catch((updateError) => console.error("Không thể cập nhật execution log thất bại", updateError));
 });
 

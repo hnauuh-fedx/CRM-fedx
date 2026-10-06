@@ -18,6 +18,7 @@ import {
   previewAutomationBulkLeads,
   type AutomationBulkFilter,
 } from "./automation-bulk.service";
+import { redactAutomationText, redactAutomationValue } from "./automation-observability";
 
 export type AutomationRuleListQuery = {
   page: number;
@@ -57,7 +58,7 @@ function canManageGlobalAutomation(user: AuthUser) {
   return user.accessScope === "ALL" && user.permissions.includes("automation.manage_global");
 }
 
-async function getAutomationRuleScopeWhere(user: AuthUser) {
+export async function getAutomationRuleScopeWhere(user: AuthUser) {
   const accessibleProgramIds = await getAccessibleAutomationProgramIds(user);
   if (accessibleProgramIds === null) {
     return canManageGlobalAutomation(user) ? {} : { institution_program_id: { not: null } };
@@ -65,7 +66,7 @@ async function getAutomationRuleScopeWhere(user: AuthUser) {
   return { institution_program_id: { in: accessibleProgramIds } };
 }
 
-async function canAccessAutomationProgram(user: AuthUser, institutionProgramId?: string | null) {
+export async function canAccessAutomationProgram(user: AuthUser, institutionProgramId?: string | null) {
   if (!institutionProgramId) return canManageGlobalAutomation(user);
   const accessibleProgramIds = await getAccessibleAutomationProgramIds(user);
   return accessibleProgramIds === null || accessibleProgramIds.includes(institutionProgramId);
@@ -449,12 +450,19 @@ async function validateRuleConfiguration(
 }
 
 export async function listExecutionLogs(user: AuthUser, ruleId: string, page: number, limit: number) {
+  const ruleScope = await getAutomationRuleScopeWhere(user);
   const rule = await prisma.automation_rules.findFirst({
-    where: { id: ruleId, ...(await getAutomationRuleScopeWhere(user)) },
+    where: { id: ruleId, ...ruleScope },
     select: { id: true },
   });
   if (!rule) return null;
-  const where = { rule_id: ruleId };
+  const where: Prisma.automation_execution_logsWhereInput = {
+    rule_id: ruleId,
+    OR: [
+      { rule_version_id: null },
+      { automation_rule_versions: { is: ruleScope as Prisma.automation_rule_versionsWhereInput } },
+    ],
+  };
   const [items, total] = await prisma.$transaction([
     prisma.automation_execution_logs.findMany({
       where,
@@ -486,8 +494,8 @@ export async function listExecutionLogs(user: AuthUser, ruleId: string, page: nu
       requestedBy: log.users ? { id: log.users.id, fullName: log.users.full_name } : null,
       executionActorId: log.execution_actor_id,
       nodeExecutionCount: log._count.automation_node_executions,
-      contextData: log.context_data,
-      errorMessage: log.error_message,
+      contextData: redactAutomationValue(log.context_data),
+      errorMessage: redactAutomationText(log.error_message),
       startedAt: log.started_at?.toISOString() ?? null,
       completedAt: log.completed_at?.toISOString() ?? null,
     })),
@@ -496,13 +504,21 @@ export async function listExecutionLogs(user: AuthUser, ruleId: string, page: nu
 }
 
 export async function getAutomationExecution(user: AuthUser, ruleId: string, executionId: string) {
+  const ruleScope = await getAutomationRuleScopeWhere(user);
   const rule = await prisma.automation_rules.findFirst({
-    where: { id: ruleId, ...(await getAutomationRuleScopeWhere(user)) },
+    where: { id: ruleId, ...ruleScope },
     select: { id: true },
   });
   if (!rule) return null;
   const log = await prisma.automation_execution_logs.findFirst({
-    where: { id: executionId, rule_id: ruleId },
+    where: {
+      id: executionId,
+      rule_id: ruleId,
+      OR: [
+        { rule_version_id: null },
+        { automation_rule_versions: { is: ruleScope as Prisma.automation_rule_versionsWhereInput } },
+      ],
+    },
     select: {
       id: true,
       source: true,
@@ -535,8 +551,8 @@ export async function getAutomationExecution(user: AuthUser, ruleId: string, exe
     status: log.status,
     version: log.automation_rule_versions?.version ?? null,
     executionActorId: log.execution_actor_id,
-    contextData: log.context_data,
-    errorMessage: log.error_message,
+    contextData: redactAutomationValue(log.context_data),
+    errorMessage: redactAutomationText(log.error_message),
     startedAt: log.started_at?.toISOString() ?? null,
     completedAt: log.completed_at?.toISOString() ?? null,
     nodes: log.automation_node_executions.map((node) => ({
@@ -545,7 +561,7 @@ export async function getAutomationExecution(user: AuthUser, ruleId: string, exe
       nodeType: node.node_type,
       status: node.status,
       attemptCount: node.attempt_count,
-      errorMessage: node.error_message,
+      errorMessage: redactAutomationText(node.error_message),
       startedAt: node.started_at?.toISOString() ?? null,
       completedAt: node.completed_at?.toISOString() ?? null,
     })),

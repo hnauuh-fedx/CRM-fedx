@@ -1,4 +1,5 @@
 import {
+  Activity,
   BarChart3,
   BadgeDollarSign,
   Bell,
@@ -381,6 +382,12 @@ const navigationSections: NavigationSection[] = [
         href: "/automations",
         icon: Workflow,
         permissions: ["automation.manage"],
+      },
+      {
+        label: "Giám sát Automation",
+        href: "/automations/monitoring",
+        icon: Activity,
+        permissions: ["automation.manage", "automation.view", "automation.view_logs", "automation.transfer_owner"],
       },
       {
         label: "Cấu hình hệ thống",

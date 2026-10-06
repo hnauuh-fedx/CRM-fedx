@@ -269,3 +269,88 @@ export type AutomationExecutionDetail = {
     completedAt: string | null;
   }>;
 };
+
+export type AutomationExecutionStatus = "queued" | "processing" | "completed" | "failed" | "stuck";
+
+export type AutomationOperationsExecution = {
+  id: string;
+  rule: { id: string; name: string };
+  version: number | null;
+  source: string;
+  status: AutomationExecutionStatus;
+  nodeExecutionCount: number;
+  contextData: unknown;
+  errorMessage: string | null;
+  startedAt: string | null;
+  completedAt: string | null;
+};
+
+export type AutomationOperationsExecutionDetail = Omit<AutomationOperationsExecution, "nodeExecutionCount"> & {
+  nodes: Array<{
+    id: string;
+    nodeId: string;
+    nodeType: string;
+    status: string;
+    attemptCount: number;
+    errorMessage: string | null;
+    startedAt: string | null;
+    actionCompletedAt: string | null;
+    completedAt: string | null;
+  }>;
+};
+
+export type AutomationExecutionListResponse = {
+  data: AutomationOperationsExecution[];
+  pagination: { page: number; limit: number; total: number; totalPages: number };
+};
+
+export type AutomationOperationalMetrics = {
+  range: { from: string; to: string };
+  totals: {
+    executions: number;
+    completed: number;
+    failed: number;
+    processing: number;
+    stuck: number;
+    affectedEntities: number;
+    successRate: number;
+    failureRate: number;
+    averageLatencyMs: number | null;
+    throughputPerHour: number;
+  };
+  queue: {
+    available: boolean;
+    waiting: number;
+    active: number;
+    delayed: number;
+    failed: number;
+    paused: number;
+  };
+  perRule: Array<{
+    ruleId: string;
+    ruleName: string;
+    total: number;
+    completed: number;
+    failed: number;
+    successRate: number;
+    affectedLeads: number;
+    affectedAdmissions: number;
+    affectedStudents: number;
+  }>;
+};
+
+export type AutomationRuleVersion = {
+  id: string;
+  version: number;
+  triggerType: string;
+  createdAt: string | null;
+  createdBy: { id: string; fullName: string } | null;
+  isCurrent: boolean;
+  changes: {
+    addedNodeIds: string[];
+    removedNodeIds: string[];
+    changedNodeIds: string[];
+    addedEdgeIds: string[];
+    removedEdgeIds: string[];
+  } | null;
+};

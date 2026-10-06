@@ -228,6 +228,11 @@ const AutomationRulesPage = lazy(() =>
     default: module.AutomationRulesPage,
   })),
 );
+const AutomationMonitoringPage = lazy(() =>
+  import("@/modules/automations/pages/automation-monitoring-page").then((module) => ({
+    default: module.AutomationMonitoringPage,
+  })),
+);
 const AutomationBuilderPage = lazy(() =>
   import("@/modules/automations/pages/automation-builder-page").then((module) => ({
     default: module.AutomationBuilderPage,
@@ -393,6 +398,9 @@ export function AppRoutes() {
 
             <Route element={<ProtectedRoute anyPermissions={["automation.manage"]} />}>
               <Route path="/automations" element={<AutomationRulesPage />} />
+            </Route>
+            <Route element={<ProtectedRoute anyPermissions={["automation.manage", "automation.view", "automation.view_logs", "automation.transfer_owner"]} />}>
+              <Route path="/automations/monitoring" element={<AutomationMonitoringPage />} />
             </Route>
           </Route>
         </Route>

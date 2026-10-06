@@ -7,6 +7,10 @@ import type {
   AutomationTestRunResponse,
   AutomationBulkJob,
   AutomationBulkPreview,
+  AutomationExecutionListResponse,
+  AutomationOperationalMetrics,
+  AutomationOperationsExecutionDetail,
+  AutomationRuleVersion,
 } from "@/modules/automations/automation.types";
 import { apiRequest } from "./api";
 
@@ -17,6 +21,17 @@ export type AutomationListParams = {
   isActive?: boolean;
   triggerType?: string;
   institutionProgramId?: string;
+};
+
+export type AutomationExecutionListParams = {
+  page?: number;
+  limit?: number;
+  search?: string;
+  ruleId?: string;
+  status?: string;
+  source?: string;
+  from?: string;
+  to?: string;
 };
 
 export function listAutomationRules(params: AutomationListParams, accessToken: string) {
@@ -95,6 +110,82 @@ export function getAutomationBulkRun(id: string, jobId: string, accessToken: str
 
 export function getAutomationExecution(id: string, executionId: string, accessToken: string) {
   return apiRequest<AutomationExecutionDetail>(`/automations/${id}/logs/${executionId}`, {}, accessToken);
+}
+
+export function listAutomationExecutions(params: AutomationExecutionListParams, accessToken: string) {
+  const query = new URLSearchParams();
+  Object.entries(params).forEach(([key, value]) => {
+    if (value !== undefined && value !== "") query.set(key, String(value));
+  });
+  return apiRequest<AutomationExecutionListResponse>(`/automations/observability/executions?${query.toString()}`, {}, accessToken);
+}
+
+export function getAutomationOperationsExecution(executionId: string, accessToken: string) {
+  return apiRequest<AutomationOperationsExecutionDetail>(`/automations/observability/executions/${executionId}`, {}, accessToken);
+}
+
+export function getAutomationOperationalMetrics(accessToken: string, from?: string, to?: string) {
+  const query = new URLSearchParams();
+  if (from) query.set("from", from);
+  if (to) query.set("to", to);
+  const suffix = query.size ? `?${query.toString()}` : "";
+  return apiRequest<AutomationOperationalMetrics>(`/automations/observability/metrics${suffix}`, {}, accessToken);
+}
+
+export function retryAutomationExecution(executionId: string, accessToken: string) {
+  return apiRequest<{ executionId: string; queued: string[]; skipped: string[] }>(
+    `/automations/observability/executions/${executionId}/retry`,
+    { method: "POST" },
+    accessToken,
+  );
+}
+
+export function replayAutomationExecution(executionId: string, requestId: string, accessToken: string) {
+  return apiRequest<{ executionId: string; status: string; version: number }>(
+    `/automations/observability/executions/${executionId}/replay`,
+    { method: "POST", body: JSON.stringify({ requestId }) },
+    accessToken,
+  );
+}
+
+export function listAutomationRuleVersions(ruleId: string, accessToken: string) {
+  return apiRequest<{ data: AutomationRuleVersion[] }>(`/automations/${ruleId}/versions`, {}, accessToken);
+}
+
+export function rollbackAutomationRule(ruleId: string, versionId: string, accessToken: string) {
+  return apiRequest<{ id: string; name: string; version: number }>(
+    `/automations/${ruleId}/versions/${versionId}/rollback`,
+    { method: "POST" },
+    accessToken,
+  );
+}
+
+export function transferAutomationRuleOwner(ruleId: string, ownerId: string, accessToken: string) {
+  return apiRequest<{ id: string; owner: { id: string; fullName: string } }>(
+    `/automations/${ruleId}/owner`,
+    { method: "PATCH", body: JSON.stringify({ ownerId }) },
+    accessToken,
+  );
+}
+
+export function listAutomationOwnerCandidates(ruleId: string, accessToken: string, search?: string) {
+  const query = new URLSearchParams();
+  if (search) query.set("search", search);
+  return apiRequest<{ data: Array<{ id: string; fullName: string }> }>(
+    `/automations/observability/rules/${ruleId}/owners?${query.toString()}`,
+    {},
+    accessToken,
+  );
+}
+
+export function listAutomationTransferRules(accessToken: string, search?: string) {
+  const query = new URLSearchParams();
+  if (search) query.set("search", search);
+  return apiRequest<{ data: Array<{ id: string; name: string; owner: { id: string; fullName: string } | null }> }>(
+    `/automations/observability/transfer-rules?${query.toString()}`,
+    {},
+    accessToken,
+  );
 }
 
 export function toggleAutomationRule(id: string, isActive: boolean, accessToken: string) {

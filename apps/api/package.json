@@ -27,6 +27,7 @@
     "test:integration:webhooks": "tsx src/integration/inbound-webhooks.integration.ts",
     "maintenance:webhook-logs": "tsx src/maintenance/cleanup-webhook-logs.ts",
     "maintenance:webhook-queue-recover": "tsx src/maintenance/recover-webhook-queue.ts",
+    "maintenance:automation-retention": "tsx src/maintenance/cleanup-automation-executions.ts",
     "worker:webhooks": "tsx src/workers/webhook.worker.ts",
     "worker:automation": "tsx src/workers/automation.worker.ts",
     "test:integration:webhooks-v2": "tsx src/integration/inbound-webhooks-v2.integration.ts",

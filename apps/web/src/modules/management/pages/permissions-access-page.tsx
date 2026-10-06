@@ -105,6 +105,11 @@ const permissionCodeOptions = [
   { code: "automation.manage_global", name: "Quản lý Rule Automation toàn hệ thống", module: "system" },
   { code: "system.manage", name: "Quản lý cấu hình hệ thống", module: "system" },
   { code: "audit.view", name: "Xem nhật ký hệ thống", module: "system" },
+  { code: "automation.view", name: "Xem vận hành Rule Automation", module: "system" },
+  { code: "automation.view_logs", name: "Xem nhật ký Rule Automation", module: "system" },
+  { code: "automation.update", name: "Cập nhật Rule Automation", module: "system" },
+  { code: "automation.retry", name: "Chạy lại Rule Automation", module: "system" },
+  { code: "automation.transfer_owner", name: "Chuyển người phụ trách Rule Automation", module: "system" },
 ] as const;
 
 type DialogState =
