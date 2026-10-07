@@ -148,14 +148,14 @@ async function loadBulkContext(jobId: string) {
     select: { id: true, requested_by: true, rule_id: true, payload: true },
   });
   if (!job?.requested_by || !job.rule_id) return null;
-  const actor = await getAuthUser(job.requested_by);
-  if (!actor?.permissions.includes("automation.manage")) return null;
   const payload = isRecord(job.payload) ? job.payload : {};
   const customerListId = typeof payload.customerListId === "string" ? payload.customerListId : "";
   const version = typeof payload.ruleVersion === "number" ? payload.ruleVersion : 0;
   const triggerType = typeof payload.triggerType === "string" ? payload.triggerType : "";
   const graphData = isRecord(payload.graphData) ? payload.graphData as unknown as AutomationGraphData : null;
   const institutionProgramId = typeof payload.institutionProgramId === "string" ? payload.institutionProgramId : null;
+  const actor = await getAuthUser(job.requested_by, institutionProgramId ?? undefined);
+  if (!actor?.permissions.includes("automation.manage")) return null;
   const snapshotAt = typeof payload.snapshotAt === "string" ? new Date(payload.snapshotAt) : null;
   const target = isRecord(payload.targetSnapshot) ? payload.targetSnapshot : null;
   const targetCustomerListId = typeof target?.customerListId === "string" ? target.customerListId : "";

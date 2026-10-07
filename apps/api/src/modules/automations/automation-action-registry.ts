@@ -354,7 +354,7 @@ async function markActionCompleted(tx: TransactionClient | typeof prisma, nodeEx
 
 async function requireActor(context: AutomationContext) {
   if (!context.actorId) throw new UnrecoverableError("Automation context không có tài khoản kích hoạt.");
-  const actor = await getAuthUser(context.actorId);
+  const actor = await getAuthUser(context.actorId, context.institutionProgramId);
   if (!actor) throw new UnrecoverableError("Tài khoản kích hoạt automation không còn hoạt động.");
   return actor;
 }

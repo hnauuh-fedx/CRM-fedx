@@ -33,6 +33,7 @@ import { Input } from "@/components/ui/input";
 import { Field, FieldDescription, FieldError, FieldGroup, FieldLabel } from "@/components/ui/field";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useAuth } from "@/modules/auth/auth-context";
+import { useInstitutionProgram } from "@/modules/institutions/institution-program-context";
 import { ApiError } from "@/services/api";
 import {
   listAutomationRules,
@@ -151,37 +152,43 @@ function createTemplateGraph(templateId: string, triggerType: string): Automatio
 }
 
 export function AutomationRulesPage() {
+  const { selectedProgramId } = useInstitutionProgram();
+
+  return <ProgramAutomationRulesPage key={selectedProgramId ?? "no-working-program"} />;
+}
+
+function ProgramAutomationRulesPage() {
   const auth = useAuth();
+  const { programs, selectedProgramId, isLoading: isProgramLoading } = useInstitutionProgram();
   const navigate = useNavigate();
   const queryClient = useQueryClient();
   const [search, setSearch] = useState("");
   const [draftSearch, setDraftSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState("all");
   const [triggerFilter, setTriggerFilter] = useState("all");
-  const [programFilter, setProgramFilter] = useState("all");
   const [page, setPage] = useState(1);
   const [createOpen, setCreateOpen] = useState(false);
   const [bulkRule, setBulkRule] = useState<AutomationRuleListItem | null>(null);
 
   const optionsQuery = useQuery({
-    queryKey: ["automations", "options"],
-    queryFn: () => getAutomationOptions(auth.accessToken!),
-    enabled: Boolean(auth.accessToken),
+    queryKey: ["automations", "options", selectedProgramId],
+    queryFn: () => getAutomationOptions(auth.accessToken!, selectedProgramId!),
+    enabled: Boolean(auth.accessToken && selectedProgramId),
   });
-  const programs = optionsQuery.data?.institutionPrograms ?? [];
   const triggers = optionsQuery.data?.registry.triggers ?? [];
+  const selectedProgram = programs.find((program) => program.id === selectedProgramId) ?? null;
 
   const rulesQuery = useQuery({
-    queryKey: ["automations", "list", { page, search, statusFilter, triggerFilter, programFilter }],
+    queryKey: ["automations", "list", selectedProgramId, { page, search, statusFilter, triggerFilter }],
     queryFn: () => listAutomationRules({
       page,
       limit: 20,
       search: search || undefined,
       isActive: statusFilter === "all" ? undefined : statusFilter === "active",
       triggerType: triggerFilter === "all" ? undefined : triggerFilter,
-      institutionProgramId: programFilter === "all" ? undefined : programFilter,
+      institutionProgramId: selectedProgramId!,
     }, auth.accessToken!),
-    enabled: Boolean(auth.accessToken),
+    enabled: Boolean(auth.accessToken && selectedProgramId),
   });
 
   const toggleMutation = useMutation({
@@ -214,11 +221,10 @@ export function AutomationRulesPage() {
     setSearch("");
     setStatusFilter("all");
     setTriggerFilter("all");
-    setProgramFilter("all");
     setPage(1);
   }
 
-  const hasFilters = Boolean(search || statusFilter !== "all" || triggerFilter !== "all" || programFilter !== "all");
+  const hasFilters = Boolean(search || statusFilter !== "all" || triggerFilter !== "all");
   const mutationError = toggleMutation.error ?? archiveMutation.error ?? duplicateMutation.error;
 
   return (
@@ -226,7 +232,9 @@ export function AutomationRulesPage() {
       <PageHeader
         eyebrow="Quản lý hệ thống"
         title="Rule Automation"
-        scopeLabel={auth.user?.accessScope === "ALL" ? "Toàn hệ thống" : "Theo phạm vi truy cập"}
+        scopeLabel={selectedProgram
+          ? `${selectedProgram.institutionName} - ${selectedProgram.name}`
+          : "Chưa chọn chương trình làm việc"}
         description="Xây dựng quy trình tự động hóa theo sự kiện để chăm sóc lead, gửi thông báo và cập nhật dữ liệu."
       />
 
@@ -235,14 +243,19 @@ export function AutomationRulesPage() {
           <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
             <div>
               <CardTitle className="text-base">Bộ lọc Automation Rule</CardTitle>
-              <CardDescription>Tìm theo tên, trạng thái, sự kiện kích hoạt hoặc chương trình tuyển sinh.</CardDescription>
+              <CardDescription>Tìm rule trong chương trình đang làm việc theo tên, trạng thái hoặc sự kiện kích hoạt.</CardDescription>
             </div>
-            <Button id="create-automation-btn" className="min-h-11" onClick={() => setCreateOpen(true)}>
+            <Button
+              id="create-automation-btn"
+              className="min-h-11"
+              disabled={!selectedProgramId}
+              onClick={() => setCreateOpen(true)}
+            >
               <Plus data-icon="inline-start" />Tạo rule mới
             </Button>
           </div>
         </CardHeader>
-        <CardContent className="grid gap-4 lg:grid-cols-[minmax(16rem,1fr)_13rem_16rem_minmax(16rem,1fr)_auto] lg:items-end">
+        <CardContent className="grid gap-4 lg:grid-cols-[minmax(16rem,1fr)_13rem_16rem_auto] lg:items-end">
           <form className="grid gap-2" onSubmit={handleSearch}>
             <Label htmlFor="automation-search">Tìm kiếm</Label>
             <div className="flex gap-2">
@@ -267,13 +280,6 @@ export function AutomationRulesPage() {
               <SelectContent><SelectItem value="all">Tất cả sự kiện</SelectItem>{triggers.map((trigger) => <SelectItem key={trigger.code} value={trigger.code}>{trigger.label}</SelectItem>)}</SelectContent>
             </Select>
           </div>
-          <div className="grid gap-2">
-            <Label htmlFor="automation-program-filter">Chương trình tuyển sinh</Label>
-            <Select value={programFilter} onValueChange={(value) => { setProgramFilter(value); setPage(1); }}>
-              <SelectTrigger id="automation-program-filter" className="min-h-11 w-full"><SelectValue /></SelectTrigger>
-              <SelectContent><SelectItem value="all">Tất cả chương trình</SelectItem>{programs.map((program) => <SelectItem key={program.id} value={program.id}>{program.institutionName} - {program.name}</SelectItem>)}</SelectContent>
-            </Select>
-          </div>
           <Button type="button" variant="ghost" className="min-h-11" disabled={!hasFilters} onClick={resetFilters}>
             <FilterX data-icon="inline-start" />Xóa lọc
           </Button>
@@ -289,7 +295,14 @@ export function AutomationRulesPage() {
       )}
 
       {/* Rule list */}
-      {rulesQuery.isLoading ? (
+      {!selectedProgramId && !isProgramLoading ? (
+        <Card>
+          <EmptyState
+            title="Chưa có chương trình làm việc"
+            description="Chọn chương trình làm việc trên thanh điều hướng để xem và quản lý rule automation."
+          />
+        </Card>
+      ) : rulesQuery.isLoading || isProgramLoading ? (
         <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
           {Array.from({ length: 6 }, (_, i) => <Skeleton key={i} className="h-40" />)}
         </div>
@@ -345,9 +358,8 @@ export function AutomationRulesPage() {
         open={createOpen}
         onOpenChange={setCreateOpen}
         accessToken={auth.accessToken!}
-        programs={programs}
+        selectedProgram={selectedProgram}
         triggers={triggers}
-        canManageGlobal={auth.user?.accessScope === "ALL" && auth.can("automation.manage_global")}
         onCreated={(id) => {
           queryClient.invalidateQueries({ queryKey: ["automations"] });
           navigate(`/automations/${id}/builder`);
@@ -491,30 +503,27 @@ function CreateRuleDialog({
   open,
   onOpenChange,
   accessToken,
-  programs,
+  selectedProgram,
   triggers,
-  canManageGlobal,
   onCreated,
 }: {
   open: boolean;
   onOpenChange: (v: boolean) => void;
   accessToken: string;
-  programs: Array<{ id: string; name: string; institutionName: string }>;
+  selectedProgram: { id: string; name: string; institutionName: string } | null;
   triggers: Array<{ code: string; label: string }>;
-  canManageGlobal: boolean;
   onCreated: (id: string) => void;
 }) {
   const [name, setName] = useState("");
   const [description, setDescription] = useState("");
   const [triggerType, setTriggerType] = useState("lead_created");
   const [templateId, setTemplateId] = useState("blank");
-  const [programId, setProgramId] = useState("");
   const [errorMessage, setErrorMessage] = useState("");
   const [isSubmitting, setIsSubmitting] = useState(false);
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
-    if (!name.trim() || !triggerType || !programId) return;
+    if (!name.trim() || !triggerType || !selectedProgram) return;
     setIsSubmitting(true);
     setErrorMessage("");
     try {
@@ -523,14 +532,13 @@ function CreateRuleDialog({
         description: description.trim() || undefined,
         triggerType,
         graphData: createTemplateGraph(templateId, triggerType),
-        institutionProgramId: programId === "global" ? undefined : programId,
+        institutionProgramId: selectedProgram.id,
       }, accessToken);
       onOpenChange(false);
       setName("");
       setDescription("");
       setTriggerType("lead_created");
       setTemplateId("blank");
-      setProgramId("");
       onCreated(rule.id);
     } catch (error) {
       setErrorMessage(error instanceof ApiError ? error.message : "Không thể tạo rule. Vui lòng thử lại.");
@@ -544,7 +552,7 @@ function CreateRuleDialog({
       <DialogContent className="sm:max-w-md">
         <DialogHeader>
           <DialogTitle>Tạo automation rule mới</DialogTitle>
-          <DialogDescription>Chọn phạm vi, sự kiện kích hoạt và đặt tên cho rule trước khi vào builder.</DialogDescription>
+          <DialogDescription>Rule sẽ được tạo trong chương trình đang làm việc. Chọn mẫu, sự kiện kích hoạt và đặt tên trước khi vào builder.</DialogDescription>
         </DialogHeader>
         <form id="create-rule-form" onSubmit={handleSubmit}>
           <FieldGroup className="gap-4">
@@ -573,23 +581,19 @@ function CreateRuleDialog({
             </Select>
             <FieldDescription>{RULE_TEMPLATES.find((template) => template.id === templateId)?.description}</FieldDescription>
           </Field>
-          <Field>
-            <FieldLabel htmlFor="rule-program">Chương trình tuyển sinh</FieldLabel>
-            <Select value={programId} onValueChange={setProgramId} required>
-              <SelectTrigger id="rule-program" className="min-h-11 w-full" aria-describedby="rule-program-help">
-                <SelectValue placeholder="Chọn phạm vi áp dụng" />
-              </SelectTrigger>
-              <SelectContent>
-                {canManageGlobal && <SelectItem value="global">Toàn hệ thống</SelectItem>}
-                {programs.map((program) => (
-                  <SelectItem key={program.id} value={program.id}>
-                    {program.institutionName} - {program.name}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
+          <Field data-readonly>
+            <FieldLabel htmlFor="rule-program">Chương trình làm việc</FieldLabel>
+            <Input
+              id="rule-program"
+              className="min-h-11"
+              readOnly
+              value={selectedProgram
+                ? `${selectedProgram.institutionName} - ${selectedProgram.name}`
+                : "Chưa chọn chương trình"}
+              aria-describedby="rule-program-help"
+            />
             <FieldDescription id="rule-program-help">
-              Rule chỉ đọc và thay đổi lead thuộc phạm vi đã chọn.
+              Rule chỉ đọc và thay đổi dữ liệu thuộc chương trình đang làm việc.
             </FieldDescription>
           </Field>
           <Field>
@@ -620,7 +624,7 @@ function CreateRuleDialog({
         </form>
         <DialogFooter>
           <Button variant="outline" type="button" onClick={() => onOpenChange(false)}>Huỷ</Button>
-          <Button type="submit" form="create-rule-form" disabled={isSubmitting || !name.trim() || !programId}>
+          <Button type="submit" form="create-rule-form" disabled={isSubmitting || !name.trim() || !selectedProgram}>
             {isSubmitting ? "Đang tạo..." : "Tạo và vào builder"}
           </Button>
         </DialogFooter>

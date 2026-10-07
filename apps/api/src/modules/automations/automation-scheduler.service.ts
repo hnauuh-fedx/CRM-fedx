@@ -18,7 +18,7 @@ export async function dispatchDueScheduledAutomations(now = new Date()) {
   do {
     const rules = await prisma.automation_rules.findMany({
       where: { is_active: true, archived_at: null, trigger_type: "scheduled" },
-      select: { id: true, graph_data: true, created_by: true },
+      select: { id: true, graph_data: true, institution_program_id: true, created_by: true },
       orderBy: { id: "asc" },
       take: 500,
       ...(cursor ? { cursor: { id: cursor }, skip: 1 } : {}),
@@ -52,7 +52,7 @@ export async function dispatchExpiringAdmissionAutomations(now = new Date()) {
       const graph = rule.graph_data as AutomationGraphData;
       const leadDays = Number(graph.nodes.find((node) => node.type === "trigger")?.data.expiryLeadDays);
       if (!Number.isInteger(leadDays) || leadDays < 0 || !rule.created_by) continue;
-      const actor = await getAuthUser(rule.created_by);
+      const actor = await getAuthUser(rule.created_by, rule.institution_program_id ?? undefined);
       if (!actor) continue;
 
       const targetDate = getAdmissionExpiryTargetDate(now, leadDays);
@@ -119,7 +119,7 @@ export async function dispatchExpiringAdmissionAutomations(now = new Date()) {
 }
 
 async function dispatchScheduledRule(
-  rule: { id: string; graph_data: unknown; created_by: string | null },
+  rule: { id: string; graph_data: unknown; institution_program_id: string | null; created_by: string | null },
   now: Date,
 ) {
   const graph = rule.graph_data as AutomationGraphData;
@@ -162,7 +162,7 @@ async function dispatchScheduledRule(
 
   try {
     if (!rule.created_by) throw new Error("Rule theo lịch chưa có chủ sở hữu.");
-    const actor = await getAuthUser(rule.created_by);
+    const actor = await getAuthUser(rule.created_by, rule.institution_program_id ?? undefined);
     if (!actor) throw new Error("Chủ sở hữu rule không còn hoạt động.");
     const result = await startAutomationBulkRun(actor, rule.id, { customerListId: data.scheduleCustomerListId }, dispatch.id);
     if (!result.ok) throw new Error(`Không thể tạo lượt chạy theo lịch: ${result.reason}.`);

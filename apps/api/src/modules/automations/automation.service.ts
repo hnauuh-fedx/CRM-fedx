@@ -40,6 +40,9 @@ export type AutomationRuleCreateInput = {
 export type AutomationRuleUpdateInput = Partial<AutomationRuleCreateInput>;
 
 async function getAccessibleAutomationProgramIds(user: AuthUser) {
+  if (user.workingInstitutionProgramId !== undefined) {
+    return user.workingInstitutionProgramId ? [user.workingInstitutionProgramId] : [];
+  }
   if (user.accessScope === "ALL" && user.permissions.includes("lead.view_all")) return null;
 
   const rows = await prisma.leads.findMany({
@@ -54,12 +57,102 @@ async function getAccessibleAutomationProgramIds(user: AuthUser) {
   return rows.flatMap((row) => row.institution_program_id ? [row.institution_program_id] : []);
 }
 
+function getAutomationLeadTagScopeSql(user: AuthUser, institutionProgramId?: string) {
+  const permissions = new Set(user.permissions);
+
+  if (user.accessScope === "ALL" && permissions.has("lead.view_all")) {
+    return Prisma.empty;
+  }
+
+  if (user.accessScope === "OWNED_ONLY") {
+    return Prisma.sql`AND l.owner_id = ${user.id}::uuid`;
+  }
+
+  if (user.accessScope === "DEPARTMENT" || permissions.has("lead.view_department")) {
+    if (user.departmentIds.length === 0) return Prisma.sql`AND FALSE`;
+
+    const departmentIds = Prisma.join(
+      user.departmentIds.map((departmentId) => Prisma.sql`${departmentId}::uuid`),
+    );
+    const unassignedProgramScope = institutionProgramId && user.institutionProgramIds.includes(institutionProgramId)
+      ? Prisma.sql`
+          OR (
+            l.institution_program_id = ${institutionProgramId}::uuid
+            AND l.assigned_to IS NULL
+            AND NOT EXISTS (
+              SELECT 1
+              FROM lead_assignments owner_assignment
+              WHERE owner_assignment.lead_id = l.id
+                AND owner_assignment.is_main_owner = TRUE
+            )
+          )
+        `
+      : Prisma.empty;
+
+    return Prisma.sql`
+      AND (
+        EXISTS (
+          SELECT 1
+          FROM lead_assignments department_assignment
+          WHERE department_assignment.lead_id = l.id
+            AND department_assignment.department_id IN (${departmentIds})
+            AND department_assignment.is_main_owner = TRUE
+        )
+        ${unassignedProgramScope}
+      )
+    `;
+  }
+
+  if (!permissions.has("lead.view_assigned") && permissions.has("lead.view_all")) {
+    return Prisma.empty;
+  }
+
+  return Prisma.sql`
+    AND (
+      l.assigned_to = ${user.id}::uuid
+      OR EXISTS (
+        SELECT 1
+        FROM lead_assignments user_assignment
+        WHERE user_assignment.lead_id = l.id
+          AND user_assignment.assigned_to = ${user.id}::uuid
+          AND user_assignment.is_main_owner = TRUE
+      )
+    )
+  `;
+}
+
+async function listAccessibleAutomationLeadTags(user: AuthUser, institutionProgramId?: string) {
+  if (user.workingInstitutionProgramId !== undefined && !institutionProgramId) return [];
+
+  const programScope = institutionProgramId
+    ? Prisma.sql`AND l.institution_program_id = ${institutionProgramId}::uuid`
+    : Prisma.empty;
+  const leadScope = getAutomationLeadTagScopeSql(user, institutionProgramId);
+
+  return prisma.$queryRaw<Array<{ name: string }>>(Prisma.sql`
+    SELECT DISTINCT t.name
+    FROM tags t
+    INNER JOIN entity_tags et
+      ON et.tag_id = t.id
+      AND et.entity_type = 'lead'
+    INNER JOIN leads l ON l.id = et.entity_id
+    WHERE l.deleted_at IS NULL
+      ${programScope}
+      ${leadScope}
+    ORDER BY t.name ASC
+    LIMIT 200
+  `);
+}
+
 function canManageGlobalAutomation(user: AuthUser) {
   return user.accessScope === "ALL" && user.permissions.includes("automation.manage_global");
 }
 
 export async function getAutomationRuleScopeWhere(user: AuthUser) {
   const accessibleProgramIds = await getAccessibleAutomationProgramIds(user);
+  if (accessibleProgramIds !== null && accessibleProgramIds.length === 0) {
+    return { id: { in: [] as string[] } };
+  }
   if (accessibleProgramIds === null) {
     return canManageGlobalAutomation(user) ? {} : { institution_program_id: { not: null } };
   }
@@ -67,6 +160,9 @@ export async function getAutomationRuleScopeWhere(user: AuthUser) {
 }
 
 export async function canAccessAutomationProgram(user: AuthUser, institutionProgramId?: string | null) {
+  if (user.workingInstitutionProgramId !== undefined) {
+    return Boolean(institutionProgramId && institutionProgramId === user.workingInstitutionProgramId);
+  }
   if (!institutionProgramId) return canManageGlobalAutomation(user);
   const accessibleProgramIds = await getAccessibleAutomationProgramIds(user);
   return accessibleProgramIds === null || accessibleProgramIds.includes(institutionProgramId);
@@ -161,7 +257,8 @@ export async function getAutomationRule(user: AuthUser, id: string) {
 }
 
 export async function createAutomationRule(user: AuthUser, input: AutomationRuleCreateInput) {
-  if (!(await canAccessAutomationProgram(user, input.institutionProgramId))) return null;
+  const institutionProgramId = input.institutionProgramId ?? user.workingInstitutionProgramId;
+  if (!(await canAccessAutomationProgram(user, institutionProgramId))) return null;
   const rule = await prisma.automation_rules.create({
     data: {
       name: input.name.trim(),
@@ -169,7 +266,7 @@ export async function createAutomationRule(user: AuthUser, input: AutomationRule
       trigger_type: input.triggerType,
       graph_data: (input.graphData as object) ?? { nodes: [], edges: [] },
       is_active: false,
-      institution_program_id: input.institutionProgramId || null,
+      institution_program_id: institutionProgramId,
       created_by: user.id,
     },
     select: { id: true, name: true, version: true, created_at: true },
@@ -322,7 +419,9 @@ export async function toggleAutomationRule(user: AuthUser, id: string, isActive:
   if (!existing) return null;
 
   if (isActive) {
-    const executionActor = existing.created_by ? await getAuthUser(existing.created_by) : null;
+    const executionActor = existing.created_by
+      ? await getAuthUser(existing.created_by, existing.institution_program_id ?? undefined)
+      : null;
     const validation = await validateRuleConfiguration(
       executionActor,
       existing.trigger_type,
@@ -379,7 +478,9 @@ export async function validateAutomationRule(user: AuthUser, id: string) {
     select: { id: true, trigger_type: true, graph_data: true, institution_program_id: true, created_by: true },
   });
   if (!rule) return null;
-  const executionActor = rule.created_by ? await getAuthUser(rule.created_by) : null;
+  const executionActor = rule.created_by
+    ? await getAuthUser(rule.created_by, rule.institution_program_id ?? undefined)
+    : null;
   return validateRuleConfiguration(executionActor, rule.trigger_type, rule.graph_data, rule.institution_program_id);
 }
 
@@ -812,6 +913,8 @@ export async function getAutomationOptions(user: AuthUser, institutionProgramId?
   if (institutionProgramId && accessibleProgramIds !== null && !accessibleProgramIds.includes(institutionProgramId)) {
     return null;
   }
+  const resolvedInstitutionProgramId = institutionProgramId ??
+    (accessibleProgramIds?.length === 1 ? accessibleProgramIds[0] : undefined);
   const canAssign = user.permissions.includes("lead.assign") || user.permissions.includes("lead.reassign");
   const scopedLeadWhere = { deleted_at: null, ...getLeadScopeWhere(user) };
   const [programs, assignees, departments, pipelineStages, targetRoles, customDataFields, sources, majors, admissionStatuses, admissionClasses, tags, customerLists, webhookEndpoints] = await Promise.all([
@@ -828,8 +931,8 @@ export async function getAutomationOptions(user: AuthUser, institutionProgramId?
           where: {
             status: "active",
             deleted_at: null,
-            ...(institutionProgramId
-              ? { user_roles: { some: { roles: { role_institution_programs: { some: { institution_program_id: institutionProgramId } } } } } }
+            ...(resolvedInstitutionProgramId
+              ? { user_roles: { some: { roles: { role_institution_programs: { some: { institution_program_id: resolvedInstitutionProgramId } } } } } }
               : {}),
           },
           select: { id: true, full_name: true },
@@ -841,8 +944,8 @@ export async function getAutomationOptions(user: AuthUser, institutionProgramId?
             where: {
               status: "active",
               deleted_at: null,
-              ...(institutionProgramId
-                ? { user_roles: { some: { roles: { role_institution_programs: { some: { institution_program_id: institutionProgramId } } } } } }
+              ...(resolvedInstitutionProgramId
+                ? { user_roles: { some: { roles: { role_institution_programs: { some: { institution_program_id: resolvedInstitutionProgramId } } } } } }
                 : {}),
               user_departments: { some: { department_id: { in: user.departmentIds } } },
             },
@@ -868,18 +971,18 @@ export async function getAutomationOptions(user: AuthUser, institutionProgramId?
       take: 500,
     }),
     prisma.roles.findMany({
-      where: institutionProgramId
-        ? { role_institution_programs: { some: { institution_program_id: institutionProgramId } } }
+      where: resolvedInstitutionProgramId
+        ? { role_institution_programs: { some: { institution_program_id: resolvedInstitutionProgramId } } }
         : undefined,
       select: { id: true, code: true, name: true },
       orderBy: { name: "asc" },
       take: 100,
     }),
-    getAutomationCustomDataFields(user, institutionProgramId ?? null),
+    getAutomationCustomDataFields(user, resolvedInstitutionProgramId ?? null),
     prisma.lead_sources.findMany({
       where: {
-        ...(institutionProgramId
-          ? { OR: [{ institution_program_id: institutionProgramId }, { institution_program_id: null }] }
+        ...(resolvedInstitutionProgramId
+          ? { OR: [{ institution_program_id: resolvedInstitutionProgramId }, { institution_program_id: null }] }
           : accessibleProgramIds === null
             ? {}
             : { leads: { some: scopedLeadWhere } }),
@@ -888,8 +991,8 @@ export async function getAutomationOptions(user: AuthUser, institutionProgramId?
       orderBy: { name: "asc" },
     }),
     prisma.majors.findMany({
-      where: institutionProgramId
-        ? { OR: [{ institution_program_id: institutionProgramId }, { institution_program_id: null }] }
+      where: resolvedInstitutionProgramId
+        ? { OR: [{ institution_program_id: resolvedInstitutionProgramId }, { institution_program_id: null }] }
         : accessibleProgramIds === null
           ? undefined
           : { OR: [{ institution_program_id: { in: accessibleProgramIds } }, { institution_program_id: null }] },
@@ -902,16 +1005,9 @@ export async function getAutomationOptions(user: AuthUser, institutionProgramId?
       orderBy: { name: "asc" },
       take: 500,
     }),
-    prisma.tags.findMany({
-      where: accessibleProgramIds === null
-        ? undefined
-        : { entity_tags: { some: { entity_type: "lead", leads: { is: scopedLeadWhere } } } },
-      select: { name: true },
-      orderBy: { name: "asc" },
-      take: 200,
-    }),
-    listAccessibleAutomationCustomerLists(user, institutionProgramId),
-    listAutomationWebhookEndpointOptions(user, institutionProgramId),
+    listAccessibleAutomationLeadTags(user, resolvedInstitutionProgramId),
+    listAccessibleAutomationCustomerLists(user, resolvedInstitutionProgramId),
+    listAutomationWebhookEndpointOptions(user, resolvedInstitutionProgramId),
   ]);
   if (!webhookEndpoints) return null;
   return {

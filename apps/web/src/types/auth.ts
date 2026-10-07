@@ -7,6 +7,7 @@ export type AuthUser = {
   permissions: string[];
   departmentIds: string[];
   institutionProgramIds: string[];
+  workingInstitutionProgramId?: string | null;
   accessScope: "ALL" | "DEPARTMENT" | "ASSIGNED_ONLY" | "OWNED_ONLY" | "READ_ONLY";
 };
 

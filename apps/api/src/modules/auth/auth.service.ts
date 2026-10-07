@@ -172,6 +172,7 @@ async function serializeUser(user: {
       ),
     ],
     institutionProgramIds,
+    workingInstitutionProgramId: selectedProgramId ?? null,
     accessScope: (await getStoredAccessScope(user.id, selectedProgramId)) ?? roleScope ?? (await getRoleAccessScope(roleIds)) ?? inferAccessScope(uniqueRoles),
   };
 }

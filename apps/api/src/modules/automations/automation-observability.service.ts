@@ -541,7 +541,7 @@ export async function transferAutomationRuleOwner(user: AuthUser, ruleId: string
     select: { id: true, created_by: true, institution_program_id: true },
   });
   if (!rule) return { ok: false as const, reason: "not_found" as const };
-  const owner = await getAuthUser(ownerId);
+  const owner = await getAuthUser(ownerId, rule.institution_program_id ?? undefined);
   if (!owner || !owner.permissions.includes("automation.manage")) {
     return { ok: false as const, reason: "invalid_owner" as const };
   }
@@ -597,7 +597,8 @@ export async function listAutomationOwnerCandidates(user: AuthUser, ruleId: stri
   });
   const eligible: AuthUser[] = [];
   for (let index = 0; index < candidates.length; index += 5) {
-    const principals = (await Promise.all(candidates.slice(index, index + 5).map((candidate) => getAuthUser(candidate.id))))
+    const principals = (await Promise.all(candidates.slice(index, index + 5).map((candidate) =>
+      getAuthUser(candidate.id, rule.institution_program_id ?? undefined))))
       .filter((principal): principal is AuthUser => Boolean(principal));
     const checks = await Promise.all(principals.map(async (principal) => ({
       principal,

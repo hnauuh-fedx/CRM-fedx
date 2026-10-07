@@ -26,7 +26,7 @@ export async function dispatchDueSlaAutomations(now = new Date(), batchSize = 20
     const trigger = graph.nodes.find((node) => node.type === "trigger");
     const slaMinutes = Number(trigger?.data.slaMinutes);
     if (!Number.isFinite(slaMinutes) || slaMinutes <= 0 || !rule.created_by) continue;
-    const actor = await getAuthUser(rule.created_by);
+    const actor = await getAuthUser(rule.created_by, rule.institution_program_id ?? undefined);
     if (!actor) continue;
     const cutoff = new Date(now.getTime() - slaMinutes * 60_000);
     const programId = rule.institution_program_id;
