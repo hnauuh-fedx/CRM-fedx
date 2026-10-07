@@ -35,6 +35,7 @@ const permissionDefinitions = [
 
 let prisma: PrismaHandle;
 let ruleId: string | null = null;
+const createdRuleIds: string[] = [];
 let pipelineId: string | null = null;
 const stageIds: string[] = [];
 const leadIds: string[] = [];
@@ -123,6 +124,10 @@ async function createFixtures() {
     ...permissions
       .filter((permission) => permission.code !== "lead.view_assigned")
       .map((permission) => ({ role_id: actorRole.id, permission_id: permission.id })),
+    {
+      role_id: targetRole.id,
+      permission_id: permissionByCode.get("lead.view_assigned")!.id,
+    },
     ...["automation.manage", "lead.view_assigned"].map((code) => ({
       role_id: scopedRole.id,
       permission_id: permissionByCode.get(code)!.id,
@@ -300,7 +305,7 @@ function automationGraph(targetUserId: string, targetStageId: string, customFiel
 
 async function cleanup() {
   if (!prisma) return;
-  if (ruleId) await prisma.automation_rules.deleteMany({ where: { id: ruleId } });
+  if (createdRuleIds.length > 0) await prisma.automation_rules.deleteMany({ where: { id: { in: createdRuleIds } } });
   await prisma.audit_logs.deleteMany({ where: { user_id: { in: userIds } } });
   await prisma.notifications.deleteMany({ where: { user_id: { in: userIds } } });
   await prisma.custom_field_values.deleteMany({ where: { custom_field_id: { in: customFieldIds } } });
@@ -332,10 +337,11 @@ async function main() {
   process.env.AUTOMATION_DELAY_MS_PER_MINUTE = "1000";
   delete process.env.DISABLE_AUTOMATION_WORKER;
   ({ prisma } = await import("../database/prisma.js"));
-  const [{ app }, engine, { redisConnection }] = await Promise.all([
+  const [{ app }, engine, { redisCommandConnection, redisConnection }, { getWebhookQueueAdapter }] = await Promise.all([
     import("../app.js"),
     import("../modules/automations/automation-engine.service.js"),
     import("../config/redis.js"),
+    import("../modules/webhooks/webhook-queue.service.js"),
   ]);
   assert.ok(engine.automationQueue && engine.automationWorker && redisConnection, "Integration test yêu cầu Redis và worker thật.");
   await redisConnection.ping();
@@ -382,6 +388,7 @@ async function main() {
     });
     assert.equal(created.status, 201, "Actor có quyền phải tạo được rule.");
     ruleId = created.payload.id as string;
+    createdRuleIds.push(ruleId);
 
     const testLeadsWithoutSensitivePermission = await request(
       baseUrl,
@@ -426,6 +433,7 @@ async function main() {
       body: {},
     });
     assert.equal(duplicated.status, 201, "Rule trong phạm vi phải nhân bản được.");
+    createdRuleIds.push(duplicated.payload.id as string);
     assert.equal(duplicated.payload.version, 1);
     const duplicatedDetail = await request(baseUrl, `/automations/${duplicated.payload.id}`, { token: actorToken });
     assert.equal(duplicatedDetail.status, 200);
@@ -602,7 +610,7 @@ async function main() {
     assert.equal(archived.status, 200, "Rule đã tắt phải lưu trữ được.");
     assert.equal(archived.payload.message, "Đã lưu trữ automation rule.");
 
-    const listAfterArchive = await request(baseUrl, "/automations?page=1&limit=20", { token: actorToken });
+    const listAfterArchive = await request(baseUrl, `/automations?search=${runId}&page=1&limit=20`, { token: actorToken });
     assert.equal(listAfterArchive.status, 200);
     assert.equal(listAfterArchive.payload.pagination.total, 0, "Rule lưu trữ không còn xuất hiện trong danh sách.");
     const logsAfterArchive = await request(baseUrl, `/automations/${ruleId}/logs?page=1&limit=20`, { token: actorToken });
@@ -611,17 +619,21 @@ async function main() {
 
     console.log("Automation integration passed: API, RBAC, archive, Redis worker, branching and all action nodes verified.");
   } finally {
+    server.closeAllConnections();
     await new Promise<void>((resolve) => server.close(() => resolve()));
-    await engine.automationWorker?.close();
     await engine.automationQueue?.obliterate({ force: true });
-    await engine.automationQueue?.close();
+    await engine.closeAutomationEngine();
+    await getWebhookQueueAdapter()?.close?.();
+    await redisCommandConnection?.quit();
     await redisConnection?.quit();
     await cleanup();
     await prisma.$disconnect();
   }
 }
 
-main().catch((error: unknown) => {
-  console.error(error);
-  process.exitCode = 1;
-});
+main()
+  .then(() => process.exit(0))
+  .catch((error: unknown) => {
+    console.error(error);
+    process.exit(1);
+  });
