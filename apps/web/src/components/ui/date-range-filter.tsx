@@ -8,11 +8,19 @@ export function DateRangeFilter({
   toDate,
   onChange,
   className,
+  placeholder,
+  buttonClassName,
+  onOpenChange,
+  isActive,
 }: {
   fromDate: string
   toDate: string
   onChange: (from: string, to: string) => void
   className?: string
+  placeholder?: string
+  buttonClassName?: string
+  onOpenChange?: (open: boolean) => void
+  isActive?: boolean
 }) {
   const dateRange = React.useMemo<DateRange | undefined>(() => {
     if (!fromDate && !toDate) return undefined
@@ -33,6 +41,10 @@ export function DateRangeFilter({
       className={className}
       date={dateRange}
       setDate={handleDateChange}
+      placeholder={placeholder}
+      buttonClassName={buttonClassName}
+      onOpenChange={onOpenChange}
+      isActive={isActive}
     />
   )
 }

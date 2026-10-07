@@ -77,7 +77,10 @@ export type LeadListFilters = {
   search: string;
   pipelineStageId: string;
   sourceId: string;
+  majorId: string;
   assigneeId: string;
+  fromDate: string;
+  toDate: string;
 };
 
 export type LeadListResponse = {
@@ -99,7 +102,14 @@ export type LeadFilterOptions = {
   sources: Array<{ id: string; name: string }>;
   institutionPrograms: Array<{ id: string; name: string; institutionName: string }>;
   assignees: Array<{ id: string; fullName: string }>;
-  stages: Array<{ id: string; name: string; color: string | null; count: number }>;
+  stages: Array<{
+    id: string;
+    name: string;
+    color: string | null;
+    pipelineId: string | null;
+    pipelineName: string | null;
+    count: number;
+  }>;
   majors: Array<{ id: string; name: string }>;
   totalLeads: number;
 };
@@ -123,6 +133,11 @@ export type DuplicateLeadResponse = {
 };
 
 export type LeadDetail = LeadListItem & {
+  lifecycleStatus: {
+    value: "ACTIVE" | "FAIL";
+    label: string;
+    failedStageId: string | null;
+  };
   sourceOccurrences: Array<{
     id: string;
     sourceGroup: { id: string; name: string };
@@ -246,6 +261,8 @@ export type LeadFormInput = {
   sourceId: string;
   assigneeId: string;
   pipelineStageId: string;
+  noteTemplateId?: string;
+  noteContent?: string;
   email: string;
   gender: string;
   dateOfBirth: string;
@@ -316,10 +333,11 @@ export type LeadActionOptions = {
   assignees: Array<{ id: string; fullName: string }>;
   telesales: Array<{ id: string; fullName: string }>;
   departments: Array<{ id: string; name: string }>;
-  institutionPrograms: Array<{ id: string; name: string; code: string; institutionName: string; programTypeName: string }>;
-  majors: Array<{ id: string; name: string; code: string | null; facultyName: string | null }>;
+  institutionPrograms: Array<{ id: string; name: string; code: string; institutionName: string }>;
+  majors: Array<{ id: string; name: string; code: string | null }>;
   admissionStatuses: Array<{ id: string; name: string }>;
   tags: string[];
+  systemFieldRequirements: Record<string, boolean>;
 };
 
 export type LeadImportError = {

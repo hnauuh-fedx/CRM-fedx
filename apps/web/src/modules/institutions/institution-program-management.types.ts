@@ -1,13 +1,9 @@
-export type InstitutionOption = { id: string; name: string; code: string; status: string | null };
-export type ProgramTypeOption = { id: string; name: string; code: string };
-
 export type ManagedInstitutionProgram = {
   id: string;
   name: string;
   code: string;
   status: "active" | "inactive" | "archived";
-  institution: InstitutionOption;
-  programType: ProgramTypeOption;
+  institutionName: string;
   counts: {
     leads: number;
     admissions: number;
@@ -24,8 +20,7 @@ export type ManagedInstitutionProgram = {
 };
 
 export type InstitutionProgramInput = {
-  institutionId: string;
-  programTypeId: string;
+  institutionName: string;
   name: string;
   code: string;
   status: "active" | "inactive" | "archived";
@@ -34,12 +29,6 @@ export type InstitutionProgramInput = {
 export type InstitutionProgramListResponse = {
   data: ManagedInstitutionProgram[];
   pagination: { page: number; limit: number; total: number; totalPages: number };
-  filters: { search: string; status: string; institutionId: string; programTypeId: string };
+  filters: { search: string; status: string; institutionName: string };
   sort: { sortBy: "createdAt" | "name" | "code" | "status"; sortOrder: "asc" | "desc" };
-};
-
-export type InstitutionProgramManagementOptions = {
-  institutions: InstitutionOption[];
-  programTypes: ProgramTypeOption[];
-  statuses: Array<"active" | "inactive" | "archived">;
 };

@@ -17,8 +17,6 @@ const roleIds: string[] = [];
 const leadIds: string[] = [];
 const fieldIds: string[] = [];
 const programIds: string[] = [];
-let institutionId: string | null = null;
-let programTypeId: string | null = null;
 let assertions = 0;
 
 function check(condition: unknown, message: string) {
@@ -129,8 +127,6 @@ async function cleanup() {
   await prisma.role_permissions.deleteMany({ where: { role_id: { in: roleIds } } });
   await prisma.roles.deleteMany({ where: { id: { in: roleIds } } });
   await prisma.institution_programs.deleteMany({ where: { id: { in: programIds } } });
-  if (institutionId) await prisma.institutions.deleteMany({ where: { id: institutionId } });
-  if (programTypeId) await prisma.program_types.deleteMany({ where: { id: programTypeId } });
 }
 
 async function main() {
@@ -151,12 +147,8 @@ async function main() {
       login(baseUrl, full.email), login(baseUrl, limited.email), login(baseUrl, noCustom.email), login(baseUrl, creator.email), login(baseUrl, noUpdate.email), login(baseUrl, outside.email),
     ]);
 
-    const institution = await prisma.institutions.create({ data: { code: `INST_${runId}`, name: "Integration Institution" }, select: { id: true } });
-    institutionId = institution.id;
-    const programType = await prisma.program_types.create({ data: { code: `TYPE_${runId}`, name: "Integration Type" }, select: { id: true } });
-    programTypeId = programType.id;
     for (const suffix of ["A", "B"]) {
-      const program = await prisma.institution_programs.create({ data: { institution_id: institution.id, program_type_id: programType.id, code: `PROGRAM_${suffix}_${runId}`, name: `Program ${suffix}` }, select: { id: true } });
+      const program = await prisma.institution_programs.create({ data: { institution_name: "Integration Institution", code: `PROGRAM_${suffix}_${runId}`, name: `Program ${suffix}` }, select: { id: true } });
       programIds.push(program.id);
     }
     const lead = await prisma.leads.create({ data: { full_name: "Scoped Lead", phone: `09${Date.now().toString().slice(-8)}`, assigned_to: full.id, owner_id: full.id, institution_program_id: programIds[0] }, select: { id: true } });

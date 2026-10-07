@@ -1,3 +1,4 @@
+import { expandLegacyCustomFieldPermission } from "../modules/custom-fields/custom-field-permissions";
 import { prisma } from "./prisma";
 
 const demoTelesaleEmail = "telesale@tvu.edu.vn";
@@ -78,7 +79,7 @@ async function seedSaleAccess() {
         create: { code, name: definition.name, description: definition.description },
       });
       const permissions = await Promise.all(
-        definition.permissions.map((permission) =>
+        definition.permissions.flatMap(expandLegacyCustomFieldPermission).map((permission) =>
           transaction.permissions.upsert({
             where: { code: permission.code },
             update: { name: permission.name, module: permission.module },
@@ -94,7 +95,7 @@ async function seedSaleAccess() {
         skipDuplicates: true,
       });
       const programs = await transaction.institution_programs.findMany({
-        where: { status: "active", institutions: { is: { status: "active" } } },
+        where: { status: "active" },
         select: { id: true },
       });
       await transaction.role_institution_programs.createMany({

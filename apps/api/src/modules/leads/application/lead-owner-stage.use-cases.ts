@@ -3,11 +3,20 @@ import type { Prisma } from "../../../generated/prisma/client";
 import type { AuthUser } from "../../auth/auth.types";
 import { getLeadScopeWhere } from "../lead-list.service";
 import {
+  ACTIVE_LEAD_STATUS,
+  createFailedLeadStatus,
+  getFailedLeadStageId,
+  getPipelineStageMarker,
+  isFailedLeadStatus,
+  type LeadLifecycleStatus,
+} from "../domain/lead-lifecycle-status";
+import {
   canAssignLead,
   canUseAssignmentDepartment,
   canUpdateLead,
 } from "./lead-authorization";
 import { recordStageChange } from "./lead-mutation-support";
+import { recordTransitionNote, resolveTransitionNote } from "../transition-note.service";
 
 export type LeadMutationTransactionEffect = (
   tx: Prisma.TransactionClient,
@@ -28,6 +37,8 @@ export async function changeVisibleLeadStage(
   institutionProgramId?: string,
   transactionEffect?: LeadMutationTransactionEffect,
   ipAddress?: string,
+  noteTemplateId?: string,
+  noteContent?: string,
 ) {
   if (!canUpdateLead(actor)) {
     return { ok: false as const, reason: "permission_denied" as const };
@@ -50,6 +61,9 @@ export async function changeVisibleLeadStage(
     if (!stage) {
       return { ok: false as const, reason: "stage_not_found" as const };
     }
+    if (isFailedLeadStatus(lead.status)) {
+      return { ok: false as const, reason: "lead_failed" as const };
+    }
     if (lead.pipeline_stage_id === stageId) {
       await transactionEffect?.(tx);
       return {
@@ -58,6 +72,8 @@ export async function changeVisibleLeadStage(
       };
     }
 
+    const note = await resolveTransitionNote(tx, stage.id, stage.name, noteTemplateId, noteContent);
+    if (!note.ok) return note;
     await tx.leads.update({
       where: { id: leadId },
       data: { pipeline_stage_id: stageId, updated_at: new Date() },
@@ -67,11 +83,180 @@ export async function changeVisibleLeadStage(
       includeStageNameInAudit: true,
       ipAddress,
     });
+    await recordTransitionNote(tx, actor, leadId, note.content, noteTemplateId, ipAddress);
     await transactionEffect?.(tx);
     return {
       ok: true as const,
       data: { id: leadId, pipelineStageId: stageId, changed: true },
     };
+  });
+}
+
+export async function changeVisibleLeadStatus(
+  actor: AuthUser,
+  leadId: string,
+  status: LeadLifecycleStatus,
+  institutionProgramId?: string,
+  ipAddress?: string,
+  noteTemplateId?: string,
+  noteContent?: string,
+) {
+  if (!canUpdateLead(actor)) {
+    return { ok: false as const, reason: "permission_denied" as const };
+  }
+
+  return prisma.$transaction(async (tx) => {
+    const lead = await findVisibleLead(actor, leadId, institutionProgramId, tx);
+    if (!lead) {
+      return { ok: false as const, reason: "lead_not_found" as const };
+    }
+
+    const failedStageId = getFailedLeadStageId(lead.status);
+    if (status === "FAIL") {
+      if (failedStageId) {
+        return {
+          ok: true as const,
+          data: {
+            id: leadId,
+            status: "FAIL" as const,
+            statusLabel: "Fail",
+            pipelineStageId: null,
+            changed: false,
+          },
+        };
+      }
+      if (!lead.pipeline_stage_id) {
+        return { ok: false as const, reason: "stage_required" as const };
+      }
+      const stage = await tx.pipeline_stages.findUnique({
+        where: { id: lead.pipeline_stage_id },
+        select: { id: true, name: true },
+      });
+      if (!stage) {
+        return { ok: false as const, reason: "stage_not_found" as const };
+      }
+      const marker = getPipelineStageMarker(stage.name);
+      const statusLabel = marker ? `Fail | ${marker}` : "Fail";
+      const nextStatus = createFailedLeadStatus(stage.id);
+      const note = await resolveTransitionNote(tx, "FAIL", "Fail", noteTemplateId, noteContent);
+      if (!note.ok) return note;
+
+      await tx.leads.update({
+        where: { id: leadId },
+        data: {
+          status: nextStatus,
+          pipeline_stage_id: null,
+          updated_at: new Date(),
+        },
+      });
+      await recordStageChange(tx, actor, leadId, stage.id, null, {
+        activityContent: `Chuyển trạng thái lead sang ${statusLabel}.`,
+        ipAddress,
+      });
+      await recordLifecycleStatusAudit(
+        tx,
+        actor,
+        leadId,
+        ACTIVE_LEAD_STATUS,
+        nextStatus,
+        stage.id,
+        null,
+        ipAddress,
+      );
+      await recordTransitionNote(tx, actor, leadId, note.content, noteTemplateId, ipAddress);
+
+      return {
+        ok: true as const,
+        data: {
+          id: leadId,
+          status: "FAIL" as const,
+          statusLabel,
+          pipelineStageId: null,
+          changed: true,
+        },
+      };
+    }
+
+    if (!failedStageId) {
+      return {
+        ok: true as const,
+        data: {
+          id: leadId,
+          status: "ACTIVE" as const,
+          statusLabel: "Active",
+          pipelineStageId: lead.pipeline_stage_id,
+          changed: false,
+        },
+      };
+    }
+    const restoredStage = await tx.pipeline_stages.findUnique({
+      where: { id: failedStageId },
+      select: { id: true, name: true },
+    });
+    if (!restoredStage) {
+      return { ok: false as const, reason: "stage_not_found" as const };
+    }
+    const note = await resolveTransitionNote(tx, restoredStage.id, restoredStage.name, noteTemplateId, noteContent);
+    if (!note.ok) return note;
+
+    await tx.leads.update({
+      where: { id: leadId },
+      data: {
+        status: ACTIVE_LEAD_STATUS,
+        pipeline_stage_id: restoredStage.id,
+        updated_at: new Date(),
+      },
+    });
+    await recordStageChange(tx, actor, leadId, null, restoredStage, {
+      activityContent: `Kích hoạt lại lead tại tiến trình ${getPipelineStageMarker(restoredStage.name) ?? restoredStage.name}.`,
+      includeStageNameInAudit: true,
+      ipAddress,
+    });
+    await recordLifecycleStatusAudit(
+      tx,
+      actor,
+      leadId,
+      lead.status,
+      ACTIVE_LEAD_STATUS,
+      null,
+      restoredStage.id,
+      ipAddress,
+    );
+    await recordTransitionNote(tx, actor, leadId, note.content, noteTemplateId, ipAddress);
+
+    return {
+      ok: true as const,
+      data: {
+        id: leadId,
+        status: "ACTIVE" as const,
+        statusLabel: "Active",
+        pipelineStageId: restoredStage.id,
+        changed: true,
+      },
+    };
+  });
+}
+
+async function recordLifecycleStatusAudit(
+  tx: Prisma.TransactionClient,
+  actor: AuthUser,
+  leadId: string,
+  previousStatus: string | null,
+  nextStatus: string,
+  previousStageId: string | null,
+  nextStageId: string | null,
+  ipAddress?: string,
+) {
+  await tx.audit_logs.create({
+    data: {
+      user_id: actor.id,
+      entity_type: "lead",
+      entity_id: leadId,
+      action: "lead_status_changed",
+      ip_address: ipAddress,
+      old_data: { status: previousStatus, pipelineStageId: previousStageId },
+      new_data: { status: nextStatus, pipelineStageId: nextStageId },
+    },
   });
 }
 
@@ -119,6 +304,9 @@ export async function assignVisibleLead(
         user_roles: {
           some: {
             roles: {
+              ...(institutionProgramId
+                ? { role_institution_programs: { some: { institution_program_id: institutionProgramId } } }
+                : {}),
               role_permissions: {
                 some: { permissions: { code: "lead.view_assigned" } },
                 none: {
@@ -247,6 +435,7 @@ async function findVisibleLead(
       id: true,
       full_name: true,
       pipeline_stage_id: true,
+      status: true,
       assigned_to: true,
     },
   });

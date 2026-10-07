@@ -1,6 +1,7 @@
 import { prisma } from "../../../database/prisma";
 import type { AuthUser } from "../../auth/auth.types";
 import { assignableSaleWhere } from "./lead-mutation-support";
+import { getSystemFieldRequirements } from "../../custom-fields/system-field-requirements.service";
 
 export async function getLeadActionOptions(
   actor: AuthUser,
@@ -49,6 +50,9 @@ export async function getLeadActionOptions(
           where: {
             status: "active",
             deleted_at: null,
+            ...(institutionProgramId
+              ? { user_roles: { some: { roles: { role_institution_programs: { some: { institution_program_id: institutionProgramId } } } } } }
+              : {}),
             ...(!canAssignAll
               ? {
                   user_departments: {
@@ -69,7 +73,18 @@ export async function getLeadActionOptions(
         ...(!canAssign ? { id: actor.id } : {}),
         status: "active",
         deleted_at: null,
-        ...assignableSaleWhere,
+        ...(institutionProgramId
+          ? {
+              user_roles: {
+                some: {
+                  roles: {
+                    ...assignableSaleWhere.user_roles.some.roles,
+                    role_institution_programs: { some: { institution_program_id: institutionProgramId } },
+                  },
+                },
+              },
+            }
+          : assignableSaleWhere),
         ...(canAssign && !canAssignAll
           ? {
               user_departments: {
@@ -102,10 +117,9 @@ export async function getLeadActionOptions(
         id: true,
         name: true,
         code: true,
-        institutions: { select: { name: true } },
-        program_types: { select: { name: true } },
+        institution_name: true,
       },
-      orderBy: [{ institutions: { name: "asc" } }, { name: "asc" }],
+      orderBy: [{ institution_name: "asc" }, { name: "asc" }],
     }),
     prisma.majors.findMany({
       where: institutionProgramId
@@ -120,7 +134,6 @@ export async function getLeadActionOptions(
         id: true,
         name: true,
         code: true,
-        faculties: { select: { name: true } },
       },
       orderBy: { name: "asc" },
     }),
@@ -134,6 +147,12 @@ export async function getLeadActionOptions(
       take: 200,
     }),
   ]);
+  const systemFieldRequirements = {
+    fullName: true,
+    phone: true,
+    sourceId: true,
+    ...await getSystemFieldRequirements("LEAD"),
+  };
 
   return {
     sources,
@@ -157,16 +176,15 @@ export async function getLeadActionOptions(
       id: program.id,
       name: program.name,
       code: program.code,
-      institutionName: program.institutions.name,
-      programTypeName: program.program_types.name,
+      institutionName: program.institution_name,
     })),
     majors: majors.map((major) => ({
       id: major.id,
       name: major.name,
       code: major.code,
-      facultyName: major.faculties?.name ?? null,
     })),
     admissionStatuses,
     tags: tags.map((tag) => tag.name),
+    systemFieldRequirements,
   };
 }

@@ -54,13 +54,14 @@ function unique(values: string[]) {
   return [...new Set(values.filter(Boolean))];
 }
 
-async function getAccessScopeMap(userIds: string[]) {
+async function getAccessScopeMap(userIds: string[], institutionProgramId: string) {
   if (userIds.length === 0) return new Map<string, AccessScope>();
   try {
     const rows = await prisma.$queryRaw<Array<{ user_id: string; scope: AccessScope }>>(Prisma.sql`
       SELECT user_id, scope
-      FROM user_access_scopes
+      FROM user_program_access_scopes
       WHERE user_id IN (${Prisma.join(userIds)})
+        AND institution_program_id = ${institutionProgramId}::uuid
     `);
     return new Map(rows.map((row) => [row.user_id, row.scope]));
   } catch (error) {
@@ -101,11 +102,18 @@ function serializeManagedUser(user: ManagedUserRow, accessScope: AccessScope | u
   };
 }
 
-export async function listManagedUsers(query: UserListQuery) {
+export async function listManagedUsers(query: UserListQuery, institutionProgramId: string) {
   const where = {
     deleted_at: null,
+    user_roles: {
+      some: {
+        roles: {
+          role_institution_programs: { some: { institution_program_id: institutionProgramId } },
+          ...(query.roleId ? { id: query.roleId } : {}),
+        },
+      },
+    },
     ...(query.status ? { status: query.status } : {}),
-    ...(query.roleId ? { user_roles: { some: { role_id: query.roleId } } } : {}),
     ...(query.departmentId ? { user_departments: { some: { department_id: query.departmentId } } } : {}),
     ...(query.search
       ? {
@@ -129,7 +137,10 @@ export async function listManagedUsers(query: UserListQuery) {
         status: true,
         last_login_at: true,
         created_at: true,
-        user_roles: { select: { roles: { select: { id: true, code: true, name: true } } } },
+        user_roles: {
+          where: { roles: { role_institution_programs: { some: { institution_program_id: institutionProgramId } } } },
+          select: { roles: { select: { id: true, code: true, name: true } } },
+        },
         user_departments: { select: { departments: { select: { id: true, code: true, name: true } } } },
       },
       orderBy: [{ [userSortFields[query.sortBy]]: query.sortOrder }, { id: "asc" }],
@@ -138,7 +149,7 @@ export async function listManagedUsers(query: UserListQuery) {
     }),
     prisma.users.count({ where }),
   ]);
-  const scopeMap = await getAccessScopeMap(items.map((item) => item.id));
+  const scopeMap = await getAccessScopeMap(items.map((item) => item.id), institutionProgramId);
 
   return {
     data: items.map((item) => serializeManagedUser(item, scopeMap.get(item.id))),
@@ -158,9 +169,10 @@ export async function listManagedUsers(query: UserListQuery) {
   };
 }
 
-export async function getUserManagementOptions() {
+export async function getUserManagementOptions(institutionProgramId: string) {
   const [roles, departments] = await prisma.$transaction([
     prisma.roles.findMany({
+      where: { role_institution_programs: { some: { institution_program_id: institutionProgramId } } },
       select: { id: true, code: true, name: true, description: true },
       orderBy: [{ code: "asc" }],
     }),
@@ -210,11 +222,16 @@ function isMissingAccessScopesTable(error: unknown) {
   );
 }
 
-async function validateReferences(input: UserManagementInput) {
+async function validateReferences(input: UserManagementInput, institutionProgramId: string) {
   const roleIds = unique(input.roleIds);
   const departmentIds = unique(input.departmentIds);
   const [roleCount, departmentCount] = await prisma.$transaction([
-    prisma.roles.count({ where: { id: { in: roleIds } } }),
+    prisma.roles.count({
+      where: {
+        id: { in: roleIds },
+        role_institution_programs: { some: { institution_program_id: institutionProgramId } },
+      },
+    }),
     prisma.departments.count({ where: { id: { in: departmentIds } } }),
   ]);
   if (roleCount !== roleIds.length) return { ok: false as const, reason: "role_not_found" as const };
@@ -222,8 +239,8 @@ async function validateReferences(input: UserManagementInput) {
   return { ok: true as const, roleIds, departmentIds };
 }
 
-export async function createManagedUser(actor: AuthUser, input: UserManagementInput, ipAddress?: string) {
-  const references = await validateReferences(input);
+export async function createManagedUser(actor: AuthUser, input: UserManagementInput, institutionProgramId: string, ipAddress?: string) {
+  const references = await validateReferences(input, institutionProgramId);
   if (!references.ok) return references;
   const email = input.email.trim().toLowerCase();
   if (await prisma.users.findFirst({ where: { email, deleted_at: null }, select: { id: true } })) {
@@ -251,8 +268,8 @@ export async function createManagedUser(actor: AuthUser, input: UserManagementIn
       await tx.user_departments.createMany({ data: references.departmentIds.map((departmentId) => ({ user_id: user.id, department_id: departmentId })) });
     }
     await tx.$executeRaw(Prisma.sql`
-      INSERT INTO user_access_scopes (user_id, scope)
-      VALUES (${user.id}::uuid, ${input.accessScope})
+      INSERT INTO user_program_access_scopes (user_id, institution_program_id, scope)
+      VALUES (${user.id}::uuid, ${institutionProgramId}::uuid, ${input.accessScope})
     `);
     await tx.audit_logs.create({
       data: {
@@ -269,6 +286,7 @@ export async function createManagedUser(actor: AuthUser, input: UserManagementIn
           roleIds: references.roleIds,
           departmentIds: references.departmentIds,
           accessScope: input.accessScope,
+          institutionProgramId,
         },
       },
     });
@@ -276,19 +294,28 @@ export async function createManagedUser(actor: AuthUser, input: UserManagementIn
   });
 }
 
-export async function updateManagedUser(actor: AuthUser, userId: string, input: UserManagementInput, ipAddress?: string) {
-  const references = await validateReferences(input);
+export async function updateManagedUser(actor: AuthUser, userId: string, input: UserManagementInput, institutionProgramId: string, ipAddress?: string) {
+  const references = await validateReferences(input, institutionProgramId);
   if (!references.ok) return references;
   const email = input.email.trim().toLowerCase();
   const existing = await prisma.users.findFirst({
-    where: { id: userId, deleted_at: null },
+    where: {
+      id: userId,
+      deleted_at: null,
+      user_roles: { some: { roles: { role_institution_programs: { some: { institution_program_id: institutionProgramId } } } } },
+    },
     select: {
       id: true,
       full_name: true,
       email: true,
       phone: true,
       status: true,
-      user_roles: { select: { role_id: true } },
+      user_roles: {
+        select: {
+          role_id: true,
+          roles: { select: { role_institution_programs: { select: { institution_program_id: true } } } },
+        },
+      },
       user_departments: { select: { department_id: true } },
     },
   });
@@ -297,7 +324,12 @@ export async function updateManagedUser(actor: AuthUser, userId: string, input: 
     return { ok: false as const, reason: "email_exists" as const };
   }
 
-  const oldScope = (await getAccessScopeMap([userId])).get(userId) ?? "DEPARTMENT";
+  const oldScope = (await getAccessScopeMap([userId], institutionProgramId)).get(userId) ?? "DEPARTMENT";
+  const programRoleIds = existing.user_roles.flatMap((assignment) =>
+    assignment.roles?.role_institution_programs.some((grant) => grant.institution_program_id === institutionProgramId)
+      ? assignment.role_id ? [assignment.role_id] : []
+      : [],
+  );
   return prisma.$transaction(async (tx) => {
     await tx.users.update({
       where: { id: userId },
@@ -310,7 +342,7 @@ export async function updateManagedUser(actor: AuthUser, userId: string, input: 
         ...(input.password ? { password_hash: await hash(input.password, 12) } : {}),
       },
     });
-    await tx.user_roles.deleteMany({ where: { user_id: userId } });
+    await tx.user_roles.deleteMany({ where: { user_id: userId, role_id: { in: programRoleIds } } });
     await tx.user_departments.deleteMany({ where: { user_id: userId } });
     if (references.roleIds.length > 0) {
       await tx.user_roles.createMany({ data: references.roleIds.map((roleId) => ({ user_id: userId, role_id: roleId })) });
@@ -319,9 +351,9 @@ export async function updateManagedUser(actor: AuthUser, userId: string, input: 
       await tx.user_departments.createMany({ data: references.departmentIds.map((departmentId) => ({ user_id: userId, department_id: departmentId })) });
     }
     await tx.$executeRaw(Prisma.sql`
-      INSERT INTO user_access_scopes (user_id, scope)
-      VALUES (${userId}::uuid, ${input.accessScope})
-      ON CONFLICT (user_id)
+      INSERT INTO user_program_access_scopes (user_id, institution_program_id, scope)
+      VALUES (${userId}::uuid, ${institutionProgramId}::uuid, ${input.accessScope})
+      ON CONFLICT (user_id, institution_program_id)
       DO UPDATE SET scope = EXCLUDED.scope, updated_at = now()
     `);
     await tx.audit_logs.create({
@@ -336,9 +368,10 @@ export async function updateManagedUser(actor: AuthUser, userId: string, input: 
           email: existing.email,
           phone: existing.phone,
           status: existing.status,
-          roleIds: existing.user_roles.flatMap((role) => role.role_id ? [role.role_id] : []),
+          roleIds: programRoleIds,
           departmentIds: existing.user_departments.flatMap((department) => department.department_id ? [department.department_id] : []),
           accessScope: oldScope,
+          institutionProgramId,
         },
         new_data: {
           fullName: input.fullName.trim(),
@@ -348,6 +381,7 @@ export async function updateManagedUser(actor: AuthUser, userId: string, input: 
           roleIds: references.roleIds,
           departmentIds: references.departmentIds,
           accessScope: input.accessScope,
+          institutionProgramId,
           passwordChanged: Boolean(input.password),
         },
       },

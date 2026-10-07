@@ -63,7 +63,6 @@ export function OverviewReportPage() {
       <div className="grid gap-6 lg:grid-cols-3">
         <BreakdownCard title="Hồ sơ theo trạng thái" items={report.applicationsByStatus} emptyText="Chưa có dữ liệu hồ sơ." />
         <BreakdownCard title="Hồ sơ theo ngành" items={report.applicationsByMajor} emptyText="Chưa có dữ liệu ngành." />
-        <BreakdownCard title="Sinh viên theo khoa" items={report.studentsByFaculty} emptyText="Chưa có dữ liệu sinh viên." />
       </div>
     </div>
   );

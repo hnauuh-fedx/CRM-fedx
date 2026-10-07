@@ -122,25 +122,25 @@ const navigationSections: NavigationSection[] = [
         type: "group",
         label: "Cấu hình trường dữ liệu",
         icon: ListPlus,
-        permissions: ["custom_field.view"],
+        permissions: ["custom_field.lead.manage","custom_field.sale_activity.manage","custom_field.sale_reminder.manage"],
         children: [
           {
             label: "Form lead",
             href: "/sale/cau-hinh-truong?form=lead",
             icon: ContactRound,
-            permissions: ["custom_field.view"],
+            permissions: ["custom_field.lead.manage"],
           },
           {
             label: "Form hoạt động",
             href: "/sale/cau-hinh-truong?form=activity",
             icon: ListChecks,
-            permissions: ["custom_field.view"],
+            permissions: ["custom_field.sale_activity.manage"],
           },
           {
             label: "Form nhắc việc",
             href: "/sale/cau-hinh-truong?form=reminder",
             icon: Bell,
-            permissions: ["custom_field.view"],
+            permissions: ["custom_field.sale_reminder.manage"],
           },
         ],
       },
@@ -211,10 +211,10 @@ const navigationSections: NavigationSection[] = [
         type: "group",
         label: "Cấu hình trường dữ liệu",
         icon: ListPlus,
-        permissions: ["custom_field.view"],
+        permissions: ["custom_field.marketing_campaign.manage","custom_field.marketing_form.manage"],
         children: [
-          { label: "Form chiến dịch", href: "/marketing/cau-hinh-truong?form=campaign", icon: Megaphone, permissions: ["custom_field.view"] },
-          { label: "Form & Survey", href: "/marketing/cau-hinh-truong?form=survey", icon: Workflow, permissions: ["custom_field.view"] },
+          { label: "Form chiến dịch", href: "/marketing/cau-hinh-truong?form=campaign", icon: Megaphone, permissions: ["custom_field.marketing_campaign.manage"] },
+          { label: "Form & Survey", href: "/marketing/cau-hinh-truong?form=survey", icon: Workflow, permissions: ["custom_field.marketing_form.manage"] },
         ],
       },
     ],
@@ -243,12 +243,6 @@ const navigationSections: NavigationSection[] = [
         permissions: ["admission.view_all", "admission.view"],
       },
       {
-        label: "Quản lý ngành",
-        href: "/tuyen-sinh/nganh",
-        icon: GraduationCap,
-        permissions: ["admission_major.manage"],
-      },
-      {
         label: "Phí / học phí",
         href: "/tuyen-sinh/phi-hoc-phi",
         icon: BadgeDollarSign,
@@ -258,12 +252,12 @@ const navigationSections: NavigationSection[] = [
         type: "group",
         label: "Cấu hình trường dữ liệu",
         icon: ListPlus,
-        permissions: ["custom_field.view"],
+        permissions: ["custom_field.admission_profile.manage","custom_field.admission_document.manage","custom_field.admission_status.manage"],
         children: [
-          { label: "Form hồ sơ", href: "/tuyen-sinh/cau-hinh-truong?form=profile", icon: ClipboardList, permissions: ["custom_field.view"] },
-          { label: "Form tài liệu", href: "/tuyen-sinh/cau-hinh-truong?form=document", icon: FileText, permissions: ["custom_field.view"] },
-          { label: "Form trạng thái", href: "/tuyen-sinh/cau-hinh-truong?form=status", icon: ClipboardCheck, permissions: ["custom_field.view"] },
-          { label: "Form ngành", href: "/tuyen-sinh/cau-hinh-truong?form=major", icon: GraduationCap, permissions: ["custom_field.view"] },
+          { label: "Form hồ sơ", href: "/tuyen-sinh/cau-hinh-truong?form=profile", icon: ClipboardList, permissions: ["custom_field.admission_profile.manage"] },
+          { label: "Form tài liệu", href: "/tuyen-sinh/cau-hinh-truong?form=document", icon: FileText, permissions: ["custom_field.admission_document.manage"] },
+          { label: "Form trạng thái", href: "/tuyen-sinh/cau-hinh-truong?form=status", icon: ClipboardCheck, permissions: ["custom_field.admission_status.manage"] },
+
         ],
       },
     ],
@@ -296,18 +290,18 @@ const navigationSections: NavigationSection[] = [
   {
     id: "report",
     label: "Báo cáo",
-    href: "/bao-cao/kpi-ca-nhan",
+    href: "/bao-cao/dashboard",
     items: [
-      {
-        label: "KPI cá nhân",
-        href: "/bao-cao/kpi-ca-nhan",
-        icon: ListPlus,
-        permissions: ["report.personal.view"],
-      },
       {
         label: "Dashboard thống kê",
         href: "/bao-cao/dashboard",
         icon: BarChart3,
+        permissions: ["report.personal.view"],
+      },
+      {
+        label: "KPI cá nhân",
+        href: "/bao-cao/kpi-ca-nhan",
+        icon: ListPlus,
         permissions: ["report.personal.view"],
       },
       {
@@ -406,6 +400,12 @@ const navigationSections: NavigationSection[] = [
         href: "/quan-ly/chuong-trinh",
         icon: GraduationCap,
         permissions: ["institution_program.manage"],
+      },
+      {
+        label: "Quản lý ngành",
+        href: "/quan-ly/nganh",
+        icon: GraduationCap,
+        permissions: ["admission_major.manage"],
       },
       {
         label: "Nhật ký hệ thống",

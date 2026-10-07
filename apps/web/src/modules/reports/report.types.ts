@@ -7,7 +7,6 @@ export type OverviewReportResponse = {
     monthlyRevenue: number;
   };
   applicationsByStatus: ReportBreakdownItem[];
-  studentsByFaculty: ReportBreakdownItem[];
   applicationsByMajor: ReportBreakdownItem[];
 };
 
@@ -23,10 +22,10 @@ export type PersonalReportMode = "SUMMARY" | "SINGLE" | "PIVOT";
 export type PersonalReportSingleDisplay = "TABLE" | "LINE";
 export type PersonalReportTimePreset = "LAST_7_DAYS" | "THIS_WEEK" | "LAST_WEEK" | "THIS_MONTH" | "LAST_MONTH" | "THIS_QUARTER" | "LAST_QUARTER" | "CUSTOM";
 export type PersonalReportDateGranularity = "DAY" | "WEEK" | "MONTH" | "QUARTER";
-export type PersonalReportDatasetKey = "LEADS" | "ADMISSION_CANDIDATES" | "STUDENTS";
+export type PersonalReportDatasetKey = "LEADS" | "QUALIFIED_LEADS" | "STUDENTS";
 export type PersonalReportFilterCondition = {
   fieldKey: string;
-  operator: "EQUALS" | "NOT_EQUALS" | "DATE_PRESET" | "DATE_BETWEEN";
+  operator: "EQUALS" | "NOT_EQUALS" | "GREATER_THAN_OR_EQUAL" | "DATE_PRESET" | "DATE_BETWEEN";
   value?: string;
   fromDate?: string;
   toDate?: string;
@@ -139,6 +138,13 @@ export type DashboardKpiWidgetResult = {
   value: number;
   format: "NUMBER" | "PERCENT";
   trend: { direction: "UP" | "DOWN" | "FLAT"; percentageChange: number; previousLabel: string } | null;
+  conversion?: {
+    sourceTotal: number;
+    targetTotal: number;
+    percentage: number;
+    sourceStageName: string;
+    targetStageName: string;
+  };
 };
 export type DashboardPipelineStage = { id: string; name: string; position: number | null; pipelineId: string | null; pipelineName: string | null };
 export type PersonalDashboardConfig = {
@@ -156,7 +162,6 @@ export type PersonalDashboardResponse = {
 } & Omit<PersonalDashboardConfig, "kpiWidgets">;
 export type ReportBreakdownWithMeta = ReportBreakdownItem & {
   color?: string | null;
-  facultyName?: string | null;
 };
 
 export type OverviewReportOptions = {
@@ -254,7 +259,6 @@ export type AdmissionReportApplication = {
   statusName: string;
   statusColor: string | null;
   majorName: string;
-  facultyName: string | null;
   applicationReceivedDate: string | null;
   feeStatus: string | null;
   tuitionStatus: string | null;
@@ -272,7 +276,6 @@ export type StudentDetailReportResponse = {
     classAssignmentRate: number;
   };
   studentsByStatus: ReportBreakdownItem[];
-  studentsByFaculty: ReportBreakdownItem[];
   studentsByMajor: ReportBreakdownWithMeta[];
   studentsByClass: ReportBreakdownItem[];
   serviceTypes: ReportBreakdownItem[];
@@ -285,7 +288,6 @@ export type StudentReportStudent = {
   leadName: string;
   status: string | null;
   majorName: string;
-  facultyName: string | null;
   className: string | null;
   enrolledAt: string | null;
 };

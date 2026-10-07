@@ -26,8 +26,6 @@ async function main() {
 
   const suffix = randomUUID().slice(0, 8);
   const ids = { users: [] as string[], roles: [] as string[], programs: [] as string[], sources: [] as string[], webhooks: [] as string[] };
-  let institutionId = "";
-  let programTypeId = "";
   const queued: string[] = [];
   const activeJobs = new Set<string>();
   const queue = {
@@ -39,11 +37,7 @@ async function main() {
   setPublicWebhookRateLimiterForTests(createMemoryWebhookRateLimiter(10_000));
 
   try {
-    const institution = await prisma.institutions.create({ data: { code: `V2_INST_${suffix}`, name: "Webhook V2 Institution" } });
-    institutionId = institution.id;
-    const programType = await prisma.program_types.create({ data: { code: `V2_TYPE_${suffix}`, name: "Webhook V2 Type" } });
-    programTypeId = programType.id;
-    const programs = await Promise.all(["A", "B"].map((label) => prisma.institution_programs.create({ data: { institution_id: institution.id, program_type_id: programType.id, code: `V2_${label}_${suffix}`, name: `Webhook V2 ${label}` } })));
+    const programs = await Promise.all(["A", "B"].map((label) => prisma.institution_programs.create({ data: { institution_name: "Webhook V2 Institution", code: `V2_${label}_${suffix}`, name: `Webhook V2 ${label}` } })));
     ids.programs.push(...programs.map((item) => item.id));
     const sources = await Promise.all(programs.map((program) => prisma.lead_sources.create({ data: { institution_program_id: program.id, name: "Website", type: "webhook" } })));
     ids.sources.push(...sources.map((item) => item.id));
@@ -344,8 +338,6 @@ async function main() {
     await prisma.role_institution_programs.deleteMany({ where: { role_id: { in: ids.roles } } });
     await prisma.roles.deleteMany({ where: { id: { in: ids.roles } } });
     await prisma.institution_programs.deleteMany({ where: { id: { in: ids.programs } } });
-    if (institutionId) await prisma.institutions.deleteMany({ where: { id: institutionId } });
-    if (programTypeId) await prisma.program_types.deleteMany({ where: { id: programTypeId } });
     await prisma.$disconnect();
   }
 }

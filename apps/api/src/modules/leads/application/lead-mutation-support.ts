@@ -30,6 +30,7 @@ export async function findVisibleLeadForMutation(
       note: true,
       source_id: true,
       temperature: true,
+      status: true,
       pipeline_stage_id: true,
       assigned_to: true,
     },
@@ -90,13 +91,25 @@ export async function findActiveAssignableSale(
   tx: Prisma.TransactionClient,
   assigneeId: string,
   departmentId?: string,
+  institutionProgramId?: string,
 ) {
   return tx.users.findFirst({
     where: {
       id: assigneeId,
       status: "active",
       deleted_at: null,
-      ...assignableSaleWhere,
+      ...(institutionProgramId
+        ? {
+            user_roles: {
+              some: {
+                roles: {
+                  ...assignableSaleWhere.user_roles.some.roles,
+                  role_institution_programs: { some: { institution_program_id: institutionProgramId } },
+                },
+              },
+            },
+          }
+        : assignableSaleWhere),
       ...(departmentId
         ? { user_departments: { some: { department_id: departmentId } } }
         : {}),

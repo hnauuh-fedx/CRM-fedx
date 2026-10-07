@@ -50,7 +50,7 @@ const personalReportInputSchema = z.object({
   fromDate: z.iso.date().optional().or(z.literal("")).transform((value) => value || undefined),
   toDate: z.iso.date().optional().or(z.literal("")).transform((value) => value || undefined),
   mode: z.enum(["SUMMARY", "SINGLE", "PIVOT"]).default("SUMMARY"),
-  datasetKey: z.enum(["LEADS", "ADMISSION_CANDIDATES", "STUDENTS"]).optional(),
+  datasetKey: z.enum(["LEADS", "QUALIFIED_LEADS", "STUDENTS"]).optional(),
   rowDimensionKey: z.string().min(1).max(80).optional(),
   columnDimensionKey: z.string().min(1).max(80).optional(),
   timePreset: z.enum(["LAST_7_DAYS", "THIS_WEEK", "LAST_WEEK", "THIS_MONTH", "LAST_MONTH", "THIS_QUARTER", "LAST_QUARTER", "CUSTOM"]).optional(),
@@ -59,7 +59,7 @@ const personalReportInputSchema = z.object({
   singleDisplay: z.enum(["TABLE", "LINE"]).optional(),
   conditions: z.array(z.object({
     fieldKey: z.string().min(1).max(80),
-    operator: z.enum(["EQUALS", "NOT_EQUALS", "DATE_PRESET", "DATE_BETWEEN"]),
+    operator: z.enum(["EQUALS", "NOT_EQUALS", "GREATER_THAN_OR_EQUAL", "DATE_PRESET", "DATE_BETWEEN"]),
     value: z.string().max(255).optional(),
     fromDate: z.iso.date().optional(),
     toDate: z.iso.date().optional(),
@@ -71,7 +71,7 @@ const idSchema = z.uuid();
 const paginationSchema = z.object({ page: z.coerce.number().int().positive().default(1), limit: z.coerce.number().int().min(1).max(50).default(20) });
 const dashboardFilterConditionSchema = z.object({
   fieldKey: z.string().min(1).max(80),
-  operator: z.enum(["EQUALS", "NOT_EQUALS", "DATE_PRESET", "DATE_BETWEEN"]),
+  operator: z.enum(["EQUALS", "NOT_EQUALS", "GREATER_THAN_OR_EQUAL", "DATE_PRESET", "DATE_BETWEEN"]),
   value: z.string().max(255).optional(),
   fromDate: z.iso.date().optional(),
   toDate: z.iso.date().optional(),
@@ -82,8 +82,8 @@ const dashboardKpiBaseSchema = z.object({
   conditions: z.array(dashboardFilterConditionSchema).max(5),
 });
 const dashboardKpiSchema = z.discriminatedUnion("type", [
-  dashboardKpiBaseSchema.extend({ type: z.literal("COUNT"), datasetKey: z.enum(["LEADS", "ADMISSION_CANDIDATES", "STUDENTS"]) }),
-  dashboardKpiBaseSchema.extend({ type: z.literal("TREND"), datasetKey: z.enum(["LEADS", "ADMISSION_CANDIDATES", "STUDENTS"]), comparisonPeriod: z.enum(["WEEK", "MONTH", "QUARTER"]) }),
+  dashboardKpiBaseSchema.extend({ type: z.literal("COUNT"), datasetKey: z.enum(["LEADS", "QUALIFIED_LEADS", "STUDENTS"]) }),
+  dashboardKpiBaseSchema.extend({ type: z.literal("TREND"), datasetKey: z.enum(["LEADS", "QUALIFIED_LEADS", "STUDENTS"]), comparisonPeriod: z.enum(["WEEK", "MONTH", "QUARTER"]) }),
   dashboardKpiBaseSchema.extend({ type: z.literal("CONVERSION"), datasetKey: z.literal("LEADS"), sourceStageId: z.uuid(), targetStageId: z.uuid() }),
 ]);
 const dashboardConfigSchema = z.object({
@@ -107,7 +107,7 @@ reportsRouter.get("/personal/options", requireAuthentication, requireAnyPermissi
 
 reportsRouter.get("/personal/filter-values", requireAuthentication, requireAnyPermission("report.personal.view"), async (request, response) => {
   const parsed = z.object({
-    datasetKey: z.enum(["LEADS", "ADMISSION_CANDIDATES", "STUDENTS"]),
+    datasetKey: z.enum(["LEADS", "QUALIFIED_LEADS", "STUDENTS"]),
     fieldKey: z.string().min(1).max(80),
   }).safeParse(request.query);
   if (!parsed.success) return response.status(400).json({ message: "Trường lọc không hợp lệ." });

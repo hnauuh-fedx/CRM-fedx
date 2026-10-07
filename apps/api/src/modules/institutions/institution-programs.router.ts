@@ -6,37 +6,32 @@ import { requireAnyPermission, requireAuthentication } from "../../middlewares/a
 import {
   createInstitutionProgram,
   deleteInstitutionProgram,
-  getInstitutionProgramManagementOptions,
   listManagedInstitutionPrograms,
   updateInstitutionProgram,
 } from "./institution-program-management.service";
 
 export const institutionProgramsRouter = Router();
 
-const querySchema = z.object({
+export const institutionProgramQuerySchema = z.object({
   page: z.coerce.number().int().min(1).default(1),
   limit: z.coerce.number().int().min(1).max(100).default(20),
   search: z.string().trim().max(100).optional().or(z.literal("")).transform((value) => value || undefined),
   status: z.enum(["active", "inactive", "archived"]).optional().or(z.literal("")).transform((value) => value || undefined),
-  institutionId: z.uuid().optional().or(z.literal("")).transform((value) => value || undefined),
-  programTypeId: z.uuid().optional().or(z.literal("")).transform((value) => value || undefined),
+  institutionName: z.string().trim().max(255).optional().or(z.literal("")).transform((value) => value || undefined),
   sortBy: z.enum(["createdAt", "name", "code", "status"]).default("name"),
   sortOrder: z.enum(["asc", "desc"]).default("asc"),
 });
 const idSchema = z.uuid();
-const bodySchema = z.object({
-  institutionId: z.uuid(),
-  programTypeId: z.uuid(),
+export const institutionProgramBodySchema = z.object({
+  institutionName: z.string().trim().min(2).max(255),
   name: z.string().trim().min(2).max(255),
   code: z.string().trim().min(2).max(100),
   status: z.enum(["active", "inactive", "archived"]).default("active"),
 });
 
 function resultMessage(reason: string) {
-  if (reason === "institution_not_found") return "Trường/đơn vị đã chọn không tồn tại.";
-  if (reason === "program_type_not_found") return "Loại chương trình đã chọn không tồn tại.";
   if (reason === "code_exists") return "Mã chương trình đã tồn tại.";
-  if (reason === "name_exists") return "Tên chương trình đã tồn tại trong cùng trường và loại chương trình.";
+  if (reason === "name_exists") return "Tên chương trình đã tồn tại trong cùng trường.";
   if (reason === "program_in_use") return "Không thể xóa chương trình đang có dữ liệu tuyển sinh liên quan.";
   return "Không tìm thấy chương trình tuyển sinh.";
 }
@@ -47,16 +42,14 @@ institutionProgramsRouter.get("/options", requireAuthentication, async (request,
       where: {
         id: { in: request.authUser!.institutionProgramIds },
         status: "active",
-        institutions: { is: { status: "active" } },
       },
       select: {
         id: true,
         name: true,
         code: true,
-        institutions: { select: { name: true } },
-        program_types: { select: { name: true } },
+        institution_name: true,
       },
-      orderBy: [{ institutions: { name: "asc" } }, { name: "asc" }],
+      orderBy: [{ institution_name: "asc" }, { name: "asc" }],
     });
 
     response.json({
@@ -64,8 +57,7 @@ institutionProgramsRouter.get("/options", requireAuthentication, async (request,
         id: program.id,
         name: program.name,
         code: program.code,
-        institutionName: program.institutions.name,
-        programTypeName: program.program_types.name,
+        institutionName: program.institution_name,
       })),
     });
   } catch (error) {
@@ -77,7 +69,7 @@ institutionProgramsRouter.use(requireAuthentication, requireAnyPermission("insti
 
 institutionProgramsRouter.get("/", async (request, response, next) => {
   try {
-    const parsed = querySchema.safeParse(request.query);
+    const parsed = institutionProgramQuerySchema.safeParse(request.query);
     if (!parsed.success) {
       response.status(400).json({ message: "Tham số danh sách chương trình không hợp lệ." });
       return;
@@ -88,17 +80,9 @@ institutionProgramsRouter.get("/", async (request, response, next) => {
   }
 });
 
-institutionProgramsRouter.get("/management-options", async (_request, response, next) => {
-  try {
-    response.json(await getInstitutionProgramManagementOptions());
-  } catch (error) {
-    next(error);
-  }
-});
-
 institutionProgramsRouter.post("/", async (request, response, next) => {
   try {
-    const parsed = bodySchema.safeParse(request.body);
+    const parsed = institutionProgramBodySchema.safeParse(request.body);
     if (!parsed.success) {
       response.status(400).json({ message: "Dữ liệu tạo chương trình không hợp lệ." });
       return;
@@ -117,7 +101,7 @@ institutionProgramsRouter.post("/", async (request, response, next) => {
 institutionProgramsRouter.patch("/:id", async (request, response, next) => {
   try {
     const parsedId = idSchema.safeParse(request.params.id);
-    const parsedBody = bodySchema.safeParse(request.body);
+    const parsedBody = institutionProgramBodySchema.safeParse(request.body);
     if (!parsedId.success || !parsedBody.success) {
       response.status(400).json({ message: "Dữ liệu cập nhật chương trình không hợp lệ." });
       return;

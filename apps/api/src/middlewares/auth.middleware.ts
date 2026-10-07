@@ -1,4 +1,5 @@
 import type { NextFunction, Request, Response } from "express";
+import { z } from "zod";
 
 import { getAuthUser, verifyAccessToken } from "../modules/auth/auth.service";
 import type { AuthUser } from "../modules/auth/auth.types";
@@ -27,9 +28,19 @@ export async function requireAuthentication(
     return;
   }
 
-  const user = await getAuthUser(payload.sub);
+  const rawProgramId = request.header("x-institution-program-id");
+  const parsedProgramId = rawProgramId ? z.uuid().safeParse(rawProgramId) : null;
+  if (parsedProgramId && !parsedProgramId.success) {
+    response.status(400).json({ message: "Chương trình đang làm việc không hợp lệ." });
+    return;
+  }
+  const user = await getAuthUser(payload.sub, parsedProgramId?.data);
   if (!user) {
     response.status(401).json({ message: "Tài khoản không còn quyền truy cập." });
+    return;
+  }
+  if (parsedProgramId?.success && !user.institutionProgramIds.includes(parsedProgramId.data)) {
+    response.status(403).json({ message: "Bạn không được phân quyền truy cập chương trình này." });
     return;
   }
 

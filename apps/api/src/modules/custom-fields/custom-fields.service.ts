@@ -1,3 +1,4 @@
+import { hasCustomFieldPermission, customFieldPermissionForms } from "./custom-field-permissions";
 import { Prisma } from "../../generated/prisma/client";
 import { prisma } from "../../database/prisma";
 import type { AuthUser } from "../auth/auth.types";
@@ -6,9 +7,7 @@ import type { CustomFieldInput } from "./custom-fields.types";
 
 const groupSelect = { id: true, group_key: true, group_label: true, description: true, is_system: true, is_active: true, display_order: true } as const;
 const select = { id: true, field_key: true, field_label: true, description: true, entity_type: true, group_id: true, custom_field_groups: { select: groupSelect }, scope_type: true, program_id: true, field_type: true, is_required: true, is_active: true, archived_at: true, is_searchable: true, is_filterable: true, is_sensitive: true, display_order: true, options: true, validation_rules: true, default_value: true, created_at: true, updated_at: true } as const;
-function allScope(actor: AuthUser) { return actor.accessScope === "ALL"; }
-function canConfigureCustomFields(actor: AuthUser) { return actor.permissions.some((permission) => permission.startsWith("custom_field.")); }
-function canAccess(actor: AuthUser, _programId: string | null) { return allScope(actor) || canConfigureCustomFields(actor); }
+function canAccess(actor: AuthUser, programId: string | null) { return !programId || actor.institutionProgramIds.includes(programId); }
 function assertScope(actor: AuthUser, programId: string | undefined) { if (!canAccess(actor, programId ?? null)) return { ok: false as const, reason: "scope_denied" as const }; return { ok: true as const }; }
 function json(value: unknown) { return value === undefined ? undefined : value as Prisma.InputJsonValue; }
 function auditPayload(field: any) { const base = { fieldId: field.id, entityType: field.entity_type, groupId: field.group_id, fieldKey: field.field_key, scopeType: field.scope_type, programId: field.program_id, fieldType: field.field_type, isRequired: field.is_required, isActive: field.is_active, isSearchable: field.is_sensitive ? false : field.is_searchable, isFilterable: field.is_sensitive ? false : field.is_filterable, isSensitive: field.is_sensitive, displayOrder: field.display_order }; return field.is_sensitive ? base : { ...base, fieldLabel: field.field_label, options: field.options, defaultValue: field.default_value }; }
@@ -16,11 +15,13 @@ async function activeGroup(groupId: string, entityType: string) { return prisma.
 
 export async function listCustomFields(actor: AuthUser, query: { entityType?: string; scopeType?: string; programId?: string; includeArchived: boolean }) {
   if (query.programId && !canAccess(actor, query.programId)) return { ok: false as const, reason: "scope_denied" as const };
-  const where = { ...(query.entityType ? { entity_type: query.entityType } : {}), ...(query.scopeType ? { scope_type: query.scopeType } : {}), ...(query.programId ? { program_id: query.programId } : {}), ...(query.includeArchived ? {} : { archived_at: null }), ...(canAccess(actor, null) ? {} : { id: "00000000-0000-4000-8000-000000000000" }) };
+  const allowedEntities = Object.keys(customFieldPermissionForms).filter((type) => hasCustomFieldPermission(actor.permissions, type, "view"));
+  if (query.entityType && !allowedEntities.includes(query.entityType)) return { ok: false as const, reason: "scope_denied" as const };
+  const where = { entity_type: { in: allowedEntities }, OR: [{ program_id: null }, { program_id: { in: actor.institutionProgramIds } }], ...(query.entityType ? { entity_type: query.entityType } : {}), ...(query.scopeType ? { scope_type: query.scopeType } : {}), ...(query.programId ? { program_id: query.programId } : {}), ...(query.includeArchived ? {} : { archived_at: null }) };
   const fields = await prisma.custom_fields.findMany({ where, select, orderBy: [{ display_order: "asc" }, { created_at: "asc" }] });
   return { ok: true as const, data: fields.map((field) => serializeCustomField(field, actor)) };
 }
-export async function getCustomField(actor: AuthUser, id: string) { const field = await prisma.custom_fields.findUnique({ where: { id }, select }); if (!field || !canAccess(actor, field.program_id)) return { ok: false as const, reason: "not_found" as const }; return { ok: true as const, data: serializeCustomField(field, actor) }; }
+export async function getCustomField(actor: AuthUser, id: string) { const field = await prisma.custom_fields.findUnique({ where: { id }, select }); if (!field || !canAccess(actor, field.program_id) || !hasCustomFieldPermission(actor.permissions, field.entity_type ?? "", "view")) return { ok: false as const, reason: "not_found" as const }; return { ok: true as const, data: serializeCustomField(field, actor) }; }
 export async function createCustomField(actor: AuthUser, input: CustomFieldInput, ipAddress?: string) {
   if (!assertScope(actor, input.programId).ok) return { ok: false as const, reason: "scope_denied" as const };
   if (!await activeGroup(input.groupId, input.entityType)) return { ok: false as const, reason: "group_not_found" as const };

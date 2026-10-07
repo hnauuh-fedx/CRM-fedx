@@ -14,7 +14,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Field, FieldError, FieldGroup, FieldLabel } from "@/components/ui/field";
 import { Input } from "@/components/ui/input";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Select, SelectContent, SelectGroup, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { useAuth } from "@/modules/auth/auth-context";
 import { RuntimeCustomFieldsSection } from "@/modules/custom-fields/runtime-custom-fields-section";
@@ -23,18 +23,16 @@ import { ApiError } from "@/services/api";
 import {
   createProgramMajor,
   deleteProgramMajor,
-  getMajorManagementOptions,
   getProgramMajors,
   updateProgramMajor,
 } from "@/services/major.service";
 import type { ManagedMajor, MajorInput } from "../major-management.types";
 
 const pageSize = 20;
-const emptyMajorForm: MajorInput = { name: "", code: "", facultyId: "" };
+const emptyMajorForm: MajorInput = { name: "", code: "" };
 const majorFormSchema = z.object({
   name: z.string().trim().min(2, "Vui lòng nhập tên ngành.").max(255),
   code: z.string().trim().min(2, "Vui lòng nhập mã ngành.").max(100),
-  facultyId: z.string(),
 });
 const dateFormatter = new Intl.DateTimeFormat("vi-VN");
 type DialogState =
@@ -44,10 +42,16 @@ type DialogState =
   | null;
 
 export function MajorsManagementPage() {
+  const { selectedProgramId } = useInstitutionProgram();
+  return <ProgramMajorsManagement key={selectedProgramId ?? "no-program"} />;
+}
+
+function ProgramMajorsManagement() {
   const auth = useAuth();
   const queryClient = useQueryClient();
-  const { programs, selectedProgramId } = useInstitutionProgram();
+  const { programs, selectedProgramId, selectProgram, isLoading: programsLoading } = useInstitutionProgram();
   const selectedProgram = programs.find((program) => program.id === selectedProgramId);
+  const programLabel = selectedProgram ? `${selectedProgram.institutionName} – ${selectedProgram.name} – ${selectedProgram.code}` : "Chưa chọn chương trình";
   const [page, setPage] = useState(1);
   const [search, setSearch] = useState("");
   const [appliedSearch, setAppliedSearch] = useState("");
@@ -57,16 +61,11 @@ export function MajorsManagementPage() {
 
   const listQuery = useQuery({
     queryKey: ["majors", "management", selectedProgramId, page, appliedSearch],
-    queryFn: () => getProgramMajors({ page, limit: pageSize, search: appliedSearch, sortBy: "createdAt", sortOrder: "desc" }, auth.accessToken!),
+    queryFn: () => getProgramMajors({ page, limit: pageSize, search: appliedSearch, sortBy: "createdAt", sortOrder: "desc" }, auth.accessToken!, selectedProgramId!),
     enabled: Boolean(selectedProgramId),
-    placeholderData: (previousData) => previousData,
-  });
-  const optionsQuery = useQuery({
-    queryKey: ["majors", "management", "options"],
-    queryFn: () => getMajorManagementOptions(auth.accessToken!),
   });
   const createMutation = useMutation({
-    mutationFn: (input: MajorInput) => createProgramMajor(input, auth.accessToken!),
+    mutationFn: (input: MajorInput) => createProgramMajor(input, auth.accessToken!, selectedProgramId!),
     onSuccess: () => {
       setDialog(null);
       void queryClient.invalidateQueries({ queryKey: ["majors"] });
@@ -76,7 +75,7 @@ export function MajorsManagementPage() {
     },
   });
   const updateMutation = useMutation({
-    mutationFn: (input: MajorInput) => updateProgramMajor(editingMajor!.id, input, auth.accessToken!),
+    mutationFn: (input: MajorInput) => updateProgramMajor(editingMajor!.id, input, auth.accessToken!, selectedProgramId!),
     onSuccess: () => {
       setDialog(null);
       void queryClient.invalidateQueries({ queryKey: ["majors"] });
@@ -86,7 +85,7 @@ export function MajorsManagementPage() {
     },
   });
   const deleteMutation = useMutation({
-    mutationFn: () => deleteProgramMajor(deletingMajor!.id, auth.accessToken!),
+    mutationFn: () => deleteProgramMajor(deletingMajor!.id, auth.accessToken!, selectedProgramId!),
     onSuccess: () => {
       setDialog(null);
       void queryClient.invalidateQueries({ queryKey: ["majors"] });
@@ -101,12 +100,12 @@ export function MajorsManagementPage() {
   return (
     <div className="mx-auto flex max-w-7xl flex-col gap-6">
       <PageHeader
-        eyebrow="CRM Tuyển sinh"
+        eyebrow="Quản lý"
         title="Quản lý ngành"
-        scopeLabel={selectedProgram ? `${selectedProgram.institutionName} - ${selectedProgram.name}` : "Chương trình đang chọn"}
+        scopeLabel={programLabel}
         description="Thêm, chỉnh sửa hoặc xóa ngành tuyển sinh trong chương trình đang làm việc."
         actions={
-          <Button type="button" onClick={() => { createMutation.reset(); setDialog({ type: "create" }); }}>
+          <Button type="button" disabled={!selectedProgram} onClick={() => { createMutation.reset(); setDialog({ type: "create" }); }}>
             <Plus aria-hidden="true" />
             Thêm ngành
           </Button>
@@ -115,8 +114,8 @@ export function MajorsManagementPage() {
 
       <Card className="gap-4 border-border/70 py-5 shadow-xs">
         <CardHeader className="gap-1 px-5">
-          <CardTitle>Tìm ngành</CardTitle>
-          <CardDescription>Danh sách được giới hạn theo chương trình đã chọn trên thanh công cụ.</CardDescription>
+          <CardTitle>Chương trình tuyển sinh và bộ lọc</CardTitle>
+          <CardDescription>Chọn chương trình để quản lý các ngành thuộc chương trình đó. Lựa chọn này đồng bộ với chương trình đang làm việc trên thanh trên cùng.</CardDescription>
         </CardHeader>
         <CardContent className="px-5">
           <form
@@ -127,7 +126,20 @@ export function MajorsManagementPage() {
               setPage(1);
             }}
           >
-            <Field className="max-w-md flex-1">
+            <Field className="min-w-0 flex-1">
+              <FieldLabel htmlFor="major-management-program">Chương trình tuyển sinh</FieldLabel>
+              <Select value={selectedProgramId ?? ""} onValueChange={selectProgram} disabled={programsLoading || programs.length === 0}>
+                <SelectTrigger id="major-management-program" className="w-full min-w-0" title={programLabel}>
+                  <SelectValue placeholder={programsLoading ? "Đang tải chương trình…" : "Chọn chương trình tuyển sinh"} />
+                </SelectTrigger>
+                <SelectContent position="popper">
+                  <SelectGroup>
+                    {programs.map((program) => <SelectItem key={program.id} value={program.id}>{program.institutionName} – {program.name} – {program.code}</SelectItem>)}
+                  </SelectGroup>
+                </SelectContent>
+              </Select>
+            </Field>
+            <Field className="min-w-0 flex-1 sm:max-w-sm">
               <FieldLabel htmlFor="major-management-search">Tìm kiếm</FieldLabel>
               <div className="relative">
                 <Search className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground" aria-hidden="true" />
@@ -141,13 +153,16 @@ export function MajorsManagementPage() {
 
       <Card className="gap-0 overflow-hidden border-border/70 py-0 shadow-xs">
         <CardHeader className="gap-1 border-b py-5">
-          <CardTitle>Ngành thuộc chương trình</CardTitle>
+          <CardTitle>{selectedProgram ? `Ngành thuộc chương trình ${selectedProgram.name}` : "Ngành thuộc chương trình"}</CardTitle>
+          {selectedProgram && <CardDescription>{selectedProgram.institutionName} · Mã chương trình: {selectedProgram.code}</CardDescription>}
           <CardDescription>{pagination ? `Hiển thị ${data.length} trong tổng số ${pagination.total} ngành` : "Đang lấy dữ liệu..."}</CardDescription>
         </CardHeader>
         <CardContent className="p-0">
-          {listQuery.isError ? (
+          {!selectedProgram && !programsLoading ? (
+            <EmptyState title="Chưa có chương trình để quản lý ngành" description="Bạn cần được cấp quyền truy cập một chương trình tuyển sinh trước khi quản lý ngành." />
+          ) : listQuery.isError ? (
             <ErrorState title="Không thể tải danh sách ngành" description="Vui lòng thử lại để cập nhật dữ liệu." onReload={() => listQuery.refetch()} />
-          ) : listQuery.isLoading ? (
+          ) : programsLoading || listQuery.isLoading ? (
             <TableLoadingState label="Đang tải danh sách ngành" />
           ) : data.length === 0 ? (
             <EmptyState title="Chưa có ngành phù hợp" description="Thêm ngành mới hoặc điều chỉnh từ khóa tìm kiếm." />
@@ -158,7 +173,6 @@ export function MajorsManagementPage() {
                 <TableRow>
                   <TableHead className="px-5">Mã ngành</TableHead>
                   <TableHead>Tên ngành</TableHead>
-                  <TableHead>Khoa</TableHead>
                   <TableHead>Đang sử dụng</TableHead>
                   <TableHead>Ngày tạo</TableHead>
                   <TableHead className="text-right">Thao tác</TableHead>
@@ -169,7 +183,6 @@ export function MajorsManagementPage() {
                   <TableRow key={major.id}>
                     <TableCell className="px-5 font-medium">{major.code ?? "-"}</TableCell>
                     <TableCell>{major.name}</TableCell>
-                    <TableCell>{major.facultyName ?? "-"}</TableCell>
                     <TableCell>{major.leadCount} lead / {major.admissionCount} hồ sơ / {major.studentCount} SV</TableCell>
                     <TableCell>{major.createdAt ? dateFormatter.format(new Date(major.createdAt)) : "-"}</TableCell>
                     <TableCell className="text-right">
@@ -211,12 +224,12 @@ export function MajorsManagementPage() {
         <DialogContent>
           <DialogHeader>
             <DialogTitle>Thêm ngành</DialogTitle>
-            <DialogDescription>Ngành mới sẽ thuộc chương trình đang làm việc.</DialogDescription>
+            <DialogDescription>Ngành mới sẽ thuộc chương trình được hiển thị bên dưới.</DialogDescription>
           </DialogHeader>
           <MajorForm
             entityId={undefined}
+            programLabel={programLabel}
             defaultValues={emptyMajorForm}
-            options={optionsQuery.data?.faculties ?? []}
             isPending={createMutation.isPending}
             error={createMutation.error}
             submitLabel="Thêm ngành"
@@ -229,13 +242,13 @@ export function MajorsManagementPage() {
         <DialogContent>
           <DialogHeader>
             <DialogTitle>Chỉnh sửa ngành</DialogTitle>
-            <DialogDescription>Cập nhật tên, mã hoặc khoa phụ trách của ngành.</DialogDescription>
+            <DialogDescription>Cập nhật tên và mã ngành.</DialogDescription>
           </DialogHeader>
           {editingMajor && (
             <MajorForm
               entityId={editingMajor.id}
-              defaultValues={{ name: editingMajor.name, code: editingMajor.code ?? "", facultyId: editingMajor.facultyId ?? "" }}
-              options={optionsQuery.data?.faculties ?? []}
+              programLabel={programLabel}
+              defaultValues={{ name: editingMajor.name, code: editingMajor.code ?? "" }}
               isPending={updateMutation.isPending}
               error={updateMutation.error}
               submitLabel="Lưu thay đổi"
@@ -250,7 +263,7 @@ export function MajorsManagementPage() {
           <DialogHeader>
             <DialogTitle>Xóa ngành</DialogTitle>
             <DialogDescription>
-              {deletingMajor ? `Bạn có chắc muốn xóa ngành "${deletingMajor.name}"? Ngành đang được sử dụng sẽ không thể xóa.` : ""}
+              {deletingMajor ? `Bạn có chắc muốn xóa ngành "${deletingMajor.name}" thuộc ${programLabel}? Ngành đang được sử dụng sẽ không thể xóa.` : ""}
             </DialogDescription>
           </DialogHeader>
           {deleteMutation.isError && <MutationError error={deleteMutation.error} />}
@@ -267,16 +280,16 @@ export function MajorsManagementPage() {
 
 function MajorForm({
   entityId,
+  programLabel,
   defaultValues,
-  options,
   isPending,
   error,
   submitLabel,
   onSubmit,
 }: {
   entityId?: string;
+  programLabel: string;
   defaultValues: MajorInput;
-  options: Array<{ id: string; name: string }>;
   isPending: boolean;
   error: Error | null;
   submitLabel: string;
@@ -301,6 +314,10 @@ function MajorForm({
     >
       {error && <MutationError error={error} />}
       <FieldGroup>
+        <Field>
+          <FieldLabel htmlFor="major-program">Chương trình tuyển sinh liên kết</FieldLabel>
+          <Input id="major-program" value={programLabel} readOnly title={programLabel} />
+        </Field>
         <Field data-invalid={Boolean(form.formState.errors.code)}>
           <FieldLabel htmlFor="major-code">Mã ngành *</FieldLabel>
           <Input id="major-code" placeholder="Ví dụ: 7480201" aria-invalid={Boolean(form.formState.errors.code)} {...form.register("code")} />
@@ -310,18 +327,6 @@ function MajorForm({
           <FieldLabel htmlFor="major-name">Tên ngành *</FieldLabel>
           <Input id="major-name" placeholder="Nhập tên ngành" aria-invalid={Boolean(form.formState.errors.name)} {...form.register("name")} />
           <FieldError errors={[form.formState.errors.name]} />
-        </Field>
-        <Field>
-          <FieldLabel htmlFor="major-faculty">Khoa phụ trách</FieldLabel>
-          <Select value={form.watch("facultyId") || "__empty__"} onValueChange={(value) => form.setValue("facultyId", value === "__empty__" ? "" : value)}>
-            <SelectTrigger id="major-faculty" className="w-full">
-              <SelectValue placeholder="Chọn khoa phụ trách" />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="__empty__">Chưa xác định</SelectItem>
-              {options.map((faculty) => <SelectItem key={faculty.id} value={faculty.id}>{faculty.name}</SelectItem>)}
-            </SelectContent>
-          </Select>
         </Field>
       </FieldGroup>
       <RuntimeCustomFieldsSection entityType="ADMISSION_MAJOR" entityId={entityId} disabled={isPending} onChange={(values) => form.setValue("customFieldValues", values)} />

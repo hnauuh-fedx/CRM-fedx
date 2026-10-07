@@ -9,6 +9,8 @@ import { triggerAutomation } from "../../automations/automation-engine.service";
 import { saveLeadAttributionAndTags } from "../../campaigns/lead-attribution.service";
 import { saveCandidateProfile } from "../../students/candidate-profile.service";
 import type { LeadInput } from "../domain/lead-input";
+import { isFailedLeadStatus } from "../domain/lead-lifecycle-status";
+import { recordTransitionNote, resolveTransitionNote } from "../transition-note.service";
 import {
   saveSaleCustomFieldValues,
   type SaleCustomFieldInput,
@@ -277,19 +279,30 @@ export async function updateLead(
     if (!source) {
       return { ok: false as const, reason: "source_not_found" as const };
     }
-    if (!(await hasValidAdmissionReferences(tx, input, leadId))) {
+    if (!(await hasValidAdmissionReferences(tx, input))) {
       return {
         ok: false as const,
         reason: "admission_reference_not_found" as const,
       };
     }
 
-    const hasStageSelection = input.pipelineStageId !== undefined;
+    if (isFailedLeadStatus(existing.status) && input.pipelineStageId) {
+      return { ok: false as const, reason: "lead_failed" as const };
+    }
+    const hasStageSelection = !isFailedLeadStatus(existing.status) && input.pipelineStageId !== undefined;
     const selectedStage = await getSelectedStage(tx, input.pipelineStageId);
     if (input.pipelineStageId && !selectedStage) {
       return { ok: false as const, reason: "stage_not_found" as const };
     }
     const nextStageId = selectedStage?.id ?? null;
+    const stageChanged = hasStageSelection && existing.pipeline_stage_id !== nextStageId;
+    if ((input.noteTemplateId || input.noteContent !== undefined) && (!stageChanged || !selectedStage)) {
+      return { ok: false as const, reason: "note_template_invalid" as const };
+    }
+    const transitionNote = selectedStage && stageChanged
+      ? await resolveTransitionNote(tx, selectedStage.id, selectedStage.name, input.noteTemplateId, input.noteContent)
+      : { ok: true as const, content: undefined };
+    if (!transitionNote.ok) return transitionNote;
     const assignmentChanged =
       input.assigneeId !== undefined &&
       input.assigneeId !== existing.assigned_to;
@@ -298,7 +311,7 @@ export async function updateLead(
     }
     const nextAssignee =
       assignmentChanged && input.assigneeId
-        ? await findActiveAssignableSale(tx, input.assigneeId)
+        ? await findActiveAssignableSale(tx, input.assigneeId, undefined, input.institutionProgramId)
         : null;
     if (
       assignmentChanged &&
@@ -359,6 +372,7 @@ export async function updateLead(
         selectedStage,
         { ipAddress },
       );
+      await recordTransitionNote(tx, actor, leadId, transitionNote.content, input.noteTemplateId, ipAddress);
     }
 
     if (assignmentChanged) {

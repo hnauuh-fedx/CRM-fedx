@@ -3,6 +3,7 @@ import { Prisma } from "../../generated/prisma/client";
 import type { AuthUser } from "../auth/auth.types";
 import type { CampaignViewer } from "../campaigns/campaign-list.service";
 import { getLeadScopeWhere } from "../leads/lead-list.service";
+import { ACTIVE_LEAD_STATUS } from "../leads/domain/lead-lifecycle-status";
 import { APPLICATION_PIPELINE_STAGE_LIKE, applicationStageLeadWhere } from "../leads/pipeline-stage-semantics";
 
 export type ReportDateRange = {
@@ -166,7 +167,7 @@ export async function getSaleDetailReport(user: AuthUser, query: ReportDateRange
       prisma.reminders.count({ where: { status: "pending", remind_at: { lt: new Date() }, leads: { is: scopedLeadWhere } } }),
       prisma.leads.groupBy({
         by: ["pipeline_stage_id"],
-        where: leadWhere,
+        where: { AND: [...leadWhere.AND, { status: ACTIVE_LEAD_STATUS }] },
         _count: { _all: true },
         orderBy: { _count: { pipeline_stage_id: "desc" } },
         take: 10,
@@ -333,7 +334,7 @@ export async function getAdmissionDetailReport(user: AuthUser, query: ReportDate
         tuition_status: true,
         monthly_revenue: true,
         admission_statuses: { select: { name: true, color: true } },
-        majors: { select: { name: true, faculties: { select: { name: true } } } },
+        majors: { select: { name: true } },
         leads: { select: { full_name: true } },
       },
     }),
@@ -346,12 +347,12 @@ export async function getAdmissionDetailReport(user: AuthUser, query: ReportDate
     }),
     prisma.majors.findMany({
       where: { id: { in: majorGroups.flatMap((group) => (group.major_id ? [group.major_id] : [])) } },
-      select: { id: true, name: true, faculties: { select: { name: true } } },
+      select: { id: true, name: true },
     }),
   ]);
 
+  const majorNames = new Map(majors.map((major) => [major.id, { name: major.name }]));
   const statusNames = new Map(statuses.map((status) => [status.id, { name: status.name, color: status.color }]));
-  const majorNames = new Map(majors.map((major) => [major.id, { name: major.name, facultyName: major.faculties?.name ?? null }]));
 
   return {
     filters: normalizedFilters(query),
@@ -377,7 +378,6 @@ export async function getAdmissionDetailReport(user: AuthUser, query: ReportDate
       return {
         id: group.major_id,
         name: major?.name ?? "Chưa có ngành",
-        facultyName: major?.facultyName ?? null,
         total: group._count._all,
       };
     }),
@@ -398,7 +398,6 @@ export async function getAdmissionDetailReport(user: AuthUser, query: ReportDate
       statusName: application.admission_statuses?.name ?? "Chưa có trạng thái",
       statusColor: application.admission_statuses?.color ?? null,
       majorName: application.majors?.name ?? "Chưa có ngành",
-      facultyName: application.majors?.faculties?.name ?? null,
       applicationReceivedDate: application.application_received_date?.toISOString() ?? null,
       feeStatus: application.fee_status,
       tuitionStatus: application.tuition_status,
@@ -416,7 +415,6 @@ export async function getStudentDetailReport(user: AuthUser, query: ReportDateRa
     serviceRequestCount,
     openServiceRequestCount,
     statusGroups,
-    facultyGroups,
     majorGroups,
     classGroups,
     serviceTypeGroups,
@@ -436,13 +434,6 @@ export async function getStudentDetailReport(user: AuthUser, query: ReportDateRa
       where: studentWhere,
       _count: { _all: true },
       orderBy: { _count: { status: "desc" } },
-      take: 10,
-    }),
-    prisma.students.groupBy({
-      by: ["faculty_id"],
-      where: studentWhere,
-      _count: { _all: true },
-      orderBy: { _count: { faculty_id: "desc" } },
       take: 10,
     }),
     prisma.students.groupBy({
@@ -477,20 +468,15 @@ export async function getStudentDetailReport(user: AuthUser, query: ReportDateRa
         enrolled_at: true,
         leads: { select: { full_name: true } },
         majors: { select: { name: true } },
-        faculties: { select: { name: true } },
         student_classes: { select: { name: true, code: true } },
       },
     }),
   ]);
 
-  const [faculties, majors, classes] = await Promise.all([
-    prisma.faculties.findMany({
-      where: { id: { in: facultyGroups.flatMap((group) => (group.faculty_id ? [group.faculty_id] : [])) } },
-      select: { id: true, name: true },
-    }),
+  const [majors, classes] = await Promise.all([
     prisma.majors.findMany({
       where: { id: { in: majorGroups.flatMap((group) => (group.major_id ? [group.major_id] : [])) } },
-      select: { id: true, name: true, faculties: { select: { name: true } } },
+      select: { id: true, name: true },
     }),
     prisma.student_classes.findMany({
       where: { id: { in: classGroups.flatMap((group) => (group.class_id ? [group.class_id] : [])) } },
@@ -498,8 +484,7 @@ export async function getStudentDetailReport(user: AuthUser, query: ReportDateRa
     }),
   ]);
 
-  const facultyNames = new Map(faculties.map((faculty) => [faculty.id, faculty.name]));
-  const majorNames = new Map(majors.map((major) => [major.id, { name: major.name, facultyName: major.faculties?.name ?? null }]));
+  const majorNames = new Map(majors.map((major) => [major.id, { name: major.name }]));
   const classNames = new Map(classes.map((studentClass) => [studentClass.id, [studentClass.code, studentClass.name].filter(Boolean).join(" - ")]));
 
   return {
@@ -517,17 +502,11 @@ export async function getStudentDetailReport(user: AuthUser, query: ReportDateRa
       name: normalizeStatusLabel(group.status),
       total: group._count._all,
     })),
-    studentsByFaculty: facultyGroups.map((group) => ({
-      id: group.faculty_id,
-      name: group.faculty_id ? (facultyNames.get(group.faculty_id) ?? "Chưa xác định") : "Chưa có khoa",
-      total: group._count._all,
-    })),
     studentsByMajor: majorGroups.map((group) => {
       const major = group.major_id ? majorNames.get(group.major_id) : null;
       return {
         id: group.major_id,
         name: major?.name ?? "Chưa có ngành",
-        facultyName: major?.facultyName ?? null,
         total: group._count._all,
       };
     }),
@@ -547,7 +526,6 @@ export async function getStudentDetailReport(user: AuthUser, query: ReportDateRa
       leadName: student.leads?.full_name ?? "Chưa xác định",
       status: student.status,
       majorName: student.majors?.name ?? "Chưa có ngành",
-      facultyName: student.faculties?.name ?? null,
       className: [student.student_classes?.code, student.student_classes?.name].filter(Boolean).join(" - ") || null,
       enrolledAt: student.enrolled_at?.toISOString() ?? null,
     })),

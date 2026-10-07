@@ -6,7 +6,6 @@ import { getInstitutionProgramScope } from "../institutions/institution-program-
 import {
   createProgramMajor,
   deleteProgramMajor,
-  getMajorManagementOptions,
   listProgramMajors,
   updateProgramMajor,
 } from "./major-management.service";
@@ -22,7 +21,6 @@ const majorIdSchema = z.uuid();
 const bodySchema = z.object({
   name: z.string().trim().min(2).max(255),
   code: z.string().trim().min(2).max(100),
-  facultyId: z.uuid().optional().or(z.literal("")).transform((value) => value || undefined),
 });
 
 export const majorsRouter = Router();
@@ -55,14 +53,6 @@ majorsRouter.get("/", async (request, response, next) => {
   }
 });
 
-majorsRouter.get("/options", async (_request, response, next) => {
-  try {
-    response.json(await getMajorManagementOptions());
-  } catch (error) {
-    next(error);
-  }
-});
-
 majorsRouter.post("/", async (request, response, next) => {
   try {
     const institutionProgramId = requireSelectedProgram(request, response);
@@ -79,9 +69,7 @@ majorsRouter.post("/", async (request, response, next) => {
       response.status(result.reason === "code_already_exists" ? 409 : 400).json({
         message: result.reason === "code_already_exists"
           ? "Mã ngành đã tồn tại trong chương trình này."
-          : result.reason === "faculty_not_found"
-            ? "Khoa đã chọn không tồn tại."
-            : "Chương trình đang chọn không tồn tại.",
+          : "Chương trình đang chọn không tồn tại.",
       });
       return;
     }
@@ -108,9 +96,7 @@ majorsRouter.patch("/:id", async (request, response, next) => {
       response.status(result.reason === "major_not_found" ? 404 : result.reason === "code_already_exists" ? 409 : 400).json({
         message: result.reason === "major_not_found"
           ? "Không tìm thấy ngành trong chương trình đang chọn."
-          : result.reason === "code_already_exists"
-            ? "Mã ngành đã tồn tại trong chương trình này."
-            : "Khoa đã chọn không tồn tại.",
+          : "Mã ngành đã tồn tại trong chương trình này.",
       });
       return;
     }

@@ -17,7 +17,6 @@ export async function getOverviewReport(institutionProgramId?: string) {
     totalStudents,
     revenue,
     applicationStatusGroups,
-    facultyGroups,
     majorGroups,
   ] = await prisma.$transaction([
     prisma.leads.count({ where: leadWhere }),
@@ -31,13 +30,6 @@ export async function getOverviewReport(institutionProgramId?: string) {
       orderBy: { _count: { admission_status_id: "desc" } },
       take: 10,
     }),
-    prisma.students.groupBy({
-      by: ["faculty_id"],
-      where: { ...studentWhere, faculty_id: { not: null } },
-      _count: { _all: true },
-      orderBy: { _count: { faculty_id: "desc" } },
-      take: 10,
-    }),
     prisma.admission_profiles.groupBy({
       by: ["major_id"],
       where: { ...admissionWhere, major_id: { not: null } },
@@ -47,7 +39,7 @@ export async function getOverviewReport(institutionProgramId?: string) {
     }),
   ]);
 
-  const [statuses, faculties, majors] = await prisma.$transaction([
+  const [statuses, majors] = await prisma.$transaction([
     prisma.admission_statuses.findMany({
       where: {
         id: {
@@ -55,12 +47,6 @@ export async function getOverviewReport(institutionProgramId?: string) {
             group.admission_status_id ? [group.admission_status_id] : [],
           ),
         },
-      },
-      select: { id: true, name: true },
-    }),
-    prisma.faculties.findMany({
-      where: {
-        id: { in: facultyGroups.flatMap((group) => (group.faculty_id ? [group.faculty_id] : [])) },
       },
       select: { id: true, name: true },
     }),
@@ -73,7 +59,6 @@ export async function getOverviewReport(institutionProgramId?: string) {
   ]);
 
   const statusNames = new Map(statuses.map((status) => [status.id, status.name]));
-  const facultyNames = new Map(faculties.map((faculty) => [faculty.id, faculty.name]));
   const majorNames = new Map(majors.map((major) => [major.id, major.name]));
 
   return {
@@ -91,11 +76,6 @@ export async function getOverviewReport(institutionProgramId?: string) {
         : "Chưa có trạng thái",
       total: group._count._all,
     })),
-    studentsByFaculty: facultyGroups.map((group) => ({
-      id: group.faculty_id!,
-      name: facultyNames.get(group.faculty_id!) ?? "Chưa xác định",
-      total: group._count._all,
-    })),
     applicationsByMajor: majorGroups.map((group) => ({
       id: group.major_id!,
       name: majorNames.get(group.major_id!) ?? "Chưa xác định",
@@ -107,14 +87,14 @@ export async function getOverviewReport(institutionProgramId?: string) {
 export async function getOverviewReportOptions() {
   const institutionPrograms = await prisma.institution_programs.findMany({
     where: { status: "active" },
-    select: { id: true, name: true, institutions: { select: { name: true } } },
+    select: { id: true, name: true, institution_name: true },
     orderBy: { name: "asc" },
   });
   return {
     institutionPrograms: institutionPrograms.map((program) => ({
       id: program.id,
       name: program.name,
-      institutionName: program.institutions.name,
+      institutionName: program.institution_name,
     })),
   };
 }

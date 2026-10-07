@@ -17,8 +17,6 @@ const sourceIds: string[] = [];
 const webhookIds: string[] = [];
 const customFieldIds: string[] = [];
 let customFieldGroupId: string | null = null;
-let institutionId: string | null = null;
-let programTypeId: string | null = null;
 let server: Server | null = null;
 let assertions = 0;
 let processQueuedWebhook: ((requestId: string) => Promise<unknown>) | null = null;
@@ -207,10 +205,6 @@ async function cleanup() {
   await prisma.institution_programs.deleteMany({
     where: { id: { in: programIds } },
   });
-  if (institutionId)
-    await prisma.institutions.deleteMany({ where: { id: institutionId } });
-  if (programTypeId)
-    await prisma.program_types.deleteMany({ where: { id: programTypeId } });
 }
 
 const webhookInput = {
@@ -289,21 +283,10 @@ async function main() {
     async counts() { return {}; },
   });
   processQueuedWebhook = processInboundWebhookRequest;
-  const institution = await prisma.institutions.create({
-    data: { code: `WH_INST_${runId}`, name: "Webhook Institution" },
-    select: { id: true },
-  });
-  institutionId = institution.id;
-  const programType = await prisma.program_types.create({
-    data: { code: `WH_TYPE_${runId}`, name: "Webhook Type" },
-    select: { id: true },
-  });
-  programTypeId = programType.id;
   for (const suffix of ["A", "B"]) {
     const program = await prisma.institution_programs.create({
       data: {
-        institution_id: institution.id,
-        program_type_id: programType.id,
+        institution_name: "Webhook Institution",
         code: `WH_PROGRAM_${suffix}_${runId}`,
         name: `Webhook Program ${suffix}`,
       },

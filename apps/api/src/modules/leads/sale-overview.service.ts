@@ -1,4 +1,5 @@
 import { prisma } from "../../database/prisma";
+import { ACTIVE_LEAD_STATUS } from "./domain/lead-lifecycle-status";
 import type { AuthUser } from "../auth/auth.types";
 import { getLeadScopeWhere } from "./lead-list.service";
 import { saveSaleCustomFieldValues, type SaleCustomFieldInput } from "./sale-custom-fields.service";
@@ -220,6 +221,9 @@ export async function getSaleFilterOptions(user: AuthUser, institutionProgramId?
         user_roles: {
           some: {
             roles: {
+              ...(institutionProgramId
+                ? { role_institution_programs: { some: { institution_program_id: institutionProgramId } } }
+                : {}),
               role_permissions: {
                 some: { permissions: { code: "lead.view_assigned" } },
                 none: { permissions: { code: { in: ["lead.view_department", "lead.view_all"] } } },
@@ -610,7 +614,7 @@ export async function getSaleKpi(institutionProgramId?: string) {
       }),
       prisma.leads.groupBy({
         by: ["pipeline_stage_id"],
-        where: activeLeadWhere,
+        where: { AND: [activeLeadWhere, { status: ACTIVE_LEAD_STATUS }] },
         _count: { _all: true },
         orderBy: { _count: { pipeline_stage_id: "desc" } },
         take: 10,

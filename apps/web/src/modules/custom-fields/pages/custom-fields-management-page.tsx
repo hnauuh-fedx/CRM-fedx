@@ -1,3 +1,4 @@
+import { customFieldPermission } from "../custom-field-permissions";
 import { useMemo, useRef, useState, type FormEvent, type ReactNode } from "react";
 import { useFieldArray, useForm, type Path } from "react-hook-form";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
@@ -50,8 +51,10 @@ import {
   createCustomField,
   getCustomFieldGroups,
   getCustomFields,
+  getSystemFieldRequirements,
   setCustomFieldStatus,
   updateCustomField,
+  updateSystemFieldRequirement,
 } from "@/services/custom-field.service";
 import {
   customFieldDataTypes,
@@ -67,6 +70,7 @@ import {
   type CustomFieldUpdateInput,
 } from "../custom-field.types";
 import type { SystemFormFieldGroup } from "../form-field-catalog.types";
+import { TransitionNoteSettings } from "../components/transition-note-settings";
 
 const allFilterValue = "__all__";
 type FieldSourceFilter = typeof allFilterValue | "system" | "custom";
@@ -159,12 +163,13 @@ export function CustomFieldsManagementPage({ config }: { config: CustomFieldsMan
   const [programFilter, setProgramFilter] = useState(selectedProgramId ?? allFilterValue);
   const [successMessage, setSuccessMessage] = useState("");
 
-  const canCreate = auth.can("custom_field.create");
-  const canUpdate = auth.can("custom_field.update");
-  const canArchive = auth.can("custom_field.archive");
-  const canManageOptions = auth.can("custom_field.manage_options");
-  const canEditSensitive = auth.can("custom_field.edit_sensitive");
-  const canManageGroups = auth.can("custom_field.manage_groups") || canCreate;
+  const canCreate = auth.can(customFieldPermission(config.entityType, "create"));
+  const canUpdate = auth.can(customFieldPermission(config.entityType, "update"));
+  const canArchive = auth.can(customFieldPermission(config.entityType, "archive"));
+  const canManageOptions = auth.can(customFieldPermission(config.entityType, "manage_options"));
+  const canEditSensitive = auth.can(customFieldPermission(config.entityType, "edit_sensitive"));
+  const canManageGroups = auth.can(customFieldPermission(config.entityType, "manage_groups")) || canCreate;
+  const canConfigureSystemRequirements = config.entityType === "LEAD";
 
   const query = useQuery({
     queryKey: ["custom-fields", config.entityType],
@@ -175,6 +180,11 @@ export function CustomFieldsManagementPage({ config }: { config: CustomFieldsMan
     queryKey: ["custom-field-groups", config.entityType],
     queryFn: () => getCustomFieldGroups(config.entityType, auth.accessToken!),
     enabled: Boolean(auth.accessToken),
+  });
+  const systemRequirementsQuery = useQuery({
+    queryKey: ["system-field-requirements", config.entityType],
+    queryFn: () => getSystemFieldRequirements(config.entityType, auth.accessToken!),
+    enabled: Boolean(auth.accessToken && config.systemFieldGroups?.length && canConfigureSystemRequirements),
   });
 
   const programById = useMemo(() => new Map(programs.map((program) => [program.id, program])), [programs]);
@@ -270,6 +280,16 @@ export function CustomFieldsManagementPage({ config }: { config: CustomFieldsMan
       notify(variables.status === "archive" ? "Đã lưu trữ trường dữ liệu." : variables.status === "activate" ? "Đã kích hoạt trường dữ liệu." : "Đã tạm ngừng trường dữ liệu.");
     },
   });
+  const systemRequirementMutation = useMutation({
+    mutationFn: ({ fieldKey, isRequired }: { fieldKey: string; isRequired: boolean }) =>
+      updateSystemFieldRequirement(config.entityType, fieldKey, isRequired, auth.accessToken!),
+    onSuccess: async () => {
+      await queryClient.invalidateQueries({ queryKey: ["system-field-requirements", config.entityType] });
+      await queryClient.invalidateQueries({ queryKey: ["lead-action-options"] });
+      await queryClient.invalidateQueries({ queryKey: ["leads", "action-options"] });
+      notify("Đã cập nhật quy tắc bắt buộc của trường dữ liệu.");
+    },
+  });
 
   const editingField = dialog?.type === "edit" ? dialog.field : null;
   const archivingField = dialog?.type === "archive" ? dialog.field : null;
@@ -363,9 +383,33 @@ export function CustomFieldsManagementPage({ config }: { config: CustomFieldsMan
                             <TableCell>{dataTypeLabels[item.dataType]}</TableCell>
                             <TableCell><code className="text-xs text-muted-foreground">{item.key}</code></TableCell>
                             <TableCell><Badge variant="secondary">Toàn hệ thống</Badge></TableCell>
-                            <TableCell><div className="flex min-w-48 flex-wrap gap-1">{item.isRequired && <Badge variant="outline">Bắt buộc</Badge>}{item.isSensitive && <Badge variant="destructive">Nhạy cảm</Badge>}{item.optionSource && <Badge variant="outline">Nguồn: {item.optionSource}</Badge>}{item.note && <span className="w-full text-xs text-muted-foreground">{item.note}</span>}{!item.isRequired && !item.isSensitive && !item.optionSource && !item.note && <span className="text-muted-foreground">Mặc định</span>}</div></TableCell>
+                            <TableCell>
+                              {canConfigureSystemRequirements ? <div className="flex min-w-48 flex-col items-start gap-2">
+                                <label className="flex min-h-8 items-center gap-2 text-sm">
+                                  <Checkbox
+                                    checked={systemRequirementsQuery.data?.[item.key] ?? item.isRequired ?? false}
+                                    disabled={item.requiredLocked || !canUpdate || systemRequirementMutation.isPending || systemRequirementsQuery.isLoading}
+                                    onCheckedChange={(checked) => systemRequirementMutation.mutate({ fieldKey: item.key, isRequired: Boolean(checked) })}
+                                    aria-label={`Đặt trường ${item.label} là bắt buộc`}
+                                  />
+                                  Bắt buộc nhập
+                                </label>
+                                {item.requiredLocked && <span className="text-xs text-muted-foreground">Trường định danh cốt lõi luôn bắt buộc.</span>}
+                                <div className="flex flex-wrap gap-1">
+                                  {item.isSensitive && <Badge variant="destructive">Nhạy cảm</Badge>}
+                                  {item.optionSource && <Badge variant="outline">Nguồn: {item.optionSource}</Badge>}
+                                  {item.note && <span className="w-full text-xs text-muted-foreground">{item.note}</span>}
+                                </div>
+                              </div> : <div className="flex min-w-48 flex-wrap gap-1">
+                                {item.isRequired && <Badge variant="outline">Bắt buộc</Badge>}
+                                {item.isSensitive && <Badge variant="destructive">Nhạy cảm</Badge>}
+                                {item.optionSource && <Badge variant="outline">Nguồn: {item.optionSource}</Badge>}
+                                {item.note && <span className="w-full text-xs text-muted-foreground">{item.note}</span>}
+                                {!item.isRequired && !item.isSensitive && !item.optionSource && !item.note && <span className="text-muted-foreground">Mặc định</span>}
+                              </div>}
+                            </TableCell>
                             <TableCell><Badge>Đang dùng</Badge></TableCell>
-                            <TableCell><div className="flex justify-end"><Tooltip><TooltipTrigger asChild><span className="inline-flex size-8 items-center justify-center text-muted-foreground" aria-label="Trường hệ thống được khóa"><LockKeyhole className="size-4" aria-hidden="true" /></span></TooltipTrigger><TooltipContent>Trường hệ thống được khai báo trong form và cơ sở dữ liệu.</TooltipContent></Tooltip></div></TableCell>
+                            <TableCell><div className="flex justify-end">{config.entityType === "LEAD" && item.key === "note" ? <TransitionNoteSettings /> : <Tooltip><TooltipTrigger asChild><span className="inline-flex size-8 items-center justify-center text-muted-foreground" aria-label="Trường hệ thống được khóa"><LockKeyhole className="size-4" aria-hidden="true" /></span></TooltipTrigger><TooltipContent>Trường hệ thống được khai báo trong form và cơ sở dữ liệu.</TooltipContent></Tooltip>}</div></TableCell>
                           </TableRow>
                         ))}
                         {group.customFields.map((field) => {

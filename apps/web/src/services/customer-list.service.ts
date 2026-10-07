@@ -53,7 +53,10 @@ export function getCustomerListLeads(id: string, params: CustomerListLeadParams,
     search: params.search,
     pipelineStageId: params.pipelineStageId,
     sourceId: params.sourceId,
+    majorId: params.majorId,
     assigneeId: params.assigneeId,
+    fromDate: params.fromDate,
+    toDate: params.toDate,
   });
   return apiRequest<LeadListResponse>(`/customer-lists/${id}/leads?${query.toString()}`, {}, accessToken);
 }

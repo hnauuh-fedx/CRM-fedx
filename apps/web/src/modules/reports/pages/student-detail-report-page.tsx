@@ -30,7 +30,7 @@ export function StudentDetailReportPage() {
         eyebrow="Báo cáo"
         title="Báo cáo Sinh viên chi tiết"
         scopeLabel="Theo quyền truy cập"
-        description="Theo dõi sinh viên đã nhập học, phân bổ lớp, khoa, ngành và yêu cầu dịch vụ sinh viên."
+        description="Theo dõi sinh viên đã nhập học, phân bổ lớp, ngành và yêu cầu dịch vụ sinh viên."
       />
       <DetailReportTimeFilter value={draftTimeFilter} onChange={setDraftTimeFilter} onApply={applyTimeFilter} />
       {reportQuery.isLoading ? (
@@ -52,7 +52,6 @@ export function StudentDetailReportPage() {
           <div className="grid gap-6 xl:grid-cols-[minmax(0,2fr)_minmax(320px,1fr)]">
             <RecentStudentsTable students={reportQuery.data.recentStudents} />
             <div className="grid gap-6">
-              <BreakdownCard title="Sinh viên theo khoa" items={reportQuery.data.studentsByFaculty} emptyText="Chưa có dữ liệu khoa." />
               <BreakdownCard title="Sinh viên theo lớp" items={reportQuery.data.studentsByClass} emptyText="Chưa có dữ liệu lớp." />
               <BreakdownCard title="Loại dịch vụ sinh viên" items={reportQuery.data.serviceTypes} emptyText="Chưa có yêu cầu dịch vụ." />
             </div>
@@ -77,7 +76,7 @@ function RecentStudentsTable({ students }: { students: StudentReportStudent[] })
             <TableHeader className="bg-muted/55 text-xs uppercase text-muted-foreground">
               <TableRow>
                 <TableHead className="px-5">Sinh viên</TableHead>
-                <TableHead>Ngành / khoa</TableHead>
+                <TableHead>Ngành</TableHead>
                 <TableHead>Lớp</TableHead>
                 <TableHead>Trạng thái</TableHead>
                 <TableHead className="px-5">Ngày nhập học</TableHead>
@@ -92,7 +91,6 @@ function RecentStudentsTable({ students }: { students: StudentReportStudent[] })
                   </TableCell>
                   <TableCell>
                     <p>{student.majorName}</p>
-                    <p className="text-sm text-muted-foreground">{student.facultyName ?? "-"}</p>
                   </TableCell>
                   <TableCell>{student.className ?? "-"}</TableCell>
                   <TableCell>{formatStatus(student.status)}</TableCell>

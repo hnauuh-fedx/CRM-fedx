@@ -5,6 +5,8 @@ export type LeadInput = {
   originId?: string;
   assigneeId?: string | null;
   pipelineStageId?: string;
+  noteTemplateId?: string;
+  noteContent?: string;
   email?: string;
   gender?: string;
   dateOfBirth?: string;

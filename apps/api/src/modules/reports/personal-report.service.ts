@@ -57,6 +57,7 @@ type StoredFilters = {
   conditions?: PersonalReportFilterCondition[];
 };
 type NumericRecord = Record<string, unknown>;
+const uuidPattern = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 
 const reportSelect = {
   id: true,
@@ -85,7 +86,7 @@ function asFilters(value: unknown): StoredFilters {
     ...(typeof input.fromDate === "string" ? { fromDate: input.fromDate } : {}),
     ...(typeof input.toDate === "string" ? { toDate: input.toDate } : {}),
     ...(["PIVOT", "SINGLE", "SUMMARY"].includes(String(input.mode)) ? { mode: input.mode as PersonalReportMode } : {}),
-    ...(["LEADS", "ADMISSION_CANDIDATES", "STUDENTS"].includes(String(input.datasetKey)) ? { datasetKey: input.datasetKey as PersonalReportDatasetKey } : {}),
+    ...(["LEADS", "QUALIFIED_LEADS", "STUDENTS"].includes(String(input.datasetKey)) ? { datasetKey: input.datasetKey as PersonalReportDatasetKey } : {}),
     ...(typeof input.rowDimensionKey === "string" ? { rowDimensionKey: input.rowDimensionKey } : {}),
     ...(typeof input.columnDimensionKey === "string" ? { columnDimensionKey: input.columnDimensionKey } : {}),
     ...(["LAST_7_DAYS", "THIS_WEEK", "LAST_WEEK", "THIS_MONTH", "LAST_MONTH", "THIS_QUARTER", "LAST_QUARTER", "CUSTOM"].includes(String(input.timePreset))
@@ -319,7 +320,7 @@ function isStoredFilterCondition(value: unknown): value is PersonalReportFilterC
   if (!value || typeof value !== "object" || Array.isArray(value)) return false;
   const item = value as Record<string, unknown>;
   return typeof item.fieldKey === "string"
-    && ["EQUALS", "NOT_EQUALS", "DATE_PRESET", "DATE_BETWEEN"].includes(String(item.operator))
+    && ["EQUALS", "NOT_EQUALS", "GREATER_THAN_OR_EQUAL", "DATE_PRESET", "DATE_BETWEEN"].includes(String(item.operator))
     && (item.value === undefined || typeof item.value === "string")
     && (item.fromDate === undefined || typeof item.fromDate === "string")
     && (item.toDate === undefined || typeof item.toDate === "string");
@@ -330,7 +331,14 @@ export function validateConditions(dataset: DatasetDefinition, conditions: Perso
   return conditions.every((condition) => {
     const field = dataset.filterFields.find((item) => item.key === condition.fieldKey);
     if (!field) return false;
-    if (field.type === "CATEGORY") return ["EQUALS", "NOT_EQUALS"].includes(condition.operator) && Boolean(condition.value?.trim());
+    if (field.type === "CATEGORY") {
+      if (condition.operator === "GREATER_THAN_OR_EQUAL") {
+        return (dataset.key === "LEADS" || dataset.key === "QUALIFIED_LEADS")
+          && condition.fieldKey === "PIPELINE_STAGE"
+          && uuidPattern.test(condition.value ?? "");
+      }
+      return ["EQUALS", "NOT_EQUALS"].includes(condition.operator) && Boolean(condition.value?.trim());
+    }
     if (condition.operator === "DATE_PRESET") return ["LAST_7_DAYS", "THIS_WEEK", "LAST_WEEK", "THIS_MONTH", "LAST_MONTH", "THIS_QUARTER", "LAST_QUARTER"].includes(condition.value ?? "");
     return condition.operator === "DATE_BETWEEN" && Boolean(condition.fromDate && condition.toDate)
       && condition.toDate! >= condition.fromDate! && isRangeAllowed(condition.fromDate!, condition.toDate!, "DAY");
@@ -338,34 +346,24 @@ export function validateConditions(dataset: DatasetDefinition, conditions: Perso
 }
 
 export function datasetFrom(datasetKey: PersonalReportDatasetKey) {
-  if (datasetKey === "ADMISSION_CANDIDATES") return Prisma.sql`reporting.admission_candidate_scope_fact fact`;
   if (datasetKey === "STUDENTS") return Prisma.sql`reporting.student_scope_fact fact`;
   return Prisma.sql`reporting.sale_pipeline_scope_fact fact`;
 }
 
 export function recordIdExpression(datasetKey: PersonalReportDatasetKey) {
-  if (datasetKey === "ADMISSION_CANDIDATES") return Prisma.sql`fact.application_id`;
   if (datasetKey === "STUDENTS") return Prisma.sql`fact.student_id`;
   return Prisma.sql`fact.lead_id`;
 }
 
 export function rawFieldExpression(datasetKey: PersonalReportDatasetKey, fieldKey: string) {
-  if (datasetKey === "LEADS") {
+  if (datasetKey === "LEADS" || datasetKey === "QUALIFIED_LEADS") {
     if (fieldKey === "SOURCE") return Prisma.sql`fact.source_name`;
     if (fieldKey === "ASSIGNEE") return Prisma.sql`fact.assignee_name`;
     if (fieldKey === "PIPELINE_STAGE") return Prisma.sql`fact.pipeline_stage_name`;
     if (fieldKey === "CREATED_DATE") return Prisma.sql`fact.lead_date`;
   }
-  if (datasetKey === "ADMISSION_CANDIDATES") {
-    if (fieldKey === "ADMISSION_STATUS") return Prisma.sql`fact.admission_status_name`;
-    if (fieldKey === "MAJOR") return Prisma.sql`fact.major_name`;
-    if (fieldKey === "FEE_STATUS") return Prisma.sql`fact.fee_status`;
-    if (fieldKey === "TUITION_STATUS") return Prisma.sql`fact.tuition_status`;
-    if (fieldKey === "RECEIVED_DATE") return Prisma.sql`fact.received_date`;
-  }
   if (datasetKey === "STUDENTS") {
     if (fieldKey === "STATUS") return Prisma.sql`fact.student_status`;
-    if (fieldKey === "FACULTY") return Prisma.sql`fact.faculty_name`;
     if (fieldKey === "MAJOR") return Prisma.sql`fact.major_name`;
     if (fieldKey === "CLASS") return Prisma.sql`fact.class_name`;
     if (fieldKey === "ENROLLED_DATE") return Prisma.sql`fact.enrolled_date`;
@@ -384,11 +382,22 @@ function outputExpression(datasetKey: PersonalReportDatasetKey, fieldKey: string
 }
 
 function outputOrderExpression(datasetKey: PersonalReportDatasetKey, fieldKey: string, granularity: PersonalReportDateGranularity) {
-  if (datasetKey === "LEADS" && fieldKey === "PIPELINE_STAGE") return Prisma.sql`fact.pipeline_stage_position`;
+  if ((datasetKey === "LEADS" || datasetKey === "QUALIFIED_LEADS") && fieldKey === "PIPELINE_STAGE") return Prisma.sql`fact.pipeline_stage_position`;
   return outputExpression(datasetKey, fieldKey, granularity);
 }
 
 export function conditionSql(datasetKey: PersonalReportDatasetKey, condition: PersonalReportFilterCondition) {
+  if ((datasetKey === "LEADS" || datasetKey === "QUALIFIED_LEADS") && condition.fieldKey === "PIPELINE_STAGE" && condition.operator === "GREATER_THAN_OR_EQUAL") {
+    return Prisma.sql`EXISTS (
+      SELECT 1
+      FROM leads compared_lead
+      JOIN pipeline_stages current_stage ON current_stage.id = compared_lead.pipeline_stage_id
+      JOIN pipeline_stages selected_stage ON selected_stage.id = CAST(${condition.value} AS uuid)
+      WHERE compared_lead.id = fact.lead_id
+        AND current_stage.pipeline_id = selected_stage.pipeline_id
+        AND current_stage.position >= selected_stage.position
+    )`;
+  }
   const expression = rawFieldExpression(datasetKey, condition.fieldKey);
   if (condition.operator === "EQUALS") return Prisma.sql`${expression} = ${condition.value}`;
   if (condition.operator === "NOT_EQUALS") return Prisma.sql`${expression} <> ${condition.value}`;
@@ -398,7 +407,36 @@ export function conditionSql(datasetKey: PersonalReportDatasetKey, condition: Pe
   return Prisma.sql`${expression} BETWEEN ${range!.fromDate}::date AND ${range!.toDate}::date`;
 }
 
-function reportWhere(datasetKey: PersonalReportDatasetKey, filters: StoredFilters, scopeKeys: string[], institutionProgramId: string) {
+export function datasetBaseCondition(datasetKey: PersonalReportDatasetKey) {
+  if (datasetKey !== "QUALIFIED_LEADS") return Prisma.sql`TRUE`;
+  return Prisma.sql`EXISTS (
+    SELECT 1
+    FROM leads qualified_lead
+    JOIN pipeline_stages current_stage ON current_stage.id = qualified_lead.pipeline_stage_id
+    JOIN pipeline_stages l2_stage
+      ON l2_stage.pipeline_id = current_stage.pipeline_id
+     AND l2_stage.name ILIKE '%(L2)%'
+    WHERE qualified_lead.id = fact.lead_id
+      AND current_stage.position >= l2_stage.position
+  )`;
+}
+
+function activePipelineLeadCondition() {
+  return Prisma.sql`EXISTS (
+    SELECT 1
+    FROM leads active_pipeline_lead
+    WHERE active_pipeline_lead.id = fact.lead_id
+      AND active_pipeline_lead.status = 'ACTIVE'
+  )`;
+}
+
+function reportWhere(
+  datasetKey: PersonalReportDatasetKey,
+  filters: StoredFilters,
+  scopeKeys: string[],
+  institutionProgramId: string,
+  outputFieldKeys: string[] = [],
+) {
   const conditions = (filters.conditions ?? []).map((condition) => conditionSql(datasetKey, condition));
   if (conditions.length === 0 && filters.timePreset) {
     const range = resolvePersonalReportDateRange(filters);
@@ -406,6 +444,10 @@ function reportWhere(datasetKey: PersonalReportDatasetKey, filters: StoredFilter
   }
   return Prisma.sql`fact.scope_key IN (${Prisma.join(scopeKeys)})
     AND fact.institution_program_id = ${institutionProgramId}::uuid
+    AND ${datasetBaseCondition(datasetKey)}
+    ${(datasetKey === "LEADS" || datasetKey === "QUALIFIED_LEADS") && outputFieldKeys.includes("PIPELINE_STAGE")
+      ? Prisma.sql`AND ${activePipelineLeadCondition()}`
+      : Prisma.empty}
     ${conditions.length ? Prisma.sql`AND ${Prisma.join(conditions, " AND ")}` : Prisma.empty}`;
 }
 
@@ -423,7 +465,12 @@ export async function getPersonalReportFilterValues(user: AuthUser, datasetKey: 
   const rows = await prisma.$queryRaw<Array<{ value: string; total: bigint | number }>>(Prisma.sql`
     SELECT ${expression}::text AS value, COUNT(DISTINCT ${recordIdExpression(datasetKey)})::bigint AS total
     FROM ${datasetFrom(datasetKey)}
-    WHERE fact.scope_key IN (${Prisma.join(scopeKeys)}) AND fact.institution_program_id = ${institutionProgramId}::uuid
+    WHERE fact.scope_key IN (${Prisma.join(scopeKeys)})
+      AND fact.institution_program_id = ${institutionProgramId}::uuid
+      AND ${datasetBaseCondition(datasetKey)}
+      ${fieldKey === "PIPELINE_STAGE" && (datasetKey === "LEADS" || datasetKey === "QUALIFIED_LEADS")
+        ? Prisma.sql`AND ${activePipelineLeadCondition()}`
+        : Prisma.empty}
     GROUP BY ${expression} ORDER BY ${orderBy} LIMIT 100
   `);
   return rows.map((item) => ({ value: item.value, label: normalizeDimensionLabel(item.value), count: Number(item.total) }));
@@ -446,7 +493,7 @@ async function executeDatasetSingleReport(user: AuthUser, stored: NonNullable<Aw
     SELECT ${expression} AS label, ${orderExpression} AS sort_order,
       COUNT(DISTINCT ${recordIdExpression(datasetKey)})::bigint AS total
     FROM ${datasetFrom(datasetKey)}
-    WHERE ${reportWhere(datasetKey, filters, scopeKeys, institutionProgramId)}
+    WHERE ${reportWhere(datasetKey, filters, scopeKeys, institutionProgramId, [dimension.key])}
     GROUP BY ${expression}, ${orderExpression}
     ORDER BY ${orderExpression} ASC NULLS LAST, ${expression} ASC LIMIT 100
   `);
@@ -482,7 +529,7 @@ async function executeDatasetPivotReport(user: AuthUser, stored: NonNullable<Awa
       ${columnExpression} AS column_key, ${columnOrderExpression} AS column_order,
       COUNT(DISTINCT ${recordIdExpression(datasetKey)})::bigint AS total
     FROM ${datasetFrom(datasetKey)}
-    WHERE ${reportWhere(datasetKey, filters, scopeKeys, institutionProgramId)}
+    WHERE ${reportWhere(datasetKey, filters, scopeKeys, institutionProgramId, [rowField.key, columnField.key])}
     GROUP BY ${rowExpression}, ${rowOrderExpression}, ${columnExpression}, ${columnOrderExpression}
     ORDER BY ${columnOrderExpression} ASC NULLS LAST, ${columnExpression} ASC,
       ${rowOrderExpression} ASC NULLS LAST, ${rowExpression} ASC LIMIT 5000
@@ -555,6 +602,7 @@ async function executeLeadSingleReport(user: AuthUser, stored: NonNullable<Await
     WHERE fact.scope_key IN (${Prisma.join(scopeKeys)})
       AND fact.institution_program_id = ${institutionProgramId}::uuid
       AND fact.lead_date BETWEEN ${range.fromDate}::date AND ${range.toDate}::date
+      ${filters.singleDimensionKey === "PIPELINE_STAGE" ? Prisma.sql`AND ${activePipelineLeadCondition()}` : Prisma.empty}
     GROUP BY ${dimensionExpression}
     ORDER BY ${dimensionExpression} ASC
     LIMIT 100
@@ -609,6 +657,7 @@ async function executeLeadPivotReport(user: AuthUser, stored: NonNullable<Awaite
     WHERE fact.scope_key IN (${Prisma.join(scopeKeys)})
       AND fact.institution_program_id = ${institutionProgramId}::uuid
       AND fact.lead_date BETWEEN ${range.fromDate}::date AND ${range.toDate}::date
+      ${filters.rowDimensionKey === "PIPELINE_STAGE" ? Prisma.sql`AND ${activePipelineLeadCondition()}` : Prisma.empty}
     GROUP BY ${rowExpression}, ${columnExpression}
     ORDER BY ${columnExpression} ASC, ${rowExpression} ASC
   `);

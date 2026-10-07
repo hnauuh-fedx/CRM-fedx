@@ -82,12 +82,12 @@ async function main() {
       const leadSources = await getPersonalReportFilterValues(viewer, "LEADS", "SOURCE", program.id);
       const leadAssignees = await getPersonalReportFilterValues(viewer, "LEADS", "ASSIGNEE", program.id);
       const leadStages = await getPersonalReportFilterValues(viewer, "LEADS", "PIPELINE_STAGE", program.id);
-      const admissionStatuses = await getPersonalReportFilterValues(viewer, "ADMISSION_CANDIDATES", "ADMISSION_STATUS", program.id);
+      const qualifiedLeadStages = await getPersonalReportFilterValues(viewer, "QUALIFIED_LEADS", "PIPELINE_STAGE", program.id);
       const studentStatuses = await getPersonalReportFilterValues(viewer, "STUDENTS", "STATUS", program.id);
       assert.ok(Array.isArray(leadSources));
       assert.ok(Array.isArray(leadAssignees));
       assert.ok(Array.isArray(leadStages));
-      assert.ok(Array.isArray(admissionStatuses));
+      assert.ok(Array.isArray(qualifiedLeadStages));
       assert.ok(Array.isArray(studentStatuses));
       assert.equal(await getPersonalReportFilterValues(viewer, "LEADS", "PHONE", program.id), null);
 

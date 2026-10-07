@@ -1,3 +1,4 @@
+import { expandLegacyCustomFieldPermission } from "../modules/custom-fields/custom-field-permissions";
 import { hash } from "bcryptjs";
 
 import { prisma } from "./prisma";
@@ -8,14 +9,6 @@ const hours = (value: number) => new Date(baseDate.getTime() + value * 60 * 60 *
 const days = (value: number) => hours(value * 24);
 
 const ids = {
-  institutions: [
-    "10000000-0000-4000-8000-000000000201",
-    "10000000-0000-4000-8000-000000000202",
-  ],
-  programTypes: [
-    "10000000-0000-4000-8000-000000000211",
-    "10000000-0000-4000-8000-000000000212",
-  ],
   institutionPrograms: [
     "10000000-0000-4000-8000-000000000221",
     "10000000-0000-4000-8000-000000000222",
@@ -164,8 +157,8 @@ const permissionDefinitions = {
     ["document.sensitive.view", "Xem tệp tài liệu hồ sơ tuyển sinh", "admission"],
     ["admission_document.upload", "Upload và cập nhật tài liệu hồ sơ tuyển sinh", "admission"],
     ["student.create_from_admission", "Chuyển hồ sơ tuyển sinh sang sinh viên", "student"],
-    ["admission_major.manage", "Quản lý ngành theo chương trình", "admission"],
-    ["institution_program.manage", "Quản lý chương trình tuyển sinh", "admission"],
+    ["admission_major.manage", "Quản lý ngành theo chương trình", "system"],
+    ["institution_program.manage", "Quản lý chương trình tuyển sinh", "system"],
     ["student.view_all", "Xem toàn bộ sinh viên", "student"],
     ["student.update_all", "Cập nhật toàn bộ sinh viên", "student"],
     ["student_service.view", "Xem dịch vụ sinh viên", "student"],
@@ -271,7 +264,7 @@ async function seedAccess() {
   for (const [roleCode, definitions] of Object.entries(permissionDefinitions)) {
     const role = roleByCode.get(roleCode)!;
     const permissions = await Promise.all(
-      definitions.map(([code, name, module]) =>
+      definitions.flatMap(([code, name, module]) => expandLegacyCustomFieldPermission({ code, name, module })).map(({ code, name, module }) =>
         prisma.permissions.upsert({
           where: { code },
           update: { name, module },
@@ -373,17 +366,9 @@ async function seedAccess() {
 
 async function seedBusinessData(principals: Awaited<ReturnType<typeof seedAccess>>) {
   const { director, manager, telesale, telesaleTwo, marketing, saleDepartment } = principals;
-  const institutions = await Promise.all([
-    prisma.institutions.upsert({ where: { code: "TVU" }, update: { name: "Đại học Trà Vinh - từ xa", status: "active" }, create: { id: ids.institutions[0], code: "TVU", name: "Đại học Trà Vinh - từ xa", status: "active" } }),
-    prisma.institutions.upsert({ where: { code: "TVU-LI" }, update: { name: "Đại học Trà Vinh - chính quy", status: "active" }, create: { id: ids.institutions[1], code: "TVU-LI", name: "Đại học Trà Vinh - chính quy", status: "active" } }),
-  ]);
-  const programTypes = await Promise.all([
-    prisma.program_types.upsert({ where: { code: "FULL_TIME" }, update: { name: "Chinh quy" }, create: { id: ids.programTypes[0], code: "FULL_TIME", name: "Chinh quy" } }),
-    prisma.program_types.upsert({ where: { code: "PART_TIME" }, update: { name: "Vua lam vua hoc" }, create: { id: ids.programTypes[1], code: "PART_TIME", name: "Vua lam vua hoc" } }),
-  ]);
   const institutionPrograms = await Promise.all([
-    prisma.institution_programs.upsert({ where: { code: "TVU-CQ-2026" }, update: { institution_id: institutions[0].id, program_type_id: programTypes[0].id, name: "Chinh quy 2026", status: "active" }, create: { id: ids.institutionPrograms[0], code: "TVU-CQ-2026", institution_id: institutions[0].id, program_type_id: programTypes[0].id, name: "Chinh quy 2026", status: "active" } }),
-    prisma.institution_programs.upsert({ where: { code: "TVU-LI-VLVH-2026" }, update: { institution_id: institutions[1].id, program_type_id: programTypes[1].id, name: "Lien ket VLVH 2026", status: "active" }, create: { id: ids.institutionPrograms[1], code: "TVU-LI-VLVH-2026", institution_id: institutions[1].id, program_type_id: programTypes[1].id, name: "Lien ket VLVH 2026", status: "active" } }),
+    prisma.institution_programs.upsert({ where: { code: "TVU-CQ-2026" }, update: { institution_name: "Đại học Trà Vinh - từ xa", name: "Chinh quy 2026", status: "active" }, create: { id: ids.institutionPrograms[0], code: "TVU-CQ-2026", institution_name: "Đại học Trà Vinh - từ xa", name: "Chinh quy 2026", status: "active" } }),
+    prisma.institution_programs.upsert({ where: { code: "TVU-LI-VLVH-2026" }, update: { institution_name: "Đại học Trà Vinh - chính quy", name: "Lien ket VLVH 2026", status: "active" }, create: { id: ids.institutionPrograms[1], code: "TVU-LI-VLVH-2026", institution_name: "Đại học Trà Vinh - chính quy", name: "Lien ket VLVH 2026", status: "active" } }),
   ]);
   const demoRoles = await prisma.roles.findMany({
     where: { code: { in: ["DIRECTOR", "SALE_MANAGER", "TELESALE", "MARKETING_MANAGER", "STUDENT_SERVICE"] } },
@@ -563,13 +548,11 @@ async function seedBusinessData(principals: Awaited<ReturnType<typeof seedAccess
 async function seedAdmissionAndStudents(principals: Awaited<ReturnType<typeof seedAccess>>, data: Awaited<ReturnType<typeof seedBusinessData>>) {
   const { director, manager, telesale } = principals;
   const { leads, institutionPrograms } = data;
-  const faculty = await prisma.faculties.upsert({ where: { code: "CNTT" }, update: { name: "Công nghệ thông tin" }, create: { code: "CNTT", name: "Công nghệ thông tin" } });
-  const economicsFaculty = await prisma.faculties.upsert({ where: { code: "KT" }, update: { name: "Kinh tế" }, create: { code: "KT", name: "Kinh tế" } });
   await prisma.majors.updateMany({ where: { code: "7480201", institution_program_id: null }, data: { institution_program_id: institutionPrograms[0].id } });
   await prisma.majors.updateMany({ where: { code: "7340101", institution_program_id: null }, data: { institution_program_id: institutionPrograms[1].id } });
-  const major = await prisma.majors.upsert({ where: { institution_program_id_code: { institution_program_id: institutionPrograms[0].id, code: "7480201" } }, update: { name: "Công nghệ thông tin", faculty_id: faculty.id }, create: { institution_program_id: institutionPrograms[0].id, code: "7480201", name: "Công nghệ thông tin", faculty_id: faculty.id } });
-  const economicsMajor = await prisma.majors.upsert({ where: { institution_program_id_code: { institution_program_id: institutionPrograms[1].id, code: "7340101" } }, update: { name: "Quản trị kinh doanh", faculty_id: economicsFaculty.id }, create: { institution_program_id: institutionPrograms[1].id, code: "7340101", name: "Quản trị kinh doanh", faculty_id: economicsFaculty.id } });
-  const classItem = await prisma.student_classes.upsert({ where: { code: "DA26CNTT01" }, update: { name: "Đại học CNTT K26 - Lớp 01", faculty_id: faculty.id }, create: { code: "DA26CNTT01", name: "Đại học CNTT K26 - Lớp 01", faculty_id: faculty.id } });
+  const major = await prisma.majors.upsert({ where: { institution_program_id_code: { institution_program_id: institutionPrograms[0].id, code: "7480201" } }, update: { name: "Công nghệ thông tin" }, create: { institution_program_id: institutionPrograms[0].id, code: "7480201", name: "Công nghệ thông tin" } });
+  const economicsMajor = await prisma.majors.upsert({ where: { institution_program_id_code: { institution_program_id: institutionPrograms[1].id, code: "7340101" } }, update: { name: "Quản trị kinh doanh" }, create: { institution_program_id: institutionPrograms[1].id, code: "7340101", name: "Quản trị kinh doanh" } });
+  const classItem = await prisma.student_classes.upsert({ where: { code: "DA26CNTT01" }, update: { name: "Đại học CNTT K26 - Lớp 01" }, create: { code: "DA26CNTT01", name: "Đại học CNTT K26 - Lớp 01" } });
   const submitted = await prisma.admission_statuses.upsert({ where: { code: "SUBMITTED" }, update: { name: "Đã nộp hồ sơ", color: "#F59E0B" }, create: { code: "SUBMITTED", name: "Đã nộp hồ sơ", color: "#F59E0B" } });
   const enrolled = await prisma.admission_statuses.upsert({ where: { code: "ENROLLED" }, update: { name: "Đã nhập học", color: "#16A34A" }, create: { code: "ENROLLED", name: "Đã nhập học", color: "#16A34A" } });
   await prisma.admission_statuses.upsert({ where: { code: "NEEDS_DOCUMENTS" }, update: { name: "Cần bổ sung", color: "#DC2626" }, create: { code: "NEEDS_DOCUMENTS", name: "Cần bổ sung", color: "#DC2626" } });
@@ -594,8 +577,8 @@ async function seedAdmissionAndStudents(principals: Awaited<ReturnType<typeof se
 
   const student = await prisma.students.upsert({
     where: { student_code: "DEMO-SV-001" },
-    update: { lead_id: leads[3].id, admission_profile_id: profileTwo.id, institution_program_id: institutionPrograms[0].id, major_id: major.id, faculty_id: faculty.id, class_id: classItem.id, status: "active" },
-    create: { student_code: "DEMO-SV-001", lead_id: leads[3].id, admission_profile_id: profileTwo.id, institution_program_id: institutionPrograms[0].id, major_id: major.id, faculty_id: faculty.id, class_id: classItem.id, status: "active", enrolled_at: days(-14), created_at: days(-14) },
+    update: { lead_id: leads[3].id, admission_profile_id: profileTwo.id, institution_program_id: institutionPrograms[0].id, major_id: major.id, class_id: classItem.id, status: "active" },
+    create: { student_code: "DEMO-SV-001", lead_id: leads[3].id, admission_profile_id: profileTwo.id, institution_program_id: institutionPrograms[0].id, major_id: major.id, class_id: classItem.id, status: "active", enrolled_at: days(-14), created_at: days(-14) },
   });
   await prisma.leads.updateMany({ where: { id: { in: [leads[2].id, leads[3].id] } }, data: { major_id: major.id } });
   await prisma.kpi_targets.upsert({ where: { id: ids.kpiTargets[0] }, update: { institution_program_id: institutionPrograms[0].id, target_type: "enrolled_students", period_start: days(-30), period_end: days(30), target_value: 120 }, create: { id: ids.kpiTargets[0], institution_program_id: institutionPrograms[0].id, target_type: "enrolled_students", period_start: days(-30), period_end: days(30), target_value: 120 } });

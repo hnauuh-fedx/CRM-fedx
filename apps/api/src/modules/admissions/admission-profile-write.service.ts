@@ -43,29 +43,36 @@ function hasAdmissionDetails(input: AdmissionInput) {
   ].some(Boolean);
 }
 
-export async function hasValidAdmissionReferences(tx: TransactionClient, input: AdmissionInput, leadId?: string) {
+export async function hasValidAdmissionReferences(tx: TransactionClient, input: AdmissionInput) {
   if (!hasAdmissionDetails(input)) {
-    if (!leadId) {
-      return true;
-    }
-    const existing = await tx.admission_profiles.findUnique({ where: { lead_id: leadId }, select: { id: true } });
-    return !existing || Boolean(input.institutionProgramId);
+    return true;
   }
-  if (!input.institutionProgramId || !input.majorId || !input.admissionStatusId) {
-    return false;
-  }
+
   const [program, major, status] = await Promise.all([
-    tx.institution_programs.findUnique({ where: { id: input.institutionProgramId }, select: { id: true } }),
-    tx.majors.findFirst({
-      where: {
-        id: input.majorId,
-        OR: [{ institution_program_id: input.institutionProgramId }, { institution_program_id: null }],
-      },
-      select: { id: true },
-    }),
-    tx.admission_statuses.findUnique({ where: { id: input.admissionStatusId }, select: { id: true } }),
+    input.institutionProgramId
+      ? tx.institution_programs.findUnique({ where: { id: input.institutionProgramId }, select: { id: true } })
+      : Promise.resolve(null),
+    input.majorId
+      ? tx.majors.findFirst({
+          where: {
+            id: input.majorId,
+            ...(input.institutionProgramId
+              ? { OR: [{ institution_program_id: input.institutionProgramId }, { institution_program_id: null }] }
+              : {}),
+          },
+          select: { id: true },
+        })
+      : Promise.resolve(null),
+    input.admissionStatusId
+      ? tx.admission_statuses.findUnique({ where: { id: input.admissionStatusId }, select: { id: true } })
+      : Promise.resolve(null),
   ]);
-  return Boolean(program && major && status);
+
+  return (
+    (!input.institutionProgramId || Boolean(program))
+    && (!input.majorId || Boolean(major))
+    && (!input.admissionStatusId || Boolean(status))
+  );
 }
 
 export async function saveAdmissionProfile(tx: TransactionClient, leadId: string, input: AdmissionInput) {

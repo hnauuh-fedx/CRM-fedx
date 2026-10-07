@@ -35,7 +35,6 @@ export type AdmissionListItem = {
   major: {
     id: string;
     name: string;
-    faculty: { id: string; name: string } | null;
   } | null;
 };
 
@@ -49,7 +48,7 @@ export type AdmissionListResponse = {
 export type AdmissionFilterOptions = {
   statuses: Array<{ id: string; name: string }>;
   institutionPrograms: Array<{ id: string; name: string; institutionName: string }>;
-  majors: Array<{ id: string; name: string; facultyName: string | null }>;
+  majors: Array<{ id: string; name: string }>;
 };
 
 export type AdmissionProfileInput = {
@@ -82,8 +81,8 @@ export type AdmissionActionOptions = {
   leads: Array<{ id: string; leadCode: string | null; fullName: string; phone: string }>;
   statuses: Array<{ id: string; name: string; code: string }>;
   institutionPrograms: Array<{ id: string; name: string; institutionName: string }>;
-  majors: Array<{ id: string; name: string; facultyId: string | null; facultyName: string | null }>;
-  classes: Array<{ id: string; code: string; name: string; facultyId: string | null }>;
+  majors: Array<{ id: string; name: string }>;
+  classes: Array<{ id: string; code: string; name: string }>;
 };
 
 export type AdmissionDocumentStatus =
@@ -164,7 +163,6 @@ export type AdmissionFeeItem = {
   candidateName: string | null;
   leadCode: string | null;
   majorName: string | null;
-  facultyName: string | null;
   feeStatus: string | null;
   tuitionStatus: string | null;
   monthlyRevenue: string | null;

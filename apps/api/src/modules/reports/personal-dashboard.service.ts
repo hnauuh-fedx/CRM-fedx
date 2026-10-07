@@ -13,6 +13,7 @@ import {
 import { resolveReportingScopeKeys } from "./reporting-scope";
 import {
   conditionSql,
+  datasetBaseCondition,
   datasetFrom,
   executePersonalReport,
   rawFieldExpression,
@@ -150,6 +151,7 @@ async function validateDashboardCustomization(user: AuthUser, customization: Per
   return customization.kpiWidgets.every((widget) => {
     const dataset = personalReportDatasetDefinitions[widget.datasetKey];
     if (!dataset || !canUseReportModule(user, dataset.module) || !validateConditions(dataset, widget.conditions)) return false;
+    if (widget.conditions.some((condition) => condition.operator === "GREATER_THAN_OR_EQUAL" && !stageById.has(condition.value ?? ""))) return false;
     if (widget.title && widget.title.trim().length > 120) return false;
     if (widget.type === "COUNT") return true;
     if (widget.type === "TREND") {
@@ -170,7 +172,7 @@ async function executeKpiWidget(user: AuthUser, institutionProgramId: string, wi
   if (!dataset || !canUseReportModule(user, dataset.module) || scopeKeys.length === 0 || !validateConditions(dataset, widget.conditions)) return unavailableWidget(widget);
   if (widget.type === "TREND" && widget.conditions.some((condition) => dataset.filterFields.find((field) => field.key === condition.fieldKey)?.type === "DATE")) return unavailableWidget(widget);
   if (widget.type === "CONVERSION") return executeConversionWidget(widget, institutionProgramId, scopeKeys, stages);
-  if (widget.type === "TREND") return executeTrendWidget(widget, institutionProgramId, scopeKeys);
+  if (widget.type === "TREND") return executeTrendWidget(widget, institutionProgramId, scopeKeys, stages);
   const [row] = await prisma.$queryRaw<CountRow[]>(Prisma.sql`
     SELECT COUNT(DISTINCT ${recordIdExpression(widget.datasetKey)})::bigint AS total
     FROM ${datasetFrom(widget.datasetKey)}
@@ -179,12 +181,12 @@ async function executeKpiWidget(user: AuthUser, institutionProgramId: string, wi
   return {
     id: widget.id, type: widget.type,
     title: normalizedTitle(widget.title) ?? `Tổng số ${dataset.label.toLocaleLowerCase("vi")}`,
-    description: describeFilters(widget, "Toàn bộ dữ liệu trong phạm vi được cấp"),
+    description: describeFilters(widget, "Toàn bộ dữ liệu trong phạm vi được cấp", stages),
     value: Number(row?.total ?? 0), format: "NUMBER" as const, trend: null,
   };
 }
 
-async function executeTrendWidget(widget: DashboardKpiWidgetInput, institutionProgramId: string, scopeKeys: string[]) {
+async function executeTrendWidget(widget: DashboardKpiWidgetInput, institutionProgramId: string, scopeKeys: string[], stages: PipelineStageOption[]) {
   const dataset = personalReportDatasetDefinitions[widget.datasetKey];
   const period = widget.comparisonPeriod ?? "MONTH";
   const ranges = comparisonRanges(period);
@@ -204,7 +206,7 @@ async function executeTrendWidget(widget: DashboardKpiWidgetInput, institutionPr
   return {
     id: widget.id, type: widget.type,
     title: normalizedTitle(widget.title) ?? `${dataset.label} ${labels.current}`,
-    description: describeFilters(widget, `Đang so sánh ${labels.current} với ${labels.previous}`),
+    description: describeFilters(widget, `Đang so sánh ${labels.current} với ${labels.previous}`, stages),
     value: current, format: "NUMBER" as const,
     trend: { direction, percentageChange: Math.abs(change), previousLabel: labels.previous },
   };
@@ -213,51 +215,48 @@ async function executeTrendWidget(widget: DashboardKpiWidgetInput, institutionPr
 async function executeConversionWidget(widget: DashboardKpiWidgetInput, institutionProgramId: string, scopeKeys: string[], stages: PipelineStageOption[]) {
   const source = stages.find((stage) => stage.id === widget.sourceStageId);
   const target = stages.find((stage) => stage.id === widget.targetStageId);
-  if (!source || !target) return unavailableWidget(widget);
+  if (!source || !target || source.pipelineId !== target.pipelineId || source.position == null || target.position == null || target.position <= source.position) {
+    return unavailableWidget(widget);
+  }
   const [row] = await prisma.$queryRaw<ConversionRow[]>(Prisma.sql`
     WITH scoped_leads AS (
       SELECT DISTINCT fact.lead_id FROM reporting.sale_pipeline_scope_fact fact
       WHERE ${dashboardWhere(widget, institutionProgramId, scopeKeys)}
-    ), stage_reaches AS (
-      SELECT lead.id AS lead_id, lead.pipeline_stage_id AS stage_id, COALESCE(lead.updated_at, lead.created_at) AS reached_at
-      FROM leads lead JOIN scoped_leads scoped ON scoped.lead_id = lead.id WHERE lead.pipeline_stage_id IS NOT NULL
-      UNION ALL
-      SELECT history.lead_id, history.to_stage_id, history.changed_at
-      FROM lead_status_histories history JOIN scoped_leads scoped ON scoped.lead_id = history.lead_id WHERE history.to_stage_id IS NOT NULL
-      UNION ALL
-      SELECT history.lead_id, history.from_stage_id, history.changed_at
-      FROM lead_status_histories history JOIN scoped_leads scoped ON scoped.lead_id = history.lead_id WHERE history.from_stage_id IS NOT NULL
-    ), source_reaches AS (
-      SELECT lead_id, MIN(reached_at) AS reached_at FROM stage_reaches WHERE stage_id = ${source.id}::uuid GROUP BY lead_id
-    ), converted_leads AS (
-      SELECT DISTINCT source_reaches.lead_id
-      FROM source_reaches
-      JOIN stage_reaches target_reaches
-        ON target_reaches.lead_id = source_reaches.lead_id
-       AND target_reaches.stage_id = ${target.id}::uuid
-       AND target_reaches.reached_at >= source_reaches.reached_at
     )
-    SELECT COUNT(*)::bigint AS source_total,
-      COUNT(converted_leads.lead_id)::bigint AS target_total
-    FROM source_reaches LEFT JOIN converted_leads USING (lead_id)
+    SELECT
+      COUNT(DISTINCT scoped.lead_id) FILTER (WHERE current_stage.position >= ${source.position})::bigint AS source_total,
+      COUNT(DISTINCT scoped.lead_id) FILTER (WHERE current_stage.position >= ${target.position})::bigint AS target_total
+    FROM scoped_leads scoped
+    JOIN leads lead ON lead.id = scoped.lead_id
+    JOIN pipeline_stages current_stage ON current_stage.id = lead.pipeline_stage_id
+    WHERE current_stage.pipeline_id = ${source.pipelineId}::uuid
   `);
   const sourceTotal = Number(row?.source_total ?? 0);
   const targetTotal = Number(row?.target_total ?? 0);
+  const conversionPercentage = percentage(targetTotal, sourceTotal);
   return {
     id: widget.id, type: widget.type,
     title: normalizedTitle(widget.title) ?? `Tỷ lệ chuyển đổi từ ${source.name} sang ${target.name}`,
-    description: describeFilters(widget, `${targetTotal}/${sourceTotal} khách hàng đã chuyển từ ${source.name} sang ${target.name}`),
-    value: percentage(targetTotal, sourceTotal), format: "PERCENT" as const, trend: null,
+    description: describeFilters(widget, `${targetTotal}/${sourceTotal} khách hàng đang ở từ ${target.name} trở đi trên tổng số từ ${source.name} trở đi`, stages),
+    value: targetTotal, format: "NUMBER" as const, trend: null,
+    conversion: {
+      sourceTotal,
+      targetTotal,
+      percentage: conversionPercentage,
+      sourceStageName: source.name,
+      targetStageName: target.name,
+    },
   };
 }
 
 function dashboardWhere(widget: DashboardKpiWidgetInput, institutionProgramId: string, scopeKeys: string[]) {
   const conditions = widget.conditions.map((condition) => conditionSql(widget.datasetKey, condition));
   return Prisma.sql`fact.scope_key IN (${Prisma.join(scopeKeys)}) AND fact.institution_program_id = ${institutionProgramId}::uuid
+    AND ${datasetBaseCondition(widget.datasetKey)}
     ${conditions.length ? Prisma.sql`AND ${Prisma.join(conditions, " AND ")}` : Prisma.empty}`;
 }
 
-function describeFilters(widget: DashboardKpiWidgetInput, fallback: string) {
+function describeFilters(widget: DashboardKpiWidgetInput, fallback: string, stages: PipelineStageOption[]) {
   if (widget.conditions.length === 0) return fallback;
   const dataset = personalReportDatasetDefinitions[widget.datasetKey];
   const descriptions = widget.conditions.map((condition) => {
@@ -265,6 +264,10 @@ function describeFilters(widget: DashboardKpiWidgetInput, fallback: string) {
     if (!field) return null;
     if (condition.operator === "DATE_PRESET") return `${field.label}: ${datePresetLabel(condition.value)}`;
     if (condition.operator === "DATE_BETWEEN") return `${field.label}: từ ${formatDate(condition.fromDate)} đến ${formatDate(condition.toDate)}`;
+    if (condition.operator === "GREATER_THAN_OR_EQUAL") {
+      const stage = stages.find((item) => item.id === condition.value);
+      return `${field.label} từ “${stage?.name ?? "giai đoạn đã chọn"}” trở đi`;
+    }
     return `${field.label} ${condition.operator === "NOT_EQUALS" ? "không bằng" : "bằng"} “${condition.value ?? ""}”`;
   }).filter(Boolean);
   return `Bộ lọc: ${descriptions.join("; ")}`;
@@ -303,7 +306,7 @@ function defaultKpiWidgets(user: AuthUser): DashboardKpiWidgetInput[] {
     if (canUseReportModule(user, personalReportDatasetDefinitions[datasetKey].module)) widgets.push({ id, type: "COUNT", datasetKey, conditions: [] });
   };
   addCount("00000000-0000-4000-8000-000000000101", "LEADS");
-  addCount("00000000-0000-4000-8000-000000000102", "ADMISSION_CANDIDATES");
+  addCount("00000000-0000-4000-8000-000000000102", "QUALIFIED_LEADS");
   addCount("00000000-0000-4000-8000-000000000103", "STUDENTS");
   if (canUseReportModule(user, "SALE")) widgets.push({ id: "00000000-0000-4000-8000-000000000104", type: "TREND", datasetKey: "LEADS", comparisonPeriod: "MONTH", conditions: [] });
   return widgets;
@@ -314,7 +317,7 @@ function parseStoredKpiWidgets(value: Prisma.JsonValue): DashboardKpiWidgetInput
   return value.flatMap((item) => {
     if (!item || typeof item !== "object" || Array.isArray(item)) return [];
     const record = item as Record<string, unknown>;
-    if (typeof record.id !== "string" || !["COUNT", "CONVERSION", "TREND"].includes(String(record.type)) || !["LEADS", "ADMISSION_CANDIDATES", "STUDENTS"].includes(String(record.datasetKey))) return [];
+    if (typeof record.id !== "string" || !["COUNT", "CONVERSION", "TREND"].includes(String(record.type)) || !["LEADS", "QUALIFIED_LEADS", "STUDENTS"].includes(String(record.datasetKey))) return [];
     return [{
       id: record.id, type: record.type as DashboardKpiWidgetType, datasetKey: record.datasetKey as PersonalReportDatasetKey,
       title: typeof record.title === "string" ? record.title : undefined,

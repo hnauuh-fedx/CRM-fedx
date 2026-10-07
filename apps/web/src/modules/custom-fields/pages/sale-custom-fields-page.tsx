@@ -1,5 +1,6 @@
-import { useMemo } from "react";
-import { useSearchParams } from "react-router-dom";
+import { useAuth } from "@/modules/auth/auth-context";
+import { customFieldPermission } from "../custom-field-permissions";
+import { Navigate, useSearchParams } from "react-router-dom";
 
 import { Field, FieldLabel } from "@/components/ui/field";
 import { Select, SelectContent, SelectGroup, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
@@ -42,22 +43,24 @@ const saleFormConfigs: SaleFormConfig[] = [
 
 export function SaleCustomFieldsPage() {
   const [searchParams, setSearchParams] = useSearchParams();
+  const auth = useAuth();
+  const visibleForms = saleFormConfigs.filter((form) => auth.can(customFieldPermission(form.entityType, "view")));
   const requestedForm = searchParams.get("form") as SaleFormConfig["key"] | null;
-  const selectedFormKey = saleFormConfigs.some((item) => item.key === requestedForm) ? requestedForm! : "lead";
-  const selectedForm = saleFormConfigs.find((item) => item.key === selectedFormKey) ?? saleFormConfigs[0];
-  const formSelector = useMemo(() => (
+  const selectedForm = visibleForms.find((item) => item.key === requestedForm) ?? visibleForms[0];
+  if (!selectedForm) return <Navigate to="/khong-co-quyen" replace />;
+  const formSelector = (
     <Field className="min-w-48 gap-1">
       <FieldLabel className="sr-only">Chọn form CRM Sale</FieldLabel>
       <Select value={selectedForm.key} onValueChange={(value) => setSearchParams({ form: value })}>
         <SelectTrigger className="h-9 w-52"><SelectValue /></SelectTrigger>
         <SelectContent>
           <SelectGroup>
-            {saleFormConfigs.map((form) => <SelectItem key={form.key} value={form.key}>{form.label}</SelectItem>)}
+            {visibleForms.map((form) => <SelectItem key={form.key} value={form.key}>{form.label}</SelectItem>)}
           </SelectGroup>
         </SelectContent>
       </Select>
     </Field>
-  ), [selectedForm.key, setSearchParams]);
+  );
 
   return (
     <CustomFieldsManagementPage

@@ -20,6 +20,7 @@ export {
 } from "./application/lead-collaboration.use-cases";
 export {
   assignLead,
+  changeLeadStatus,
   changeLeadStage,
 } from "./application/lead-owner-stage.commands";
 export { assignLeads } from "./application/assign-leads.use-case";

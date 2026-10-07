@@ -1,3 +1,4 @@
+import { hasCustomFieldPermission } from "../custom-fields/custom-field-permissions";
 import { Prisma } from "../../generated/prisma/client";
 import { prisma } from "../../database/prisma";
 import type { AuthUser } from "../auth/auth.types";
@@ -152,7 +153,7 @@ export async function getLeadCustomFields(
     include: { custom_field_groups: true, custom_field_values: { where: { entity_type: "LEAD", entity_id: lead.id } } },
     orderBy: [{ custom_field_groups: { display_order: "asc" } }, { display_order: "asc" }, { id: "asc" }],
   });
-  const viewSensitive = user.permissions.includes("custom_field.view_sensitive");
+  const viewSensitive = hasCustomFieldPermission(user.permissions, "LEAD", "view_sensitive");
   const canEdit = user.permissions.some((permission) => ["lead.update_all", "lead.update_department", "lead.update_assigned"].includes(permission));
   return {
     fields: fields.map((field) => ({
@@ -170,7 +171,7 @@ export async function getLeadCustomFields(
       defaultValue: field.is_sensitive && !viewSensitive ? undefined : field.default_value,
       value: field.is_sensitive && !viewSensitive ? null : readValue(field, field.custom_field_values[0]),
       canView: !field.is_sensitive || viewSensitive,
-      canEdit: canEdit && (!field.is_sensitive || user.permissions.includes("custom_field.edit_sensitive")),
+      canEdit: canEdit && (!field.is_sensitive || hasCustomFieldPermission(user.permissions, "LEAD", "edit_sensitive")),
     })),
   };
 }
@@ -181,7 +182,7 @@ export async function getLeadCustomFieldDefinitions(user: AuthUser, programId: s
     include: { custom_field_groups: true },
     orderBy: [{ custom_field_groups: { display_order: "asc" } }, { display_order: "asc" }, { id: "asc" }],
   });
-  const viewSensitive = user.permissions.includes("custom_field.view_sensitive");
+  const viewSensitive = hasCustomFieldPermission(user.permissions, "LEAD", "view_sensitive");
   return {
     fields: fields.map((field) => ({
       id: field.id,
@@ -198,7 +199,7 @@ export async function getLeadCustomFieldDefinitions(user: AuthUser, programId: s
       defaultValue: field.is_sensitive && !viewSensitive ? undefined : field.default_value,
       value: field.is_sensitive && !viewSensitive ? null : readValue(field, null),
       canView: !field.is_sensitive || viewSensitive,
-      canEdit: canEdit && (!field.is_sensitive || user.permissions.includes("custom_field.edit_sensitive")),
+      canEdit: canEdit && (!field.is_sensitive || hasCustomFieldPermission(user.permissions, "LEAD", "edit_sensitive")),
     })),
   };
 }
@@ -219,7 +220,7 @@ export async function patchLeadCustomFields(
 
   const map = new Map(fields.map((field) => [field.id, field]));
   const prepared = values.map((value) => ({ field: map.get(value.fieldId)!, value: normalize(map.get(value.fieldId)!, value.value) }));
-  if (prepared.some((item) => item.field.is_sensitive && !user.permissions.includes("custom_field.edit_sensitive"))) return { ok: false as const, reason: "sensitive_forbidden" };
+  if (prepared.some((item) => item.field.is_sensitive && !hasCustomFieldPermission(user.permissions, "LEAD", "edit_sensitive"))) return { ok: false as const, reason: "sensitive_forbidden" };
   if (prepared.some((item) => item.value === null && item.field.is_required) || prepared.some((item, index) => item.value === null && values[index].value !== null && values[index].value !== "")) return { ok: false as const, reason: "invalid" };
 
   await prisma.$transaction(async (tx) => {

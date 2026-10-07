@@ -74,13 +74,12 @@ export async function listAdmissionProfiles(user: AuthUser, query: AdmissionList
         leads: { select: { id: true, lead_code: true, full_name: true } },
         admission_statuses: { select: { id: true, name: true, color: true } },
         institution_programs: {
-          select: { id: true, name: true, institutions: { select: { name: true } } },
+          select: { id: true, name: true, institution_name: true },
         },
         majors: {
           select: {
             id: true,
             name: true,
-            faculties: { select: { id: true, name: true } },
           },
         },
       },
@@ -127,14 +126,13 @@ export async function listAdmissionProfiles(user: AuthUser, query: AdmissionList
         ? {
             id: profile.institution_programs.id,
             name: profile.institution_programs.name,
-            institutionName: profile.institution_programs.institutions.name,
+            institutionName: profile.institution_programs.institution_name,
           }
         : null,
       major: profile.majors
         ? {
             id: profile.majors.id,
             name: profile.majors.name,
-            faculty: profile.majors.faculties,
           }
         : null,
     })),
@@ -167,14 +165,14 @@ export async function getAdmissionFilterOptions(user: AuthUser, institutionProgr
     }),
     prisma.institution_programs.findMany({
       where: { status: "active", admission_profiles: { some: { leads: { is: getLeadScopeWhere(user) } } } },
-      select: { id: true, name: true, institutions: { select: { name: true } } },
+      select: { id: true, name: true, institution_name: true },
       orderBy: { name: "asc" },
     }),
     prisma.majors.findMany({
       where: institutionProgramId
         ? { OR: [{ institution_program_id: institutionProgramId }, { institution_program_id: null }] }
         : undefined,
-      select: { id: true, name: true, faculties: { select: { name: true } } },
+      select: { id: true, name: true },
       orderBy: { name: "asc" },
     }),
   ]);
@@ -184,12 +182,11 @@ export async function getAdmissionFilterOptions(user: AuthUser, institutionProgr
     institutionPrograms: institutionPrograms.map((program) => ({
       id: program.id,
       name: program.name,
-      institutionName: program.institutions.name,
+      institutionName: program.institution_name,
     })),
     majors: majors.map((major) => ({
       id: major.id,
       name: major.name,
-      facultyName: major.faculties?.name ?? null,
     })),
   };
 }

@@ -56,7 +56,6 @@ export async function listStudentServices(user: AuthUser, query: ListQuery<"crea
             student_code: true,
             status: true,
             leads: { select: { full_name: true } },
-            faculties: { select: { name: true } },
             student_classes: { select: { name: true } },
           },
         },
@@ -282,7 +281,6 @@ function serializeStudentService(item: {
     student_code: string;
     status: string | null;
     leads: { full_name: string } | null;
-    faculties: { name: string } | null;
     student_classes: { name: string } | null;
   } | null;
 }) {
@@ -292,7 +290,6 @@ function serializeStudentService(item: {
     studentCode: item.students?.student_code ?? null,
     studentName: item.students?.leads?.full_name ?? null,
     studentStatus: item.students?.status ?? null,
-    facultyName: item.students?.faculties?.name ?? null,
     className: item.students?.student_classes?.name ?? null,
     type: item.type,
     status: item.status,

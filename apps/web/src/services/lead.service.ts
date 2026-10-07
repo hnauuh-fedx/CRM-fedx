@@ -30,7 +30,10 @@ export function getLeads(params: LeadListParams, accessToken: string) {
     search: params.search,
     pipelineStageId: params.pipelineStageId,
     sourceId: params.sourceId,
+    majorId: params.majorId,
     assigneeId: params.assigneeId,
+    fromDate: params.fromDate,
+    toDate: params.toDate,
   });
 
   return apiRequest<LeadListResponse>(`/leads?${query.toString()}`, {}, accessToken);
@@ -104,11 +107,35 @@ export function deleteLeads(leadIds: string[], accessToken: string) {
   );
 }
 
-export function changeLeadStage(leadId: string, stageId: string, accessToken: string) {
+export function changeLeadStage(leadId: string, stageId: string, accessToken: string, noteTemplateId?: string, noteContent?: string) {
   return apiRequest<{ id: string; pipelineStageId: string }>(
     `/leads/${leadId}/stage`,
-    { method: "PATCH", body: JSON.stringify({ stageId }) },
+    { method: "PATCH", body: JSON.stringify({ stageId, noteTemplateId, noteContent }) },
     accessToken,
+  );
+}
+
+export function initializeLeadOnOpen(leadId: string, accessToken: string) {
+  return apiRequest<{ id: string; changed: boolean }>(`/leads/${leadId}/open`, { method: "POST" }, accessToken);
+}
+
+export function changeLeadStatus(leadId: string, status: "ACTIVE" | "FAIL", accessToken: string, noteTemplateId?: string, noteContent?: string) {
+  return apiRequest<{
+    id: string;
+    status: "ACTIVE" | "FAIL";
+    statusLabel: string;
+    pipelineStageId: string | null;
+    changed: boolean;
+  }>(
+    `/leads/${leadId}/status`,
+    { method: "PATCH", body: JSON.stringify({ status, noteTemplateId, noteContent }) },
+    accessToken,
+  );
+}
+
+export function getTransitionNoteOptions(leadId: string, target: string, accessToken: string) {
+  return apiRequest<import("@/modules/leads/transition-note.types").TransitionNoteOptions>(
+    `/leads/${leadId}/transition-note-options?target=${encodeURIComponent(target)}`, {}, accessToken,
   );
 }
 

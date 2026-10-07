@@ -572,7 +572,7 @@ export function WebhooksPage() {
                   : emptyWebhook
               }
               fields={metadataQuery.data.fields}
-              canViewCustomFields={auth.can("custom_field.view")}
+              canViewCustomFields={auth.can("custom_field.lead.manage")}
               onRefreshFields={() => void metadataQuery.refetch()}
               refreshingFields={metadataQuery.isFetching}
               refreshFieldsError={metadataQuery.isError}

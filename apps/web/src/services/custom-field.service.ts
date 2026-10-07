@@ -7,9 +7,21 @@ import type {
   CustomFieldScopeType,
   CustomFieldStatusAction,
   CustomFieldUpdateInput,
+  SystemFieldRequirements,
 } from "@/modules/custom-fields/custom-field.types";
 import { apiRequest } from "./api";
 import type { LeadCustomFieldsResponse, LeadCustomFieldValue } from "@/modules/leads/lead.types";
+import type { TransitionNoteConfiguration, TransitionNoteTemplate } from "@/modules/leads/transition-note.types";
+
+export function getTransitionNoteConfiguration(accessToken: string) {
+  return apiRequest<TransitionNoteConfiguration[]>("/custom-fields/system/LEAD/note-templates", {}, accessToken);
+}
+
+export function setTransitionNoteTemplates(target: string, templates: TransitionNoteTemplate[], accessToken: string) {
+  return apiRequest<TransitionNoteTemplate[]>(`/custom-fields/system/LEAD/note-templates/${target}`, {
+    method: "PUT", body: JSON.stringify({ templates }),
+  }, accessToken);
+}
 
 export function getCustomFields(
   params: {
@@ -27,6 +39,23 @@ export function getCustomFields(
   if (params.scopeType) query.set("scopeType", params.scopeType);
   if (params.programId) query.set("programId", params.programId);
   return apiRequest<CustomFieldDefinition[]>(`/custom-fields?${query.toString()}`, {}, accessToken);
+}
+
+export function getSystemFieldRequirements(entityType: CustomFieldEntityType, accessToken: string) {
+  return apiRequest<SystemFieldRequirements>(`/custom-fields/system/${entityType}/requirements`, {}, accessToken);
+}
+
+export function updateSystemFieldRequirement(
+  entityType: CustomFieldEntityType,
+  fieldKey: string,
+  isRequired: boolean,
+  accessToken: string,
+) {
+  return apiRequest<SystemFieldRequirements>(
+    `/custom-fields/system/${entityType}/requirements`,
+    { method: "PATCH", body: JSON.stringify({ fieldKey, isRequired }) },
+    accessToken,
+  );
 }
 
 export function createCustomField(input: CustomFieldInput, accessToken: string) {
@@ -73,6 +102,6 @@ export function getRuntimeCustomFields(entityType: RuntimeCustomFieldEntityType,
   return apiRequest<LeadCustomFieldsResponse>(`/custom-fields/runtime/${entityType}${query}`, {}, accessToken);
 }
 
-export function saveRuntimeCustomFields(entityType: RuntimeCustomFieldEntityType, entityId: string, values: Record<string, LeadCustomFieldValue>, accessToken: string) {
-  return apiRequest<{ message: string }>(`/custom-fields/runtime/${entityType}/${entityId}`, { method: "PATCH", body: JSON.stringify({ values }) }, accessToken);
+export function saveRuntimeCustomFields(entityType: RuntimeCustomFieldEntityType, entityId: string, values: Record<string, LeadCustomFieldValue>, accessToken: string, institutionProgramId?: string) {
+  return apiRequest<{ message: string }>(`/custom-fields/runtime/${entityType}/${entityId}`, { method: "PATCH", body: JSON.stringify({ values }), ...(institutionProgramId ? { headers: { "X-Institution-Program-Id": institutionProgramId } } : {}) }, accessToken);
 }

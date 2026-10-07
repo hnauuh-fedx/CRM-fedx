@@ -12,6 +12,7 @@ import { useInstitutionProgram } from "@/modules/institutions/institution-progra
 import { useAuth } from "@/modules/auth/auth-context";
 import { getLeadCustomFieldDefinitions, getLeadCustomFields } from "@/services/lead.service";
 import { DynamicFieldRenderer } from "./dynamic-field-renderer";
+import { useTransitionNotePrompt } from "./transition-note-dialog";
 import { leadFormSchema } from "../lead.schema";
 import type { LeadActionOptions, LeadCustomField, LeadCustomFieldValue, LeadFormInput } from "../lead.types";
 
@@ -26,7 +27,7 @@ const compactNumberFormatter = new Intl.NumberFormat("vi-VN", { notation: "compa
 
 type LeadFormProps = {
   defaultValues: LeadFormInput;
-  options: Pick<LeadActionOptions, "sources" | "stages" | "telesales" | "institutionPrograms" | "majors" | "admissionStatuses" | "tags">;
+  options: Pick<LeadActionOptions, "sources" | "stages" | "telesales" | "institutionPrograms" | "majors" | "admissionStatuses" | "tags" | "systemFieldRequirements">;
   leadId?: string;
   submitLabel: string;
   isPending: boolean;
@@ -52,7 +53,8 @@ export function LeadForm({ defaultValues, options, leadId, submitLabel, isPendin
     enabled: Boolean(auth.accessToken && (leadId || programId)),
   });
   const customFields = useMemo(() => customFieldsQuery.data?.fields ?? [], [customFieldsQuery.data?.fields]);
-  const { formRef, handleFormSubmit } = useLeadFormSubmission(form, customFields, onSubmit);
+  const { formRef, handleFormSubmit } = useLeadFormSubmission(form, customFields, options.systemFieldRequirements, onSubmit);
+  const isRequired = (fieldKey: keyof LeadFormInput) => options.systemFieldRequirements[fieldKey] ?? false;
   const customFieldsByGroup = useMemo(() => {
     const grouped = new Map<string, LeadCustomField[]>();
     for (const field of customFields) grouped.set(field.group.key, [...(grouped.get(field.group.key) ?? []), field]);
@@ -63,8 +65,19 @@ export function LeadForm({ defaultValues, options, leadId, submitLabel, isPendin
     for (const field of customFields) if (!field.group.isSystem) groups.set(field.group.id, field.group);
     return [...groups.values()].sort((left, right) => left.displayOrder - right.displayOrder);
   }, [customFields]);
-  const syncStageFields = (stageId: string) => {
+  const transition = useTransitionNotePrompt<string>((stageId, selection) => {
     form.setValue("pipelineStageId", stageId, { shouldDirty: true, shouldValidate: true });
+    form.setValue("noteTemplateId", stageId !== defaultValues.pipelineStageId ? selection.templateId : undefined, { shouldDirty: true });
+    form.setValue("noteContent", stageId !== defaultValues.pipelineStageId ? selection.noteContent : undefined, { shouldDirty: true });
+  });
+  const syncStageFields = (stageId: string) => {
+    if (isPending || transition.isPending || transition.dialog || stageId === form.getValues("pipelineStageId")) return;
+    if (leadId && stageId && stageId !== defaultValues.pipelineStageId) transition.request(leadId, stageId, stageId);
+    else {
+      form.setValue("pipelineStageId", stageId, { shouldDirty: true, shouldValidate: true });
+      form.setValue("noteTemplateId", undefined, { shouldDirty: true });
+      form.setValue("noteContent", undefined, { shouldDirty: true });
+    }
   };
   const previousCustomFieldIds = useRef<string[]>([]);
   const [hiddenCustomValueWarning, setHiddenCustomValueWarning] = useState(false);
@@ -91,14 +104,21 @@ export function LeadForm({ defaultValues, options, leadId, submitLabel, isPendin
   useEffect(() => { const currentIds = new Set(customFields.map((field) => field.id)); if (previousCustomFieldIds.current.some((fieldId) => !currentIds.has(fieldId) && form.getFieldState(`customFieldValues.${fieldId}`).isDirty)) setHiddenCustomValueWarning(true); previousCustomFieldIds.current = [...currentIds]; }, [customFields, form]);
 
   return (
+    <>
+    {transition.dialog}
     <form
       ref={formRef}
       className={cn("flex flex-col", dialogLayout ? "min-h-0 flex-1 gap-0" : "gap-6")}
       noValidate
-      onSubmit={(event) => void handleFormSubmit(event)}
+      onSubmit={(event) => {
+        if (transition.isPending || transition.dialog || isPending) { event.preventDefault(); return; }
+        void handleFormSubmit(event);
+      }}
     >
       <div className={cn("flex flex-col gap-6", dialogLayout && "min-h-0 flex-1 overflow-y-auto px-6 py-5")}>
       <FormSection title="Tiến trình" description="Chọn bước xử lý hiện tại của học viên. Mỗi lần thay đổi sẽ được lưu vào lịch sử và nhật ký hệ thống.">
+        {transition.isPending && <p role="status" className="text-sm text-muted-foreground">Đang tải ghi chú theo tiến trình…</p>}
+        {transition.error && <p role="alert" className="text-sm text-destructive">{transition.error.message}</p>}
         <LeadProgressSelector
           value={form.watch("pipelineStageId")}
           stages={options.stages}
@@ -110,10 +130,10 @@ export function LeadForm({ defaultValues, options, leadId, submitLabel, isPendin
 
       <FormSection title="Thông tin cơ bản" description="Thông tin nhận diện và liên hệ bắt buộc của ứng viên.">
         <FieldGroup className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
-          <TextField name="fullName" id="lead-full-name" label="Họ và tên *" register={form.register} errors={form.formState.errors} autoComplete="name" />
-          <TextField name="phone" id="lead-phone" label="Số điện thoại *" register={form.register} errors={form.formState.errors} type="tel" inputMode="numeric" autoComplete="tel" placeholder="Nhập đúng 10 chữ số" />
+          <TextField name="fullName" id="lead-full-name" label={`Họ và tên${isRequired("fullName") ? " *" : ""}`} register={form.register} errors={form.formState.errors} autoComplete="name" />
+          <TextField name="phone" id="lead-phone" label={`Số điện thoại${isRequired("phone") ? " *" : ""}`} register={form.register} errors={form.formState.errors} type="tel" inputMode="numeric" autoComplete="tel" placeholder="Nhập đúng 10 chữ số" />
           <Field data-invalid={Boolean(form.formState.errors.sourceId)}>
-            <FieldLabel htmlFor="lead-form-source">Nguồn học viên *</FieldLabel>
+            <FieldLabel htmlFor="lead-form-source">Nguồn học viên{isRequired("sourceId") ? " *" : ""}</FieldLabel>
             <Select value={form.watch("sourceId")} onValueChange={(value) => form.setValue("sourceId", value, { shouldValidate: true })}>
               <SelectTrigger id="lead-form-source" className="w-full" aria-invalid={Boolean(form.formState.errors.sourceId)}>
                 <SelectValue placeholder="Chọn nguồn học viên" />
@@ -198,10 +218,10 @@ export function LeadForm({ defaultValues, options, leadId, submitLabel, isPendin
         <CustomFieldInputs fields={customFieldsByGroup.get("relatives") ?? []} control={form.control} isPending={isPending} />
       </FormSection>
 
-      <FormSection title="Thông tin tuyển sinh" description="Hồ sơ được ghi vào chương trình đang chọn trên thanh công cụ; ngành đăng ký và trạng thái hồ sơ là bắt buộc khi nhập phần này.">
+      <FormSection title="Thông tin tuyển sinh" description="Hồ sơ được ghi vào chương trình đang chọn; các trường bắt buộc tuân theo mục Cấu hình trường dữ liệu.">
         <FieldGroup className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
           <Field data-invalid={Boolean(form.formState.errors.majorId)}>
-            <FieldLabel htmlFor="lead-major">Ngành đăng ký *</FieldLabel>
+            <FieldLabel htmlFor="lead-major">Ngành đăng ký{isRequired("majorId") ? " *" : ""}</FieldLabel>
             <Select value={form.watch("majorId") || "__empty__"} onValueChange={(value) => form.setValue("majorId", value === "__empty__" ? "" : value, { shouldValidate: true })}>
               <SelectTrigger id="lead-major" className="w-full" aria-invalid={Boolean(form.formState.errors.majorId)}><SelectValue placeholder="Chọn ngành đăng ký" /></SelectTrigger>
               <SelectContent><SelectGroup><SelectItem value="__empty__">Chưa lập hồ sơ</SelectItem>{options.majors.map((major) => <SelectItem key={major.id} value={major.id}>{major.code ? `${major.code} - ` : ""}{major.name}</SelectItem>)}</SelectGroup></SelectContent>
@@ -209,7 +229,7 @@ export function LeadForm({ defaultValues, options, leadId, submitLabel, isPendin
             <FieldError errors={[form.formState.errors.majorId]} />
           </Field>
           <Field data-invalid={Boolean(form.formState.errors.admissionStatusId)}>
-            <FieldLabel htmlFor="lead-admission-status">Trạng thái hồ sơ *</FieldLabel>
+            <FieldLabel htmlFor="lead-admission-status">Trạng thái hồ sơ{isRequired("admissionStatusId") ? " *" : ""}</FieldLabel>
             <Select value={form.watch("admissionStatusId") || "__empty__"} onValueChange={(value) => form.setValue("admissionStatusId", value === "__empty__" ? "" : value, { shouldValidate: true })}>
               <SelectTrigger id="lead-admission-status" className="w-full" aria-invalid={Boolean(form.formState.errors.admissionStatusId)}><SelectValue placeholder="Chọn trạng thái" /></SelectTrigger>
               <SelectContent><SelectGroup><SelectItem value="__empty__">Chưa xác định</SelectItem>{options.admissionStatuses.map((status) => <SelectItem key={status.id} value={status.id}>{status.name}</SelectItem>)}</SelectGroup></SelectContent>
@@ -294,15 +314,17 @@ export function LeadForm({ defaultValues, options, leadId, submitLabel, isPendin
       ))}
       </div>
       <div className={cn("flex shrink-0 justify-end", dialogLayout && "border-t bg-background px-6 py-4")}>
-        <Button type="submit" disabled={isPending}>{isPending ? "Đang lưu..." : submitLabel}</Button>
+        <Button type="submit" disabled={isPending || transition.isPending || Boolean(transition.dialog)}>{isPending ? "Đang lưu..." : submitLabel}</Button>
       </div>
     </form>
+    </>
   );
 }
 
 function useLeadFormSubmission(
   form: UseFormReturn<LeadFormInput>,
   customFields: LeadCustomField[],
+  systemFieldRequirements: Record<string, boolean>,
   onSubmit: (values: LeadFormInput) => void,
 ) {
   const formRef = useRef<HTMLFormElement>(null);
@@ -331,8 +353,15 @@ function useLeadFormSubmission(
       });
     }
 
+    const missingRequiredFields = Object.entries(systemFieldRequirements)
+      .filter(([fieldKey, required]) => required && fieldKey in values && isEmptyRequiredValue(values[fieldKey as keyof LeadFormInput]))
+      .map(([fieldKey]) => fieldKey as keyof LeadFormInput);
+    for (const field of missingRequiredFields) {
+      form.setError(field, { message: "Trường này là bắt buộc." });
+    }
+
     const customFieldsAreValid = await form.trigger("customFieldValues", { shouldFocus: false });
-    if (!parsed.success || !customFieldsAreValid) {
+    if (!parsed.success || missingRequiredFields.length > 0 || !customFieldsAreValid) {
       focusFirstInvalidField();
       return;
     }
@@ -347,6 +376,10 @@ function useLeadFormSubmission(
   };
 
   return { formRef, handleFormSubmit };
+}
+
+function isEmptyRequiredValue(value: unknown) {
+  return value === undefined || value === null || value === "" || (Array.isArray(value) && value.length === 0);
 }
 
 function CustomFieldInputs({ fields, control, isPending, emptyLabel }: { fields: LeadCustomField[]; control: Control<LeadFormInput>; isPending: boolean; emptyLabel?: string }) {
@@ -421,7 +454,13 @@ export function LeadProgressSelector({
 
   return (
     <div className="flex flex-col gap-3">
-      <fieldset className={singleRowDesktop ? `grid grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-4 ${allOptionLabel ? "2xl:grid-cols-9" : "2xl:grid-cols-8"}` : "flex flex-wrap gap-2"}>
+      <fieldset
+        className={cn(
+          singleRowDesktop
+            ? "grid grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-4 2xl:grid-cols-[repeat(auto-fit,minmax(9rem,1fr))]"
+            : "flex flex-wrap gap-2",
+        )}
+      >
         <legend className="sr-only">Chọn tiến trình học viên</legend>
         {allOptionLabel && (
           <button

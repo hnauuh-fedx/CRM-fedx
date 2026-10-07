@@ -41,7 +41,6 @@ type SupportRecord = BusinessRecord & {
   studentId: string | null;
   studentCode: string | null;
   studentName: string | null;
-  facultyName: string | null;
   className: string | null;
   type: string | null;
   status: string | null;
@@ -225,7 +224,7 @@ export function StudentSupportHistoryPage() {
                 <TableRow className="hover:bg-muted/55">
                   <TableHead className="px-5">Thời gian</TableHead>
                   <TableHead className="px-5">Sinh viên</TableHead>
-                  <TableHead className="px-5">Khoa / Lớp</TableHead>
+                  <TableHead className="px-5">Lớp</TableHead>
                   <TableHead className="px-5">Loại hỗ trợ</TableHead>
                   <TableHead className="px-5">Trạng thái</TableHead>
                   <TableHead className="px-5">Nội dung xử lý</TableHead>
@@ -242,7 +241,7 @@ export function StudentSupportHistoryPage() {
                       <br />
                       <span className="text-xs text-muted-foreground">{record.studentCode ?? "-"}</span>
                     </TableCell>
-                    <TableCell className="px-5 py-4">{record.facultyName ?? "-"} / {record.className ?? "-"}</TableCell>
+                    <TableCell className="px-5 py-4">{record.className ?? "-"}</TableCell>
                     <TableCell className="px-5 py-4">{record.type ?? "-"}</TableCell>
                     <TableCell className="px-5 py-4"><Badge variant="secondary">{displayStatus(record.status)}</Badge></TableCell>
                     <TableCell className="max-w-96 px-5 py-4">{record.content ?? "-"}</TableCell>
@@ -308,7 +307,7 @@ export function StudentSupportHistoryPage() {
                     <span>Ghi nhận: {formatDateTime(record.createdAt)}</span>
                     <span>Cập nhật: {formatDateTime(record.updatedAt)}</span>
                     <span>Người xử lý: {record.handledBy ?? "Chưa phân công"}</span>
-                    <span>Khoa / Lớp: {record.facultyName ?? "-"} / {record.className ?? "-"}</span>
+                    <span>Lớp: {record.className ?? "-"}</span>
                   </div>
                 </li>
               ))}

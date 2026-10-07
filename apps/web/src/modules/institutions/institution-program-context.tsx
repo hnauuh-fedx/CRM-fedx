@@ -9,7 +9,6 @@ export type InstitutionProgramOption = {
   name: string;
   code: string;
   institutionName: string;
-  programTypeName: string;
 };
 
 type InstitutionProgramContextValue = {

@@ -9,7 +9,7 @@ import {
   type Table as DataTable,
   useReactTable,
 } from "@tanstack/react-table";
-import { ArrowDown, ArrowUp, ArrowUpDown, ChevronDown, ChevronLeft, ChevronRight, ExternalLink, Eye, FileSpreadsheet, ListPlus, Pencil, Plus, Search, Upload } from "lucide-react";
+import { ArrowDown, ArrowUp, ArrowUpDown, ChevronDown, ChevronLeft, ChevronRight, ExternalLink, Eye, FileSpreadsheet, ListPlus, Plus, Search, Upload } from "lucide-react";
 import { Link, useNavigate } from "react-router-dom";
 
 import { EmptyState } from "@/components/shared/data-states";
@@ -21,6 +21,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardAction, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Checkbox } from "@/components/ui/checkbox";
+import { DateRangeFilter } from "@/components/ui/date-range-filter";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuGroup, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { Field, FieldDescription, FieldError, FieldGroup, FieldLabel } from "@/components/ui/field";
@@ -29,15 +30,18 @@ import { Select, SelectContent, SelectGroup, SelectItem, SelectTrigger, SelectVa
 import { Spinner } from "@/components/ui/spinner";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { useAuth } from "@/modules/auth/auth-context";
+import { resolveDetailReportDateRange, type DetailReportTimeFilterValue } from "@/modules/reports/components/detail-report-time-filter";
 import { cn } from "@/lib/utils";
 import { ApiError } from "@/services/api";
 import { addLeadsToCustomerList, createCustomerList, getCustomerListLeads, getCustomerLists } from "@/services/customer-list.service";
-import { assignLeads, changeLeadStage, createLead, deleteLeads, getLead, getLeadActionOptions, getLeadFilterOptions, getLeads, importLeads, updateLead, updateLeadCustomFields } from "@/services/lead.service";
+import { assignLeads, createLead, deleteLeads, getLead, getLeadActionOptions, getLeadFilterOptions, getLeads, importLeads, updateLeadCustomFields } from "@/services/lead.service";
 import { LeadForm, LeadProgressSelector } from "../components/lead-form";
 import { LeadCustomFieldsCard } from "../components/lead-custom-fields-card";
-import { toLeadFormOptions, toLeadFormValues } from "../lead-form.helpers";
+import { InlineLeadSummaryCard } from "../components/inline-lead-summary-card";
 import { emptyLeadForm } from "../lead.schema";
-import { ActivityWorkspace, LeadSummaryCard, PipelineProgressCard, SourceOccurrencesCard } from "./lead-detail-page";
+import { ActivityWorkspace, PipelineProgressCard, SourceOccurrencesCard } from "./lead-detail-page";
+import { LeadOpenInitialization } from "../components/lead-open-initialization";
+import { useLeadWorkflowTransition } from "../components/transition-note-dialog";
 import type {
   LeadActionOptions,
   LeadDetail,
@@ -61,7 +65,10 @@ const emptyFilters: LeadListFilters = {
   search: "",
   pipelineStageId: "",
   sourceId: "",
+  majorId: "",
   assigneeId: "",
+  fromDate: "",
+  toDate: "",
 };
 
 function formatDate(value: string | null) {
@@ -418,19 +425,6 @@ export function LeadsListPage({
     queryFn: () => getLead(editingLeadId!, auth.accessToken!),
     enabled: Boolean(editingLeadId),
   });
-  const updateMutation = useMutation({
-    mutationFn: async (input: LeadFormInput) => {
-      const result = await updateLead(editingLeadId!, input, auth.accessToken!);
-      const values = Object.entries(input.customFieldValues).map(([fieldId, value]) => ({ fieldId, value }));
-      if (values.length > 0) await updateLeadCustomFields(editingLeadId!, { values }, auth.accessToken!);
-      return result;
-    },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["leads"] });
-      queryClient.invalidateQueries({ queryKey: ["sale"] });
-      setViewState((current) => ({ ...current, isEditDialogOpen: false }));
-    },
-  });
   const data = leadsQuery.data?.data ?? [];
   const pagination = leadsQuery.data?.pagination;
 
@@ -617,6 +611,7 @@ export function LeadsListPage({
                     majors: actionOptionsQuery.data?.majors ?? [],
                     admissionStatuses: actionOptionsQuery.data?.admissionStatuses ?? [],
                     tags: actionOptionsQuery.data?.tags ?? [],
+                    systemFieldRequirements: actionOptionsQuery.data?.systemFieldRequirements ?? { fullName: true, phone: true, sourceId: true },
                   }}
                   submitLabel="Lưu ứng viên"
                   isPending={createMutation.isPending}
@@ -651,22 +646,41 @@ export function LeadsListPage({
         </CardContent>
       </Card>
 
-      <LeadFiltersCard
-        filters={draftFilters}
-        options={optionsQuery.data}
-        onChange={(field, value) => {
-          setDraftFilters((current) => ({ ...current, [field]: value }));
-          if (field !== "search") {
-            setFilters((current) => ({ ...current, [field]: value }));
+      {isSaleList ? (
+        <SaleLeadFiltersCard
+          filters={draftFilters}
+          options={optionsQuery.data}
+          onChange={(field, value) => {
+            setDraftFilters((current) => ({ ...current, [field]: value }));
+            if (field !== "search") {
+              setFilters((current) => ({ ...current, [field]: value }));
+              setViewState((current) => ({ ...current, page: 1 }));
+            }
+          }}
+          onReset={() => {
+            setDraftFilters(emptyFilters);
+            setFilters(emptyFilters);
             setViewState((current) => ({ ...current, page: 1 }));
-          }
-        }}
-        onReset={() => {
-          setDraftFilters(emptyFilters);
-          setFilters(emptyFilters);
-          setViewState((current) => ({ ...current, page: 1 }));
-        }}
-      />
+          }}
+        />
+      ) : (
+        <LeadFiltersCard
+          filters={draftFilters}
+          options={optionsQuery.data}
+          onChange={(field, value) => {
+            setDraftFilters((current) => ({ ...current, [field]: value }));
+            if (field !== "search") {
+              setFilters((current) => ({ ...current, [field]: value }));
+              setViewState((current) => ({ ...current, page: 1 }));
+            }
+          }}
+          onReset={() => {
+            setDraftFilters(emptyFilters);
+            setFilters(emptyFilters);
+            setViewState((current) => ({ ...current, page: 1 }));
+          }}
+        />
+      )}
       <LeadResultsCard
         table={table}
         data={data}
@@ -681,7 +695,6 @@ export function LeadsListPage({
         onPrevious={() => setViewState((current) => ({ ...current, page: Math.max(1, current.page - 1) }))}
         onNext={() => setViewState((current) => ({ ...current, page: current.page + 1 }))}
         onEditLead={(leadId) => {
-          updateMutation.reset();
           setViewState((current) => ({ ...current, editingLeadId: leadId, isEditDialogOpen: true }));
         }}
         canAssignToCustomerList={enableCustomerListAssignment && (
@@ -731,10 +744,17 @@ export function LeadsListPage({
         }}
       />
       <EditLeadDialog
+        key={editingLeadId ?? "closed"}
         isOpen={isEditDialogOpen}
         lead={editingLeadQuery.data?.data}
         options={actionOptionsQuery.data}
         fallbackStages={optionsQuery.data?.stages}
+        stagesLoading={
+          (actionOptionsQuery.data?.stages.length ?? 0) === 0
+          && (optionsQuery.data?.stages.length ?? 0) === 0
+          && (actionOptionsQuery.isPending || optionsQuery.isPending)
+        }
+        stagesLoadError={actionOptionsQuery.isError && optionsQuery.isError}
         canUpdate={canUpdate}
         status={
           editingLeadQuery.isPending
@@ -743,12 +763,9 @@ export function LeadsListPage({
               ? "error"
               : "ready"
         }
-        isSaving={updateMutation.isPending}
-        mutationError={updateMutation.error}
         onOpenChange={(open) => {
           if (!open) {
             setViewState((current) => ({ ...current, isEditDialogOpen: false }));
-            updateMutation.reset();
           }
         }}
         onAfterClose={() => {
@@ -756,7 +773,6 @@ export function LeadsListPage({
             ? current
             : { ...current, editingLeadId: null });
         }}
-        onSubmit={(values) => updateMutation.mutate(values)}
       />
     </div>
   );
@@ -767,13 +783,12 @@ type EditLeadDialogProps = {
   lead?: LeadDetail;
   options?: LeadActionOptions;
   fallbackStages?: LeadFilterOptions["stages"];
+  stagesLoading: boolean;
+  stagesLoadError: boolean;
   canUpdate: boolean;
   status: "loading" | "error" | "ready";
-  isSaving: boolean;
-  mutationError: Error | null;
   onOpenChange: (open: boolean) => void;
   onAfterClose: () => void;
-  onSubmit: (values: LeadFormInput) => void;
 };
 
 function EditLeadDialog({
@@ -781,28 +796,19 @@ function EditLeadDialog({
   lead,
   options,
   fallbackStages,
+  stagesLoading,
+  stagesLoadError,
   canUpdate,
   status,
-  isSaving,
-  mutationError,
   onOpenChange,
   onAfterClose,
-  onSubmit,
 }: EditLeadDialogProps) {
   const auth = useAuth();
-  const [isEditing, setIsEditing] = useState(false);
   const canNote = canUpdate || auth.can("lead_note.create");
   const canFile = canUpdate || auth.can("file.upload");
-  const queryClient = useQueryClient();
-  const stageMutation = useMutation({
-    mutationFn: (stageId: string) => changeLeadStage(lead!.id, stageId, auth.accessToken!),
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["leads"] });
-      queryClient.invalidateQueries({ queryKey: ["sale"] });
-    },
-  });
+  const transition = useLeadWorkflowTransition(lead);
   return (
-    <Dialog open={isOpen} onOpenChange={(open) => { if (!open) setIsEditing(false); onOpenChange(open); }}>
+    <Dialog open={isOpen} onOpenChange={onOpenChange}>
       <DialogContent
         className="flex h-[calc(100dvh-2rem)] max-h-[calc(100dvh-2rem)] flex-col gap-0 overflow-hidden p-0 sm:max-w-[calc(100vw-2rem)] xl:max-w-400"
         onCloseAutoFocus={onAfterClose}
@@ -813,39 +819,33 @@ function EditLeadDialog({
               <DialogTitle>{lead?.fullName ?? "Chi tiết Lead"}</DialogTitle>
               <DialogDescription>{lead ? `${lead.leadCode ?? "Chưa có mã Lead"} · Tạo ngày ${formatDate(lead.createdAt)}` : "Thông tin hồ sơ và lịch sử xử lý Lead."}</DialogDescription>
             </div>
-            {lead && <div className="flex flex-wrap gap-2">{canUpdate && <Button type="button" size="sm" variant={isEditing ? "secondary" : "default"} onClick={() => setIsEditing((value) => !value)}><Pencil aria-hidden="true" />{isEditing ? "Xem thông tin" : "Chỉnh sửa"}</Button>}<Button asChild type="button" size="sm" variant="outline"><Link to={`/sale/leads/${lead.id}`}><ExternalLink aria-hidden="true" />Mở trang chi tiết</Link></Button></div>}
+            {lead && <Button asChild type="button" size="sm" variant="outline"><Link to={`/sale/leads/${lead.id}`}><ExternalLink aria-hidden="true" />Mở trang chi tiết</Link></Button>}
           </div>
         </DialogHeader>
-        {mutationError && (
-          <p role="alert" className="mx-6 mt-4 text-sm text-destructive">
-            {mutationError instanceof ApiError ? mutationError.message : "Không thể lưu thay đổi. Vui lòng thử lại."}
-          </p>
-        )}
         {status === "loading" ? (
           <p role="status" className="px-6 py-5 text-sm text-muted-foreground">Đang tải thông tin ứng viên…</p>
         ) : status === "error" || !lead ? (
           <p role="alert" className="px-6 py-5 text-sm text-destructive">
             Không thể tải thông tin ứng viên. Vui lòng đóng cửa sổ và thử lại.
           </p>
-        ) : isEditing && canUpdate ? (
-          options ? (
-          <LeadForm
-            defaultValues={toLeadFormValues(lead)}
-            options={toLeadFormOptions(lead, options)}
-            leadId={lead.id}
-            submitLabel="Lưu thay đổi"
-            isPending={isSaving}
-            dialogLayout
-            onSubmit={onSubmit}
-          />
-          ) : <p role="status" className="px-6 py-5 text-sm text-muted-foreground">Đang tải dữ liệu chỉnh sửa…</p>
         ) : (
           <div className="flex min-h-0 flex-1 flex-col gap-6 overflow-y-auto bg-muted/20 p-4 sm:p-6">
-            <PipelineProgressCard lead={lead} options={options} fallbackStages={fallbackStages} onStageChange={canUpdate ? (stageId) => stageMutation.mutate(stageId) : undefined} isChanging={stageMutation.isPending} />
-            {stageMutation.isError && <p role="alert" className="-mt-4 text-sm text-destructive">{stageMutation.error instanceof ApiError ? stageMutation.error.message : "Không thể chuyển tiến trình. Vui lòng thử lại."}</p>}
+            <LeadOpenInitialization key={lead.id} lead={lead} isOpen={isOpen} />
+            <PipelineProgressCard
+              lead={lead}
+              options={options}
+              fallbackStages={fallbackStages}
+              onStageChange={canUpdate ? transition.changeStage : undefined}
+              onStatusChange={canUpdate ? transition.changeStatus : undefined}
+              isChanging={transition.isPending}
+              isLoading={stagesLoading}
+              hasLoadError={stagesLoadError}
+            />
+            {transition.dialog}
+            {transition.error && <p role="alert" className="-mt-4 text-sm text-destructive">{transition.error.message}</p>}
             <div className="grid items-start gap-6 xl:grid-cols-[minmax(320px,0.82fr)_minmax(0,1.48fr)]">
               <aside className="flex min-w-0 flex-col gap-6">
-                <LeadSummaryCard lead={lead} canUpdate={canUpdate} onEdit={() => setIsEditing(true)} />
+                <InlineLeadSummaryCard lead={lead} options={options} canUpdate={canUpdate} />
                 <SourceOccurrencesCard lead={lead} />
                 <LeadCustomFieldsCard leadId={lead.id} />
               </aside>
@@ -1128,6 +1128,203 @@ type LeadFiltersCardProps = {
   onReset: () => void;
 };
 
+type SaleLeadFilterField = "NONE" | "MAJOR" | "SOURCE" | "ASSIGNEE" | "CREATED_DATE";
+type RelativeDateFilter = Extract<DetailReportTimeFilterValue, { condition: "RELATIVE" }>;
+
+const defaultLeadDateFilter: RelativeDateFilter = { condition: "RELATIVE", preset: "THIS_MONTH" };
+const leadDatePresetOptions: Array<{ value: RelativeDateFilter["preset"]; label: string }> = [
+  { value: "LAST_7_DAYS", label: "7 ngày gần nhất" },
+  { value: "THIS_WEEK", label: "Tuần này" },
+  { value: "LAST_WEEK", label: "Tuần trước" },
+  { value: "THIS_MONTH", label: "Tháng này" },
+  { value: "LAST_MONTH", label: "Tháng trước" },
+  { value: "THIS_QUARTER", label: "Quý này" },
+  { value: "LAST_QUARTER", label: "Quý trước" },
+];
+
+function SaleLeadFiltersCard({ filters, options, onChange, onReset }: LeadFiltersCardProps) {
+  const [selectedField, setSelectedField] = useState<SaleLeadFilterField>("NONE");
+  const [dateFilter, setDateFilter] = useState<DetailReportTimeFilterValue>(defaultLeadDateFilter);
+  const hasActiveFilters = Object.values(filters).some(Boolean);
+
+  function clearDynamicFilters() {
+    onChange("majorId", "");
+    onChange("sourceId", "");
+    onChange("assigneeId", "");
+    onChange("fromDate", "");
+    onChange("toDate", "");
+  }
+
+  function changeField(field: SaleLeadFilterField) {
+    clearDynamicFilters();
+    setSelectedField(field);
+    if (field === "CREATED_DATE") applyDateFilter(defaultLeadDateFilter);
+  }
+
+  function applyDateFilter(next: DetailReportTimeFilterValue) {
+    setDateFilter(next);
+    if (next.condition === "CUSTOM" && (!next.fromDate || !next.toDate)) {
+      onChange("fromDate", "");
+      onChange("toDate", "");
+      return;
+    }
+    const range = resolveDetailReportDateRange(next);
+    onChange("fromDate", range.fromDate);
+    onChange("toDate", range.toDate);
+  }
+
+  function resetFilters() {
+    setSelectedField("NONE");
+    setDateFilter(defaultLeadDateFilter);
+    onReset();
+  }
+
+  return (
+    <Card className={cn("gap-4 border-border/70 py-5 shadow-xs", hasActiveFilters && "border-primary/30 bg-primary/5")}>
+      <CardHeader className="gap-1 px-5">
+        <CardTitle className="flex flex-wrap items-center gap-2">Bộ lọc {hasActiveFilters && <Badge variant="secondary">Đang lọc</Badge>}</CardTitle>
+        <CardDescription>Tìm theo mã lead, họ tên, số điện thoại hoặc email; bộ lọc được áp dụng trong phạm vi bạn được xem.</CardDescription>
+      </CardHeader>
+      <CardContent className="px-5">
+        <FieldGroup className="grid gap-4 lg:grid-cols-[minmax(260px,1.6fr)_minmax(180px,1fr)_minmax(160px,0.8fr)_minmax(220px,1.2fr)_auto]">
+          <LeadSearchField value={filters.search} onChange={(value) => onChange("search", value)} />
+          <Field className="gap-2">
+            <FieldLabel>Trường thông tin</FieldLabel>
+            <Select value={selectedField} onValueChange={(value) => changeField(value as SaleLeadFilterField)}>
+              <SelectTrigger className="w-full"><SelectValue /></SelectTrigger>
+              <SelectContent><SelectGroup>
+                <SelectItem value="NONE">Chưa chọn</SelectItem>
+                <SelectItem value="MAJOR">Ngành đăng ký</SelectItem>
+                <SelectItem value="SOURCE">Nguồn</SelectItem>
+                <SelectItem value="ASSIGNEE">Nhân viên</SelectItem>
+                <SelectItem value="CREATED_DATE">Ngày tạo</SelectItem>
+              </SelectGroup></SelectContent>
+            </Select>
+          </Field>
+          <SaleLeadFilterCondition value={dateFilter} field={selectedField} onChange={applyDateFilter} />
+          <SaleLeadFilterValue
+            field={selectedField}
+            filters={filters}
+            options={options}
+            dateFilter={dateFilter}
+            onChange={onChange}
+            onDateChange={applyDateFilter}
+          />
+          <div className="flex items-end">
+            <Button type="button" variant="outline" onClick={resetFilters} disabled={!hasActiveFilters}>Xóa lọc</Button>
+          </div>
+        </FieldGroup>
+      </CardContent>
+    </Card>
+  );
+}
+
+function LeadSearchField({ value, onChange }: { value: string; onChange: (value: string) => void }) {
+  return (
+    <Field className="gap-2">
+      <FieldLabel htmlFor="lead-search">Tìm kiếm</FieldLabel>
+      <div className="relative">
+        <Search className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground" aria-hidden="true" />
+        <Input
+          id="lead-search"
+          className={cn("pl-9", value && "border-primary/40 bg-primary/5")}
+          value={value}
+          placeholder="Họ tên, SĐT, email hoặc mã lead"
+          onChange={(event) => onChange(event.target.value)}
+        />
+      </div>
+    </Field>
+  );
+}
+
+function SaleLeadFilterCondition({ field, value, onChange }: {
+  field: SaleLeadFilterField;
+  value: DetailReportTimeFilterValue;
+  onChange: (value: DetailReportTimeFilterValue) => void;
+}) {
+  return (
+    <Field className="gap-2">
+      <FieldLabel>Điều kiện</FieldLabel>
+      {field === "CREATED_DATE" ? (
+        <Select
+          value={value.condition}
+          onValueChange={(condition) => onChange(condition === "RELATIVE"
+            ? defaultLeadDateFilter
+            : { condition: "CUSTOM", fromDate: "", toDate: "" })}
+        >
+          <SelectTrigger className="w-full"><SelectValue /></SelectTrigger>
+          <SelectContent><SelectGroup>
+            <SelectItem value="RELATIVE">Khoảng tương đối</SelectItem>
+            <SelectItem value="CUSTOM">Khoảng tùy chọn</SelectItem>
+          </SelectGroup></SelectContent>
+        </Select>
+      ) : (
+        <Select value="EQUALS" disabled>
+          <SelectTrigger className="w-full"><SelectValue placeholder={field === "NONE" ? "Chọn trường trước" : "Bằng"} /></SelectTrigger>
+          <SelectContent><SelectItem value="EQUALS">Bằng</SelectItem></SelectContent>
+        </Select>
+      )}
+    </Field>
+  );
+}
+
+function SaleLeadFilterValue({ field, filters, options, dateFilter, onChange, onDateChange }: {
+  field: SaleLeadFilterField;
+  filters: LeadListFilters;
+  options?: LeadFilterOptions;
+  dateFilter: DetailReportTimeFilterValue;
+  onChange: (field: keyof LeadListFilters, value: string) => void;
+  onDateChange: (value: DetailReportTimeFilterValue) => void;
+}) {
+  if (field === "CREATED_DATE" && dateFilter.condition === "CUSTOM") {
+    return (
+      <Field className="gap-2">
+        <FieldLabel>Khoảng ngày</FieldLabel>
+        <DateRangeFilter
+          className="w-full"
+          fromDate={dateFilter.fromDate}
+          toDate={dateFilter.toDate}
+          onChange={(fromDate, toDate) => onDateChange({ condition: "CUSTOM", fromDate, toDate })}
+        />
+      </Field>
+    );
+  }
+  if (field === "CREATED_DATE") {
+    return (
+      <Field className="gap-2">
+        <FieldLabel>Giá trị</FieldLabel>
+        <Select value={dateFilter.preset} onValueChange={(preset) => onDateChange({ condition: "RELATIVE", preset: preset as RelativeDateFilter["preset"] })}>
+          <SelectTrigger className="w-full"><SelectValue /></SelectTrigger>
+          <SelectContent><SelectGroup>
+            {leadDatePresetOptions.map((option) => <SelectItem key={option.value} value={option.value}>{option.label}</SelectItem>)}
+          </SelectGroup></SelectContent>
+        </Select>
+      </Field>
+    );
+  }
+  const configuration = saleLeadCategoryConfiguration(field, filters, options);
+  return (
+    <Field className="gap-2">
+      <FieldLabel>Giá trị</FieldLabel>
+      <Select value={configuration.value || undefined} disabled={field === "NONE" || configuration.options.length === 0} onValueChange={(value) => onChange(configuration.filterKey, value)}>
+        <SelectTrigger className="w-full"><SelectValue placeholder={field === "NONE" ? "Chọn trường trước" : "Chọn giá trị"} /></SelectTrigger>
+        <SelectContent><SelectGroup>
+          {configuration.options.length === 0
+            ? <SelectItem value="NO_OPTIONS" disabled>Không có dữ liệu</SelectItem>
+            : configuration.options.map((option) => <SelectItem key={option.value} value={option.value}>{option.label}</SelectItem>)}
+        </SelectGroup></SelectContent>
+      </Select>
+    </Field>
+  );
+}
+
+function saleLeadCategoryConfiguration(field: SaleLeadFilterField, filters: LeadListFilters, options?: LeadFilterOptions) {
+  if (field === "MAJOR") return { filterKey: "majorId" as const, value: filters.majorId, options: (options?.majors ?? []).map((item) => ({ value: item.id, label: item.name })) };
+  if (field === "SOURCE") return { filterKey: "sourceId" as const, value: filters.sourceId, options: (options?.sources ?? []).map((item) => ({ value: item.id, label: item.name })) };
+  if (field === "ASSIGNEE") return { filterKey: "assigneeId" as const, value: filters.assigneeId, options: (options?.assignees ?? []).map((item) => ({ value: item.id, label: item.fullName })) };
+  return { filterKey: "majorId" as const, value: "", options: [] };
+}
+
 function LeadFiltersCard({ filters, options, onChange, onReset }: LeadFiltersCardProps) {
   const hasActiveFilters = Object.values(filters).some(Boolean);
   return (
@@ -1138,19 +1335,7 @@ function LeadFiltersCard({ filters, options, onChange, onReset }: LeadFiltersCar
       </CardHeader>
       <CardContent className="px-5">
         <FieldGroup className="grid gap-4 lg:grid-cols-[minmax(220px,2fr)_repeat(3,minmax(150px,1fr))_auto]">
-          <Field className="gap-2">
-            <FieldLabel htmlFor="lead-search">Tìm kiếm</FieldLabel>
-            <div className="relative">
-              <Search className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground" aria-hidden="true" />
-              <Input
-                id="lead-search"
-                className={cn("pl-9", filters.search && "border-primary/40 bg-primary/5")}
-                value={filters.search}
-                placeholder="Nhập mã lead hoặc họ tên"
-                onChange={(event) => onChange("search", event.target.value)}
-              />
-            </div>
-          </Field>
+          <LeadSearchField value={filters.search} onChange={(value) => onChange("search", value)} />
           <FilterSelect
             id="lead-pipeline-stage"
             label="Quy trình"

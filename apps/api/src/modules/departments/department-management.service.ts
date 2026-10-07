@@ -35,12 +35,17 @@ function serializeUser(user: { id: string; full_name: string; email: string }) {
   return { id: user.id, fullName: user.full_name, email: user.email };
 }
 
-async function validateUsers(managerId: string | undefined, memberIds: string[]) {
+async function validateUsers(managerId: string | undefined, memberIds: string[], institutionProgramId: string) {
   const ids = unique([...(managerId ? [managerId] : []), ...memberIds]);
   if (ids.length === 0) return { ok: true as const, memberIds };
 
   const users = await prisma.users.findMany({
-    where: { id: { in: ids }, deleted_at: null, status: "active" },
+    where: {
+      id: { in: ids },
+      deleted_at: null,
+      status: "active",
+      user_roles: { some: { roles: { role_institution_programs: { some: { institution_program_id: institutionProgramId } } } } },
+    },
     select: { id: true },
   });
   if (users.length !== ids.length) return { ok: false as const, reason: "user_not_found" as const };
@@ -52,7 +57,7 @@ function serializeDepartment(department: {
   name: string;
   code: string | null;
   created_at: Date | null;
-  users: { id: string; full_name: string; email: string } | null;
+  users: { id: string; full_name: string; email: string; user_roles: Array<{ id: string }> } | null;
   user_departments: Array<{ users: { id: string; full_name: string; email: string } | null }>;
   _count: { user_departments: number; lead_assignments: number };
 }) {
@@ -60,7 +65,7 @@ function serializeDepartment(department: {
     id: department.id,
     name: department.name,
     code: department.code,
-    manager: department.users ? serializeUser(department.users) : null,
+    manager: department.users && department.users.user_roles.length > 0 ? serializeUser(department.users) : null,
     members: department.user_departments.flatMap((membership) =>
       membership.users ? [serializeUser(membership.users)] : [],
     ),
@@ -70,7 +75,7 @@ function serializeDepartment(department: {
   };
 }
 
-export async function listManagedDepartments(query: DepartmentListQuery) {
+export async function listManagedDepartments(query: DepartmentListQuery, institutionProgramId: string) {
   const where = {
     ...(query.search
       ? {
@@ -90,12 +95,30 @@ export async function listManagedDepartments(query: DepartmentListQuery) {
         name: true,
         code: true,
         created_at: true,
-        users: { select: { id: true, full_name: true, email: true } },
+        users: {
+          select: {
+            id: true,
+            full_name: true,
+            email: true,
+            user_roles: {
+              where: { roles: { role_institution_programs: { some: { institution_program_id: institutionProgramId } } } },
+              select: { id: true },
+            },
+          },
+        },
         user_departments: {
+          where: { users: { user_roles: { some: { roles: { role_institution_programs: { some: { institution_program_id: institutionProgramId } } } } } } },
           select: { users: { select: { id: true, full_name: true, email: true } } },
           orderBy: { users: { full_name: "asc" } },
         },
-        _count: { select: { user_departments: true, lead_assignments: true } },
+        _count: {
+          select: {
+            user_departments: {
+              where: { users: { user_roles: { some: { roles: { role_institution_programs: { some: { institution_program_id: institutionProgramId } } } } } } },
+            },
+            lead_assignments: true,
+          },
+        },
       },
       orderBy: [{ [departmentSortFields[query.sortBy]]: query.sortOrder }, { id: "asc" }],
       skip: (query.page - 1) * query.limit,
@@ -117,9 +140,13 @@ export async function listManagedDepartments(query: DepartmentListQuery) {
   };
 }
 
-export async function getDepartmentManagementOptions() {
+export async function getDepartmentManagementOptions(institutionProgramId: string) {
   const users = await prisma.users.findMany({
-    where: { deleted_at: null, status: "active" },
+    where: {
+      deleted_at: null,
+      status: "active",
+      user_roles: { some: { roles: { role_institution_programs: { some: { institution_program_id: institutionProgramId } } } } },
+    },
     select: { id: true, full_name: true, email: true },
     orderBy: [{ full_name: "asc" }, { email: "asc" }],
     take: 1000,
@@ -127,13 +154,13 @@ export async function getDepartmentManagementOptions() {
   return { users: users.map(serializeUser) };
 }
 
-export async function createManagedDepartment(actor: AuthUser, input: DepartmentInput, ipAddress?: string) {
+export async function createManagedDepartment(actor: AuthUser, input: DepartmentInput, institutionProgramId: string, ipAddress?: string) {
   const code = normalizeDepartmentCode(input.code);
   if (code && (await prisma.departments.findUnique({ where: { code }, select: { id: true } }))) {
     return { ok: false as const, reason: "code_exists" as const };
   }
 
-  const references = await validateUsers(input.managerId, unique(input.memberIds));
+  const references = await validateUsers(input.managerId, unique(input.memberIds), institutionProgramId);
   if (!references.ok) return references;
 
   return prisma.$transaction(async (tx) => {
@@ -165,7 +192,7 @@ export async function createManagedDepartment(actor: AuthUser, input: Department
   });
 }
 
-export async function updateManagedDepartment(actor: AuthUser, id: string, input: DepartmentInput, ipAddress?: string) {
+export async function updateManagedDepartment(actor: AuthUser, id: string, input: DepartmentInput, institutionProgramId: string, ipAddress?: string) {
   const existing = await prisma.departments.findUnique({
     where: { id },
     select: {
@@ -173,7 +200,16 @@ export async function updateManagedDepartment(actor: AuthUser, id: string, input
       name: true,
       code: true,
       manager_id: true,
-      user_departments: { select: { user_id: true } },
+      user_departments: {
+        select: {
+          user_id: true,
+          users: {
+            select: {
+              user_roles: { select: { roles: { select: { role_institution_programs: { select: { institution_program_id: true } } } } } },
+            },
+          },
+        },
+      },
     },
   });
   if (!existing) return { ok: false as const, reason: "department_not_found" as const };
@@ -183,15 +219,22 @@ export async function updateManagedDepartment(actor: AuthUser, id: string, input
     return { ok: false as const, reason: "code_exists" as const };
   }
 
-  const references = await validateUsers(input.managerId, unique(input.memberIds));
+  const references = await validateUsers(input.managerId, unique(input.memberIds), institutionProgramId);
   if (!references.ok) return references;
+  const programMemberIds = existing.user_departments.flatMap((membership) =>
+    membership.users?.user_roles.some((assignment) =>
+      assignment.roles?.role_institution_programs.some((grant) => grant.institution_program_id === institutionProgramId),
+    ) && membership.user_id
+      ? [membership.user_id]
+      : [],
+  );
 
   await prisma.$transaction(async (tx) => {
     await tx.departments.update({
       where: { id },
       data: { name: input.name.trim(), code, manager_id: input.managerId || null },
     });
-    await tx.user_departments.deleteMany({ where: { department_id: id } });
+    await tx.user_departments.deleteMany({ where: { department_id: id, user_id: { in: programMemberIds } } });
     if (references.memberIds.length > 0) {
       await tx.user_departments.createMany({
         data: references.memberIds.map((userId) => ({ user_id: userId, department_id: id })),

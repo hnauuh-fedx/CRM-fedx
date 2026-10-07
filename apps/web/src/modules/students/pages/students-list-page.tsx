@@ -37,7 +37,7 @@ import type {
 } from "../student.types";
 
 const pageSize = 20;
-const emptyFilters: StudentListFilters = { search: "", status: "", majorId: "", facultyId: "", classId: "" };
+const emptyFilters: StudentListFilters = { search: "", status: "", majorId: "", classId: "" };
 const sortableColumns = new Set<StudentSortField>(["enrolledAt", "studentCode", "status"]);
 const dateFormatter = new Intl.DateTimeFormat("vi-VN");
 const statusLabels: Record<string, string> = { active: "Đang học", graduated: "Đã tốt nghiệp", suspended: "Tạm dừng", withdrawn: "Thôi học" };
@@ -110,7 +110,7 @@ export function StudentsListPage() {
         eyebrow="CRM Sinh viên"
         title="Danh sách sinh viên"
         scopeLabel="Theo phạm vi truy cập"
-        description="Theo dõi sinh viên đã nhập học theo khoa, lớp và trạng thái đào tạo."
+        description="Theo dõi sinh viên đã nhập học theo lớp và trạng thái đào tạo."
       />
       <StudentFilters
         filters={draftFilters}
@@ -181,10 +181,10 @@ function useStudentColumns({ canUpdate, onOpen }: { canUpdate: boolean; onOpen: 
         cell: ({ row }) => `${row.original.institutionProgram?.name ?? "-"} / ${row.original.major?.name ?? "-"}`,
       },
       {
-        id: "facultyClass",
-        header: "Khoa / Lớp",
+        id: "studentClass",
+        header: "Lớp",
         enableSorting: false,
-        cell: ({ row }) => `${row.original.faculty?.name ?? "-"} / ${row.original.studentClass?.name ?? "-"}`,
+        cell: ({ row }) => row.original.studentClass?.name ?? "-",
       },
       {
         accessorKey: "status",
@@ -247,7 +247,6 @@ function StudentDetailDialog(props: DetailDialogProps) {
               <DetailItem label="Ngày sinh" value={formatDate(student.lead?.dateOfBirth ?? null)} />
               <DetailItem label="Chương trình" value={student.institutionProgram?.name} />
               <DetailItem label="Ngành" value={student.major?.name} />
-              <DetailItem label="Khoa" value={student.faculty?.name} />
               <DetailItem label="Lớp" value={student.studentClass?.name} />
               <DetailItem label="Mã hồ sơ" value={student.admissionProfile?.admissionCode} />
               <DetailItem label="Ngày nhập học" value={formatDate(student.enrolledAt)} />
@@ -288,7 +287,6 @@ function StudentAcademicForm({
 }) {
   const [form, setForm] = useState<StudentUpdateInput>({
     status: student.status ?? "active",
-    facultyId: student.faculty?.id,
     classId: student.studentClass?.id,
   });
   const statusOptions = Array.from(new Set([...defaultStatuses, ...(options?.statuses ?? [])]));
@@ -301,7 +299,7 @@ function StudentAcademicForm({
         onSubmit(form);
       }}
     >
-      <div className="grid gap-4 sm:grid-cols-3">
+      <div className="grid gap-4 sm:grid-cols-2">
         <Field className="gap-2">
           <FieldLabel>Trạng thái</FieldLabel>
           <Select value={form.status} onValueChange={(value) => setForm((current) => ({ ...current, status: value }))}>
@@ -312,23 +310,13 @@ function StudentAcademicForm({
           </Select>
         </Field>
         <Field className="gap-2">
-          <FieldLabel>Khoa</FieldLabel>
-          <Select value={form.facultyId ?? "none"} onValueChange={(value) => setForm((current) => ({ ...current, facultyId: value === "none" ? undefined : value }))}>
-            <SelectTrigger><SelectValue placeholder="Chọn khoa" /></SelectTrigger>
-            <SelectContent>
-              <SelectItem value="none">Chưa phân khoa</SelectItem>
-              {(options?.faculties ?? []).map((faculty) => <SelectItem key={faculty.id} value={faculty.id}>{faculty.name}</SelectItem>)}
-            </SelectContent>
-          </Select>
-        </Field>
-        <Field className="gap-2">
           <FieldLabel>Lớp</FieldLabel>
           <Select value={form.classId ?? "none"} onValueChange={(value) => setForm((current) => ({ ...current, classId: value === "none" ? undefined : value }))}>
             <SelectTrigger><SelectValue placeholder="Chọn lớp" /></SelectTrigger>
             <SelectContent>
               <SelectItem value="none">Chưa phân lớp</SelectItem>
               {(options?.classes ?? []).map((item) => (
-                <SelectItem key={item.id} value={item.id}>{item.facultyName ? `${item.name} - ${item.facultyName}` : item.name}</SelectItem>
+                <SelectItem key={item.id} value={item.id}>{item.name}</SelectItem>
               ))}
             </SelectContent>
           </Select>
@@ -379,8 +367,7 @@ function StudentFilters({ filters, options, onChange, onApply, onReset }: Filter
           </Field>
           <FilterSelect id="student-status" label="Trạng thái" value={filters.status} onChange={(value) => onChange("status", value)} options={(options?.statuses ?? []).map((status) => ({ value: status, label: displayStatus(status) }))} />
           <FilterSelect id="student-major" label="Ngành" value={filters.majorId} onChange={(value) => onChange("majorId", value)} options={(options?.majors ?? []).map((item) => ({ value: item.id, label: item.name }))} />
-          <FilterSelect id="student-faculty" label="Khoa" value={filters.facultyId} onChange={(value) => onChange("facultyId", value)} options={(options?.faculties ?? []).map((item) => ({ value: item.id, label: item.name }))} />
-          <FilterSelect id="student-class" label="Lớp" value={filters.classId} onChange={(value) => onChange("classId", value)} options={(options?.classes ?? []).map((item) => ({ value: item.id, label: item.facultyName ? `${item.name} - ${item.facultyName}` : item.name }))} />
+          <FilterSelect id="student-class" label="Lớp" value={filters.classId} onChange={(value) => onChange("classId", value)} options={(options?.classes ?? []).map((item) => ({ value: item.id, label: item.name }))} />
           <AutoFilterActions snapshot={filters} onApply={onApply} onReset={onReset} />
           </FieldGroup>
         </form>

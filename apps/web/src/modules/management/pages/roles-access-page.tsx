@@ -1,4 +1,5 @@
 import { useMemo, useState } from "react";
+import { customFieldPermissionForms } from "@/modules/custom-fields/custom-field-permissions";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Pencil, Plus, ShieldCheck, Trash2 } from "lucide-react";
 
@@ -315,7 +316,15 @@ function RoleForm({ defaultValues, options, error, isPending, onSubmit }: {
       const module = permission.module ?? "system";
       groups.set(module, [...(groups.get(module) ?? []), permission]);
     }
-    return [...groups.entries()];
+    return [...groups.entries()].map(([module, permissions]) => {
+      const sections = new Map<string, typeof permissions>();
+      for (const permission of permissions) {
+        const form = Object.values(customFieldPermissionForms).find((item) => permission.code.startsWith(`custom_field.${item.key}.`));
+        const label = form ? "Quản lý cấu hình trường dữ liệu" : "Chức năng";
+        sections.set(label, [...(sections.get(label) ?? []), permission]);
+      }
+      return [module, [...sections.entries()].sort(([left], [right]) => Number(left !== "Chức năng") - Number(right !== "Chức năng"))] as const;
+    });
   }, [options]);
 
   function togglePermission(permissionId: string) {
@@ -416,18 +425,23 @@ function RoleForm({ defaultValues, options, error, isPending, onSubmit }: {
       <fieldset className="grid gap-4 rounded-md border p-4">
         <legend className="text-sm font-medium">Chức năng được phép dùng</legend>
         <div className="grid gap-4 lg:grid-cols-2">
-          {permissionsByModule.map(([module, permissions]) => (
+          {permissionsByModule.map(([module, sections]) => (
             <div key={module} className="rounded-md border p-3">
               <p className="mb-3 text-sm font-medium uppercase text-muted-foreground">{module}</p>
               <div className="grid gap-2">
+                {sections.map(([label, permissions]) => (
+                  <FieldSet key={label} className="gap-2">
+                    <FieldLegend variant="label">{label}</FieldLegend>
                 {permissions.map((permission) => (
                   <label key={permission.id} className="flex min-h-11 cursor-pointer items-start gap-3 rounded-md p-2 hover:bg-muted/50">
                     <Checkbox checked={values.permissionIds.includes(permission.id)} onCheckedChange={() => togglePermission(permission.id)} aria-label={`Chọn ${permission.name}`} />
                     <span>
-                      <span className="block text-sm font-medium">{permission.name}</span>
-                      <span className="block text-xs text-muted-foreground">{permission.code}</span>
+                      <span className="block text-sm font-medium">{Object.values(customFieldPermissionForms).find((form) => permission.code === `custom_field.${form.key}.manage`)?.label ?? permission.name}</span>
+                      {label === "Chức năng" && <span className="block text-xs text-muted-foreground">{permission.code}</span>}
                     </span>
                   </label>
+                ))}
+                  </FieldSet>
                 ))}
               </div>
             </div>

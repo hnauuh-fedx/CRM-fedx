@@ -31,7 +31,6 @@ export function getStudents(params: StudentListParams, accessToken: string) {
     search: params.search,
     status: params.status,
     majorId: params.majorId,
-    facultyId: params.facultyId,
     classId: params.classId,
   });
 

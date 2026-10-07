@@ -4,6 +4,7 @@ export type LeadSystemField = {
   dataType: "TEXT" | "TEXTAREA" | "NUMBER" | "DATE" | "BOOLEAN" | "EMAIL" | "PHONE" | "SELECT" | "MULTI_SELECT";
   storage: string;
   isRequired?: boolean;
+  requiredLocked?: boolean;
   isSensitive?: boolean;
   optionSource?: string;
   note?: string;
@@ -30,9 +31,9 @@ export const leadFormFieldCatalog: LeadSystemFieldGroup[] = [
     label: "Thông tin cơ bản",
     description: "Thông tin nhận diện và liên hệ của lead.",
     fields: [
-      field("fullName", "Họ và tên", "TEXT", "leads.full_name", { isRequired: true }),
-      field("phone", "Số điện thoại", "PHONE", "leads.phone", { isRequired: true, isSensitive: true }),
-      field("sourceId", "Nguồn học viên", "SELECT", "leads.source_id", { isRequired: true, optionSource: "lead_sources" }),
+      field("fullName", "Họ và tên", "TEXT", "leads.full_name", { isRequired: true, requiredLocked: true }),
+      field("phone", "Số điện thoại", "PHONE", "leads.phone", { isRequired: true, requiredLocked: true, isSensitive: true }),
+      field("sourceId", "Nguồn học viên", "SELECT", "leads.source_id", { isRequired: true, requiredLocked: true, optionSource: "lead_sources" }),
       field("email", "Email", "EMAIL", "leads.email", { isSensitive: true }),
       field("gender", "Giới tính", "SELECT", "leads.gender", { optionSource: "Danh sách cố định" }),
       field("dateOfBirth", "Ngày sinh", "DATE", "leads.date_of_birth", { isSensitive: true }),
@@ -102,8 +103,8 @@ export const leadFormFieldCatalog: LeadSystemFieldGroup[] = [
     label: "Thông tin tuyển sinh",
     description: "Thông tin ngành, hồ sơ và kết quả xét tuyển.",
     fields: [
-      field("majorId", "Ngành đăng ký", "SELECT", "leads.major_id + admission_profiles.major_id", { isRequired: true, optionSource: "majors", note: "Bắt buộc khi lập hồ sơ tuyển sinh" }),
-      field("admissionStatusId", "Trạng thái hồ sơ", "SELECT", "admission_profiles.admission_status_id", { isRequired: true, optionSource: "admission_statuses", note: "Bắt buộc khi lập hồ sơ tuyển sinh" }),
+      field("majorId", "Ngành đăng ký", "SELECT", "leads.major_id + admission_profiles.major_id", { optionSource: "majors" }),
+      field("admissionStatusId", "Trạng thái hồ sơ", "SELECT", "admission_profiles.admission_status_id", { optionSource: "admission_statuses" }),
       field("trainingCode", "Mã đào tạo", "TEXT", "admission_profiles.training_code"),
       field("classCode", "Mã lớp", "TEXT", "admission_profiles.class_code"),
       field("subjectGroupCode", "Mã tổ hợp môn", "TEXT", "admission_profiles.subject_group_code"),

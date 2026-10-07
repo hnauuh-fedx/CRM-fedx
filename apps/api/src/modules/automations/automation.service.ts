@@ -820,12 +820,18 @@ export async function getAutomationOptions(user: AuthUser, institutionProgramId?
         status: "active",
         ...(accessibleProgramIds === null ? {} : { id: { in: accessibleProgramIds } }),
       },
-      select: { id: true, name: true, institutions: { select: { name: true } } },
+      select: { id: true, name: true, institution_name: true },
       orderBy: { name: "asc" },
     }),
     canAssign && accessibleProgramIds === null
       ? prisma.users.findMany({
-          where: { status: "active", deleted_at: null },
+          where: {
+            status: "active",
+            deleted_at: null,
+            ...(institutionProgramId
+              ? { user_roles: { some: { roles: { role_institution_programs: { some: { institution_program_id: institutionProgramId } } } } } }
+              : {}),
+          },
           select: { id: true, full_name: true },
           orderBy: { full_name: "asc" },
           take: 500,
@@ -835,6 +841,9 @@ export async function getAutomationOptions(user: AuthUser, institutionProgramId?
             where: {
               status: "active",
               deleted_at: null,
+              ...(institutionProgramId
+                ? { user_roles: { some: { roles: { role_institution_programs: { some: { institution_program_id: institutionProgramId } } } } } }
+                : {}),
               user_departments: { some: { department_id: { in: user.departmentIds } } },
             },
             select: { id: true, full_name: true },
@@ -859,6 +868,9 @@ export async function getAutomationOptions(user: AuthUser, institutionProgramId?
       take: 500,
     }),
     prisma.roles.findMany({
+      where: institutionProgramId
+        ? { role_institution_programs: { some: { institution_program_id: institutionProgramId } } }
+        : undefined,
       select: { id: true, code: true, name: true },
       orderBy: { name: "asc" },
       take: 100,
@@ -886,11 +898,6 @@ export async function getAutomationOptions(user: AuthUser, institutionProgramId?
     }),
     prisma.admission_statuses.findMany({ select: { id: true, name: true, code: true }, orderBy: { name: "asc" } }),
     prisma.student_classes.findMany({
-      where: institutionProgramId
-        ? { faculties: { is: { majors: { some: { institution_program_id: institutionProgramId } } } } }
-        : accessibleProgramIds === null
-          ? undefined
-          : { faculties: { is: { majors: { some: { institution_program_id: { in: accessibleProgramIds } } } } } },
       select: { id: true, name: true, code: true },
       orderBy: { name: "asc" },
       take: 500,
@@ -924,7 +931,7 @@ export async function getAutomationOptions(user: AuthUser, institutionProgramId?
         return false;
       })),
     },
-    institutionPrograms: programs.map((p) => ({ id: p.id, name: p.name, institutionName: p.institutions.name })),
+    institutionPrograms: programs.map((p) => ({ id: p.id, name: p.name, institutionName: p.institution_name })),
     triggerTypes: [...AUTOMATION_TRIGGER_TYPES],
     assignees: assignees.map((assignee) => ({ id: assignee.id, fullName: assignee.full_name })),
     departments,
@@ -945,7 +952,7 @@ export async function getAutomationOptions(user: AuthUser, institutionProgramId?
       majors: majors.map((major) => ({ code: major.id, label: major.name })),
       admission_statuses: admissionStatuses.map((status) => ({ code: status.id, label: status.name })),
       tags: tags.map((tag) => ({ code: tag.name, label: tag.name })),
-      institution_programs: programs.map((program) => ({ code: program.id, label: `${program.institutions.name} - ${program.name}` })),
+      institution_programs: programs.map((program) => ({ code: program.id, label: `${program.institution_name} - ${program.name}` })),
       payment_statuses: [
         { code: "pending", label: "Chờ thanh toán" },
         { code: "partial", label: "Thanh toán một phần" },
