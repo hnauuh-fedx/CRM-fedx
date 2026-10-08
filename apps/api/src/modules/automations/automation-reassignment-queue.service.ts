@@ -4,7 +4,7 @@ import { isRedisDisabled, redisConnection } from "../../config/redis";
 import { prisma } from "../../database/prisma";
 import { processReassignmentExpiry, processReassignmentWarning } from "./automation-reassignment.service";
 
-type ReassignmentJobData = {
+export type ReassignmentJobData = {
   monitorId: string;
   kind: "warning" | "expiry";
 };
@@ -54,7 +54,7 @@ export async function enqueueReassignmentMonitorJobs(monitorId: string) {
     select: { status: true, warning_due_at: true, warned_at: true, reassignment_due_at: true },
   });
   if (!monitor || !["pending", "warned"].includes(monitor.status)) return false;
-  if (monitor.warning_due_at && !monitor.warned_at) {
+  if (monitor.warning_due_at && !monitor.warned_at && monitor.reassignment_due_at > new Date()) {
     await addJob({ monitorId, kind: "warning" }, monitor.warning_due_at);
   }
   await addJob({ monitorId, kind: "expiry" }, monitor.reassignment_due_at);
@@ -108,12 +108,24 @@ if (reassignmentWorker) {
   recoveryTimer.unref();
 }
 
+export async function recordTerminalReassignmentJobFailure(data: ReassignmentJobData, error: Error) {
+  if (data.kind === "warning") {
+    await prisma.automation_reassignment_monitors.updateMany({
+      where: { id: data.monitorId, status: { in: ["pending", "warned"] } },
+      data: { last_error: `warning_job_failed: ${error.message}`, updated_at: new Date() },
+    });
+    return;
+  }
+  await prisma.automation_reassignment_monitors.updateMany({
+    where: { id: data.monitorId, status: { in: ["pending", "warned", "processing"] } },
+    data: { status: "failed", completion_reason: "job_failed", last_error: error.message, processed_at: new Date(), updated_at: new Date() },
+  });
+}
+
 reassignmentWorker?.on("failed", async (job, error) => {
   if (!job || (!(error instanceof UnrecoverableError) && job.attemptsMade < (job.opts.attempts ?? 1))) return;
-  await prisma.automation_reassignment_monitors.updateMany({
-    where: { id: job.data.monitorId, status: { in: ["pending", "warned", "processing"] } },
-    data: { status: "failed", completion_reason: "job_failed", last_error: error.message, processed_at: new Date(), updated_at: new Date() },
-  }).catch((updateError) => console.error("Không thể cập nhật monitor chuyển Sale thất bại", updateError));
+  await recordTerminalReassignmentJobFailure(job.data, error)
+    .catch((updateError) => console.error("Không thể cập nhật monitor chuyển Sale thất bại", updateError));
 });
 
 export async function closeAutomationReassignmentQueue() {

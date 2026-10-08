@@ -95,18 +95,21 @@ async function main() {
     { role_id: saleRole.id, permission_id: permissionByCode.get("lead.view_assigned")! },
   ] });
 
-  const [manager, firstSale, secondSale] = await Promise.all([
+  const [manager, firstSale, secondSale, thirdSale] = await Promise.all([
     prisma.users.create({ data: { email: `reassignment.manager.${runId}@example.test`, password_hash: "integration-only", full_name: `Manager ${runId}` }, select: { id: true } }),
     prisma.users.create({ data: { email: `reassignment.first.${runId}@example.test`, password_hash: "integration-only", full_name: `Sale 1 ${runId}` }, select: { id: true } }),
     prisma.users.create({ data: { email: `reassignment.second.${runId}@example.test`, password_hash: "integration-only", full_name: `Sale 2 ${runId}` }, select: { id: true } }),
+    prisma.users.create({ data: { email: `reassignment.third.${runId}@example.test`, password_hash: "integration-only", full_name: `Sale 3 ${runId}` }, select: { id: true } }),
   ]);
-  userIds.push(manager.id, firstSale.id, secondSale.id);
+  userIds.push(manager.id, firstSale.id, secondSale.id, thirdSale.id);
   await prisma.user_roles.createMany({ data: [
     { user_id: manager.id, role_id: managerRole.id },
     { user_id: firstSale.id, role_id: saleRole.id },
     { user_id: secondSale.id, role_id: saleRole.id },
+    { user_id: secondSale.id, role_id: managerRole.id },
+    { user_id: thirdSale.id, role_id: saleRole.id },
   ] });
-  await prisma.user_departments.createMany({ data: [manager.id, firstSale.id, secondSale.id].map((userId) => ({
+  await prisma.user_departments.createMany({ data: [manager.id, firstSale.id, secondSale.id, thirdSale.id].map((userId) => ({
     user_id: userId,
     department_id: department.id,
   })) });
@@ -124,7 +127,12 @@ async function main() {
   });
   ruleIds.push(rule.id);
 
-  const createLeadWithMonitor = async (suffix: string, firstOpenedAt?: Date, monitorPolicy = policy) => {
+  const createLeadWithMonitor = async (
+    suffix: string,
+    firstOpenedAt?: Date,
+    monitorPolicy = policy,
+    assignedAt = new Date(Date.now() - 2 * 60 * 60_000),
+  ) => {
     const lead = await prisma.leads.create({
       data: {
         full_name: `Lead reassignment ${suffix} ${runId}`,
@@ -137,7 +145,6 @@ async function main() {
       select: { id: true },
     });
     leadIds.push(lead.id);
-    const assignedAt = new Date(Date.now() - 2 * 60 * 60_000);
     const assignment = await prisma.lead_assignments.create({
       data: {
         lead_id: lead.id,
@@ -164,7 +171,7 @@ async function main() {
       leadId: lead.id,
       actorId: manager.id,
       institutionProgramId: program.id,
-      nodeSnapshot: { assignmentStrategy: "round_robin", assigneeIds: [firstSale.id, secondSale.id], departmentId: department.id },
+      nodeSnapshot: { assignmentStrategy: "round_robin", assigneeIds: [firstSale.id, secondSale.id, thirdSale.id], departmentId: department.id },
       policy: monitorPolicy,
     }));
     return { lead, assignment, monitor };
@@ -177,7 +184,7 @@ async function main() {
   ]);
   assert.ok(concurrentResults.some((result) => result.outcome === "reassigned"));
   const changedLead = await prisma.leads.findUniqueOrThrow({ where: { id: active.lead.id }, select: { assigned_to: true } });
-  assert.equal(changedLead.assigned_to, secondSale.id, "Lead phải được chuyển sang Sale chưa được thử.");
+  assert.equal(changedLead.assigned_to, thirdSale.id, "Người có thêm vai trò quản lý phải bị loại khỏi pool Sale dù vẫn có vai trò telesale.");
   const oldMonitor = await prisma.automation_reassignment_monitors.findUniqueOrThrow({ where: { id: active.monitor.id } });
   assert.equal(oldMonitor.status, "reassigned");
   assert.ok(oldMonitor.next_assignment_id);
@@ -193,7 +200,12 @@ async function main() {
   await processReassignmentExpiry(active.monitor.id);
   assert.equal(await prisma.lead_assignments.count({ where: { lead_id: active.lead.id } }), 2, "Chạy lại job không được tạo assignment trùng.");
 
-  const warning = await createLeadWithMonitor("warning", undefined, { ...policy, warningEnabled: true });
+  const warning = await createLeadWithMonitor(
+    "warning",
+    undefined,
+    { ...policy, warningEnabled: true, warningContent: "Lead {{system:fullName}} sắp được chuyển." },
+    new Date(Date.now() - 45 * 60_000),
+  );
   const { processReassignmentWarning } = await import("../modules/automations/automation-reassignment.service.js");
   await Promise.all([
     processReassignmentWarning(warning.monitor.id),
@@ -205,6 +217,27 @@ async function main() {
     "Cảnh báo chạy đồng thời vẫn chỉ được gửi một lần.",
   );
   assert.equal((await prisma.automation_reassignment_monitors.findUniqueOrThrow({ where: { id: warning.monitor.id } })).status, "warned");
+  const warningNotification = await prisma.notifications.findFirstOrThrow({
+    where: { user_id: firstSale.id, type: "automation_reassignment_warning" },
+    orderBy: { created_at: "desc" },
+  });
+  assert.ok(warningNotification.content?.includes(`Lead reassignment warning ${runId}`));
+  assert.ok(!warningNotification.content?.includes("{{"), "Template token cảnh báo phải được render trước khi gửi.");
+
+  const warningFailure = await createLeadWithMonitor("warning-failure");
+  const { recordTerminalReassignmentJobFailure } = await import("../modules/automations/automation-reassignment-queue.service.js");
+  await recordTerminalReassignmentJobFailure(
+    { monitorId: warningFailure.monitor.id, kind: "warning" },
+    new Error("notification provider unavailable"),
+  );
+  const warningFailureMonitor = await prisma.automation_reassignment_monitors.findUniqueOrThrow({ where: { id: warningFailure.monitor.id } });
+  assert.equal(warningFailureMonitor.status, "pending", "Cảnh báo thất bại không được vô hiệu hóa job thu hồi.");
+  assert.match(warningFailureMonitor.last_error ?? "", /warning_job_failed/);
+  assert.equal((await processReassignmentExpiry(warningFailure.monitor.id)).outcome, "reassigned");
+
+  const lateWarning = await createLeadWithMonitor("late-warning", undefined, { ...policy, warningEnabled: true });
+  const lateWarningResult = await processReassignmentWarning(lateWarning.monitor.id);
+  assert.equal(lateWarningResult.outcome, "expiry_due", "Không được gửi cảnh báo sau khi đã đến hạn chuyển Sale.");
 
   const opened = await createLeadWithMonitor("opened", new Date());
   await processReassignmentExpiry(opened.monitor.id);

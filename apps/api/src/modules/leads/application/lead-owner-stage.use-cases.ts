@@ -325,11 +325,16 @@ export async function assignVisibleLead(
                 : {}),
               role_permissions: {
                 some: { permissions: { code: "lead.view_assigned" } },
-                none: {
-                  permissions: {
-                    code: { in: ["lead.view_department", "lead.view_all"] },
-                  },
-                },
+              },
+            },
+          },
+          none: {
+            roles: {
+              ...(institutionProgramId
+                ? { role_institution_programs: { some: { institution_program_id: institutionProgramId } } }
+                : {}),
+              role_permissions: {
+                some: { permissions: { code: { in: ["lead.view_department", "lead.view_all"] } } },
               },
             },
           },

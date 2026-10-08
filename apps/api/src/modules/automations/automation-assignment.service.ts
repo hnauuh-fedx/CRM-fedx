@@ -34,14 +34,19 @@ export async function listEligibleAutomationAssigneeIds(
           : []),
       ],
       user_roles: {
-        some: {
+        some: { roles: {
+          ...(input.institutionProgramId
+            ? { role_institution_programs: { some: { institution_program_id: input.institutionProgramId } } }
+            : {}),
+          role_permissions: { some: { permissions: { code: "lead.view_assigned" } } },
+        } },
+        none: {
           roles: {
             ...(input.institutionProgramId
               ? { role_institution_programs: { some: { institution_program_id: input.institutionProgramId } } }
               : {}),
             role_permissions: {
-              some: { permissions: { code: "lead.view_assigned" } },
-              none: { permissions: { code: { in: ["lead.view_department", "lead.view_all"] } } },
+              some: { permissions: { code: { in: ["lead.view_department", "lead.view_all"] } } },
             },
           },
         },

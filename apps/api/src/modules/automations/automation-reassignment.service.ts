@@ -8,6 +8,7 @@ import {
   resolveAutomationAssignee,
   type AutomationAssignmentStrategy,
 } from "./automation-assignment.service";
+import { getAutomationLeadData, getAutomationTemplateReferences, renderAutomationTemplate } from "./automation-data-field.service";
 import { buildReassignmentSchedule, planReassignmentCandidates, type ReassignmentStopReason } from "./automation-reassignment-state";
 
 type TransactionClient = Prisma.TransactionClient;
@@ -125,6 +126,7 @@ export async function processReassignmentWarning(monitorId: string, now = new Da
     const monitor = await tx.automation_reassignment_monitors.findUnique({ where: { id: monitorId } });
     if (!monitor || !["pending", "warned"].includes(monitor.status)) return { ok: true as const, outcome: "inactive" as const };
     if (!monitor.warning_due_at || monitor.warning_due_at > now || monitor.warned_at) return { ok: true as const, outcome: "not_due" as const };
+    if (monitor.reassignment_due_at <= now) return { ok: true as const, outcome: "expiry_due" as const };
     const assignment = await tx.lead_assignments.findUnique({
       where: { id: monitor.assignment_id },
       select: { is_main_owner: true, assigned_to: true, first_opened_at: true },
@@ -145,11 +147,18 @@ export async function processReassignmentWarning(monitorId: string, now = new Da
     }
     const policy = parsePolicy(monitor.policy_snapshot);
     if (!policy?.warningEnabled) return { ok: true as const, outcome: "warning_disabled" as const };
+    const actor = monitor.actor_id ? await getAuthUser(monitor.actor_id, monitor.institution_program_id ?? undefined) : null;
+    if (!actor) throw new Error("Tài khoản chạy cảnh báo chuyển Sale không còn khả dụng.");
+    const references = getAutomationTemplateReferences(policy.warningContent);
+    const leadData = references.length > 0
+      ? await getAutomationLeadData(actor, monitor.lead_id, monitor.institution_program_id ?? undefined, references)
+      : new Map<string, unknown>();
+    if (!leadData) throw new Error("Lead cảnh báo không còn nằm trong phạm vi của tài khoản automation.");
     await tx.notifications.create({
       data: {
         user_id: monitor.assignee_id,
         title: "Lead sắp được chuyển cho nhân viên khác",
-        content: policy.warningContent,
+        content: renderAutomationTemplate(policy.warningContent, leadData),
         type: "automation_reassignment_warning",
       },
     });
@@ -291,6 +300,7 @@ export async function processReassignmentExpiry(monitorId: string, now = new Dat
           entity_type: "automation_reassignment_monitor",
           entity_id: claimed.id,
           action: "sale_reassigned",
+          ip_address: null,
           old_data: { assignmentId: claimed.assignment_id, assigneeId: claimed.assignee_id },
           new_data: {
             ruleId: claimed.rule_id,
