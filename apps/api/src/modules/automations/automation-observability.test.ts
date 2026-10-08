@@ -9,6 +9,7 @@ import {
   redactAutomationText,
   redactAutomationValue,
   selectRecoverableNodeIds,
+  summarizeReassignmentMetrics,
 } from "./automation-observability";
 
 test("classifies old processing executions as stuck", () => {
@@ -170,4 +171,38 @@ test("derives a stable replay execution id from source and request", () => {
   assert.equal(first, createReplayExecutionId("source-1", "request-1"));
   assert.notEqual(first, createReplayExecutionId("source-1", "request-2"));
   assert.match(first, /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/);
+});
+
+test("summarizes reassignment statuses and weighted delay across programs", () => {
+  assert.deepEqual(summarizeReassignmentMetrics([
+    {
+      institutionProgramId: "program-1",
+      institutionProgramName: "Chương trình 1",
+      pending: 2,
+      warned: 1,
+      reassigned: 3,
+      cancelled: 1,
+      failed: 0,
+      delaySampleCount: 3,
+      averageDelayMs: 2_000,
+    },
+    {
+      institutionProgramId: "program-2",
+      institutionProgramName: "Chương trình 2",
+      pending: 1,
+      warned: 0,
+      reassigned: 1,
+      cancelled: 0,
+      failed: 1,
+      delaySampleCount: 2,
+      averageDelayMs: 5_000,
+    },
+  ]), {
+    pending: 3,
+    warned: 1,
+    reassigned: 4,
+    cancelled: 1,
+    failed: 1,
+    averageDelayMs: 3_200,
+  });
 });

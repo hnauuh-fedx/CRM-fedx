@@ -28,7 +28,7 @@ import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { useAuth } from "@/modules/auth/auth-context";
-import type { AutomationExecutionStatus, AutomationRuleVersion } from "@/modules/automations/automation.types";
+import type { AutomationExecutionStatus, AutomationOperationalMetrics, AutomationRuleVersion } from "@/modules/automations/automation.types";
 import {
   getAutomationOperationalMetrics,
   getAutomationOperationsExecution,
@@ -69,6 +69,26 @@ function formatDuration(milliseconds: number | null) {
   if (milliseconds < 1_000) return `${Math.round(milliseconds)} ms`;
   if (milliseconds < 60_000) return `${numberFormatter.format(milliseconds / 1_000)} giây`;
   return `${numberFormatter.format(milliseconds / 60_000)} phút`;
+}
+
+const reassignmentReasonCopy: Record<string, string> = {
+  sale_reassigned: "Đã chuyển sang Sale khác",
+  lead_opened: "Sale đã mở bản ghi",
+  stale_assignment: "Phân công không còn hiệu lực",
+  reassignment_disabled: "Đã tắt chia lại",
+  invalid_policy: "Cấu hình không hợp lệ",
+  max_reassignments_reached: "Đã đạt giới hạn chia lại",
+  candidate_pool_exhausted: "Đã hết danh sách Sale",
+  max_pool_cycles_reached: "Đã đạt giới hạn vòng chia",
+  assignment_no_longer_eligible: "Lead không còn đủ điều kiện",
+  actor_unavailable: "Tài khoản thực thi không khả dụng",
+  invalid_node_snapshot: "Snapshot node không hợp lệ",
+  job_failed: "Job xử lý thất bại",
+};
+
+function reassignmentReasonLabel(reason: string | null) {
+  if (!reason) return "Không có lý do";
+  return reassignmentReasonCopy[reason] ?? reason;
 }
 
 export function AutomationMonitoringPage() {
@@ -194,6 +214,8 @@ export function AutomationMonitoringPage() {
           <MetricCard icon={AlertTriangle} label="Độ sâu hàng đợi" value={metrics ? numberFormatter.format(metrics.queue.waiting + metrics.queue.active + metrics.queue.delayed) : "..."} hint={metrics ? (metrics.queue.available ? `${metrics.queue.failed} dead-letter` : "Redis chưa khả dụng") : "Đang kiểm tra"} tone={metrics && (!metrics.queue.available || metrics.queue.failed > 0) ? "warning" : "normal"} />
         </section>
       )}
+
+      {canViewMetrics && metrics?.reassignment && <ReassignmentObservabilitySection metrics={metrics} canViewLogs={canViewLogs} />}
 
       {canTransfer && (
         <Card className="gap-4 border-border/70 py-5 shadow-xs">
@@ -351,6 +373,84 @@ export function AutomationMonitoringPage() {
         </DialogContent>
       </Dialog>
     </div>
+  );
+}
+
+function ReassignmentObservabilitySection({ metrics, canViewLogs }: { metrics: AutomationOperationalMetrics; canViewLogs: boolean }) {
+  const reassignment = metrics.reassignment;
+  return (
+    <section className="space-y-4" aria-labelledby="reassignment-observability-title">
+      <div>
+        <h2 id="reassignment-observability-title" className="text-lg font-semibold">Theo dõi tự động chuyển Sale</h2>
+        <p className="text-sm text-muted-foreground">Backlog hiện tại và kết quả xử lý trong khoảng thống kê, giới hạn theo chương trình làm việc.</p>
+      </div>
+      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5">
+        <MetricCard icon={Clock3} label="Đang chờ" value={numberFormatter.format(reassignment.totals.pending)} hint="Chưa đến hạn kiểm tra" />
+        <MetricCard icon={AlertTriangle} label="Đã cảnh báo" value={numberFormatter.format(reassignment.totals.warned)} hint="Đang chờ đến hạn chuyển" tone={reassignment.totals.warned > 0 ? "warning" : "normal"} />
+        <MetricCard icon={GitCompareArrows} label="Đã chuyển Sale" value={numberFormatter.format(reassignment.totals.reassigned)} hint={`Trễ TB ${formatDuration(reassignment.totals.averageDelayMs)}`} />
+        <MetricCard icon={RotateCcw} label="Đã hủy" value={numberFormatter.format(reassignment.totals.cancelled)} hint="Assignment không còn hiệu lực" />
+        <MetricCard icon={AlertTriangle} label="Thất bại" value={numberFormatter.format(reassignment.totals.failed)} hint="Cần kiểm tra worker hoặc quyền" tone={reassignment.totals.failed > 0 ? "warning" : "normal"} />
+      </div>
+      <div className="grid gap-4 xl:grid-cols-[minmax(0,1fr)_minmax(0,1.4fr)]">
+        <Card className="gap-0 overflow-hidden border-border/70 py-0 shadow-xs">
+          <CardHeader className="border-b py-5">
+            <CardTitle>Theo chương trình</CardTitle>
+            <CardDescription>Số lượng được tách riêng, không cộng dữ liệu từ chương trình khác.</CardDescription>
+          </CardHeader>
+          <CardContent className="p-0">
+            {reassignment.perProgram.length === 0 ? (
+              <EmptyState title="Chưa có monitor chuyển Sale" description="Dữ liệu sẽ xuất hiện sau khi node Chia Lead tự động tạo monitor đầu tiên." />
+            ) : (
+              <div className="overflow-x-auto">
+                <Table>
+                  <caption className="sr-only">Chỉ số tự động chuyển Sale theo chương trình</caption>
+                  <TableHeader className="bg-muted/55"><TableRow><TableHead className="min-w-48 px-5">Chương trình</TableHead><TableHead className="text-right">Chờ</TableHead><TableHead className="text-right">Cảnh báo</TableHead><TableHead className="text-right">Đã chuyển</TableHead><TableHead className="text-right">Lỗi</TableHead></TableRow></TableHeader>
+                  <TableBody>{reassignment.perProgram.map((program) => (
+                    <TableRow key={program.institutionProgramId ?? "global"}>
+                      <TableCell className="px-5 font-medium">{program.institutionProgramName}</TableCell>
+                      <TableCell className="text-right tabular-nums">{program.pending}</TableCell>
+                      <TableCell className="text-right tabular-nums">{program.warned}</TableCell>
+                      <TableCell className="text-right tabular-nums">{program.reassigned}</TableCell>
+                      <TableCell className="text-right tabular-nums">{program.failed}</TableCell>
+                    </TableRow>
+                  ))}</TableBody>
+                </Table>
+              </div>
+            )}
+          </CardContent>
+        </Card>
+
+        <Card className="gap-0 overflow-hidden border-border/70 py-0 shadow-xs">
+          <CardHeader className="border-b py-5">
+            <CardTitle>Nhật ký chuyển Sale gần đây</CardTitle>
+            <CardDescription>Lý do kết thúc, Sale cũ/mới và độ trễ so với hạn xử lý.</CardDescription>
+          </CardHeader>
+          <CardContent className="p-0">
+            {!canViewLogs ? (
+              <EmptyState title="Bạn chưa có quyền xem nhật ký" description="Cần quyền automation.view_logs để xem Sale cũ/mới và lý do của từng lượt xử lý." />
+            ) : reassignment.recent.length === 0 ? (
+              <EmptyState title="Chưa có lượt xử lý gần đây" description="Không có monitor kết thúc trong khoảng thời gian đang thống kê." />
+            ) : (
+              <div className="overflow-x-auto">
+                <Table>
+                  <caption className="sr-only">Nhật ký tự động chuyển Sale gần đây</caption>
+                  <TableHeader className="bg-muted/55"><TableRow><TableHead className="min-w-56 px-5">Rule / chương trình</TableHead><TableHead className="min-w-52">Kết quả</TableHead><TableHead className="min-w-52">Sale</TableHead><TableHead className="whitespace-nowrap">Độ trễ</TableHead><TableHead className="whitespace-nowrap">Xử lý lúc</TableHead></TableRow></TableHeader>
+                  <TableBody>{reassignment.recent.map((entry) => (
+                    <TableRow key={entry.id}>
+                      <TableCell className="px-5"><div className="font-medium">{entry.ruleName}</div><div className="text-xs text-muted-foreground">{entry.institutionProgramName}</div></TableCell>
+                      <TableCell><Badge variant={entry.status === "failed" ? "destructive" : entry.status === "reassigned" ? "default" : "outline"}>{reassignmentReasonLabel(entry.completionReason)}</Badge></TableCell>
+                      <TableCell><div className="text-sm">{entry.previousAssignee.fullName}</div><div className="text-xs text-muted-foreground">{entry.nextAssignee ? `→ ${entry.nextAssignee.fullName}` : "Không chuyển Sale"}</div></TableCell>
+                      <TableCell className="whitespace-nowrap tabular-nums">{formatDuration(entry.delayMs)}</TableCell>
+                      <TableCell className="whitespace-nowrap">{formatDateTime(entry.processedAt)}</TableCell>
+                    </TableRow>
+                  ))}</TableBody>
+                </Table>
+              </div>
+            )}
+          </CardContent>
+        </Card>
+      </div>
+    </section>
   );
 }
 

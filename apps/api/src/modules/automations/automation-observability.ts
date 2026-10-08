@@ -2,7 +2,48 @@ import { createHash } from "node:crypto";
 
 export type AutomationExecutionHealth = "queued" | "processing" | "completed" | "failed" | "stuck";
 
+export type ReassignmentProgramMetric = {
+  institutionProgramId: string | null;
+  institutionProgramName: string;
+  pending: number;
+  warned: number;
+  reassigned: number;
+  cancelled: number;
+  failed: number;
+  delaySampleCount: number;
+  averageDelayMs: number | null;
+};
+
 const SENSITIVE_KEY_PATTERN = /(^|_)(authorization|cccd|email|password|phone|phone_number|secret|token)($|_)/i;
+
+export function summarizeReassignmentMetrics(rows: ReassignmentProgramMetric[]) {
+  const totals = rows.reduce((result, row) => ({
+    pending: result.pending + row.pending,
+    warned: result.warned + row.warned,
+    reassigned: result.reassigned + row.reassigned,
+    cancelled: result.cancelled + row.cancelled,
+    failed: result.failed + row.failed,
+    delaySampleCount: result.delaySampleCount + row.delaySampleCount,
+    weightedDelayMs: result.weightedDelayMs + (row.averageDelayMs ?? 0) * row.delaySampleCount,
+  }), {
+    pending: 0,
+    warned: 0,
+    reassigned: 0,
+    cancelled: 0,
+    failed: 0,
+    delaySampleCount: 0,
+    weightedDelayMs: 0,
+  });
+
+  return {
+    pending: totals.pending,
+    warned: totals.warned,
+    reassigned: totals.reassigned,
+    cancelled: totals.cancelled,
+    failed: totals.failed,
+    averageDelayMs: totals.delaySampleCount > 0 ? totals.weightedDelayMs / totals.delaySampleCount : null,
+  };
+}
 
 export function classifyAutomationExecution(input: {
   status: string;

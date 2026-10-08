@@ -4,6 +4,7 @@ import { randomUUID } from "node:crypto";
 let prisma: typeof import("../database/prisma.js")["prisma"];
 let createReassignmentMonitor: typeof import("../modules/automations/automation-reassignment.service.js")["createReassignmentMonitor"];
 let processReassignmentExpiry: typeof import("../modules/automations/automation-reassignment.service.js")["processReassignmentExpiry"];
+let getAutomationOperationalMetrics: typeof import("../modules/automations/automation-observability.service.js")["getAutomationOperationalMetrics"];
 
 const runId = randomUUID();
 const userIds: string[] = [];
@@ -56,6 +57,7 @@ async function main() {
   process.env.DISABLE_AUTOMATION_WORKER = "true";
   ({ prisma } = await import("../database/prisma.js"));
   ({ createReassignmentMonitor, processReassignmentExpiry } = await import("../modules/automations/automation-reassignment.service.js"));
+  ({ getAutomationOperationalMetrics } = await import("../modules/automations/automation-observability.service.js"));
 
   const program = await prisma.institution_programs.findFirst({
     where: { status: "active" },
@@ -261,6 +263,30 @@ async function main() {
   assert.equal(staleMonitor.status, "cancelled");
   assert.equal(staleMonitor.completion_reason, "stale_assignment");
   assert.equal(await prisma.lead_assignments.count({ where: { lead_id: stale.lead.id } }), 2);
+
+  const metrics = await getAutomationOperationalMetrics({
+    id: manager.id,
+    email: `reassignment.manager.${runId}@example.test`,
+    fullName: `Manager ${runId}`,
+    avatarUrl: null,
+    roles: [],
+    permissions: ["automation.view_logs"],
+    departmentIds: [department.id],
+    institutionProgramIds: [program.id],
+    workingInstitutionProgramId: program.id,
+    accessScope: "DEPARTMENT",
+  });
+  const programMetrics = metrics.reassignment.perProgram.find((item) => item.institutionProgramId === program.id);
+  assert.ok(programMetrics, "Metrics phải được nhóm theo chương trình làm việc.");
+  assert.ok(programMetrics.reassigned >= 2, "Metrics phải đếm các lượt đã chuyển Sale.");
+  assert.ok(programMetrics.warned >= 1, "Metrics phải đếm backlog đã cảnh báo.");
+  assert.ok(metrics.reassignment.recent.some((item) => (
+    item.id === active.monitor.id
+    && item.previousAssignee.id === firstSale.id
+    && item.nextAssignee?.id === thirdSale.id
+    && item.completionReason === "sale_reassigned"
+    && item.delayMs >= 0
+  )), "Nhật ký gần đây phải có lý do, Sale cũ/mới và độ trễ.");
 
   console.log("Automation reassignment integration test passed.");
 }

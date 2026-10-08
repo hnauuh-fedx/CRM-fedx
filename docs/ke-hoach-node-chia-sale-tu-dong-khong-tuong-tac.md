@@ -152,8 +152,8 @@ Không dùng browser alert. Email chỉ hiển thị trong cấu hình khi provi
 
 - [x] Cảnh báo CRM lần một.
 - [x] Thông báo khi bị thu hồi.
-- [ ] Log lý do dừng/chuyển, Sale cũ/mới và thời gian trễ.
-- [ ] Metrics pending/warned/reassigned/cancelled/failed theo chương trình.
+- [x] Log lý do dừng/chuyển, Sale cũ/mới và thời gian trễ.
+- [x] Metrics pending/warned/reassigned/cancelled/failed theo chương trình.
 
 ### Giai đoạn E — Mở rộng tương tác
 
@@ -187,6 +187,7 @@ Không dùng browser alert. Email chỉ hiển thị trong cấu hình khi provi
 ## Trạng thái
 
 - Ngày bắt đầu: 08/10/2026.
-- Trạng thái hiện tại: đã hoàn tất nền tảng Giai đoạn A và runtime Giai đoạn C; contract/UI Giai đoạn B đã được mở để cấu hình chính sách.
+- Trạng thái hiện tại: đã hoàn tất nền tảng Giai đoạn A, runtime Giai đoạn C và observability Giai đoạn D; contract/UI Giai đoạn B đã được mở để cấu hình chính sách.
 - Migration đã áp dụng vào PostgreSQL cục bộ; integration test open tracking và unit test validation policy đều đã đạt.
 - Monitor được tạo cùng transaction phân công; warning/expiry job dùng BullMQ, có recovery scan và khóa chống xử lý trùng.
+- Trang giám sát hiển thị backlog và kết quả chuyển Sale theo đúng chương trình làm việc, kèm nhật ký lý do, Sale cũ/mới và độ trễ xử lý.

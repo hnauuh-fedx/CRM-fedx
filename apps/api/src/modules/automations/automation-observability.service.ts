@@ -21,6 +21,8 @@ import {
   redactAutomationText,
   redactAutomationValue,
   selectRecoverableNodeIds,
+  summarizeReassignmentMetrics,
+  type ReassignmentProgramMetric,
 } from "./automation-observability";
 import type { AutomationContext } from "./automation-execution.types";
 import type { AutomationGraphData } from "./automation.types";
@@ -319,6 +321,8 @@ export async function getAutomationOperationalMetrics(user: AuthUser, from?: Dat
     };
   }).filter((rule) => rule.total > 0).sort((a, b) => b.total - a.total);
 
+  const canViewReassignmentLogs = user.permissions.includes("automation.manage") || user.permissions.includes("automation.view_logs");
+  const reassignment = await getReassignmentOperationalMetrics(ruleIds, rangeStart, rangeEnd, canViewReassignmentLogs);
   const queue = await getAutomationQueueHealth();
 
   return {
@@ -337,6 +341,149 @@ export async function getAutomationOperationalMetrics(user: AuthUser, from?: Dat
     },
     queue,
     perRule,
+    reassignment,
+  };
+}
+
+type ReassignmentMetricRow = {
+  institution_program_id: string | null;
+  institution_program_name: string | null;
+  pending: bigint;
+  warned: bigint;
+  reassigned: bigint;
+  cancelled: bigint;
+  failed: bigint;
+  delay_sample_count: bigint;
+  average_delay_ms: number | null;
+};
+
+type RecentReassignmentRow = {
+  id: string;
+  lead_id: string;
+  rule_name: string;
+  institution_program_id: string | null;
+  institution_program_name: string | null;
+  status: string;
+  completion_reason: string | null;
+  previous_assignee_id: string;
+  previous_assignee_name: string;
+  next_assignee_id: string | null;
+  next_assignee_name: string | null;
+  reassignment_due_at: Date;
+  processed_at: Date;
+  delay_ms: number;
+};
+
+async function getReassignmentOperationalMetrics(ruleIds: string[], rangeStart: Date, rangeEnd: Date, includeRecent: boolean) {
+  if (ruleIds.length === 0) {
+    return {
+      totals: summarizeReassignmentMetrics([]),
+      perProgram: [] as ReassignmentProgramMetric[],
+      recent: [],
+    };
+  }
+
+  const ruleIdList = Prisma.join(ruleIds.map((id) => Prisma.sql`${id}::uuid`));
+  const [metricRows, recentRows] = await Promise.all([
+    prisma.$queryRaw<ReassignmentMetricRow[]>(Prisma.sql`
+      SELECT
+        arm.institution_program_id,
+        ip.name AS institution_program_name,
+        COUNT(*) FILTER (WHERE arm.status = 'pending')::bigint AS pending,
+        COUNT(*) FILTER (WHERE arm.status = 'warned')::bigint AS warned,
+        COUNT(*) FILTER (
+          WHERE arm.status = 'reassigned'
+            AND arm.processed_at >= ${rangeStart}
+            AND arm.processed_at <= ${rangeEnd}
+        )::bigint AS reassigned,
+        COUNT(*) FILTER (
+          WHERE arm.status = 'cancelled'
+            AND arm.processed_at >= ${rangeStart}
+            AND arm.processed_at <= ${rangeEnd}
+        )::bigint AS cancelled,
+        COUNT(*) FILTER (
+          WHERE arm.status = 'failed'
+            AND arm.processed_at >= ${rangeStart}
+            AND arm.processed_at <= ${rangeEnd}
+        )::bigint AS failed,
+        COUNT(*) FILTER (
+          WHERE arm.processed_at >= ${rangeStart}
+            AND arm.processed_at <= ${rangeEnd}
+            AND arm.status IN ('reassigned', 'cancelled', 'completed', 'failed')
+        )::bigint AS delay_sample_count,
+        AVG(GREATEST(EXTRACT(EPOCH FROM (arm.processed_at - arm.reassignment_due_at)) * 1000, 0)) FILTER (
+          WHERE arm.processed_at >= ${rangeStart}
+            AND arm.processed_at <= ${rangeEnd}
+            AND arm.status IN ('reassigned', 'cancelled', 'completed', 'failed')
+        )::float8 AS average_delay_ms
+      FROM automation_reassignment_monitors arm
+      LEFT JOIN institution_programs ip ON ip.id = arm.institution_program_id
+      WHERE arm.rule_id IN (${ruleIdList})
+      GROUP BY arm.institution_program_id, ip.name
+      ORDER BY ip.name ASC NULLS LAST
+    `),
+    includeRecent ? prisma.$queryRaw<RecentReassignmentRow[]>(Prisma.sql`
+      SELECT
+        arm.id,
+        arm.lead_id,
+        ar.name AS rule_name,
+        arm.institution_program_id,
+        ip.name AS institution_program_name,
+        arm.status,
+        arm.completion_reason,
+        arm.assignee_id AS previous_assignee_id,
+        previous_sale.full_name AS previous_assignee_name,
+        next_assignment.assigned_to AS next_assignee_id,
+        next_sale.full_name AS next_assignee_name,
+        arm.reassignment_due_at,
+        arm.processed_at,
+        GREATEST(EXTRACT(EPOCH FROM (arm.processed_at - arm.reassignment_due_at)) * 1000, 0)::float8 AS delay_ms
+      FROM automation_reassignment_monitors arm
+      JOIN automation_rules ar ON ar.id = arm.rule_id
+      JOIN users previous_sale ON previous_sale.id = arm.assignee_id
+      LEFT JOIN lead_assignments next_assignment ON next_assignment.id = arm.next_assignment_id
+      LEFT JOIN users next_sale ON next_sale.id = next_assignment.assigned_to
+      LEFT JOIN institution_programs ip ON ip.id = arm.institution_program_id
+      WHERE arm.rule_id IN (${ruleIdList})
+        AND arm.processed_at >= ${rangeStart}
+        AND arm.processed_at <= ${rangeEnd}
+        AND arm.status IN ('reassigned', 'cancelled', 'completed', 'failed')
+      ORDER BY arm.processed_at DESC, arm.id ASC
+      LIMIT 20
+    `) : Promise.resolve([]),
+  ]);
+
+  const perProgram: ReassignmentProgramMetric[] = metricRows.map((row) => ({
+    institutionProgramId: row.institution_program_id,
+    institutionProgramName: row.institution_program_name ?? "Toàn hệ thống",
+    pending: Number(row.pending),
+    warned: Number(row.warned),
+    reassigned: Number(row.reassigned),
+    cancelled: Number(row.cancelled),
+    failed: Number(row.failed),
+    delaySampleCount: Number(row.delay_sample_count),
+    averageDelayMs: row.average_delay_ms,
+  }));
+
+  return {
+    totals: summarizeReassignmentMetrics(perProgram),
+    perProgram,
+    recent: recentRows.map((row) => ({
+      id: row.id,
+      leadId: row.lead_id,
+      ruleName: row.rule_name,
+      institutionProgramId: row.institution_program_id,
+      institutionProgramName: row.institution_program_name ?? "Toàn hệ thống",
+      status: row.status,
+      completionReason: row.completion_reason,
+      previousAssignee: { id: row.previous_assignee_id, fullName: row.previous_assignee_name },
+      nextAssignee: row.next_assignee_id && row.next_assignee_name
+        ? { id: row.next_assignee_id, fullName: row.next_assignee_name }
+        : null,
+      reassignmentDueAt: row.reassignment_due_at.toISOString(),
+      processedAt: row.processed_at.toISOString(),
+      delayMs: row.delay_ms,
+    })),
   };
 }
 

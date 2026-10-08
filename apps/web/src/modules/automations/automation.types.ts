@@ -342,6 +342,41 @@ export type AutomationOperationalMetrics = {
     affectedAdmissions: number;
     affectedStudents: number;
   }>;
+  reassignment: {
+    totals: {
+      pending: number;
+      warned: number;
+      reassigned: number;
+      cancelled: number;
+      failed: number;
+      averageDelayMs: number | null;
+    };
+    perProgram: Array<{
+      institutionProgramId: string | null;
+      institutionProgramName: string;
+      pending: number;
+      warned: number;
+      reassigned: number;
+      cancelled: number;
+      failed: number;
+      delaySampleCount: number;
+      averageDelayMs: number | null;
+    }>;
+    recent: Array<{
+      id: string;
+      leadId: string;
+      ruleName: string;
+      institutionProgramId: string | null;
+      institutionProgramName: string;
+      status: string;
+      completionReason: string | null;
+      previousAssignee: { id: string; fullName: string };
+      nextAssignee: { id: string; fullName: string } | null;
+      reassignmentDueAt: string;
+      processedAt: string;
+      delayMs: number;
+    }>;
+  };
 };
 
 export type AutomationRuleVersion = {

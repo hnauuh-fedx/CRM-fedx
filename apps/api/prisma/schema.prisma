@@ -173,9 +173,10 @@ model automation_reassignment_monitors {
   @@unique([rule_id, node_id, assignment_id], map: "uq_automation_reassignment_rule_node_assignment")
   @@index([status, warning_due_at, id], map: "idx_automation_reassignment_warning_due")
   @@index([status, reassignment_due_at, id], map: "idx_automation_reassignment_expiry_due")
-  @@index([lead_id, status, id], map: "idx_automation_reassignment_lead_status")
-  @@index([assignment_id], map: "idx_automation_reassignment_assignment")
-}
+    @@index([lead_id, status, id], map: "idx_automation_reassignment_lead_status")
+    @@index([assignment_id], map: "idx_automation_reassignment_assignment")
+    @@index([rule_id, status, processed_at], map: "idx_automation_reassignment_rule_status_processed")
+  }
 
 model automation_sla_dispatches {
   id               String           @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
