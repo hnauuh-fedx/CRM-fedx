@@ -2,6 +2,7 @@ import { prisma } from "../../database/prisma";
 import { Prisma } from "../../generated/prisma/client";
 import type { AutomationReassignmentPolicy } from "@admission-crm/shared/automation-reassignment-policy";
 import { getAuthUser } from "../auth/auth.service";
+import { getLeadScopeWhere } from "../leads/lead-list.service";
 import { assignVisibleLead, type LeadAssignmentTransactionContext } from "../leads/lead-owner-stage-mutations.service";
 import {
   listEligibleAutomationAssigneeIds,
@@ -148,12 +149,24 @@ export async function processReassignmentWarning(monitorId: string, now = new Da
     const policy = parsePolicy(monitor.policy_snapshot);
     if (!policy?.warningEnabled) return { ok: true as const, outcome: "warning_disabled" as const };
     const actor = monitor.actor_id ? await getAuthUser(monitor.actor_id, monitor.institution_program_id ?? undefined) : null;
-    if (!actor) throw new Error("Tài khoản chạy cảnh báo chuyển Sale không còn khả dụng.");
+    if (!actor || !actor.permissions.some((permission) => permission === "lead.assign" || permission === "lead.reassign")) {
+      throw new Error("Tài khoản chạy cảnh báo chuyển Sale không còn quyền phân công Lead.");
+    }
+    const visibleLead = await tx.leads.findFirst({
+      where: {
+        id: monitor.lead_id,
+        deleted_at: null,
+        ...getLeadScopeWhere(actor, monitor.institution_program_id ?? undefined),
+        ...(monitor.institution_program_id ? { institution_program_id: monitor.institution_program_id } : {}),
+      },
+      select: { id: true },
+    });
+    if (!visibleLead) throw new Error("Lead cảnh báo không còn nằm trong phạm vi của tài khoản automation.");
     const references = getAutomationTemplateReferences(policy.warningContent);
     const leadData = references.length > 0
       ? await getAutomationLeadData(actor, monitor.lead_id, monitor.institution_program_id ?? undefined, references)
       : new Map<string, unknown>();
-    if (!leadData) throw new Error("Lead cảnh báo không còn nằm trong phạm vi của tài khoản automation.");
+    if (!leadData) throw new Error("Không thể đọc dữ liệu Lead để render cảnh báo.");
     await tx.notifications.create({
       data: {
         user_id: monitor.assignee_id,
