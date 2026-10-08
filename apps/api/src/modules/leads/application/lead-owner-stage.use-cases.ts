@@ -1,5 +1,5 @@
 import { prisma } from "../../../database/prisma";
-import type { Prisma } from "../../../generated/prisma/client";
+import { Prisma } from "../../../generated/prisma/client";
 import type { AuthUser } from "../../auth/auth.types";
 import { getLeadScopeWhere } from "../lead-list.service";
 import {
@@ -279,6 +279,9 @@ export async function assignVisibleLead(
   }
 
   return prisma.$transaction(async (tx) => {
+    await tx.$executeRaw(Prisma.sql`
+      SELECT pg_advisory_xact_lock(hashtext(${`lead-assignment:${leadId}`}))
+    `);
     const lead = await findVisibleLead(
       actor,
       leadId,
@@ -368,7 +371,7 @@ export async function assignVisibleLead(
       where: { lead_id: leadId, is_main_owner: true },
       data: { is_main_owner: false },
     });
-    await tx.lead_assignments.create({
+    const assignment = await tx.lead_assignments.create({
       data: {
         lead_id: leadId,
         assigned_to: assignee.id,
@@ -376,6 +379,7 @@ export async function assignVisibleLead(
         department_id: departmentId,
         is_main_owner: true,
       },
+      select: { id: true },
     });
     await tx.leads.update({
       where: { id: leadId },
@@ -411,7 +415,7 @@ export async function assignVisibleLead(
     await transactionEffect?.(tx);
     return {
       ok: true as const,
-      data: { id: leadId, assigneeId: assignee.id },
+      data: { id: leadId, assigneeId: assignee.id, assignmentId: assignment.id },
     };
   });
 }

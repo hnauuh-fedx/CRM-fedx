@@ -542,7 +542,6 @@ leadsRouter.post(
   "/:id/open",
   requireAuthentication,
   requireAnyPermission(...leadListPermissions),
-  requireAnyPermission(...leadUpdatePermissions),
   async (request, response, next) => {
     try {
       const parsedId = leadIdSchema.safeParse(request.params.id);
@@ -552,9 +551,7 @@ leadsRouter.post(
       }
       const result = await initializeLeadOnOpen(request.authUser!, parsedId.data, getInstitutionProgramScope(request), request.ip);
       if (!result.ok) {
-        response.status(result.reason === "permission_denied" ? 403 : result.reason === "lead_not_found" ? 404 : 409).json({ message:
-          result.reason === "initial_stage_unavailable" ? "Không thể tự chuyển tiến trình: cần cấu hình duy nhất một tiến trình L0 cho CRM Sale."
-          : result.reason === "lead_not_found" ? "Không tìm thấy lead trong phạm vi truy cập." : "Bạn không có quyền cập nhật lead." });
+        response.status(404).json({ message: "Không tìm thấy lead trong phạm vi truy cập." });
         return;
       }
       response.json(result.data);

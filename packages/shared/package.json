@@ -3,6 +3,7 @@
   "private": true,
   "type": "module",
   "exports": {
+    "./automation-reassignment-policy": "./src/automation-reassignment-policy.ts",
     "./lead-form-field-catalog": "./src/lead-form-field-catalog.ts"
   }
 }

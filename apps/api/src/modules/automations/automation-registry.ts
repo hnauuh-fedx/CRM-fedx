@@ -1,6 +1,8 @@
 import { AUTOMATION_SYSTEM_FIELDS } from "./automation-field-registry";
 import type { AutomationNode, AutomationNodeData, AutomationNodeType } from "./automation.types";
 
+const REASSIGNMENT_MONITOR_AVAILABLE = false;
+
 export type AutomationConfigControl =
   | "condition_group"
   | "multi_select"
@@ -221,6 +223,9 @@ export function validateRegisteredAutomationNode(node: AutomationNode): string[]
   const issues: string[] = [];
   const missing = (message: string) => issues.push(message);
   const hasText = (value: unknown) => typeof value === "string" && value.trim().length > 0;
+  const isBoundedInteger = (value: unknown, min: number, max: number) => (
+    typeof value === "number" && Number.isInteger(value) && value >= min && value <= max
+  );
 
   if (!node.data.label?.trim()) missing(`Node ${node.id} phải có tên hiển thị.`);
   if (!getAutomationNodeDefinition(node.type)) return [...issues, `Loại node ${node.type} chưa được đăng ký.`];
@@ -251,6 +256,58 @@ export function validateRegisteredAutomationNode(node: AutomationNode): string[]
 
   if (node.type === "action_assign_pool" && !node.data.departmentId && !node.data.assigneeIds?.length) {
     missing(`Node chia Lead ${node.id} phải chọn team/phòng ban hoặc ít nhất một nhân viên.`);
+  }
+
+  if (node.type === "action_assign_pool" && node.data.reassignmentPolicy !== undefined) {
+    const rawPolicy = node.data.reassignmentPolicy as unknown;
+    if (!rawPolicy || typeof rawPolicy !== "object" || Array.isArray(rawPolicy)) {
+      missing(`Node chia Lead ${node.id} có chính sách chuyển sale không đúng cấu trúc.`);
+    } else {
+      const policy = rawPolicy as Record<string, unknown>;
+      if (typeof policy.enabled !== "boolean") {
+        missing(`Node chia Lead ${node.id} phải xác định trạng thái bật chính sách chuyển sale.`);
+      } else if (policy.enabled) {
+        if (!REASSIGNMENT_MONITOR_AVAILABLE) {
+          missing(`Node chia Lead ${node.id} chưa thể bật chuyển sale cho đến khi bộ giám sát Giai đoạn C hoàn tất.`);
+        }
+        if (policy.interactionCriterion !== "not_opened_since_assignment") {
+          missing(`Node chia Lead ${node.id} dùng điều kiện chuyển sale chưa được hỗ trợ.`);
+        }
+        if (!isBoundedInteger(policy.timeoutMinutes, 1, 43_200)) {
+          missing(`Node chia Lead ${node.id} phải đặt thời gian chờ từ 1 phút đến 30 ngày.`);
+        }
+        if (typeof policy.assignToAnotherSale !== "boolean") {
+          missing(`Node chia Lead ${node.id} phải xác định có gán cho nhân viên khác hay không.`);
+        }
+        if (policy.excludeCurrentAssignee !== true) {
+          missing(`Node chia Lead ${node.id} không được chọn lại sale hiện tại trong V1.`);
+        }
+        if (!isBoundedInteger(policy.maxReassignments, 1, 100)) {
+          missing(`Node chia Lead ${node.id} phải giới hạn số lần gán lại từ 1 đến 100.`);
+        }
+        if (typeof policy.recyclePool !== "boolean") {
+          missing(`Node chia Lead ${node.id} phải xác định chính sách chia lại danh sách.`);
+        }
+        if (!isBoundedInteger(policy.maxPoolCycles, 1, 100)) {
+          missing(`Node chia Lead ${node.id} phải giới hạn số vòng chia lại từ 1 đến 100.`);
+        }
+        if (typeof policy.warningEnabled !== "boolean") {
+          missing(`Node chia Lead ${node.id} phải xác định trạng thái cảnh báo.`);
+        } else if (policy.warningEnabled) {
+          if (!isBoundedInteger(policy.warningBeforeMinutes, 1, 43_199)
+            || !isBoundedInteger(policy.timeoutMinutes, 1, 43_200)
+            || Number(policy.warningBeforeMinutes) >= Number(policy.timeoutMinutes)) {
+            missing(`Node chia Lead ${node.id} phải cảnh báo trước thời điểm chuyển sale.`);
+          }
+          if (!hasText(policy.warningContent)) {
+            missing(`Node chia Lead ${node.id} phải có nội dung cảnh báo.`);
+          }
+        }
+        if (typeof policy.notifyOnRemoval !== "boolean") {
+          missing(`Node chia Lead ${node.id} phải xác định có thông báo khi thu hồi hay không.`);
+        }
+      }
+    }
   }
 
   for (const field of getAutomationNodeDefinition(node.type)?.configFields ?? []) {

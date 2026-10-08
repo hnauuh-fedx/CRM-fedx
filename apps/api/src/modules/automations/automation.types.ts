@@ -1,3 +1,7 @@
+import type { AutomationReassignmentPolicy } from "@admission-crm/shared/automation-reassignment-policy";
+
+export type { AutomationReassignmentPolicy } from "@admission-crm/shared/automation-reassignment-policy";
+
 export type AutomationRuleListItem = {
   id: string;
   name: string;
@@ -73,6 +77,7 @@ export type AutomationNodeData = {
   assignmentStrategy?: "round_robin" | "least_loaded";
   assigneeIds?: string[];
   departmentId?: string;
+  reassignmentPolicy?: AutomationReassignmentPolicy;
   // Action: update stage
   stageId?: string;
   // Action: activity

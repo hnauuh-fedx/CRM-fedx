@@ -21,6 +21,24 @@ import { AutomationFieldPicker } from "./automation-field-picker";
 
 type TemplateFieldKey = "title" | "content" | "activityContent" | "reminderTitle" | "reminderContent" | "messageSubject" | "messageContent" | "webhookPayload";
 
+type ReassignmentPolicy = NonNullable<AutomationNodeData["reassignmentPolicy"]>;
+const reassignmentMonitorAvailable = false;
+
+const defaultReassignmentPolicy: ReassignmentPolicy = {
+  enabled: false,
+  interactionCriterion: "not_opened_since_assignment",
+  timeoutMinutes: 60,
+  assignToAnotherSale: true,
+  excludeCurrentAssignee: true,
+  maxReassignments: 3,
+  recyclePool: false,
+  maxPoolCycles: 1,
+  warningEnabled: true,
+  warningBeforeMinutes: 30,
+  warningContent: "Bạn có Lead mới chưa được mở. Vui lòng vào tư vấn trước khi hệ thống chuyển cho nhân viên khác.",
+  notifyOnRemoval: true,
+};
+
 export type NodePropertiesPanelProps = {
   selectedNodeId: string | null;
   nodes: AutomationNode[];
@@ -85,7 +103,7 @@ export function NodePropertiesPanel({ selectedNodeId, nodes, options, isLoadingO
   };
 
   return (
-    <div className="w-80 border-l bg-background flex flex-col h-full shadow-sm z-10 shrink-0">
+    <div className="w-96 max-w-[100vw] border-l bg-background flex flex-col h-full shadow-sm z-10 shrink-0">
       <div className="flex items-center justify-between border-b px-4 py-3">
         <h3 className="font-semibold text-sm">Cấu hình thao tác</h3>
         <Button variant="ghost" size="icon" className="size-11" onClick={onClose} aria-label="Đóng bảng cấu hình node">
@@ -223,19 +241,178 @@ export function NodePropertiesPanel({ selectedNodeId, nodes, options, isLoadingO
         )}
 
         {selectedNode.type !== 'condition' && (
-          <RegistryNodeFields
-            nodeType={selectedNode.type}
-            data={localData}
-            options={options}
-            dataFields={dataFields}
-            isLoading={isLoadingOptions}
-            onChange={handleChange}
-            onInsertToken={insertFieldToken}
-          />
+          <>
+            <RegistryNodeFields
+              nodeType={selectedNode.type}
+              data={localData}
+              options={options}
+              dataFields={dataFields}
+              isLoading={isLoadingOptions}
+              onChange={handleChange}
+              onInsertToken={insertFieldToken}
+            />
+            {selectedNode.type === "action_assign_pool" ? (
+              <ReassignmentPolicyFields
+                policy={localData.reassignmentPolicy ?? defaultReassignmentPolicy}
+                onChange={(reassignmentPolicy) => handleChange("reassignmentPolicy", reassignmentPolicy)}
+              />
+            ) : null}
+          </>
         )}
 
       </div>
     </div>
+  );
+}
+
+function durationParts(minutes: number) {
+  if (minutes >= 1_440 && minutes % 1_440 === 0) return { value: minutes / 1_440, unit: "days" as const };
+  if (minutes >= 60 && minutes % 60 === 0) return { value: minutes / 60, unit: "hours" as const };
+  return { value: minutes, unit: "minutes" as const };
+}
+
+function DurationInput({
+  id,
+  minutes,
+  minMinutes = 1,
+  maxMinutes,
+  onChange,
+}: {
+  id: string;
+  minutes: number;
+  minMinutes?: number;
+  maxMinutes: number;
+  onChange: (minutes: number) => void;
+}) {
+  const parts = durationParts(minutes);
+  const multipliers = { minutes: 1, hours: 60, days: 1_440 } as const;
+  return (
+    <div className="grid grid-cols-[minmax(0,1fr)_8rem] gap-2">
+      <Input
+        id={id}
+        type="number"
+        min={Math.max(1, Math.ceil(minMinutes / multipliers[parts.unit]))}
+        max={Math.max(1, Math.floor(maxMinutes / multipliers[parts.unit]))}
+        value={parts.value}
+        onChange={(event) => onChange(Math.min(maxMinutes, Math.max(minMinutes, (Number(event.target.value) || 1) * multipliers[parts.unit])))}
+      />
+      <Select
+        value={parts.unit}
+        onValueChange={(unit) => onChange(Math.min(maxMinutes, Math.max(minMinutes, parts.value * multipliers[unit as keyof typeof multipliers])))}
+      >
+        <SelectTrigger aria-label="Đơn vị thời gian"><SelectValue /></SelectTrigger>
+        <SelectContent>
+          <SelectItem value="minutes">Phút</SelectItem>
+          <SelectItem value="hours">Giờ</SelectItem>
+          <SelectItem value="days">Ngày</SelectItem>
+        </SelectContent>
+      </Select>
+    </div>
+  );
+}
+
+function ReassignmentPolicyFields({ policy, onChange }: { policy: ReassignmentPolicy; onChange: (policy: ReassignmentPolicy) => void }) {
+  const patchPolicy = (patch: Partial<ReassignmentPolicy>) => onChange({ ...policy, ...patch });
+  return (
+    <section className="space-y-4 rounded-lg border bg-muted/20 p-3" aria-labelledby="reassignment-policy-heading">
+      <label className="flex min-h-11 cursor-pointer items-center gap-3">
+        <Checkbox
+          id="reassignment-policy-enabled"
+          checked={policy.enabled}
+          disabled={!reassignmentMonitorAvailable}
+          onCheckedChange={(checked) => patchPolicy({ enabled: checked === true })}
+        />
+        <span id="reassignment-policy-heading" className="text-sm font-semibold">Chuyển sale không tương tác với khách hàng (đang hoàn thiện)</span>
+      </label>
+
+      {!reassignmentMonitorAvailable ? (
+        <p className="rounded-md border border-amber-300 bg-amber-50 p-2 text-xs text-amber-900">
+          Đây là bản xem trước cấu hình. Có thể bật sau khi bộ giám sát và job chuyển sale ở Giai đoạn C hoàn tất.
+        </p>
+      ) : null}
+
+      {policy.enabled || !reassignmentMonitorAvailable ? (
+        <fieldset disabled={!reassignmentMonitorAvailable} className="space-y-5 border-l-2 border-primary/20 pl-3">
+          <div className="space-y-2" role="radiogroup" aria-labelledby="interaction-criterion-label">
+            <p id="interaction-criterion-label" className="text-sm font-medium">Chọn điều kiện tương tác</p>
+            <label className="flex min-h-11 items-center gap-2 text-sm text-muted-foreground">
+              <input type="radio" name="interaction-criterion" disabled /> Ghi chú trong bản ghi <span className="text-xs">(sắp hỗ trợ)</span>
+            </label>
+            <label className="flex min-h-11 items-center gap-2 text-sm text-muted-foreground">
+              <input type="radio" name="interaction-criterion" disabled /> Tương tác với trường dữ liệu <span className="text-xs">(sắp hỗ trợ)</span>
+            </label>
+            <label className="flex min-h-11 cursor-pointer items-center gap-2 text-sm">
+              <input type="radio" checked readOnly name="interaction-criterion" /> Không mở bản ghi kể từ thời điểm gán
+            </label>
+          </div>
+
+          <div className="space-y-2">
+            <Label htmlFor="reassignment-timeout">Loại bỏ sale nếu không tương tác sau</Label>
+            <DurationInput
+              id="reassignment-timeout"
+              minutes={policy.timeoutMinutes}
+              minMinutes={policy.warningEnabled ? 2 : 1}
+              maxMinutes={43_200}
+              onChange={(timeoutMinutes) => patchPolicy({
+                timeoutMinutes,
+                warningBeforeMinutes: Math.min(policy.warningBeforeMinutes, Math.max(1, timeoutMinutes - 1)),
+              })}
+            />
+          </div>
+
+          <label className="flex min-h-11 cursor-pointer items-center gap-3">
+            <Checkbox checked={policy.assignToAnotherSale} onCheckedChange={(checked) => patchPolicy({ assignToAnotherSale: checked === true })} />
+            <span className="text-sm">Gán cho nhân viên khác sau khi loại bỏ sale</span>
+          </label>
+          {policy.assignToAnotherSale ? (
+            <div className="space-y-2 pl-7">
+              <Label htmlFor="max-reassignments">Số lần gán lại tối đa</Label>
+              <Input id="max-reassignments" type="number" min={1} max={100} value={policy.maxReassignments} onChange={(event) => patchPolicy({ maxReassignments: Math.min(100, Math.max(1, Number(event.target.value) || 1)) })} />
+            </div>
+          ) : null}
+
+          <label className="flex min-h-11 cursor-pointer items-center gap-3">
+            <Checkbox checked={policy.recyclePool} onCheckedChange={(checked) => patchPolicy({ recyclePool: checked === true })} />
+            <span className="text-sm">Cho phép chia lại khi hết danh sách</span>
+          </label>
+          {policy.recyclePool ? (
+            <div className="space-y-2 pl-7">
+              <Label htmlFor="max-pool-cycles">Số vòng chia lại tối đa</Label>
+              <Input id="max-pool-cycles" type="number" min={1} max={100} value={policy.maxPoolCycles} onChange={(event) => patchPolicy({ maxPoolCycles: Math.min(100, Math.max(1, Number(event.target.value) || 1)) })} />
+            </div>
+          ) : null}
+
+          <label className="flex min-h-11 cursor-pointer items-center gap-3">
+            <Checkbox checked={policy.warningEnabled} onCheckedChange={(checked) => patchPolicy({
+              warningEnabled: checked === true,
+              timeoutMinutes: checked === true ? Math.max(2, policy.timeoutMinutes) : policy.timeoutMinutes,
+            })} />
+            <span className="text-sm">Gửi cảnh báo cho nhân viên không tương tác</span>
+          </label>
+          {policy.warningEnabled ? (
+            <div className="space-y-4 pl-7">
+              <div className="space-y-2">
+                <Label htmlFor="warning-before">Cảnh báo trước khi chuyển sale</Label>
+                <DurationInput id="warning-before" minutes={policy.warningBeforeMinutes} maxMinutes={Math.max(1, policy.timeoutMinutes - 1)} onChange={(warningBeforeMinutes) => patchPolicy({ warningBeforeMinutes })} />
+              </div>
+              <p className="text-xs text-muted-foreground">Kênh V1: thông báo trong CRM.</p>
+              <div className="space-y-2">
+                <Label htmlFor="warning-content">Nội dung thông báo</Label>
+                <Textarea id="warning-content" rows={4} value={policy.warningContent} onChange={(event) => patchPolicy({ warningContent: event.target.value })} />
+                <p className="text-xs text-muted-foreground">Thông báo được gửi cho sale đang phụ trách bản ghi.</p>
+              </div>
+            </div>
+          ) : null}
+
+          <label className="flex min-h-11 cursor-pointer items-center gap-3">
+            <Checkbox checked={policy.notifyOnRemoval} onCheckedChange={(checked) => patchPolicy({ notifyOnRemoval: checked === true })} />
+            <span className="text-sm">Gửi thông báo khi nhân viên bị loại khỏi bản ghi</span>
+          </label>
+        </fieldset>
+      ) : (
+        <p className="text-xs text-muted-foreground">Bật tùy chọn để theo dõi thời gian sale chưa mở Lead sau khi được gán.</p>
+      )}
+    </section>
   );
 }
 

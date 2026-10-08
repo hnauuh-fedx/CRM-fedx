@@ -33,6 +33,7 @@
     "test:integration:webhooks-v2": "tsx src/integration/inbound-webhooks-v2.integration.ts",
     "test:integration:automation": "tsx src/integration/automation-engine.integration.ts",
     "test:integration:automation-program-scope": "tsx src/integration/automation-program-scope.integration.ts",
+    "test:integration:lead-assignment-open": "tsx src/integration/lead-assignment-open.integration.ts",
     "test:automation": "tsx --test src/modules/automations/*.test.ts",
     "test:security:reporting": "tsx src/integration/reporting-security.integration.ts",
     "test:integration:reporting-pivot": "tsx src/integration/personal-report-pivot.integration.ts",

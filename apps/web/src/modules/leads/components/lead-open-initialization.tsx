@@ -11,9 +11,8 @@ export function LeadOpenInitialization({ lead, isOpen = true }: { lead: LeadDeta
   const auth = useAuth();
   const queryClient = useQueryClient();
   const attempted = useRef(false);
-  const eligible = isOpen && lead.assignee?.id === auth.user?.id && !lead.pipelineStage
-    && lead.lifecycleStatus.value === "ACTIVE"
-    && ["lead.update_all", "lead.update_department", "lead.update_assigned"].some(auth.can);
+  const eligible = isOpen && lead.assignee?.id === auth.user?.id
+    && lead.lifecycleStatus.value === "ACTIVE";
   const { mutate, isPending, error, data } = useMutation({
     mutationFn: () => initializeLeadOnOpen(lead.id, auth.accessToken!),
     onSuccess: (result) => {
@@ -35,10 +34,14 @@ export function LeadOpenInitialization({ lead, isOpen = true }: { lead: LeadDeta
     return () => { cancelled = true; };
   }, [eligible, mutate]);
 
-  if (isPending) return <p role="status" className="text-sm text-muted-foreground">Đang tự động chuyển lead sang tiến trình L0…</p>;
+  if (isPending) return <p role="status" className="text-sm text-muted-foreground">Đang ghi nhận lần mở Lead…</p>;
   if (error) return <Alert variant="destructive">
-    <AlertTitle>Chưa thể tự chuyển tiến trình L0</AlertTitle>
+    <AlertTitle>Chưa thể ghi nhận lần mở Lead</AlertTitle>
     <AlertDescription>{error.message}{eligible && <Button type="button" variant="outline" onClick={() => mutate()}>Thử lại</Button>}</AlertDescription>
+  </Alert>;
+  if (data?.pipelineInitializationIssue === "initial_stage_unavailable") return <Alert variant="destructive">
+    <AlertTitle>Đã ghi nhận lần mở, nhưng chưa thể chuyển tiến trình</AlertTitle>
+    <AlertDescription>Cần cấu hình duy nhất một tiến trình L0 cho CRM Sale.</AlertDescription>
   </Alert>;
   if (!data?.changed) return null;
   return <Alert role="status">

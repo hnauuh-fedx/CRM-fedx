@@ -116,7 +116,12 @@ export function changeLeadStage(leadId: string, stageId: string, accessToken: st
 }
 
 export function initializeLeadOnOpen(leadId: string, accessToken: string) {
-  return apiRequest<{ id: string; changed: boolean }>(`/leads/${leadId}/open`, { method: "POST" }, accessToken);
+  return apiRequest<{
+    id: string;
+    changed: boolean;
+    assignmentOpened: boolean;
+    pipelineInitializationIssue?: "initial_stage_unavailable";
+  }>(`/leads/${leadId}/open`, { method: "POST" }, accessToken);
 }
 
 export function changeLeadStatus(leadId: string, status: "ACTIVE" | "FAIL", accessToken: string, noteTemplateId?: string, noteContent?: string) {
@@ -164,7 +169,7 @@ export function assignLead(
   input: { assigneeId: string; departmentId?: string },
   accessToken: string,
 ) {
-  return apiRequest<{ id: string; assigneeId: string }>(
+  return apiRequest<{ id: string; assigneeId: string; assignmentId: string }>(
     `/leads/${leadId}/assign`,
     { method: "POST", body: JSON.stringify(input) },
     accessToken,
