@@ -144,6 +144,39 @@ model automation_assignment_cursors {
   @@index([last_assignee_id], map: "idx_automation_assignment_cursor_assignee")
 }
 
+model automation_reassignment_monitors {
+  id                     String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  rule_id                String    @db.Uuid
+  node_id                String    @db.VarChar(255)
+  assignment_id          String    @db.Uuid
+  lead_id                String    @db.Uuid
+  assignee_id            String    @db.Uuid
+  actor_id               String?   @db.Uuid
+  institution_program_id String?   @db.Uuid
+  status                 String    @default("pending") @db.VarChar(50)
+  warning_due_at         DateTime? @db.Timestamp(6)
+  reassignment_due_at    DateTime  @db.Timestamp(6)
+  warned_at              DateTime? @db.Timestamp(6)
+  claimed_at             DateTime? @db.Timestamp(6)
+  processed_at           DateTime? @db.Timestamp(6)
+  reassignment_count     Int       @default(0)
+  pool_cycle             Int       @default(0)
+  attempted_assignee_ids Json
+  node_snapshot          Json
+  policy_snapshot        Json
+  next_assignment_id     String?   @db.Uuid
+  completion_reason      String?   @db.VarChar(100)
+  last_error             String?
+  created_at             DateTime  @default(now()) @db.Timestamp(6)
+  updated_at             DateTime  @default(now()) @db.Timestamp(6)
+
+  @@unique([rule_id, node_id, assignment_id], map: "uq_automation_reassignment_rule_node_assignment")
+  @@index([status, warning_due_at, id], map: "idx_automation_reassignment_warning_due")
+  @@index([status, reassignment_due_at, id], map: "idx_automation_reassignment_expiry_due")
+  @@index([lead_id, status, id], map: "idx_automation_reassignment_lead_status")
+  @@index([assignment_id], map: "idx_automation_reassignment_assignment")
+}
+
 model automation_sla_dispatches {
   id               String           @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
   rule_id          String           @db.Uuid

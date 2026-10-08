@@ -142,16 +142,16 @@ Không dùng browser alert. Email chỉ hiển thị trong cấu hình khi provi
 
 ### Giai đoạn C — Monitor và chia lại
 
-- [ ] Bảng monitor/migration/index.
-- [ ] Job cảnh báo và job hết hạn.
-- [ ] Loại Sale hiện tại/lịch sử vòng khỏi candidate pool.
-- [ ] Giới hạn số lần gán lại và số vòng.
-- [ ] Idempotency, transaction lock và phục hồi job bị thất lạc.
+- [x] Bảng monitor/migration/index.
+- [x] Job cảnh báo và job hết hạn.
+- [x] Loại Sale hiện tại/lịch sử vòng khỏi candidate pool.
+- [x] Giới hạn số lần gán lại và số vòng.
+- [x] Idempotency, transaction lock và phục hồi job bị thất lạc.
 
 ### Giai đoạn D — Thông báo và observability
 
-- [ ] Cảnh báo CRM lần một.
-- [ ] Thông báo khi bị thu hồi.
+- [x] Cảnh báo CRM lần một.
+- [x] Thông báo khi bị thu hồi.
 - [ ] Log lý do dừng/chuyển, Sale cũ/mới và thời gian trễ.
 - [ ] Metrics pending/warned/reassigned/cancelled/failed theo chương trình.
 
@@ -187,6 +187,6 @@ Không dùng browser alert. Email chỉ hiển thị trong cấu hình khi provi
 ## Trạng thái
 
 - Ngày bắt đầu: 08/10/2026.
-- Trạng thái hiện tại: đã hoàn tất nền tảng Giai đoạn A và contract/validation nền của Giai đoạn B; UI đang ở bản xem trước bị khóa.
+- Trạng thái hiện tại: đã hoàn tất nền tảng Giai đoạn A và runtime Giai đoạn C; contract/UI Giai đoạn B đã được mở để cấu hình chính sách.
 - Migration đã áp dụng vào PostgreSQL cục bộ; integration test open tracking và unit test validation policy đều đã đạt.
-- UI policy đang ở chế độ xem trước và chưa cho bật cho đến khi monitor/job Giai đoạn C hoàn tất.
+- Monitor được tạo cùng transaction phân công; warning/expiry job dùng BullMQ, có recovery scan và khóa chống xử lý trùng.

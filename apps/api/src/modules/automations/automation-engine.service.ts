@@ -7,6 +7,7 @@ import { decideNodeExecution } from "./automation-execution-state";
 import type { AutomationContext, AutomationExecutionSource, ExecutableAutomationRule } from "./automation-execution.types";
 import { validateAutomationGraph, withAutomationTriggerType } from "./automation-graph.validator";
 import { ensureAutomationRuleVersionSnapshot } from "./automation-rule-version.service";
+import { closeAutomationReassignmentQueue } from "./automation-reassignment-queue.service";
 import type { AutomationEdge, AutomationGraphData } from "./automation.types";
 
 export type { AutomationContext, AutomationExecutionSource, ExecutableAutomationRule } from "./automation-execution.types";
@@ -468,6 +469,7 @@ export async function closeAutomationEngine() {
     automationBulkLeadQueue?.close(),
     automationBulkPrepareQueue?.close(),
     automationQueue?.close(),
+    closeAutomationReassignmentQueue(),
   ]);
 }
 

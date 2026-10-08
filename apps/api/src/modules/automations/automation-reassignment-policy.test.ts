@@ -33,9 +33,9 @@ function node(policy: AutomationReassignmentPolicy): AutomationNode {
   };
 }
 
-test("rejects activation while the reassignment monitor is not available", () => {
+test("accepts a valid active reassignment policy", () => {
   const issues = validateRegisteredAutomationNode(node(validPolicy));
-  assert.deepEqual(issues, ["Node chia Lead assign-pool chưa thể bật chuyển sale cho đến khi bộ giám sát Giai đoạn C hoàn tất."]);
+  assert.deepEqual(issues, []);
 });
 
 test("rejects invalid timeout and retry limits", () => {

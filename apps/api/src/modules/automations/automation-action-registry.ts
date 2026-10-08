@@ -13,6 +13,7 @@ import {
   createAdmissionProfile,
 } from "../admissions/admission-profile-management.service";
 import { resolveAutomationAssignee } from "./automation-assignment.service";
+import { createReassignmentMonitor } from "./automation-reassignment.service";
 import { evaluateAutomationConditions } from "./automation-condition-evaluator";
 import { getAutomationLeadData, getAutomationTemplateReferences, renderAutomationTemplate } from "./automation-data-field.service";
 import { sendAutomationMessage } from "./automation-message-delivery.service";
@@ -118,10 +119,11 @@ async function executeAssignAction(node: AutomationNode, context: AutomationCont
 }
 
 async function executeAssignPoolAction(node: AutomationNode, context: AutomationContext, nodeExecutionId: string): Promise<AutomationActionResult> {
-  const { assignmentStrategy, assigneeIds, departmentId } = node.data;
+  const { assignmentStrategy, assigneeIds, departmentId, reassignmentPolicy } = node.data;
   if (!context.leadId || !assignmentStrategy || (!assigneeIds?.length && !departmentId)) throw new UnrecoverableError("Node chia Lead thiếu chiến lược, team/danh sách nhân viên hoặc lead context.");
   const actor = await requireActor(context);
   const result = { nextSourceHandle: "default", delayMinutes: 0 };
+  let monitorId: string | null = null;
   const mutation = await assignVisibleLead(actor, context.leadId, {
     departmentId,
     resolveAssigneeId: (tx) => resolveAutomationAssignee(tx, {
@@ -129,10 +131,38 @@ async function executeAssignPoolAction(node: AutomationNode, context: Automation
       nodeId: node.id,
       candidateIds: assigneeIds ?? [],
       departmentId,
+      institutionProgramId: context.institutionProgramId,
+      allowedDepartmentIds: actor.departmentIds,
+      allowAllCandidates: actor.accessScope === "ALL" && actor.permissions.includes("lead.view_all"),
       strategy: assignmentStrategy,
     }),
-  }, context.institutionProgramId, async (tx) => markActionCompleted(tx, nodeExecutionId, result));
+  }, context.institutionProgramId, async (tx, assignment) => {
+    await markActionCompleted(tx, nodeExecutionId, result);
+    if (reassignmentPolicy?.enabled) {
+      const monitor = await createReassignmentMonitor(tx, {
+        ruleId: context.ruleId,
+        nodeId: node.id,
+        assignment,
+        leadId: context.leadId!,
+        actorId: actor.id,
+        institutionProgramId: context.institutionProgramId,
+        nodeSnapshot: {
+          assignmentStrategy,
+          assigneeIds: assigneeIds ?? [],
+          ...(departmentId ? { departmentId } : {}),
+        },
+        policy: reassignmentPolicy,
+      });
+      monitorId = monitor.id;
+    }
+  });
   if (!mutation.ok) throw new UnrecoverableError(`Không thể chia Lead tự động: ${mutation.reason}`);
+  if (monitorId) {
+    const { enqueueReassignmentMonitorJobs } = await import("./automation-reassignment-queue.service.js");
+    await enqueueReassignmentMonitorJobs(monitorId).catch((error) => {
+      console.error("Không thể enqueue monitor chuyển Sale; recovery scan sẽ thử lại.", { monitorId, error });
+    });
+  }
   return result;
 }
 

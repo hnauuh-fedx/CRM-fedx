@@ -1,4 +1,5 @@
 import { prisma } from "../../../database/prisma";
+import { Prisma } from "../../../generated/prisma/client";
 import type { AuthUser } from "../../auth/auth.types";
 import { triggerAutomation } from "../../automations/automation-engine.service";
 import { getPipelineStageMarker, isFailedLeadStatus } from "../domain/lead-lifecycle-status";
@@ -9,6 +10,9 @@ import { recordStageChange } from "./lead-mutation-support";
 export async function initializeLeadOnOpen(actor: AuthUser, leadId: string, institutionProgramId?: string, ipAddress?: string) {
   const mayInitializePipeline = canUpdateLead(actor);
   const result = await prisma.$transaction(async (tx) => {
+    await tx.$executeRaw(Prisma.sql`
+      SELECT pg_advisory_xact_lock(hashtext(${`lead-assignment:${leadId}`}))
+    `);
     const scope = { ...getLeadScopeWhere(actor, institutionProgramId), ...(institutionProgramId ? { institution_program_id: institutionProgramId } : {}) };
     const lead = await tx.leads.findFirst({
       where: { ...scope, id: leadId, deleted_at: null },

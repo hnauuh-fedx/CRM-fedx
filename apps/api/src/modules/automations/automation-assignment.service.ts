@@ -4,42 +4,67 @@ import { selectLeastLoadedAssignee, selectRoundRobinAssignee } from "./automatio
 
 export type AutomationAssignmentStrategy = "least_loaded" | "round_robin";
 
-export async function resolveAutomationAssignee(
-  tx: Prisma.TransactionClient,
-  input: {
-  ruleId: string;
-  nodeId: string;
+export type AutomationAssigneePoolInput = {
   candidateIds: string[];
   departmentId?: string;
-  strategy: AutomationAssignmentStrategy;
-  },
+  institutionProgramId?: string;
+  excludedCandidateIds?: string[];
+  allowedDepartmentIds?: string[];
+  allowAllCandidates?: boolean;
+};
+
+export async function listEligibleAutomationAssigneeIds(
+  tx: Prisma.TransactionClient,
+  input: AutomationAssigneePoolInput,
 ) {
   const candidateIds = [...new Set(input.candidateIds)];
   if (candidateIds.length === 0 && !input.departmentId) throw new Error("Danh sách nhân viên phân công đang trống.");
-
-  await tx.$executeRaw(Prisma.sql`SELECT pg_advisory_xact_lock(hashtext(${`${input.ruleId}:${input.nodeId}`}))`);
-    const activeUsers = await tx.users.findMany({
-      where: {
-        ...(candidateIds.length > 0 ? { id: { in: candidateIds } } : {}),
-        ...(input.departmentId ? { user_departments: { some: { department_id: input.departmentId } } } : {}),
-        status: "active",
-        deleted_at: null,
-        user_roles: {
-          some: {
-            roles: {
-              role_permissions: {
-                some: { permissions: { code: "lead.view_assigned" } },
-                none: { permissions: { code: { in: ["lead.view_department", "lead.view_all"] } } },
-              },
+  const excludedIds = new Set(input.excludedCandidateIds ?? []);
+  const activeUsers = await tx.users.findMany({
+    where: {
+      ...(candidateIds.length > 0 ? { id: { in: candidateIds } } : {}),
+      status: "active",
+      deleted_at: null,
+      AND: [
+        ...(input.departmentId
+          ? [{ user_departments: { some: { department_id: input.departmentId } } }]
+          : []),
+        ...(!input.allowAllCandidates && input.allowedDepartmentIds?.length
+          ? [{ user_departments: { some: { department_id: { in: input.allowedDepartmentIds } } } }]
+          : []),
+      ],
+      user_roles: {
+        some: {
+          roles: {
+            ...(input.institutionProgramId
+              ? { role_institution_programs: { some: { institution_program_id: input.institutionProgramId } } }
+              : {}),
+            role_permissions: {
+              some: { permissions: { code: "lead.view_assigned" } },
+              none: { permissions: { code: { in: ["lead.view_department", "lead.view_all"] } } },
             },
           },
         },
       },
-      select: { id: true },
-      orderBy: { id: "asc" },
-    });
-    const activeIds = new Set(activeUsers.map((user) => user.id));
-    const eligibleIds = candidateIds.length > 0 ? candidateIds.filter((id) => activeIds.has(id)) : [...activeIds];
+    },
+    select: { id: true },
+    orderBy: { id: "asc" },
+  });
+  const activeIds = new Set(activeUsers.map((user) => user.id));
+  return (candidateIds.length > 0 ? candidateIds.filter((id) => activeIds.has(id)) : [...activeIds])
+    .filter((id) => !excludedIds.has(id));
+}
+
+export async function resolveAutomationAssignee(
+  tx: Prisma.TransactionClient,
+  input: AutomationAssigneePoolInput & {
+    ruleId: string;
+    nodeId: string;
+    strategy: AutomationAssignmentStrategy;
+  },
+) {
+  await tx.$executeRaw(Prisma.sql`SELECT pg_advisory_xact_lock(hashtext(${`${input.ruleId}:${input.nodeId}`}))`);
+    const eligibleIds = await listEligibleAutomationAssigneeIds(tx, input);
     if (eligibleIds.length === 0) throw new Error("Không còn nhân viên đủ điều kiện trong danh sách phân công.");
 
     let selectedId: string;

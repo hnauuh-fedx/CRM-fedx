@@ -22,7 +22,7 @@ import { AutomationFieldPicker } from "./automation-field-picker";
 type TemplateFieldKey = "title" | "content" | "activityContent" | "reminderTitle" | "reminderContent" | "messageSubject" | "messageContent" | "webhookPayload";
 
 type ReassignmentPolicy = NonNullable<AutomationNodeData["reassignmentPolicy"]>;
-const reassignmentMonitorAvailable = false;
+const reassignmentMonitorAvailable = true;
 
 const defaultReassignmentPolicy: ReassignmentPolicy = {
   enabled: false,
@@ -322,7 +322,7 @@ function ReassignmentPolicyFields({ policy, onChange }: { policy: ReassignmentPo
           disabled={!reassignmentMonitorAvailable}
           onCheckedChange={(checked) => patchPolicy({ enabled: checked === true })}
         />
-        <span id="reassignment-policy-heading" className="text-sm font-semibold">Chuyển sale không tương tác với khách hàng (đang hoàn thiện)</span>
+        <span id="reassignment-policy-heading" className="text-sm font-semibold">Chuyển sale không tương tác với khách hàng</span>
       </label>
 
       {!reassignmentMonitorAvailable ? (

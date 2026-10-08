@@ -1,8 +1,6 @@
 import { AUTOMATION_SYSTEM_FIELDS } from "./automation-field-registry";
 import type { AutomationNode, AutomationNodeData, AutomationNodeType } from "./automation.types";
 
-const REASSIGNMENT_MONITOR_AVAILABLE = false;
-
 export type AutomationConfigControl =
   | "condition_group"
   | "multi_select"
@@ -267,9 +265,6 @@ export function validateRegisteredAutomationNode(node: AutomationNode): string[]
       if (typeof policy.enabled !== "boolean") {
         missing(`Node chia Lead ${node.id} phải xác định trạng thái bật chính sách chuyển sale.`);
       } else if (policy.enabled) {
-        if (!REASSIGNMENT_MONITOR_AVAILABLE) {
-          missing(`Node chia Lead ${node.id} chưa thể bật chuyển sale cho đến khi bộ giám sát Giai đoạn C hoàn tất.`);
-        }
         if (policy.interactionCriterion !== "not_opened_since_assignment") {
           missing(`Node chia Lead ${node.id} dùng điều kiện chuyển sale chưa được hỗ trợ.`);
         }

@@ -22,6 +22,19 @@ export type LeadMutationTransactionEffect = (
   tx: Prisma.TransactionClient,
 ) => Promise<void>;
 
+export type LeadAssignmentTransactionContext = {
+  assignmentId: string;
+  assigneeId: string;
+  previousAssigneeId: string | null;
+  departmentId: string | null;
+  assignedAt: Date;
+};
+
+export type LeadAssignmentTransactionEffect = (
+  tx: Prisma.TransactionClient,
+  context: LeadAssignmentTransactionContext,
+) => Promise<void>;
+
 type LeadAssignmentInput = {
   assigneeId?: string;
   departmentId?: string;
@@ -265,7 +278,7 @@ export async function assignVisibleLead(
   leadId: string,
   input: LeadAssignmentInput,
   institutionProgramId?: string,
-  transactionEffect?: LeadMutationTransactionEffect,
+  transactionEffect?: LeadAssignmentTransactionEffect,
   ipAddress?: string,
 ) {
   if (!canAssignLead(actor)) {
@@ -379,7 +392,7 @@ export async function assignVisibleLead(
         department_id: departmentId,
         is_main_owner: true,
       },
-      select: { id: true },
+      select: { id: true, assigned_at: true },
     });
     await tx.leads.update({
       where: { id: leadId },
@@ -412,10 +425,17 @@ export async function assignVisibleLead(
         new_data: { assigneeId: assignee.id, departmentId },
       },
     });
-    await transactionEffect?.(tx);
+    const assignedAt = assignment.assigned_at ?? new Date();
+    await transactionEffect?.(tx, {
+      assignmentId: assignment.id,
+      assigneeId: assignee.id,
+      previousAssigneeId: lead.assigned_to,
+      departmentId,
+      assignedAt,
+    });
     return {
       ok: true as const,
-      data: { id: leadId, assigneeId: assignee.id, assignmentId: assignment.id },
+      data: { id: leadId, assigneeId: assignee.id, assignmentId: assignment.id, assignedAt },
     };
   });
 }
