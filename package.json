@@ -6,10 +6,11 @@
     "packages/*"
   ],
   "scripts": {
-    "dev": "concurrently -n web,api,webhook-worker -c blue,green,magenta \"npm run dev:web\" \"npm run dev:api\" \"npm run dev:webhook-worker\"",
+    "dev": "concurrently -n web,api,webhook-worker,automation-worker -c blue,green,magenta,yellow \"npm run dev:web\" \"npm run dev:api\" \"npm run dev:webhook-worker\" \"npm run dev:automation-worker\"",
     "dev:web": "npm run dev --workspace apps/web",
     "dev:api": "npm run dev --workspace apps/api",
-    "dev:webhook-worker": "npm run worker:webhooks --workspace apps/api"
+    "dev:webhook-worker": "npm run worker:webhooks --workspace apps/api",
+    "dev:automation-worker": "npm run worker:automation --workspace apps/api"
   },
   "dependencies": {
     "class-variance-authority": "^0.7.1",
