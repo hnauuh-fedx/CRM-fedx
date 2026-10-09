@@ -96,12 +96,7 @@ async function preparePrincipals() {
     "lead.update_department",
     "lead.assign",
     "lead.reassign",
-    "custom_field.view",
-    "custom_field.create",
-    "custom_field.update",
-    "custom_field.archive",
-    "custom_field.manage_options",
-    "custom_field.manage_groups",
+    "custom_field.lead.manage",
   ]) {
     assert.ok(managerPermissionCodes.includes(code), `SALE_MANAGER is missing ${code}.`);
   }
@@ -237,6 +232,17 @@ async function verifyLeadWorkflow() {
   });
   assert.equal(unassignedLead.assigned_to, null);
   assert.equal(unassignedLead._count.lead_assignments, 0);
+
+  for (const search of [primaryPhone, `lead.${runId}@example.test`]) {
+    const searchResponse = await request(baseUrl, `/leads?search=${encodeURIComponent(search)}`, { token: managerToken });
+    assert.equal(searchResponse.status, 200);
+    const searchResults = searchResponse.payload.data as Array<{ id: string }>;
+    assert.ok(searchResults.some((lead) => lead.id === leadId), `Tìm kiếm phải hỗ trợ giá trị ${search}.`);
+  }
+  const createdDate = new Date().toISOString().slice(0, 10);
+  const dateFilterResponse = await request(baseUrl, `/leads?fromDate=${createdDate}&toDate=${createdDate}`, { token: managerToken });
+  assert.equal(dateFilterResponse.status, 200);
+  assert.ok((dateFilterResponse.payload.data as Array<{ id: string }>).some((lead) => lead.id === leadId));
 
   const directorCreatedLead = await prisma.leads.create({
     data: {
@@ -456,6 +462,45 @@ async function verifyLeadWorkflow() {
     })).status,
     200,
   );
+  const failResponse = await request(baseUrl, `/leads/${leadId}/status`, {
+    token: telesaleToken,
+    method: "PATCH",
+    body: { status: "FAIL" },
+  });
+  assert.equal(failResponse.status, 200);
+  assert.equal(failResponse.payload.status, "FAIL");
+  const failedLead = await prisma.leads.findUniqueOrThrow({
+    where: { id: leadId },
+    select: { status: true, pipeline_stage_id: true },
+  });
+  assert.equal(failedLead.status, `FAIL:${fixture.stageIds[1]}`);
+  assert.equal(failedLead.pipeline_stage_id, null);
+  assert.equal(
+    (await request(baseUrl, `/leads/${leadId}/stage`, {
+      token: telesaleToken,
+      method: "PATCH",
+      body: { stageId: fixture.stageIds[0] },
+    })).status,
+    409,
+    "Lead Fail không được chuyển tiến trình trực tiếp.",
+  );
+  const failedDetailResponse = await request(baseUrl, `/leads/${leadId}`, { token: telesaleToken });
+  assert.equal(failedDetailResponse.status, 200);
+  assert.equal((failedDetailResponse.payload.data as JsonRecord).pipelineStage, null);
+  assert.equal(((failedDetailResponse.payload.data as JsonRecord).lifecycleStatus as JsonRecord).value, "FAIL");
+
+  const reactivateResponse = await request(baseUrl, `/leads/${leadId}/status`, {
+    token: telesaleToken,
+    method: "PATCH",
+    body: { status: "ACTIVE" },
+  });
+  assert.equal(reactivateResponse.status, 200);
+  const reactivatedLead = await prisma.leads.findUniqueOrThrow({
+    where: { id: leadId },
+    select: { status: true, pipeline_stage_id: true },
+  });
+  assert.equal(reactivatedLead.status, "ACTIVE");
+  assert.equal(reactivatedLead.pipeline_stage_id, fixture.stageIds[1]);
   assert.equal(
     (await request(baseUrl, `/leads/${leadId}`, {
       token: managerToken,
@@ -498,7 +543,7 @@ async function verifyLeadWorkflow() {
   for (const activity of ["lead_created", "lead_updated", "pipeline_stage_changed", "lead_assigned", "note_created", "file_attached", "meeting", "reminder_created", "reminder_updated", "reminder_completed", "reminder_due", "reminder_overdue"]) {
     assert.ok(activityTypes.includes(activity), `Activity ${activity} was not recorded.`);
   }
-  assert.equal(verification.lead_status_histories.length, 2);
+  assert.equal(verification.lead_status_histories.length, 4);
   assert.equal(verification.reminders.length, 2);
   assert.ok(verification.reminders.some((reminder) => reminder.id === reminderId && reminder.status === "done"));
   assert.ok(
@@ -513,7 +558,7 @@ async function verifyLeadWorkflow() {
   assert.equal(notificationCount, 3);
   assert.equal(reminderNotificationCount, 2);
 
-  console.log("Lead integration verified: create, update, scope denial, pipeline, notes, files, activities, due/overdue reminders, audit and notifications.");
+  console.log("Lead integration verified: create, update, scope denial, pipeline, Fail/Active restoration, notes, files, activities, due/overdue reminders, audit and notifications.");
 }
 
 verifyLeadWorkflow()
