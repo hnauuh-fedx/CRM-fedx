@@ -10,6 +10,7 @@ import {
   type AutomationAssignmentStrategy,
 } from "./automation-assignment.service";
 import { getAutomationLeadData, getAutomationTemplateReferences, renderAutomationTemplate } from "./automation-data-field.service";
+import { sendAutomationInternalEmail } from "./automation-internal-email.service";
 import { buildReassignmentSchedule, planReassignmentCandidates, type ReassignmentStopReason } from "./automation-reassignment-state";
 
 type TransactionClient = Prisma.TransactionClient;
@@ -35,9 +36,63 @@ type CreateMonitorInput = {
 };
 
 class ReassignmentStoppedError extends Error {
-  constructor(readonly reason: ReassignmentStopReason | "assignment_no_longer_eligible") {
+  constructor(readonly reason: ReassignmentStopReason | "assignment_no_longer_eligible" | InteractionReason) {
     super(reason);
   }
+}
+
+type InteractionReason = "lead_opened" | "care_activity_recorded" | "lead_data_updated";
+
+async function findAssignmentInteraction(
+  tx: TransactionClient,
+  input: {
+    leadId: string;
+    assigneeId: string;
+    assignedAt: Date;
+    firstOpenedAt: Date | null;
+    criterion: AutomationReassignmentPolicy["interactionCriterion"];
+  },
+): Promise<InteractionReason | null> {
+  if (input.criterion === "not_opened_since_assignment") {
+    return input.firstOpenedAt && input.firstOpenedAt >= input.assignedAt ? "lead_opened" : null;
+  }
+  if (input.criterion === "no_care_activity_since_assignment") {
+    const [note, activity] = await Promise.all([
+      tx.lead_notes.findFirst({
+        where: { lead_id: input.leadId, user_id: input.assigneeId, created_at: { gte: input.assignedAt } },
+        select: { id: true },
+      }),
+      tx.lead_activities.findFirst({
+        where: {
+          lead_id: input.leadId,
+          user_id: input.assigneeId,
+          created_at: { gte: input.assignedAt },
+          metadata: { path: ["origin"], equals: "manual" },
+        },
+        select: { id: true },
+      }),
+    ]);
+    return note || activity ? "care_activity_recorded" : null;
+  }
+  const audit = await tx.audit_logs.findFirst({
+    where: {
+      user_id: input.assigneeId,
+      entity_id: input.leadId,
+      created_at: { gte: input.assignedAt },
+      OR: [
+        { entity_type: "lead", action: { in: ["update", "pipeline_stage_changed", "lead_status_changed"] } },
+        { entity_type: "lead_custom_field", action: { in: ["update", "clear"] } },
+      ],
+    },
+    select: { id: true },
+  });
+  return audit ? "lead_data_updated" : null;
+}
+
+function getCriterionDescription(criterion: AutomationReassignmentPolicy["interactionCriterion"]) {
+  if (criterion === "no_care_activity_since_assignment") return "không ghi nhận hoạt động chăm sóc";
+  if (criterion === "no_data_update_since_assignment") return "không cập nhật dữ liệu Lead";
+  return "không mở bản ghi";
 }
 
 function asJson(value: unknown) {
@@ -53,7 +108,7 @@ function parsePolicy(value: Prisma.JsonValue): AutomationReassignmentPolicy | nu
   const policy = value as Record<string, unknown>;
   if (
     policy.enabled !== true
-    || policy.interactionCriterion !== "not_opened_since_assignment"
+    || !["not_opened_since_assignment", "no_care_activity_since_assignment", "no_data_update_since_assignment"].includes(String(policy.interactionCriterion))
     || typeof policy.timeoutMinutes !== "number"
     || typeof policy.assignToAnotherSale !== "boolean"
     || policy.excludeCurrentAssignee !== true
@@ -61,10 +116,20 @@ function parsePolicy(value: Prisma.JsonValue): AutomationReassignmentPolicy | nu
     || typeof policy.recyclePool !== "boolean"
     || typeof policy.maxPoolCycles !== "number"
     || typeof policy.warningEnabled !== "boolean"
-    || typeof policy.warningBeforeMinutes !== "number"
-    || typeof policy.warningContent !== "string"
+    || (policy.secondWarningEnabled !== undefined && typeof policy.secondWarningEnabled !== "boolean")
     || typeof policy.notifyOnRemoval !== "boolean"
   ) return null;
+  if (policy.warningEnabled && (
+    typeof policy.warningBeforeMinutes !== "number"
+    || typeof policy.warningContent !== "string"
+    || (policy.warningEmailEnabled !== undefined && typeof policy.warningEmailEnabled !== "boolean")
+  )) return null;
+  if (policy.secondWarningEnabled === true && (
+    policy.warningEnabled !== true
+    || typeof policy.secondWarningBeforeMinutes !== "number"
+    || typeof policy.secondWarningContent !== "string"
+    || (policy.secondWarningEmailEnabled !== undefined && typeof policy.secondWarningEmailEnabled !== "boolean")
+  )) return null;
   return policy as AutomationReassignmentPolicy;
 }
 
@@ -103,6 +168,7 @@ export async function createReassignmentMonitor(tx: TransactionClient, input: Cr
       actor_id: input.actorId,
       institution_program_id: input.institutionProgramId,
       warning_due_at: schedule.warningDueAt,
+      second_warning_due_at: schedule.secondWarningDueAt ?? null,
       reassignment_due_at: schedule.reassignmentDueAt,
       reassignment_count: input.reassignmentCount ?? 0,
       pool_cycle: input.poolCycle ?? 0,
@@ -121,16 +187,22 @@ async function lockMonitor(tx: TransactionClient, monitorId: string) {
   `);
 }
 
-export async function processReassignmentWarning(monitorId: string, now = new Date()) {
-  return prisma.$transaction(async (tx) => {
+export async function processReassignmentWarning(
+  monitorId: string,
+  now = new Date(),
+  warningKind: "first" | "second" = "first",
+) {
+  const result = await prisma.$transaction(async (tx) => {
     await lockMonitor(tx, monitorId);
     const monitor = await tx.automation_reassignment_monitors.findUnique({ where: { id: monitorId } });
     if (!monitor || !["pending", "warned"].includes(monitor.status)) return { ok: true as const, outcome: "inactive" as const };
-    if (!monitor.warning_due_at || monitor.warning_due_at > now || monitor.warned_at) return { ok: true as const, outcome: "not_due" as const };
+    const dueAt = warningKind === "second" ? monitor.second_warning_due_at : monitor.warning_due_at;
+    const warnedAt = warningKind === "second" ? monitor.second_warned_at : monitor.warned_at;
+    if (!dueAt || dueAt > now || warnedAt) return { ok: true as const, outcome: "not_due" as const };
     if (monitor.reassignment_due_at <= now) return { ok: true as const, outcome: "expiry_due" as const };
     const assignment = await tx.lead_assignments.findUnique({
       where: { id: monitor.assignment_id },
-      select: { is_main_owner: true, assigned_to: true, first_opened_at: true },
+      select: { is_main_owner: true, assigned_to: true, first_opened_at: true, assigned_at: true },
     });
     if (!assignment || !assignment.is_main_owner || assignment.assigned_to !== monitor.assignee_id) {
       await tx.automation_reassignment_monitors.update({
@@ -139,15 +211,33 @@ export async function processReassignmentWarning(monitorId: string, now = new Da
       });
       return { ok: true as const, outcome: "cancelled" as const };
     }
-    if (assignment.first_opened_at) {
+    const policy = parsePolicy(monitor.policy_snapshot);
+    if (!policy) {
       await tx.automation_reassignment_monitors.update({
         where: { id: monitor.id },
-        data: { status: "completed", completion_reason: "lead_opened", processed_at: now, updated_at: now },
+        data: { status: "completed", completion_reason: "invalid_policy", processed_at: now, updated_at: now },
       });
-      return { ok: true as const, outcome: "opened" as const };
+      return { ok: true as const, outcome: "invalid_policy" as const };
     }
-    const policy = parsePolicy(monitor.policy_snapshot);
-    if (!policy?.warningEnabled) return { ok: true as const, outcome: "warning_disabled" as const };
+    if (warningKind === "second" && policy.warningEnabled && !monitor.warned_at) {
+      return { ok: true as const, outcome: "waiting_first_warning" as const };
+    }
+    const interactionReason = await findAssignmentInteraction(tx, {
+      leadId: monitor.lead_id,
+      assigneeId: monitor.assignee_id,
+      assignedAt: assignment.assigned_at ?? monitor.created_at,
+      firstOpenedAt: assignment.first_opened_at,
+      criterion: policy.interactionCriterion,
+    });
+    if (interactionReason) {
+      await tx.automation_reassignment_monitors.update({
+        where: { id: monitor.id },
+        data: { status: "completed", completion_reason: interactionReason, processed_at: now, updated_at: now },
+      });
+      return { ok: true as const, outcome: "interaction_recorded" as const };
+    }
+    const enabled = warningKind === "second" ? policy.secondWarningEnabled === true : policy.warningEnabled;
+    if (!enabled) return { ok: true as const, outcome: "warning_disabled" as const };
     const actor = monitor.actor_id ? await getAuthUser(monitor.actor_id, monitor.institution_program_id ?? undefined) : null;
     if (!actor || !actor.permissions.some((permission) => permission === "lead.assign" || permission === "lead.reassign")) {
       throw new Error("Tài khoản chạy cảnh báo chuyển Sale không còn quyền phân công Lead.");
@@ -162,25 +252,53 @@ export async function processReassignmentWarning(monitorId: string, now = new Da
       select: { id: true },
     });
     if (!visibleLead) throw new Error("Lead cảnh báo không còn nằm trong phạm vi của tài khoản automation.");
-    const references = getAutomationTemplateReferences(policy.warningContent);
+    const warningContent = warningKind === "second" ? policy.secondWarningContent ?? "" : policy.warningContent;
+    const references = getAutomationTemplateReferences(warningContent);
     const leadData = references.length > 0
       ? await getAutomationLeadData(actor, monitor.lead_id, monitor.institution_program_id ?? undefined, references)
       : new Map<string, unknown>();
     if (!leadData) throw new Error("Không thể đọc dữ liệu Lead để render cảnh báo.");
+    const renderedContent = renderAutomationTemplate(warningContent, leadData);
     await tx.notifications.create({
       data: {
         user_id: monitor.assignee_id,
-        title: "Lead sắp được chuyển cho nhân viên khác",
-        content: renderAutomationTemplate(policy.warningContent, leadData),
-        type: "automation_reassignment_warning",
+        title: warningKind === "second" ? "Cảnh báo lần hai: Lead sắp được chuyển" : "Lead sắp được chuyển cho nhân viên khác",
+        content: renderedContent,
+        type: warningKind === "second" ? "automation_reassignment_second_warning" : "automation_reassignment_warning",
       },
     });
+    const emailEnabled = warningKind === "second" ? policy.secondWarningEmailEnabled === true : policy.warningEmailEnabled === true;
+    const recipient = emailEnabled
+      ? await tx.users.findUnique({ where: { id: monitor.assignee_id }, select: { email: true } })
+      : null;
     await tx.automation_reassignment_monitors.update({
       where: { id: monitor.id },
-      data: { status: "warned", warned_at: now, updated_at: now },
+      data: warningKind === "second"
+        ? { status: "warned", second_warned_at: now, updated_at: now }
+        : { status: "warned", warned_at: now, updated_at: now },
     });
-    return { ok: true as const, outcome: "warned" as const };
+    return {
+      ok: true as const,
+      outcome: "warned" as const,
+      email: recipient?.email ? {
+        to: recipient.email,
+        subject: warningKind === "second" ? "Cảnh báo lần hai: Lead sắp được chuyển" : "Lead sắp được chuyển cho nhân viên khác",
+        content: renderedContent,
+        idempotencyKey: `${monitor.id}:warning:${warningKind === "second" ? 2 : 1}`,
+      } : null,
+    };
   });
+  if ("email" in result && result.email) {
+    try {
+      await sendAutomationInternalEmail(result.email);
+    } catch {
+      await prisma.automation_reassignment_monitors.updateMany({
+        where: { id: monitorId, status: "warned" },
+        data: { last_error: `${warningKind}_warning_email_failed`, updated_at: new Date() },
+      });
+    }
+  }
+  return { ok: result.ok, outcome: result.outcome };
 }
 
 async function completeStoppedMonitor(monitorId: string, reason: string, now: Date) {
@@ -198,7 +316,7 @@ export async function processReassignmentExpiry(monitorId: string, now = new Dat
     if (monitor.reassignment_due_at > now) return null;
     const assignment = await tx.lead_assignments.findUnique({
       where: { id: monitor.assignment_id },
-      select: { is_main_owner: true, assigned_to: true, first_opened_at: true },
+      select: { is_main_owner: true, assigned_to: true, first_opened_at: true, assigned_at: true },
     });
     if (!assignment || !assignment.is_main_owner || assignment.assigned_to !== monitor.assignee_id) {
       await tx.automation_reassignment_monitors.update({
@@ -207,18 +325,32 @@ export async function processReassignmentExpiry(monitorId: string, now = new Dat
       });
       return null;
     }
-    if (assignment.first_opened_at) {
+    const policy = parsePolicy(monitor.policy_snapshot);
+    if (!policy) {
       await tx.automation_reassignment_monitors.update({
         where: { id: monitor.id },
-        data: { status: "completed", completion_reason: "lead_opened", processed_at: now, updated_at: now },
+        data: { status: "completed", completion_reason: "invalid_policy", processed_at: now, updated_at: now },
       });
       return null;
     }
-    const policy = parsePolicy(monitor.policy_snapshot);
-    if (!policy || !policy.assignToAnotherSale) {
+    const interactionReason = await findAssignmentInteraction(tx, {
+      leadId: monitor.lead_id,
+      assigneeId: monitor.assignee_id,
+      assignedAt: assignment.assigned_at ?? monitor.created_at,
+      firstOpenedAt: assignment.first_opened_at,
+      criterion: policy.interactionCriterion,
+    });
+    if (interactionReason) {
       await tx.automation_reassignment_monitors.update({
         where: { id: monitor.id },
-        data: { status: "completed", completion_reason: policy ? "reassignment_disabled" : "invalid_policy", processed_at: now, updated_at: now },
+        data: { status: "completed", completion_reason: interactionReason, processed_at: now, updated_at: now },
+      });
+      return null;
+    }
+    if (!policy.assignToAnotherSale) {
+      await tx.automation_reassignment_monitors.update({
+        where: { id: monitor.id },
+        data: { status: "completed", completion_reason: "reassignment_disabled", processed_at: now, updated_at: now },
       });
       return null;
     }
@@ -255,11 +387,19 @@ export async function processReassignmentExpiry(monitorId: string, now = new Dat
       resolveAssigneeId: async (tx) => {
         const assignment = await tx.lead_assignments.findUnique({
           where: { id: claimed.assignment_id },
-          select: { is_main_owner: true, assigned_to: true, first_opened_at: true },
+          select: { is_main_owner: true, assigned_to: true, first_opened_at: true, assigned_at: true },
         });
-        if (!assignment || !assignment.is_main_owner || assignment.assigned_to !== claimed.assignee_id || assignment.first_opened_at) {
+        if (!assignment || !assignment.is_main_owner || assignment.assigned_to !== claimed.assignee_id) {
           throw new ReassignmentStoppedError("assignment_no_longer_eligible");
         }
+        const interactionReason = await findAssignmentInteraction(tx, {
+          leadId: claimed.lead_id,
+          assigneeId: claimed.assignee_id,
+          assignedAt: assignment.assigned_at ?? claimed.created_at,
+          firstOpenedAt: assignment.first_opened_at,
+          criterion: claimed.policy.interactionCriterion,
+        });
+        if (interactionReason) throw new ReassignmentStoppedError(interactionReason);
         const eligibleIds = await listEligibleAutomationAssigneeIds(tx, {
           candidateIds: nodeSnapshot.assigneeIds,
           departmentId: nodeSnapshot.departmentId,
@@ -304,7 +444,7 @@ export async function processReassignmentExpiry(monitorId: string, now = new Dat
           lead_id: claimed.lead_id,
           user_id: actor.id,
           type: "automation_reassignment",
-          content: "Tự động chuyển Lead do Sale không mở bản ghi trong thời hạn cấu hình.",
+          content: `Tự động chuyển Lead do Sale ${getCriterionDescription(claimed.policy.interactionCriterion)} trong thời hạn cấu hình.`,
         },
       });
       await tx.audit_logs.create({
@@ -322,6 +462,7 @@ export async function processReassignmentExpiry(monitorId: string, now = new Dat
             assigneeId: assignment.assigneeId,
             reassignmentCount,
             poolCycle: candidatePlan.poolCycle,
+            interactionCriterion: claimed.policy.interactionCriterion,
           },
         },
       });
@@ -330,7 +471,7 @@ export async function processReassignmentExpiry(monitorId: string, now = new Dat
           data: {
             user_id: claimed.assignee_id,
             title: "Lead đã được chuyển cho nhân viên khác",
-            content: "Lead đã được thu hồi do bạn chưa mở bản ghi trong thời hạn cấu hình.",
+            content: `Lead đã được thu hồi do bạn ${getCriterionDescription(claimed.policy.interactionCriterion)} trong thời hạn cấu hình.`,
             type: "automation_reassignment_removed",
           },
         });

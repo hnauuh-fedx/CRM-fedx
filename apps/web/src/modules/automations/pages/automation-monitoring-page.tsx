@@ -74,6 +74,8 @@ function formatDuration(milliseconds: number | null) {
 const reassignmentReasonCopy: Record<string, string> = {
   sale_reassigned: "Đã chuyển sang Sale khác",
   lead_opened: "Sale đã mở bản ghi",
+  care_activity_recorded: "Sale đã chăm sóc Lead",
+  lead_data_updated: "Sale đã cập nhật dữ liệu Lead",
   stale_assignment: "Phân công không còn hiệu lực",
   reassignment_disabled: "Đã tắt chia lại",
   invalid_policy: "Cấu hình không hợp lệ",

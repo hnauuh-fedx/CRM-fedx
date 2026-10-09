@@ -16,6 +16,11 @@ const validPolicy: AutomationReassignmentPolicy = {
   warningEnabled: true,
   warningBeforeMinutes: 30,
   warningContent: "Vui lòng mở Lead trước thời hạn.",
+  warningEmailEnabled: false,
+  secondWarningEnabled: true,
+  secondWarningBeforeMinutes: 10,
+  secondWarningContent: "Lead sắp được chuyển. Vui lòng chăm sóc ngay.",
+  secondWarningEmailEnabled: false,
   notifyOnRemoval: true,
 };
 
@@ -62,6 +67,47 @@ test("requires an earlier in-app warning with content and excludes the current s
   assert.ok(issues.some((issue) => issue.includes("cảnh báo trước")));
   assert.ok(issues.some((issue) => issue.includes("nội dung cảnh báo")));
   assert.ok(issues.some((issue) => issue.includes("không được chọn lại sale hiện tại")));
+});
+
+test("accepts every supported interaction criterion", () => {
+  for (const interactionCriterion of [
+    "not_opened_since_assignment",
+    "no_care_activity_since_assignment",
+    "no_data_update_since_assignment",
+  ] as const) {
+    assert.deepEqual(validateRegisteredAutomationNode(node({ ...validPolicy, interactionCriterion })), []);
+  }
+});
+
+test("requires the second warning to be closer to expiry than the first warning", () => {
+  const issues = validateRegisteredAutomationNode(node({
+    ...validPolicy,
+    secondWarningBeforeMinutes: validPolicy.warningBeforeMinutes,
+    secondWarningContent: " ",
+  }));
+
+  assert.ok(issues.some((issue) => issue.includes("cảnh báo lần hai")));
+  assert.ok(issues.some((issue) => issue.includes("nội dung cảnh báo lần hai")));
+});
+
+test("requires the first warning when the second warning is enabled", () => {
+  const issues = validateRegisteredAutomationNode(node({
+    ...validPolicy,
+    warningEnabled: false,
+    secondWarningEnabled: true,
+  }));
+
+  assert.ok(issues.some((issue) => issue.includes("bật cảnh báo lần một")));
+});
+
+test("rejects a malformed second-warning flag even when the first warning is disabled", () => {
+  const malformed = node({ ...validPolicy, warningEnabled: false, secondWarningEnabled: false });
+  malformed.data.reassignmentPolicy = {
+    ...malformed.data.reassignmentPolicy,
+    secondWarningEnabled: "yes",
+  } as unknown as AutomationReassignmentPolicy;
+
+  assert.ok(validateRegisteredAutomationNode(malformed).some((issue) => issue.includes("trạng thái cảnh báo lần hai")));
 });
 
 test("ignores dormant policy values while the feature is disabled", () => {

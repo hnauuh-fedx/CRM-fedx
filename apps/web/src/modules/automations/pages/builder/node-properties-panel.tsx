@@ -36,6 +36,11 @@ const defaultReassignmentPolicy: ReassignmentPolicy = {
   warningEnabled: true,
   warningBeforeMinutes: 30,
   warningContent: "Bạn có Lead mới chưa được mở. Vui lòng vào tư vấn trước khi hệ thống chuyển cho nhân viên khác.",
+  warningEmailEnabled: false,
+  secondWarningEnabled: false,
+  secondWarningBeforeMinutes: 10,
+  secondWarningContent: "Lead sắp được chuyển cho nhân viên khác. Vui lòng chăm sóc ngay.",
+  secondWarningEmailEnabled: false,
   notifyOnRemoval: true,
 };
 
@@ -254,6 +259,7 @@ export function NodePropertiesPanel({ selectedNodeId, nodes, options, isLoadingO
             {selectedNode.type === "action_assign_pool" ? (
               <ReassignmentPolicyFields
                 policy={localData.reassignmentPolicy ?? defaultReassignmentPolicy}
+                emailProviderAvailable={options?.providerCapabilities.email ?? false}
                 onChange={(reassignmentPolicy) => handleChange("reassignmentPolicy", reassignmentPolicy)}
               />
             ) : null}
@@ -311,7 +317,16 @@ function DurationInput({
   );
 }
 
-function ReassignmentPolicyFields({ policy, onChange }: { policy: ReassignmentPolicy; onChange: (policy: ReassignmentPolicy) => void }) {
+function ReassignmentPolicyFields({
+  policy: storedPolicy,
+  emailProviderAvailable,
+  onChange,
+}: {
+  policy: ReassignmentPolicy;
+  emailProviderAvailable: boolean;
+  onChange: (policy: ReassignmentPolicy) => void;
+}) {
+  const policy = { ...defaultReassignmentPolicy, ...storedPolicy };
   const patchPolicy = (patch: Partial<ReassignmentPolicy>) => onChange({ ...policy, ...patch });
   return (
     <section className="space-y-4 rounded-lg border bg-muted/20 p-3" aria-labelledby="reassignment-policy-heading">
@@ -335,14 +350,14 @@ function ReassignmentPolicyFields({ policy, onChange }: { policy: ReassignmentPo
         <fieldset disabled={!reassignmentMonitorAvailable} className="space-y-5 border-l-2 border-primary/20 pl-3">
           <div className="space-y-2" role="radiogroup" aria-labelledby="interaction-criterion-label">
             <p id="interaction-criterion-label" className="text-sm font-medium">Chọn điều kiện tương tác</p>
-            <label className="flex min-h-11 items-center gap-2 text-sm text-muted-foreground">
-              <input type="radio" name="interaction-criterion" disabled /> Ghi chú trong bản ghi <span className="text-xs">(sắp hỗ trợ)</span>
-            </label>
-            <label className="flex min-h-11 items-center gap-2 text-sm text-muted-foreground">
-              <input type="radio" name="interaction-criterion" disabled /> Tương tác với trường dữ liệu <span className="text-xs">(sắp hỗ trợ)</span>
+            <label className="flex min-h-11 cursor-pointer items-center gap-2 text-sm">
+              <input type="radio" name="interaction-criterion" checked={policy.interactionCriterion === "no_care_activity_since_assignment"} onChange={() => patchPolicy({ interactionCriterion: "no_care_activity_since_assignment" })} /> Không ghi chú/chăm sóc kể từ thời điểm gán
             </label>
             <label className="flex min-h-11 cursor-pointer items-center gap-2 text-sm">
-              <input type="radio" checked readOnly name="interaction-criterion" /> Không mở bản ghi kể từ thời điểm gán
+              <input type="radio" name="interaction-criterion" checked={policy.interactionCriterion === "no_data_update_since_assignment"} onChange={() => patchPolicy({ interactionCriterion: "no_data_update_since_assignment" })} /> Không cập nhật trường dữ liệu kể từ thời điểm gán
+            </label>
+            <label className="flex min-h-11 cursor-pointer items-center gap-2 text-sm">
+              <input type="radio" name="interaction-criterion" checked={policy.interactionCriterion === "not_opened_since_assignment"} onChange={() => patchPolicy({ interactionCriterion: "not_opened_since_assignment" })} /> Không mở bản ghi kể từ thời điểm gán
             </label>
           </div>
 
@@ -351,11 +366,12 @@ function ReassignmentPolicyFields({ policy, onChange }: { policy: ReassignmentPo
             <DurationInput
               id="reassignment-timeout"
               minutes={policy.timeoutMinutes}
-              minMinutes={policy.warningEnabled ? 2 : 1}
+              minMinutes={policy.secondWarningEnabled ? 3 : policy.warningEnabled ? 2 : 1}
               maxMinutes={43_200}
               onChange={(timeoutMinutes) => patchPolicy({
                 timeoutMinutes,
                 warningBeforeMinutes: Math.min(policy.warningBeforeMinutes, Math.max(1, timeoutMinutes - 1)),
+                secondWarningBeforeMinutes: Math.min(policy.secondWarningBeforeMinutes ?? 1, Math.max(1, timeoutMinutes - 2)),
               })}
             />
           </div>
@@ -385,6 +401,7 @@ function ReassignmentPolicyFields({ policy, onChange }: { policy: ReassignmentPo
           <label className="flex min-h-11 cursor-pointer items-center gap-3">
             <Checkbox checked={policy.warningEnabled} onCheckedChange={(checked) => patchPolicy({
               warningEnabled: checked === true,
+              secondWarningEnabled: checked === true ? policy.secondWarningEnabled : false,
               timeoutMinutes: checked === true ? Math.max(2, policy.timeoutMinutes) : policy.timeoutMinutes,
             })} />
             <span className="text-sm">Gửi cảnh báo cho nhân viên không tương tác</span>
@@ -393,7 +410,16 @@ function ReassignmentPolicyFields({ policy, onChange }: { policy: ReassignmentPo
             <div className="space-y-4 pl-7">
               <div className="space-y-2">
                 <Label htmlFor="warning-before">Cảnh báo trước khi chuyển sale</Label>
-                <DurationInput id="warning-before" minutes={policy.warningBeforeMinutes} maxMinutes={Math.max(1, policy.timeoutMinutes - 1)} onChange={(warningBeforeMinutes) => patchPolicy({ warningBeforeMinutes })} />
+                <DurationInput
+                  id="warning-before"
+                  minutes={policy.warningBeforeMinutes}
+                  minMinutes={policy.secondWarningEnabled ? 2 : 1}
+                  maxMinutes={Math.max(1, policy.timeoutMinutes - 1)}
+                  onChange={(warningBeforeMinutes) => patchPolicy({
+                    warningBeforeMinutes,
+                    secondWarningBeforeMinutes: Math.min(policy.secondWarningBeforeMinutes ?? 1, Math.max(1, warningBeforeMinutes - 1)),
+                  })}
+                />
               </div>
               <p className="text-xs text-muted-foreground">Kênh V1: thông báo trong CRM.</p>
               <div className="space-y-2">
@@ -401,6 +427,37 @@ function ReassignmentPolicyFields({ policy, onChange }: { policy: ReassignmentPo
                 <Textarea id="warning-content" rows={4} value={policy.warningContent} onChange={(event) => patchPolicy({ warningContent: event.target.value })} />
                 <p className="text-xs text-muted-foreground">Thông báo được gửi cho sale đang phụ trách bản ghi.</p>
               </div>
+              <label className="flex min-h-11 cursor-pointer items-center gap-3">
+                <Checkbox checked={policy.warningEmailEnabled} disabled={!emailProviderAvailable} onCheckedChange={(checked) => patchPolicy({ warningEmailEnabled: checked === true })} />
+                <span className="text-sm">Gửi thêm email cho Sale</span>
+              </label>
+              {!emailProviderAvailable ? <p className="text-xs text-muted-foreground">Email chỉ bật được khi provider email đã được cấu hình.</p> : null}
+
+              <label className="flex min-h-11 cursor-pointer items-center gap-3">
+                <Checkbox checked={policy.secondWarningEnabled} onCheckedChange={(checked) => patchPolicy(checked === true ? {
+                  secondWarningEnabled: true,
+                  timeoutMinutes: Math.max(3, policy.timeoutMinutes),
+                  warningBeforeMinutes: Math.max(2, policy.warningBeforeMinutes),
+                  secondWarningBeforeMinutes: Math.min(policy.secondWarningBeforeMinutes ?? 1, Math.max(1, policy.warningBeforeMinutes - 1)),
+                } : { secondWarningEnabled: false })} />
+                <span className="text-sm">Gửi cảnh báo lần hai</span>
+              </label>
+              {policy.secondWarningEnabled ? (
+                <div className="space-y-4 border-l-2 border-primary/20 pl-4">
+                  <div className="space-y-2">
+                    <Label htmlFor="second-warning-before">Cảnh báo lần hai trước khi chuyển Sale</Label>
+                    <DurationInput id="second-warning-before" minutes={policy.secondWarningBeforeMinutes ?? 1} maxMinutes={Math.max(1, policy.warningBeforeMinutes - 1)} onChange={(secondWarningBeforeMinutes) => patchPolicy({ secondWarningBeforeMinutes })} />
+                  </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="second-warning-content">Nội dung cảnh báo lần hai</Label>
+                    <Textarea id="second-warning-content" rows={4} value={policy.secondWarningContent ?? ""} onChange={(event) => patchPolicy({ secondWarningContent: event.target.value })} />
+                  </div>
+                  <label className="flex min-h-11 cursor-pointer items-center gap-3">
+                    <Checkbox checked={policy.secondWarningEmailEnabled} disabled={!emailProviderAvailable} onCheckedChange={(checked) => patchPolicy({ secondWarningEmailEnabled: checked === true })} />
+                    <span className="text-sm">Gửi thêm email ở cảnh báo lần hai</span>
+                  </label>
+                </div>
+              ) : null}
             </div>
           ) : null}
 

@@ -76,3 +76,18 @@ test("derives warning and reassignment deadlines from the assignment time", () =
     warningBeforeMinutes: 30,
   }).warningDueAt, null);
 });
+
+test("derives a second warning deadline closer to reassignment", () => {
+  const assignedAt = new Date("2026-10-09T01:00:00.000Z");
+  assert.deepEqual(buildReassignmentSchedule(assignedAt, {
+    timeoutMinutes: 60,
+    warningEnabled: true,
+    warningBeforeMinutes: 30,
+    secondWarningEnabled: true,
+    secondWarningBeforeMinutes: 10,
+  }), {
+    warningDueAt: new Date("2026-10-09T01:30:00.000Z"),
+    secondWarningDueAt: new Date("2026-10-09T01:50:00.000Z"),
+    reassignmentDueAt: new Date("2026-10-09T02:00:00.000Z"),
+  });
+});

@@ -19,6 +19,7 @@ import {
   type AutomationBulkFilter,
 } from "./automation-bulk.service";
 import { redactAutomationText, redactAutomationValue } from "./automation-observability";
+import { isAutomationEmailProviderAvailable } from "./automation-internal-email.service";
 
 export type AutomationRuleListQuery = {
   page: number;
@@ -1040,6 +1041,7 @@ export async function getAutomationOptions(user: AuthUser, institutionProgramId?
     customDataFields,
     customerLists,
     webhookEndpoints,
+    providerCapabilities: { email: isAutomationEmailProviderAvailable() },
     majors,
     admissionStatuses,
     admissionClasses,

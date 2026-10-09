@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
+import type { AutomationReassignmentPolicy } from "@admission-crm/shared/automation-reassignment-policy";
 
 let prisma: typeof import("../database/prisma.js")["prisma"];
 let createReassignmentMonitor: typeof import("../modules/automations/automation-reassignment.service.js")["createReassignmentMonitor"];
@@ -14,7 +15,7 @@ const assignmentIds: string[] = [];
 const ruleIds: string[] = [];
 let departmentId: string | null = null;
 
-const policy = {
+const policy: AutomationReassignmentPolicy = {
   enabled: true,
   interactionCriterion: "not_opened_since_assignment" as const,
   timeoutMinutes: 60,
@@ -37,6 +38,7 @@ async function cleanup() {
   }
   if (leadIds.length) {
     await prisma.automation_reassignment_monitors.deleteMany({ where: { lead_id: { in: leadIds } } });
+    await prisma.lead_notes.deleteMany({ where: { lead_id: { in: leadIds } } });
     await prisma.lead_activities.deleteMany({ where: { lead_id: { in: leadIds } } });
     await prisma.lead_assignments.deleteMany({ where: { lead_id: { in: leadIds } } });
     await prisma.leads.deleteMany({ where: { id: { in: leadIds } } });
@@ -55,6 +57,8 @@ async function main() {
   process.env.NODE_ENV = "integration";
   process.env.DISABLE_REDIS = "true";
   process.env.DISABLE_AUTOMATION_WORKER = "true";
+  delete process.env.AUTOMATION_EMAIL_PROVIDER_URL;
+  delete process.env.AUTOMATION_EMAIL_PROVIDER_TOKEN;
   ({ prisma } = await import("../database/prisma.js"));
   ({ createReassignmentMonitor, processReassignmentExpiry } = await import("../modules/automations/automation-reassignment.service.js"));
   ({ getAutomationOperationalMetrics } = await import("../modules/automations/automation-observability.service.js"));
@@ -205,7 +209,7 @@ async function main() {
   const warning = await createLeadWithMonitor(
     "warning",
     undefined,
-    { ...policy, warningEnabled: true, warningContent: "Lead {{system:fullName}} sắp được chuyển." },
+    { ...policy, warningEnabled: true, warningContent: "Lead {{system:fullName}} sắp được chuyển.", warningEmailEnabled: true },
     new Date(Date.now() - 45 * 60_000),
   );
   const { processReassignmentWarning } = await import("../modules/automations/automation-reassignment.service.js");
@@ -225,6 +229,72 @@ async function main() {
   });
   assert.ok(warningNotification.content?.includes(`Lead reassignment warning ${runId}`));
   assert.ok(!warningNotification.content?.includes("{{"), "Template token cảnh báo phải được render trước khi gửi.");
+
+  const secondWarning = await createLeadWithMonitor(
+    "second-warning",
+    undefined,
+    {
+      ...policy,
+      warningEnabled: true,
+      warningContent: "Cảnh báo lần một.",
+      secondWarningEnabled: true,
+      secondWarningBeforeMinutes: 10,
+      secondWarningContent: "Cảnh báo lần hai cho {{system:fullName}}.",
+    },
+    new Date(Date.now() - 55 * 60_000),
+  );
+  await processReassignmentWarning(secondWarning.monitor.id);
+  await Promise.all([
+    processReassignmentWarning(secondWarning.monitor.id, new Date(), "second"),
+    processReassignmentWarning(secondWarning.monitor.id, new Date(), "second"),
+  ]);
+  assert.equal(
+    await prisma.notifications.count({ where: { user_id: firstSale.id, type: "automation_reassignment_second_warning" } }),
+    1,
+    "Cảnh báo lần hai chạy đồng thời vẫn chỉ được gửi một lần.",
+  );
+  const secondWarningMonitor = await prisma.automation_reassignment_monitors.findUniqueOrThrow({ where: { id: secondWarning.monitor.id } });
+  assert.ok(secondWarningMonitor.second_warned_at, "Monitor phải lưu thời điểm gửi cảnh báo lần hai.");
+
+  const cared = await createLeadWithMonitor(
+    "cared",
+    undefined,
+    { ...policy, interactionCriterion: "no_care_activity_since_assignment" },
+  );
+  await prisma.lead_activities.create({
+    data: {
+      lead_id: cared.lead.id,
+      user_id: firstSale.id,
+      type: "call",
+      content: "Đã gọi chăm sóc Lead.",
+      metadata: { origin: "manual" },
+    },
+  });
+  await processReassignmentExpiry(cared.monitor.id);
+  const caredMonitor = await prisma.automation_reassignment_monitors.findUniqueOrThrow({ where: { id: cared.monitor.id } });
+  assert.equal(caredMonitor.status, "completed");
+  assert.equal(caredMonitor.completion_reason, "care_activity_recorded");
+  assert.equal((await prisma.leads.findUniqueOrThrow({ where: { id: cared.lead.id }, select: { assigned_to: true } })).assigned_to, firstSale.id);
+
+  const updated = await createLeadWithMonitor(
+    "updated",
+    undefined,
+    { ...policy, interactionCriterion: "no_data_update_since_assignment" },
+  );
+  await prisma.audit_logs.create({
+    data: {
+      user_id: firstSale.id,
+      entity_type: "lead_custom_field",
+      entity_id: updated.lead.id,
+      action: "update",
+      new_data: { fieldId: "integration-field" },
+    },
+  });
+  await processReassignmentExpiry(updated.monitor.id);
+  const updatedMonitor = await prisma.automation_reassignment_monitors.findUniqueOrThrow({ where: { id: updated.monitor.id } });
+  assert.equal(updatedMonitor.status, "completed");
+  assert.equal(updatedMonitor.completion_reason, "lead_data_updated");
+  assert.equal((await prisma.leads.findUniqueOrThrow({ where: { id: updated.lead.id }, select: { assigned_to: true } })).assigned_to, firstSale.id);
 
   const warningFailure = await createLeadWithMonitor("warning-failure");
   const { recordTerminalReassignmentJobFailure } = await import("../modules/automations/automation-reassignment-queue.service.js");

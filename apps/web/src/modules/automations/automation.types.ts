@@ -180,6 +180,7 @@ export type AutomationOptions = {
   majors: Array<{ id: string; name: string }>;
   admissionStatuses: Array<{ id: string; name: string; code: string | null }>;
   admissionClasses: Array<{ id: string; name: string; code: string | null }>;
+  providerCapabilities: { email: boolean };
   systemFieldOptions: Record<string, AutomationDataFieldOption[]>;
 };
 

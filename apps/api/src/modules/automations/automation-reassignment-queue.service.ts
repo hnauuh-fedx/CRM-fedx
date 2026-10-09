@@ -6,7 +6,7 @@ import { processReassignmentExpiry, processReassignmentWarning } from "./automat
 
 export type ReassignmentJobData = {
   monitorId: string;
-  kind: "warning" | "expiry";
+  kind: "warning" | "second_warning" | "expiry";
 };
 
 const DEFAULT_AUTOMATION_QUEUE_NAME = "automation_engine_queue";
@@ -51,11 +51,21 @@ async function addJob(data: ReassignmentJobData, runAt: Date) {
 export async function enqueueReassignmentMonitorJobs(monitorId: string) {
   const monitor = await prisma.automation_reassignment_monitors.findUnique({
     where: { id: monitorId },
-    select: { status: true, warning_due_at: true, warned_at: true, reassignment_due_at: true },
+    select: {
+      status: true,
+      warning_due_at: true,
+      warned_at: true,
+      second_warning_due_at: true,
+      second_warned_at: true,
+      reassignment_due_at: true,
+    },
   });
   if (!monitor || !["pending", "warned"].includes(monitor.status)) return false;
   if (monitor.warning_due_at && !monitor.warned_at && monitor.reassignment_due_at > new Date()) {
     await addJob({ monitorId, kind: "warning" }, monitor.warning_due_at);
+  }
+  if (monitor.second_warning_due_at && !monitor.second_warned_at && monitor.reassignment_due_at > new Date()) {
+    await addJob({ monitorId, kind: "second_warning" }, monitor.second_warning_due_at);
   }
   await addJob({ monitorId, kind: "expiry" }, monitor.reassignment_due_at);
   return true;
@@ -63,6 +73,7 @@ export async function enqueueReassignmentMonitorJobs(monitorId: string) {
 
 async function processJob(job: Job<ReassignmentJobData>) {
   if (job.data.kind === "warning") return processReassignmentWarning(job.data.monitorId);
+  if (job.data.kind === "second_warning") return processReassignmentWarning(job.data.monitorId, new Date(), "second");
   return processReassignmentExpiry(job.data.monitorId);
 }
 
@@ -88,6 +99,7 @@ export async function recoverDueReassignmentMonitors(now = new Date(), limit = 5
       status: { in: ["pending", "warned"] },
       OR: [
         { warning_due_at: { lte: now }, warned_at: null },
+        { second_warning_due_at: { lte: now }, second_warned_at: null },
         { reassignment_due_at: { lte: now } },
       ],
     },
@@ -109,10 +121,10 @@ if (reassignmentWorker) {
 }
 
 export async function recordTerminalReassignmentJobFailure(data: ReassignmentJobData, error: Error) {
-  if (data.kind === "warning") {
+  if (data.kind === "warning" || data.kind === "second_warning") {
     await prisma.automation_reassignment_monitors.updateMany({
       where: { id: data.monitorId, status: { in: ["pending", "warned"] } },
-      data: { last_error: `warning_job_failed: ${error.message}`, updated_at: new Date() },
+      data: { last_error: `${data.kind}_job_failed: ${error.message}`, updated_at: new Date() },
     });
     return;
   }

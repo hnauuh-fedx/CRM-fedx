@@ -265,7 +265,7 @@ export function validateRegisteredAutomationNode(node: AutomationNode): string[]
       if (typeof policy.enabled !== "boolean") {
         missing(`Node chia Lead ${node.id} phải xác định trạng thái bật chính sách chuyển sale.`);
       } else if (policy.enabled) {
-        if (policy.interactionCriterion !== "not_opened_since_assignment") {
+        if (!["not_opened_since_assignment", "no_care_activity_since_assignment", "no_data_update_since_assignment"].includes(String(policy.interactionCriterion))) {
           missing(`Node chia Lead ${node.id} dùng điều kiện chuyển sale chưa được hỗ trợ.`);
         }
         if (!isBoundedInteger(policy.timeoutMinutes, 1, 43_200)) {
@@ -286,6 +286,9 @@ export function validateRegisteredAutomationNode(node: AutomationNode): string[]
         if (!isBoundedInteger(policy.maxPoolCycles, 1, 100)) {
           missing(`Node chia Lead ${node.id} phải giới hạn số vòng chia lại từ 1 đến 100.`);
         }
+        if (policy.secondWarningEnabled !== undefined && typeof policy.secondWarningEnabled !== "boolean") {
+          missing(`Node chia Lead ${node.id} phải xác định trạng thái cảnh báo lần hai.`);
+        }
         if (typeof policy.warningEnabled !== "boolean") {
           missing(`Node chia Lead ${node.id} phải xác định trạng thái cảnh báo.`);
         } else if (policy.warningEnabled) {
@@ -297,6 +300,23 @@ export function validateRegisteredAutomationNode(node: AutomationNode): string[]
           if (!hasText(policy.warningContent)) {
             missing(`Node chia Lead ${node.id} phải có nội dung cảnh báo.`);
           }
+          if (policy.warningEmailEnabled !== undefined && typeof policy.warningEmailEnabled !== "boolean") {
+            missing(`Node chia Lead ${node.id} có cấu hình email cảnh báo không hợp lệ.`);
+          }
+          if (policy.secondWarningEnabled === true) {
+            if (!isBoundedInteger(policy.secondWarningBeforeMinutes, 1, 43_198)
+              || Number(policy.secondWarningBeforeMinutes) >= Number(policy.warningBeforeMinutes)) {
+              missing(`Node chia Lead ${node.id} phải đặt cảnh báo lần hai gần thời điểm chuyển sale hơn cảnh báo lần một.`);
+            }
+            if (!hasText(policy.secondWarningContent)) {
+              missing(`Node chia Lead ${node.id} phải có nội dung cảnh báo lần hai.`);
+            }
+            if (policy.secondWarningEmailEnabled !== undefined && typeof policy.secondWarningEmailEnabled !== "boolean") {
+              missing(`Node chia Lead ${node.id} có cấu hình email cảnh báo lần hai không hợp lệ.`);
+            }
+          }
+        } else if (policy.secondWarningEnabled === true) {
+          missing(`Node chia Lead ${node.id} phải bật cảnh báo lần một trước khi bật cảnh báo lần hai.`);
         }
         if (typeof policy.notifyOnRemoval !== "boolean") {
           missing(`Node chia Lead ${node.id} phải xác định có thông báo khi thu hồi hay không.`);

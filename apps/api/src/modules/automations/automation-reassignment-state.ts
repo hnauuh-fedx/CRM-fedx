@@ -38,13 +38,22 @@ export function planReassignmentCandidates(input: ReassignmentCandidatePlanInput
 
 export function buildReassignmentSchedule(
   assignedAt: Date,
-  policy: { timeoutMinutes: number; warningEnabled: boolean; warningBeforeMinutes: number },
+  policy: {
+    timeoutMinutes: number;
+    warningEnabled: boolean;
+    warningBeforeMinutes: number;
+    secondWarningEnabled?: boolean;
+    secondWarningBeforeMinutes?: number;
+  },
 ) {
   const reassignmentDueAt = new Date(assignedAt.getTime() + policy.timeoutMinutes * 60_000);
   return {
     warningDueAt: policy.warningEnabled
       ? new Date(reassignmentDueAt.getTime() - policy.warningBeforeMinutes * 60_000)
       : null,
+    ...(policy.secondWarningEnabled ? {
+      secondWarningDueAt: new Date(reassignmentDueAt.getTime() - (policy.secondWarningBeforeMinutes ?? 1) * 60_000),
+    } : {}),
     reassignmentDueAt,
   };
 }

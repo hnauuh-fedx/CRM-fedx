@@ -103,6 +103,7 @@ model audit_logs {
   @@index([entity_type, entity_id], map: "idx_audit_logs_entity")
   @@index([user_id], map: "idx_audit_logs_user_id")
   @@index([user_id, created_at, id], map: "idx_audit_logs_user_created_page")
+  @@index([entity_type, entity_id, user_id, created_at], map: "idx_audit_logs_entity_user_created")
 }
 
 model automation_jobs {
@@ -155,8 +156,10 @@ model automation_reassignment_monitors {
   institution_program_id String?   @db.Uuid
   status                 String    @default("pending") @db.VarChar(50)
   warning_due_at         DateTime? @db.Timestamp(6)
+  second_warning_due_at  DateTime? @db.Timestamp(6)
   reassignment_due_at    DateTime  @db.Timestamp(6)
   warned_at              DateTime? @db.Timestamp(6)
+  second_warned_at       DateTime? @db.Timestamp(6)
   claimed_at             DateTime? @db.Timestamp(6)
   processed_at           DateTime? @db.Timestamp(6)
   reassignment_count     Int       @default(0)
@@ -172,6 +175,7 @@ model automation_reassignment_monitors {
 
   @@unique([rule_id, node_id, assignment_id], map: "uq_automation_reassignment_rule_node_assignment")
   @@index([status, warning_due_at, id], map: "idx_automation_reassignment_warning_due")
+  @@index([status, second_warning_due_at, id], map: "idx_automation_reassignment_second_warning_due")
   @@index([status, reassignment_due_at, id], map: "idx_automation_reassignment_expiry_due")
   @@index([lead_id, status, id], map: "idx_automation_reassignment_lead_status")
   @@index([assignment_id], map: "idx_automation_reassignment_assignment")
@@ -571,6 +575,7 @@ model lead_activities {
   @@index([type, created_at, id], map: "idx_lead_activities_type_created_page")
   @@index([user_id], map: "idx_lead_activities_user_id")
   @@index([user_id, created_at, id], map: "idx_lead_activities_user_created_page")
+  @@index([lead_id, user_id, created_at], map: "idx_lead_activities_lead_user_created")
 }
 
 model lead_assignments {
@@ -604,6 +609,8 @@ model lead_notes {
   created_at DateTime? @default(now()) @db.Timestamp(6)
   leads      leads?    @relation(fields: [lead_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
   users      users?    @relation(fields: [user_id], references: [id], onDelete: NoAction, onUpdate: NoAction)
+
+  @@index([lead_id, user_id, created_at], map: "idx_lead_notes_lead_user_created")
 }
 
 model lead_sources {

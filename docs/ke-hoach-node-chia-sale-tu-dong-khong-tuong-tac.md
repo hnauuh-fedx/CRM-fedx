@@ -18,8 +18,8 @@ Node Chia Lead tự động gồm các nhóm:
    - Checkbox bật/tắt chính sách.
    - Tiêu chí tương tác dạng radio:
      - Không mở bản ghi kể từ thời điểm gán (V1).
-     - Không ghi chú/chăm sóc kể từ thời điểm gán (giai đoạn sau).
-     - Không cập nhật dữ liệu kể từ thời điểm gán (giai đoạn sau).
+     - Không ghi chú/chăm sóc kể từ thời điểm gán.
+     - Không cập nhật dữ liệu kể từ thời điểm gán.
    - Khoảng thời gian và đơn vị Phút/Giờ/Ngày.
 3. **Chính sách chia lại**
    - Gán cho nhân viên khác sau khi thu hồi.
@@ -30,7 +30,7 @@ Node Chia Lead tự động gồm các nhóm:
 4. **Cảnh báo**
    - Cảnh báo CRM lần một trước hạn thu hồi.
    - Nội dung hỗ trợ template token.
-   - Cảnh báo lần hai và email là phần mở rộng sau V1.
+   - Cảnh báo lần hai và email nội bộ khi provider khả dụng.
    - Thông báo cho Sale khi Lead bị thu hồi.
 
 Các trường con chỉ xuất hiện khi checkbox cha được bật. Form phải có nhãn hiển thị, mô tả ngắn, lỗi cạnh trường, điều khiển bàn phím và trạng thái disabled rõ ràng. Panel cấu hình mở rộng trên desktop và dùng bố cục phù hợp màn hình nhỏ.
@@ -157,10 +157,10 @@ Không dùng browser alert. Email chỉ hiển thị trong cấu hình khi provi
 
 ### Giai đoạn E — Mở rộng tương tác
 
-- [ ] Không ghi chú/chăm sóc kể từ lúc gán.
-- [ ] Không cập nhật dữ liệu kể từ lúc gán.
-- [ ] Cảnh báo lần hai.
-- [ ] Email khi provider thật khả dụng.
+- [x] Không ghi chú/chăm sóc kể từ lúc gán.
+- [x] Không cập nhật dữ liệu kể từ lúc gán.
+- [x] Cảnh báo lần hai.
+- [x] Email khi provider thật khả dụng.
 
 ## Tiêu chí nghiệm thu V1
 
@@ -187,7 +187,8 @@ Không dùng browser alert. Email chỉ hiển thị trong cấu hình khi provi
 ## Trạng thái
 
 - Ngày bắt đầu: 08/10/2026.
-- Trạng thái hiện tại: đã hoàn tất nền tảng Giai đoạn A, runtime Giai đoạn C và observability Giai đoạn D; contract/UI Giai đoạn B đã được mở để cấu hình chính sách.
-- Migration đã áp dụng vào PostgreSQL cục bộ; integration test open tracking và unit test validation policy đều đã đạt.
+- Trạng thái hiện tại: đã hoàn tất nền tảng Giai đoạn A, runtime Giai đoạn C, observability Giai đoạn D và mở rộng tương tác Giai đoạn E; contract/UI Giai đoạn B đã được mở để cấu hình chính sách.
+- Migration Giai đoạn E đã áp dụng vào PostgreSQL cục bộ; unit test policy/lịch cảnh báo và integration test chuyển Sale theo ba tiêu chí đều đã đạt.
 - Monitor được tạo cùng transaction phân công; warning/expiry job dùng BullMQ, có recovery scan và khóa chống xử lý trùng.
 - Trang giám sát hiển thị backlog và kết quả chuyển Sale theo đúng chương trình làm việc, kèm nhật ký lý do, Sale cũ/mới và độ trễ xử lý.
+- Cảnh báo lần một/lần hai dùng job độc lập, chống gửi trùng; email chỉ có thể bật khi API phát hiện provider email đã cấu hình.
