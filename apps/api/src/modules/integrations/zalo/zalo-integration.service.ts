@@ -4,10 +4,6 @@ import { env, gptApiKey } from "../../../config/env";
 import { prisma } from "../../../database/prisma";
 import type { AuthUser } from "../../auth/auth.types";
 import { triggerAutomation } from "../../automations/automation-engine.service";
-import { extractLeadInformation, mayContainLeadInformation, normalizeVietnamPhone } from "../shared/lead-extraction.service";
-import { decryptZaloSecret, encryptZaloSecret } from "./zalo-crypto";
-import { getZaloOaInfo, getZaloUserProfile, refreshZaloOaToken } from "./zalo-api.service";
-<<<<<<< HEAD
 import {
   extractLeadInformation,
   extractVietnamPhoneFromText,
@@ -15,9 +11,9 @@ import {
   normalizeVietnamPhone,
   resolveInboundLeadName,
   usedProfileNameFallback,
-} from "./zalo-extraction.service";
-=======
->>>>>>> origin/create-connect-meta-to-get-data-in-message
+} from "../shared/lead-extraction.service";
+import { decryptZaloSecret, encryptZaloSecret } from "./zalo-crypto";
+import { getZaloOaInfo, getZaloUserProfile, refreshZaloOaToken } from "./zalo-api.service";
 
 const refreshSafetyMs = 60 * 60 * 1000;
 const leadExtractionContextWindowMs = 15 * 60 * 1000;
