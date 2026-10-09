@@ -404,13 +404,14 @@ function ReassignmentObservabilitySection({ metrics, canViewLogs }: { metrics: A
               <div className="overflow-x-auto">
                 <Table>
                   <caption className="sr-only">Chỉ số tự động chuyển Sale theo chương trình</caption>
-                  <TableHeader className="bg-muted/55"><TableRow><TableHead className="min-w-48 px-5">Chương trình</TableHead><TableHead className="text-right">Chờ</TableHead><TableHead className="text-right">Cảnh báo</TableHead><TableHead className="text-right">Đã chuyển</TableHead><TableHead className="text-right">Lỗi</TableHead></TableRow></TableHeader>
+                  <TableHeader className="bg-muted/55"><TableRow><TableHead className="min-w-48 px-5">Chương trình</TableHead><TableHead className="text-right">Chờ</TableHead><TableHead className="text-right">Cảnh báo</TableHead><TableHead className="text-right">Đã chuyển</TableHead><TableHead className="text-right">Đã hủy</TableHead><TableHead className="text-right">Lỗi</TableHead></TableRow></TableHeader>
                   <TableBody>{reassignment.perProgram.map((program) => (
                     <TableRow key={program.institutionProgramId ?? "global"}>
                       <TableCell className="px-5 font-medium">{program.institutionProgramName}</TableCell>
                       <TableCell className="text-right tabular-nums">{program.pending}</TableCell>
                       <TableCell className="text-right tabular-nums">{program.warned}</TableCell>
                       <TableCell className="text-right tabular-nums">{program.reassigned}</TableCell>
+                      <TableCell className="text-right tabular-nums">{program.cancelled}</TableCell>
                       <TableCell className="text-right tabular-nums">{program.failed}</TableCell>
                     </TableRow>
                   ))}</TableBody>
