@@ -30,19 +30,22 @@ let limitedRoleId: string | null = null;
 let managedRoleId: string | null = null;
 let departmentId: string | null = null;
 let programId: string | null = null;
+let secondaryProgramId: string | null = null;
+let secondaryManagerRoleId: string | null = null;
 let originalOwnedOnlyScope: { name: string; description: string | null; isActive: boolean } | null = null;
 const createdPermissionIds: string[] = [];
 
 async function request(
   baseUrl: string,
   path: string,
-  options: { token?: string; method?: string; body?: JsonRecord } = {},
+  options: { token?: string; method?: string; body?: JsonRecord; programId?: string } = {},
 ) {
   const response = await fetch(`${baseUrl}${path}`, {
     method: options.method ?? "GET",
     headers: {
       "Content-Type": "application/json",
       ...(options.token ? { Authorization: `Bearer ${options.token}` } : {}),
+      ...(options.programId ? { "X-Institution-Program-Id": options.programId } : {}),
     },
     body: options.body ? JSON.stringify(options.body) : undefined,
   });
@@ -65,12 +68,22 @@ async function preparePrincipal() {
   await ensureAccessScopes();
   const permissionIds = await ensurePermissions(["user.manage", "role.manage", "department.manage"]);
   const program = await prisma.institution_programs.findFirst({
-    where: { status: "active", institutions: { is: { status: "active" } } },
-    select: { id: true },
+    where: { status: "active" },
+    select: { id: true, institution_name: true },
     orderBy: { created_at: "asc" },
   });
   assert.ok(program, "An active institution program is required for role access integration tests.");
   programId = program.id;
+  const secondaryProgram = await prisma.institution_programs.create({
+    data: {
+      institution_name: program.institution_name,
+      name: `Integration secondary program ${runId}`,
+      code: `INT-SECONDARY-${runId}`,
+      status: "active",
+    },
+    select: { id: true },
+  });
+  secondaryProgramId = secondaryProgram.id;
 
   const managerRole = await prisma.roles.create({
     data: {
@@ -87,8 +100,11 @@ async function preparePrincipal() {
   await prisma.role_access_scopes.create({
     data: { role_id: managerRole.id, scope_code: "ALL" },
   });
-  await prisma.role_institution_programs.create({
-    data: { role_id: managerRole.id, institution_program_id: program.id },
+  await prisma.role_institution_programs.createMany({
+    data: [program.id, secondaryProgram.id].map((institutionProgramId) => ({
+      role_id: managerRole.id,
+      institution_program_id: institutionProgramId,
+    })),
   });
 
   const limitedRole = await prisma.roles.create({
@@ -105,6 +121,18 @@ async function preparePrincipal() {
   });
   await prisma.role_institution_programs.create({
     data: { role_id: limitedRole.id, institution_program_id: program.id },
+  });
+  const secondaryManagerRole = await prisma.roles.create({
+    data: { code: `INTEGRATION_SECONDARY_${runId}`, name: "Integration Secondary Manager" },
+    select: { id: true },
+  });
+  secondaryManagerRoleId = secondaryManagerRole.id;
+  await prisma.role_permissions.create({
+    data: { role_id: secondaryManagerRole.id, permission_id: permissionIds.get("user.manage")! },
+  });
+  await prisma.role_access_scopes.create({ data: { role_id: secondaryManagerRole.id, scope_code: "READ_ONLY" } });
+  await prisma.role_institution_programs.create({
+    data: { role_id: secondaryManagerRole.id, institution_program_id: secondaryProgram.id },
   });
 
   const [managerUser, limitedUser] = await Promise.all([
@@ -133,6 +161,7 @@ async function preparePrincipal() {
     data: [
       { user_id: managerUser.id, role_id: managerRole.id },
       { user_id: limitedUser.id, role_id: limitedRole.id },
+      { user_id: limitedUser.id, role_id: secondaryManagerRole.id },
     ],
   });
   await prisma.user_access_scopes.createMany({
@@ -263,13 +292,14 @@ async function verifyUserRoleScopeManagement() {
 
   assert.equal((await request(baseUrl, "/users")).status, 401);
   const limitedLogin = await login(baseUrl, limitedEmail, limitedPassword);
-  assert.equal((await request(baseUrl, "/users", { token: limitedLogin.accessToken as string })).status, 403);
+  assert.equal((await request(baseUrl, "/users", { token: limitedLogin.accessToken as string, programId: programId! })).status, 403);
+  assert.equal((await request(baseUrl, "/users", { token: limitedLogin.accessToken as string, programId: secondaryProgramId! })).status, 200);
 
   const managerLogin = await login(baseUrl, managerEmail, managerPassword);
   const managerToken = managerLogin.accessToken as string;
   const managerUser = managerLogin.user as { accessScope: AccessScope; permissions: string[]; institutionProgramIds: string[] };
   assert.equal(managerUser.accessScope, "ALL");
-  assert.deepEqual(managerUser.institutionProgramIds, [programId]);
+  assert.deepEqual(managerUser.institutionProgramIds, [programId, secondaryProgramId].sort());
   assert.ok(managerUser.permissions.includes("user.manage"));
   assert.ok(managerUser.permissions.includes("role.manage"));
 
@@ -412,6 +442,14 @@ async function verifyUserRoleScopeManagement() {
   assert.equal(createUser.status, 201);
   managedUserId = createUser.payload.id as string;
 
+  const crossProgramUsers = await request(
+    baseUrl,
+    `/users?page=1&limit=20&search=${encodeURIComponent("Integration Managed User")}`,
+    { token: managerToken, programId: secondaryProgramId! },
+  );
+  assert.equal(crossProgramUsers.status, 200);
+  assert.equal((crossProgramUsers.payload.data as Array<{ id: string }>).some((user) => user.id === managedUserId), false);
+
   assert.equal(
     (await request(baseUrl, "/users", {
       token: managerToken,
@@ -526,7 +564,7 @@ async function cleanup() {
   }
 
   const userIds = [managerUserId, limitedUserId, managedUserId].flatMap((id) => (id ? [id] : []));
-  const roleIds = [managerRoleId, limitedRoleId, managedRoleId].flatMap((id) => (id ? [id] : []));
+  const roleIds = [managerRoleId, limitedRoleId, managedRoleId, secondaryManagerRoleId].flatMap((id) => (id ? [id] : []));
   const departmentIds = departmentId ? [departmentId] : [];
 
   await prisma.$transaction([
@@ -555,6 +593,7 @@ async function cleanup() {
     prisma.role_permissions.deleteMany({ where: { role_id: { in: roleIds } } }),
     prisma.roles.deleteMany({ where: { id: { in: roleIds } } }),
     prisma.permissions.deleteMany({ where: { id: { in: createdPermissionIds } } }),
+    prisma.institution_programs.deleteMany({ where: { id: { in: secondaryProgramId ? [secondaryProgramId] : [] } } }),
   ]);
 }
 

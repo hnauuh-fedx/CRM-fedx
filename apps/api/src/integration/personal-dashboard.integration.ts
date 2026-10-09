@@ -36,7 +36,7 @@ async function main() {
     institutionProgramIds: [program.id],
     accessScope: "ALL",
   };
-  let conversionLeadId: string | null = null;
+  let conversionLeadIds: string[] = [];
   let conversionSourceId: string | null = null;
 
   try {
@@ -49,6 +49,7 @@ async function main() {
       { id: randomUUID(), type: "TREND" as const, datasetKey: "LEADS" as const, comparisonPeriod: "WEEK" as const, conditions: [] },
     ];
     let conversionWidgetId: string | null = null;
+    let stageThresholdWidgetId: string | null = null;
     if (sourceStage && targetStage) {
       const conversionSource = await prisma.lead_sources.create({
         data: { name: `Dashboard conversion source ${suffix}`, institution_program_id: program.id, type: "integration-test" },
@@ -65,11 +66,21 @@ async function main() {
           owner_id: owner.id,
         },
       });
-      conversionLeadId = conversionLead.id;
-      await prisma.lead_status_histories.create({
-        data: { lead_id: conversionLead.id, from_stage_id: sourceStage.id, to_stage_id: targetStage.id, changed_by: owner.id },
+      conversionLeadIds.push(conversionLead.id);
+      const sourceLead = await prisma.leads.create({
+        data: {
+          lead_code: `DASH-SOURCE-${suffix}`,
+          full_name: "Dashboard source-stage test lead",
+          phone: `S${Date.now()}`,
+          source_id: conversionSource.id,
+          institution_program_id: program.id,
+          pipeline_stage_id: sourceStage.id,
+          owner_id: owner.id,
+        },
       });
+      conversionLeadIds.push(sourceLead.id);
       conversionWidgetId = randomUUID();
+      stageThresholdWidgetId = randomUUID();
       kpiWidgets.push({
         id: conversionWidgetId,
         type: "CONVERSION",
@@ -77,6 +88,15 @@ async function main() {
         sourceStageId: sourceStage.id,
         targetStageId: targetStage.id,
         conditions: [{ fieldKey: "SOURCE", operator: "EQUALS", value: conversionSource.name }],
+      });
+      kpiWidgets.push({
+        id: stageThresholdWidgetId,
+        type: "COUNT",
+        datasetKey: "LEADS",
+        conditions: [
+          { fieldKey: "SOURCE", operator: "EQUALS", value: conversionSource.name },
+          { fieldKey: "PIPELINE_STAGE", operator: "GREATER_THAN_OR_EQUAL", value: sourceStage.id },
+        ],
       });
     }
     assert.equal(await updatePersonalDashboardConfig(authUser, program.id, [ownReport.id], { columnCount: 6, kpiWidgets }), null, "KhÃ´ng Ä‘Æ°á»£c lÆ°u quÃ¡ 5 cá»™t.");
@@ -95,8 +115,18 @@ async function main() {
     assert.equal(dashboard?.kpiWidgets[1]?.trend?.previousLabel, "tuần trước");
     if (sourceStage && targetStage && conversionWidgetId) {
       const conversionWidget = dashboard?.kpiWidgets.find((widget) => widget.id === conversionWidgetId);
-      assert.equal(conversionWidget?.format, "PERCENT");
-      assert.equal(conversionWidget?.value, 100, "Phải tính from_stage_id là tiến trình nguồn đã đạt.");
+      assert.equal(conversionWidget?.format, "NUMBER");
+      assert.equal(conversionWidget?.value, 1, "Giá trị chính phải là số lead hiện tại đạt từ stage đích trở đi.");
+      const conversionDetails = (conversionWidget && "conversion" in conversionWidget ? conversionWidget.conversion : undefined) as {
+        sourceTotal: number;
+        targetTotal: number;
+        percentage: number;
+      } | undefined;
+      assert.equal(conversionDetails?.sourceTotal, 2);
+      assert.equal(conversionDetails?.targetTotal, 1);
+      assert.equal(conversionDetails?.percentage, 50, "Tỷ lệ phải lấy số đạt đích chia cho số đạt từ stage nguồn trở đi.");
+      const stageThresholdWidget = dashboard?.kpiWidgets.find((widget) => widget.id === stageThresholdWidgetId);
+      assert.equal(stageThresholdWidget?.value, 2, "Lead ở giai đoạn nguồn và cao hơn phải được tính trong bộ lọc từ giai đoạn nguồn trở đi.");
     }
     console.log("Personal dashboard integration passed: ownership, scope, configurable KPI and widget execution.");
   } finally {
@@ -104,7 +134,7 @@ async function main() {
     await prisma.personal_dashboard_settings.deleteMany({ where: { user_id: owner.id } });
     await prisma.audit_logs.deleteMany({ where: { user_id: owner.id } });
     await prisma.personal_reports.deleteMany({ where: { id: { in: [ownReport.id, privateReport.id] } } });
-    if (conversionLeadId) await prisma.leads.deleteMany({ where: { id: conversionLeadId } });
+    if (conversionLeadIds.length > 0) await prisma.leads.deleteMany({ where: { id: { in: conversionLeadIds } } });
     if (conversionSourceId) await prisma.lead_sources.deleteMany({ where: { id: conversionSourceId } });
     await prisma.users.deleteMany({ where: { id: { in: [owner.id, other.id] } } });
     await prisma.$disconnect();
