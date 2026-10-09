@@ -1,5 +1,7 @@
 import { useMemo, useState } from "react";
-import { useQuery } from "@tanstack/react-query";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { useForm } from "react-hook-form";
+import { leadSourceInputSchema, type LeadSourceInput } from "@admission-crm/shared/lead-source";
 import {
   flexRender,
   getCoreRowModel,
@@ -9,7 +11,7 @@ import {
   type Table as DataTable,
   useReactTable,
 } from "@tanstack/react-table";
-import { ArrowDown, ArrowUp, ArrowUpDown, ChevronLeft, ChevronRight, Search } from "lucide-react";
+import { ArrowDown, ArrowUp, ArrowUpDown, ChevronLeft, ChevronRight, Plus, Search } from "lucide-react";
 
 import { EmptyState } from "@/components/shared/data-states";
 import { AutoFilterActions } from "@/components/shared/auto-filter-actions";
@@ -18,12 +20,15 @@ import { FilterSelect } from "@/components/shared/filter-select";
 import { PageHeader } from "@/components/shared/page-header";
 import { TableLoadingState } from "@/components/shared/table-loading-state";
 import { Button } from "@/components/ui/button";
+import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
-import { Field, FieldGroup, FieldLabel } from "@/components/ui/field";
+import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
+import { Field, FieldError, FieldGroup, FieldLabel } from "@/components/ui/field";
 import { Input } from "@/components/ui/input";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { useAuth } from "@/modules/auth/auth-context";
-import { getLeadSourceFilterOptions, getLeadSources } from "@/services/marketing-reference.service";
+import { useInstitutionProgram } from "@/modules/institutions/institution-program-context";
+import { createLeadSource, getLeadSourceFilterOptions, getLeadSources } from "@/services/marketing-reference.service";
 import type {
   LeadSourceFilterOptions,
   LeadSourceFilters,
@@ -42,24 +47,33 @@ function formatDate(value: string | null) {
 }
 
 export function LeadSourcesPage() {
+  const { selectedProgramId } = useInstitutionProgram();
+  return <ProgramLeadSourcesPage key={selectedProgramId ?? "no-program"} />;
+}
+
+function ProgramLeadSourcesPage() {
   const auth = useAuth();
+  const { selectedProgramId, hasSelectedProgram } = useInstitutionProgram();
   const [page, setPage] = useState(1);
   const [draftFilters, setDraftFilters] = useState(emptyFilters);
   const [filters, setFilters] = useState(emptyFilters);
   const [sorting, setSorting] = useState<SortingState>([{ id: "createdAt", desc: true }]);
+  const [createdSourceName, setCreatedSourceName] = useState<string | null>(null);
   const selectedSort = sorting[0] ?? { id: "createdAt", desc: true };
   const sortBy = sortableColumns.has(selectedSort.id as LeadSourceSortField)
     ? (selectedSort.id as LeadSourceSortField)
     : "createdAt";
   const sortOrder = selectedSort.desc ? "desc" : "asc";
   const listQuery = useQuery({
-    queryKey: ["lead-sources", "list", page, pageSize, sortBy, sortOrder, filters],
-    queryFn: () => getLeadSources({ page, limit: pageSize, sortBy, sortOrder, ...filters }, auth.accessToken!),
+    queryKey: ["lead-sources", selectedProgramId, "list", page, pageSize, sortBy, sortOrder, filters],
+    queryFn: () => getLeadSources({ page, limit: pageSize, sortBy, sortOrder, ...filters }, auth.accessToken!, selectedProgramId!),
     placeholderData: (previousData) => previousData,
+    enabled: hasSelectedProgram && !!auth.accessToken,
   });
   const optionsQuery = useQuery({
-    queryKey: ["lead-sources", "options"],
-    queryFn: () => getLeadSourceFilterOptions(auth.accessToken!),
+    queryKey: ["lead-sources", selectedProgramId, "options"],
+    queryFn: () => getLeadSourceFilterOptions(auth.accessToken!, selectedProgramId!),
+    enabled: hasSelectedProgram && !!auth.accessToken,
   });
   const data = listQuery.data?.data ?? [];
   const table = useReactTable({
@@ -83,9 +97,19 @@ export function LeadSourcesPage() {
       <PageHeader
         eyebrow="CRM Marketing"
         title="Nguồn lead"
-        scopeLabel="Toàn hệ thống"
-        description="Theo dõi các nguồn phát sinh lead và số lead đang hoạt động theo từng nguồn."
+        scopeLabel="Theo chương trình"
+        description="Theo dõi nguồn lead và số lead đang hoạt động của chương trình đang làm việc."
+        actions={(auth.can("lead_source.manage") || auth.can("system.manage")) && hasSelectedProgram ? (
+          <CreateLeadSourceDialog programId={selectedProgramId!} onCreated={(name) => {
+            setCreatedSourceName(name);
+            setDraftFilters(emptyFilters);
+            setFilters(emptyFilters);
+            setPage(1);
+            setSorting([{ id: "createdAt", desc: true }]);
+          }} />
+        ) : undefined}
       />
+      {createdSourceName && <p role="status" className="text-sm text-muted-foreground">Đã thêm nguồn “{createdSourceName}”.</p>}
       <LeadSourceFilters
         filters={draftFilters}
         options={optionsQuery.data}
@@ -116,12 +140,74 @@ export function LeadSourcesPage() {
   );
 }
 
+function CreateLeadSourceDialog({ programId, onCreated }: { programId: string; onCreated: (name: string) => void }) {
+  const auth = useAuth();
+  const { programs } = useInstitutionProgram();
+  const program = programs.find((item) => item.id === programId);
+  const queryClient = useQueryClient();
+  const [open, setOpen] = useState(false);
+  const form = useForm<LeadSourceInput>({ defaultValues: { name: "" } });
+  const mutation = useMutation({
+    mutationFn: (input: LeadSourceInput) => createLeadSource(input, auth.accessToken!, programId),
+    onSuccess: (_result, input) => {
+      setOpen(false);
+      onCreated(input.name);
+      void queryClient.invalidateQueries({ queryKey: ["lead-sources", programId] });
+      void queryClient.invalidateQueries({ queryKey: ["leads", "action-options"] });
+      void queryClient.invalidateQueries({ queryKey: ["leads", "options"] });
+    },
+  });
+  return (
+    <Dialog open={open} onOpenChange={(nextOpen) => {
+      if (mutation.isPending) return;
+      if (nextOpen) {
+        form.reset({ name: "" });
+        mutation.reset();
+      }
+      setOpen(nextOpen);
+    }}>
+      <DialogTrigger asChild><Button type="button"><Plus data-icon="inline-start" aria-hidden="true" />Thêm nguồn</Button></DialogTrigger>
+      <DialogContent className="max-h-[90dvh] overflow-y-auto" showCloseButton={!mutation.isPending}>
+        <DialogHeader>
+          <DialogTitle>Thêm nguồn lead</DialogTitle>
+          <DialogDescription>Nguồn mới thuộc chương trình {program ? `${program.institutionName} - ${program.name}` : "đang làm việc"}.</DialogDescription>
+        </DialogHeader>
+        <form noValidate className="flex flex-col gap-5" onSubmit={form.handleSubmit((values) => {
+          if (mutation.isPending) return;
+          form.clearErrors();
+          const parsed = leadSourceInputSchema.safeParse(values);
+          if (!parsed.success) {
+            parsed.error.issues.forEach((issue) => form.setError(issue.path[0] as keyof LeadSourceInput, { message: issue.message }));
+            const firstField = parsed.error.issues[0]?.path[0];
+            if (firstField === "name") form.setFocus(firstField);
+            return;
+          }
+          mutation.mutate(parsed.data);
+        })}>
+          {mutation.error && <Alert variant="destructive"><AlertDescription>{mutation.error.message}</AlertDescription></Alert>}
+          <FieldGroup>
+            <Field data-invalid={Boolean(form.formState.errors.name)} data-disabled={mutation.isPending}>
+              <FieldLabel htmlFor="lead-source-name">Tên nguồn *</FieldLabel>
+              <Input id="lead-source-name" placeholder="Ví dụ: Facebook Ads" maxLength={150} aria-required="true" aria-invalid={Boolean(form.formState.errors.name)} aria-describedby={form.formState.errors.name ? "lead-source-name-error" : undefined} disabled={mutation.isPending} {...form.register("name")} />
+              <FieldError id="lead-source-name-error" errors={[form.formState.errors.name]} />
+            </Field>
+          </FieldGroup>
+          <DialogFooter>
+            <Button type="button" variant="outline" disabled={mutation.isPending} onClick={() => setOpen(false)}>Hủy</Button>
+            <Button type="submit" disabled={mutation.isPending}>{mutation.isPending ? "Đang lưu…" : "Lưu nguồn"}</Button>
+          </DialogFooter>
+        </form>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
 function useColumns() {
   return useMemo<ColumnDef<LeadSourceItem>[]>(
     () => [
       { accessorKey: "name", header: "Nguồn lead", cell: ({ row }) => <span className="font-medium">{row.original.name}</span> },
       { accessorKey: "type", header: "Loại", cell: ({ row }) => row.original.type ?? "-" },
-      { id: "institutionProgram", header: "Chương trình", enableSorting: false, cell: ({ row }) => row.original.institutionProgram ? `${row.original.institutionProgram.institutionName} / ${row.original.institutionProgram.name}` : "Dùng chung" },
+      { id: "institutionProgram", header: "Chương trình", enableSorting: false, cell: ({ row }) => row.original.institutionProgram ? `${row.original.institutionProgram.institutionName} / ${row.original.institutionProgram.name}` : "Chưa gán chương trình" },
       { accessorKey: "activeLeadCount", header: "Lead đang hoạt động", enableSorting: false },
       { accessorKey: "createdAt", header: "Ngày tạo", cell: ({ row }) => formatDate(row.original.createdAt) },
     ],

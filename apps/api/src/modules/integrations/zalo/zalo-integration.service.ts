@@ -108,8 +108,9 @@ export async function getZaloConnectionOptions(user: AuthUser) {
   const [leadSources, programs] = await prisma.$transaction([
     prisma.lead_sources.findMany({
       where: {
+        institution_program_id: { not: null },
         ...(user.institutionProgramIds.length > 0 && user.accessScope !== "ALL"
-          ? { OR: [{ institution_program_id: null }, { institution_program_id: { in: user.institutionProgramIds } }] }
+          ? { institution_program_id: { in: user.institutionProgramIds } }
           : {}),
       },
       select: { id: true, name: true, type: true, institution_program_id: true },
@@ -157,7 +158,7 @@ export async function saveManualZaloConnection(user: AuthUser, input: SaveZaloCo
     && !user.institutionProgramIds.includes(input.institutionProgramId)) {
     throw new Error("Bạn không có phạm vi quản lý chương trình tuyển sinh này.");
   }
-  if (source.institution_program_id && source.institution_program_id !== input.institutionProgramId) {
+  if (source.institution_program_id !== input.institutionProgramId) {
     throw new Error("Nguồn lead không thuộc chương trình tuyển sinh đã chọn.");
   }
 

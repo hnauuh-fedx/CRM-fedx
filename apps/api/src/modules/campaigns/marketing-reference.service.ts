@@ -1,4 +1,6 @@
 import { prisma } from "../../database/prisma";
+import type { LeadSourceInput } from "@admission-crm/shared/lead-source";
+import type { AuthUser } from "../auth/auth.types";
 import type { CampaignViewer } from "./campaign-list.service";
 import { getCampaignVisibilityWhere } from "./campaign-list.service";
 
@@ -7,7 +9,7 @@ export type LeadSourceListQuery = {
   limit: number;
   search?: string;
   type?: string;
-  institutionProgramId?: string;
+  institutionProgramId: string;
   sortBy: "createdAt" | "name" | "type";
   sortOrder: "asc" | "desc";
 };
@@ -61,6 +63,29 @@ const formSortFields = {
   status: "status",
 } as const;
 
+export async function createLeadSource(actor: AuthUser, input: LeadSourceInput, institutionProgramId: string, ipAddress?: string) {
+  const program = await prisma.institution_programs.findFirst({
+    where: { id: institutionProgramId, status: "active" },
+    select: { id: true },
+  });
+  if (!program) return { ok: false as const, reason: "program_not_found" as const };
+  return prisma.$transaction(async (tx) => {
+    const source = await tx.lead_sources.create({
+      data: { name: input.name, type: null, institution_program_id: institutionProgramId },
+      select: { id: true, name: true, type: true, created_at: true },
+    });
+    await tx.audit_logs.create({ data: {
+      user_id: actor.id,
+      entity_type: "lead_source",
+      entity_id: source.id,
+      action: "create",
+      ip_address: ipAddress,
+      new_data: { name: source.name, type: source.type, institutionProgramId },
+    } });
+    return { ok: true as const, data: { id: source.id, name: source.name, type: source.type, institutionProgramId, createdAt: source.created_at?.toISOString() ?? null } };
+  });
+}
+
 export async function listLeadSources(query: LeadSourceListQuery) {
   const where = {
     AND: [
@@ -75,9 +100,7 @@ export async function listLeadSources(query: LeadSourceListQuery) {
           ]
         : []),
       ...(query.type ? [{ type: query.type }] : []),
-      ...(query.institutionProgramId
-        ? [{ OR: [{ institution_program_id: query.institutionProgramId }, { institution_program_id: null }] }]
-        : []),
+      { institution_program_id: query.institutionProgramId },
     ],
   };
   const [items, total] = await prisma.$transaction([
@@ -89,7 +112,7 @@ export async function listLeadSources(query: LeadSourceListQuery) {
         type: true,
         created_at: true,
         institution_programs: { select: { id: true, name: true, institution_name: true } },
-        _count: { select: { leads: { where: { deleted_at: null } } } },
+        _count: { select: { leads: { where: { deleted_at: null, institution_program_id: query.institutionProgramId } } } },
       },
       orderBy: [{ [leadSourceSortFields[query.sortBy]]: query.sortOrder }, { id: "asc" }],
       skip: (query.page - 1) * query.limit,
@@ -115,10 +138,10 @@ export async function listLeadSources(query: LeadSourceListQuery) {
   };
 }
 
-export async function getLeadSourceFilterOptions() {
+export async function getLeadSourceFilterOptions(institutionProgramId: string) {
   const [types, institutionPrograms] = await prisma.$transaction([
-    prisma.lead_sources.findMany({ select: { type: true }, distinct: ["type"], take: 100 }),
-    prisma.institution_programs.findMany({ where: { status: "active" }, select: { id: true, name: true, institution_name: true }, orderBy: { name: "asc" } }),
+    prisma.lead_sources.findMany({ where: { institution_program_id: institutionProgramId }, select: { type: true }, distinct: ["type"], take: 100 }),
+    prisma.institution_programs.findMany({ where: { id: institutionProgramId, status: "active" }, select: { id: true, name: true, institution_name: true }, orderBy: { name: "asc" } }),
   ]);
   return {
     types: types.flatMap((source) => (source.type ? [source.type] : [])).sort(),

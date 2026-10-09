@@ -5,6 +5,7 @@ import type {
   LeadSourceSortField,
   MarketingFormFilterOptions,
   MarketingFormFilters,
+  MarketingFormItem,
   MarketingFormListResponse,
   MarketingFormInput,
   MarketingFormSortField,
@@ -19,6 +20,7 @@ import type {
   UtmTrackingSortField,
 } from "@/modules/marketing/marketing-reference.types";
 import { apiRequest } from "./api";
+import type { LeadSourceInput } from "@admission-crm/shared/lead-source";
 import { saveRuntimeCustomFields } from "./custom-field.service";
 
 type LeadSourceParams = {
@@ -53,7 +55,7 @@ type MarketingFormParams = {
   sortOrder: "asc" | "desc";
 } & MarketingFormFilters;
 
-export function getLeadSources(params: LeadSourceParams, accessToken: string) {
+export function getLeadSources(params: LeadSourceParams, accessToken: string, institutionProgramId?: string) {
   const query = new URLSearchParams({
     page: String(params.page),
     limit: String(params.limit),
@@ -62,11 +64,23 @@ export function getLeadSources(params: LeadSourceParams, accessToken: string) {
     search: params.search,
     type: params.type,
   });
-  return apiRequest<LeadSourceListResponse>(`/lead-sources?${query.toString()}`, {}, accessToken);
+  return apiRequest<LeadSourceListResponse>(`/lead-sources?${query.toString()}`, {
+    headers: institutionProgramId ? { "X-Institution-Program-Id": institutionProgramId } : undefined,
+  }, accessToken);
 }
 
-export function getLeadSourceFilterOptions(accessToken: string) {
-  return apiRequest<LeadSourceFilterOptions>("/lead-sources/options", {}, accessToken);
+export function getLeadSourceFilterOptions(accessToken: string, institutionProgramId?: string) {
+  return apiRequest<LeadSourceFilterOptions>("/lead-sources/options", {
+    headers: institutionProgramId ? { "X-Institution-Program-Id": institutionProgramId } : undefined,
+  }, accessToken);
+}
+
+export function createLeadSource(input: LeadSourceInput, accessToken: string, institutionProgramId: string) {
+  return apiRequest<{ id: string }>("/lead-sources", {
+    method: "POST",
+    headers: { "X-Institution-Program-Id": institutionProgramId },
+    body: JSON.stringify(input),
+  }, accessToken);
 }
 
 export function getUtmTrackings(params: UtmTrackingParams, accessToken: string) {

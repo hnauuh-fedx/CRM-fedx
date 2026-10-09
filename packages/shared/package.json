@@ -3,6 +3,10 @@
   "private": true,
   "type": "module",
   "exports": {
-    "./lead-form-field-catalog": "./src/lead-form-field-catalog.ts"
+    "./lead-form-field-catalog": "./src/lead-form-field-catalog.ts",
+    "./lead-source": "./src/lead-source.ts"
+  },
+  "dependencies": {
+    "zod": "4.4.3"
   }
 }

@@ -70,6 +70,7 @@ export function InstitutionProgramsManagementPage() {
   function refresh() {
     setDialog(null);
     void queryClient.invalidateQueries({ queryKey: ["institution-programs"] });
+    void queryClient.invalidateQueries({ queryKey: ["roles", "management", "options"] });
     void queryClient.invalidateQueries({ queryKey: ["leads"] });
     void queryClient.invalidateQueries({ queryKey: ["admissions"] });
     void queryClient.invalidateQueries({ queryKey: ["students"] });

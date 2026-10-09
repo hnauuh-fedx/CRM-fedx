@@ -29,6 +29,17 @@ function normalizeRoleCode(code: string) {
   return code.trim().toUpperCase().replace(/[^A-Z0-9_]/g, "_");
 }
 
+export function getRoleAssignableProgramWhere(
+  actor: Pick<AuthUser, "permissions" | "institutionProgramIds">,
+): Prisma.institution_programsWhereInput {
+  return {
+    status: "active",
+    ...(actor.permissions.includes("institution_program.manage")
+      ? {}
+      : { id: { in: actor.institutionProgramIds } }),
+  };
+}
+
 async function getRoleScopeMap(roleIds: string[]) {
   if (roleIds.length === 0) return new Map<string, AccessScopeCode>();
   await ensureAccessScopeCatalog();
@@ -128,10 +139,7 @@ export async function getRoleManagementOptions(actor: AuthUser) {
     }),
     listAccessScopes(),
     prisma.institution_programs.findMany({
-      where: {
-        id: { in: actor.institutionProgramIds },
-        status: "active",
-      },
+      where: getRoleAssignableProgramWhere(actor),
       select: { id: true, code: true, name: true, institution_name: true },
       orderBy: [{ institution_name: "asc" }, { name: "asc" }],
     }),
@@ -173,7 +181,7 @@ export async function listAccessScopes() {
 }
 
 export async function createRole(actor: AuthUser, input: RoleInput, ipAddress?: string) {
-  const validation = await validateRoleInput(input, actor.institutionProgramIds);
+  const validation = await validateRoleInput(input, actor);
   if (!validation.ok) return validation;
   const code = normalizeRoleCode(input.code);
   if (await prisma.roles.findUnique({ where: { code }, select: { id: true } })) {
@@ -215,7 +223,7 @@ export async function createRole(actor: AuthUser, input: RoleInput, ipAddress?: 
 }
 
 export async function updateRole(actor: AuthUser, roleId: string, input: RoleInput, institutionProgramId: string, ipAddress?: string) {
-  const validation = await validateRoleInput(input, actor.institutionProgramIds);
+  const validation = await validateRoleInput(input, actor);
   if (!validation.ok) return validation;
   const code = normalizeRoleCode(input.code);
   const existing = await prisma.roles.findUnique({
@@ -338,7 +346,7 @@ export async function updateAccessScope(actor: AuthUser, code: AccessScopeCode, 
   return { ok: true as const, data: { code } };
 }
 
-async function validateRoleInput(input: RoleInput, accessibleProgramIds: string[]) {
+async function validateRoleInput(input: RoleInput, actor: AuthUser) {
   await ensureAccessScopeCatalog();
   const permissionIds = unique(input.permissionIds);
   const programIds = unique(input.programIds);
@@ -350,11 +358,13 @@ async function validateRoleInput(input: RoleInput, accessibleProgramIds: string[
   const permissionCount = await prisma.permissions.count({ where: { id: { in: permissionIds }, is_active: true } });
   if (permissionCount !== permissionIds.length) return { ok: false as const, reason: "permission_not_found" as const };
   if (programIds.length === 0) return { ok: false as const, reason: "program_required" as const };
-  if (programIds.some((programId) => !accessibleProgramIds.includes(programId))) {
-    return { ok: false as const, reason: "program_not_found" as const };
-  }
   const programCount = await prisma.institution_programs.count({
-    where: { id: { in: programIds }, status: "active" },
+    where: {
+      AND: [
+        getRoleAssignableProgramWhere(actor),
+        { id: { in: programIds } },
+      ],
+    },
   });
   if (programCount !== programIds.length) return { ok: false as const, reason: "program_not_found" as const };
   return { ok: true as const, permissionIds, programIds };

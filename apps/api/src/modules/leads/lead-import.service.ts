@@ -211,7 +211,7 @@ function validateRequiredHeaders(headers: string[], hasScopedInstitutionProgram:
 async function getReferenceMaps(scopedInstitutionProgramId?: string): Promise<ReferenceMaps> {
   const [sources, stages, programs, majors, admissionStatuses] = await prisma.$transaction([
     prisma.lead_sources.findMany({
-      where: scopedInstitutionProgramId ? { OR: [{ institution_program_id: scopedInstitutionProgramId }, { institution_program_id: null }] } : undefined,
+      where: scopedInstitutionProgramId ? { institution_program_id: scopedInstitutionProgramId } : { institution_program_id: { not: null } },
       select: { id: true, name: true },
     }),
     prisma.pipeline_stages.findMany({ select: { id: true, name: true } }),

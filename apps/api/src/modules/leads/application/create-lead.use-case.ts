@@ -64,10 +64,10 @@ async function persistLeadInTransaction(
     const source = input.sourceId
       ? await tx.lead_sources.findUnique({
           where: { id: input.sourceId },
-          select: { id: true },
+          select: { id: true, institution_program_id: true },
         })
       : null;
-    if (!source) {
+    if (!source || !input.institutionProgramId || source.institution_program_id !== input.institutionProgramId) {
       return { ok: false as const, reason: "source_not_found" as const };
     }
   }

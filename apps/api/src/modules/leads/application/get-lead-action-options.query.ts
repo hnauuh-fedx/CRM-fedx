@@ -25,13 +25,8 @@ export async function getLeadActionOptions(
   ] = await prisma.$transaction([
     prisma.lead_sources.findMany({
       where: institutionProgramId
-        ? {
-            OR: [
-              { institution_program_id: institutionProgramId },
-              { institution_program_id: null },
-            ],
-          }
-        : undefined,
+        ? { institution_program_id: institutionProgramId }
+        : { institution_program_id: { in: actor.institutionProgramIds } },
       select: { id: true, name: true },
       orderBy: { name: "asc" },
     }),

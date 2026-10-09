@@ -1,11 +1,13 @@
 import { Router } from "express";
 import { z } from "zod";
+import { leadSourceInputSchema } from "@admission-crm/shared/lead-source";
 
 import {
   requireAnyPermission,
   requireAuthentication,
 } from "../../middlewares/auth.middleware";
 import {
+  createLeadSource,
   getLeadSourceFilterOptions,
   getMarketingFormFilterOptions,
   getUtmTrackingFilterOptions,
@@ -14,7 +16,7 @@ import {
   listMarketingForms,
   listUtmTrackings,
 } from "./marketing-reference.service";
-import { getInstitutionProgramScope } from "../institutions/institution-program-scope";
+import { getInstitutionProgramScope, InstitutionProgramScopeError } from "../institutions/institution-program-scope";
 import { getUtmAnalytics, listUtmGeneratedLeads } from "./utm-analytics.service";
 import {
   createMarketingForm,
@@ -155,6 +157,26 @@ export const utmTrackingsRouter = Router();
 export const marketingFormsRouter = Router();
 export const publicMarketingFormsRouter = Router();
 
+leadSourcesRouter.post("/", requireAuthentication, requireAnyPermission("lead_source.manage", "system.manage"), async (request, response, next) => {
+  try {
+    const parsed = leadSourceInputSchema.safeParse(request.body);
+    if (!parsed.success) {
+      response.status(400).json({ message: parsed.error.issues[0]?.message ?? "Thông tin nguồn lead không hợp lệ." });
+      return;
+    }
+    const institutionProgramId = getInstitutionProgramScope(request);
+    if (!institutionProgramId) throw new InstitutionProgramScopeError(400, "Vui lòng chọn chương trình đang làm việc.");
+    const result = await createLeadSource(request.authUser!, parsed.data, institutionProgramId, request.ip);
+    if (!result.ok) {
+      response.status(400).json({ message: "Chương trình đang làm việc không tồn tại hoặc đã ngừng hoạt động." });
+      return;
+    }
+    response.status(201).json(result.data);
+  } catch (error) {
+    next(error);
+  }
+});
+
 leadSourcesRouter.get("/", requireAuthentication, requireAnyPermission("campaign.view_all", "lead_source.manage"), async (request, response, next) => {
   try {
     const parsed = leadSourceQuerySchema.safeParse(request.query);
@@ -162,18 +184,22 @@ leadSourcesRouter.get("/", requireAuthentication, requireAnyPermission("campaign
       response.status(400).json({ message: "Tham số danh sách nguồn lead không hợp lệ." });
       return;
     }
+    const institutionProgramId = getInstitutionProgramScope(request);
+    if (!institutionProgramId) throw new InstitutionProgramScopeError(400, "Vui lòng chọn chương trình đang làm việc.");
     response.json(await listLeadSources({
       ...parsed.data,
-      institutionProgramId: getInstitutionProgramScope(request) ?? parsed.data.institutionProgramId,
+      institutionProgramId,
     }));
   } catch (error) {
     next(error);
   }
 });
 
-leadSourcesRouter.get("/options", requireAuthentication, requireAnyPermission("campaign.view_all", "lead_source.manage"), async (_request, response, next) => {
+leadSourcesRouter.get("/options", requireAuthentication, requireAnyPermission("campaign.view_all", "lead_source.manage"), async (request, response, next) => {
   try {
-    response.json(await getLeadSourceFilterOptions());
+    const institutionProgramId = getInstitutionProgramScope(request);
+    if (!institutionProgramId) throw new InstitutionProgramScopeError(400, "Vui lòng chọn chương trình đang làm việc.");
+    response.json(await getLeadSourceFilterOptions(institutionProgramId));
   } catch (error) {
     next(error);
   }

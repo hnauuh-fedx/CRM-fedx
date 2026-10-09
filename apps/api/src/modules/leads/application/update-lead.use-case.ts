@@ -274,9 +274,10 @@ export async function updateLead(
     }
     const source = await tx.lead_sources.findUnique({
       where: { id: input.sourceId },
-      select: { id: true },
+      select: { id: true, institution_program_id: true },
     });
-    if (!source) {
+    const sourceProgramId = input.institutionProgramId ?? institutionProgramId;
+    if (!source || !sourceProgramId || source.institution_program_id !== sourceProgramId) {
       return { ok: false as const, reason: "source_not_found" as const };
     }
     if (!(await hasValidAdmissionReferences(tx, input))) {

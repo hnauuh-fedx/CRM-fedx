@@ -262,7 +262,7 @@ async function canLinkSource(sourceId?: string, institutionProgramId?: string) {
   return Boolean(await prisma.lead_sources.findFirst({
     where: {
       id: sourceId,
-      ...(institutionProgramId ? { OR: [{ institution_program_id: institutionProgramId }, { institution_program_id: null }] } : {}),
+      institution_program_id: institutionProgramId ?? { not: null },
     },
     select: { id: true },
   }));

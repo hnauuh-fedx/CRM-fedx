@@ -119,8 +119,8 @@ function validateFieldValue(field: { field_type: string; label: string; validati
 async function findDefaultLeadSource(client: Pick<typeof prisma, "lead_sources">, institutionProgramId?: string | null) {
   return client.lead_sources.findFirst({
     where: institutionProgramId
-      ? { OR: [{ institution_program_id: institutionProgramId }, { institution_program_id: null }] }
-      : undefined,
+      ? { institution_program_id: institutionProgramId }
+      : { id: { in: [] } },
     select: { id: true },
     orderBy: [{ institution_program_id: "desc" }, { created_at: "asc" }],
   });

@@ -982,7 +982,7 @@ export async function getAutomationOptions(user: AuthUser, institutionProgramId?
     prisma.lead_sources.findMany({
       where: {
         ...(resolvedInstitutionProgramId
-          ? { OR: [{ institution_program_id: resolvedInstitutionProgramId }, { institution_program_id: null }] }
+          ? { institution_program_id: resolvedInstitutionProgramId }
           : accessibleProgramIds === null
             ? {}
             : { leads: { some: scopedLeadWhere } }),
