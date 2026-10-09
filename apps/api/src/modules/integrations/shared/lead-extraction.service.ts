@@ -1,6 +1,7 @@
 import { z } from "zod";
 
 import { env, gptApiKey } from "../../../config/env";
+import { LEAD_EXTRACTION_PROMPT } from "./lead-extraction.prompt";
 
 const extractionSchema = z.object({
   isLeadInformation: z.boolean(),
@@ -13,7 +14,7 @@ const extractionSchema = z.object({
   confidence: z.number().min(0).max(1),
 });
 
-export type ZaloLeadExtraction = z.infer<typeof extractionSchema>;
+export type LeadExtraction = z.infer<typeof extractionSchema>;
 
 function responseText(payload: unknown) {
   const response = payload as { output_text?: string; output?: Array<{ content?: Array<{ type?: string; text?: string }> }> };
@@ -39,7 +40,7 @@ export function normalizeVietnamPhone(value: string | null) {
   return /^0\d{9}$/.test(phone) ? phone : null;
 }
 
-export async function extractLeadInformation(conversation: string): Promise<ZaloLeadExtraction> {
+export async function extractLeadInformation(conversation: string): Promise<LeadExtraction> {
   if (!gptApiKey) throw new Error("GPT_API_KEY chưa được cấu hình.");
   const response = await fetch("https://api.openai.com/v1/responses", {
     method: "POST",
@@ -51,16 +52,13 @@ export async function extractLeadInformation(conversation: string): Promise<Zalo
       model: env.GPT_MODEL,
       reasoning: { effort: "none" },
       input: [
-        {
-          role: "developer",
-          content: "Bạn trích xuất thông tin ứng viên từ hội thoại tuyển sinh tiếng Việt. Chỉ lấy dữ liệu người dùng cung cấp, không lấy dữ liệu trong câu hỏi mẫu của nhân viên. Không tự suy đoán dữ liệu còn thiếu.",
-        },
+        { role: "developer", content: LEAD_EXTRACTION_PROMPT },
         { role: "user", content: conversation },
       ],
       text: {
         format: {
           type: "json_schema",
-          name: "zalo_lead_information",
+          name: "lead_information",
           strict: true,
           schema: {
             type: "object",

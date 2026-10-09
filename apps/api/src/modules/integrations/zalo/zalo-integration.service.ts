@@ -4,8 +4,10 @@ import { env, gptApiKey } from "../../../config/env";
 import { prisma } from "../../../database/prisma";
 import type { AuthUser } from "../../auth/auth.types";
 import { triggerAutomation } from "../../automations/automation-engine.service";
+import { extractLeadInformation, mayContainLeadInformation, normalizeVietnamPhone } from "../shared/lead-extraction.service";
 import { decryptZaloSecret, encryptZaloSecret } from "./zalo-crypto";
 import { getZaloOaInfo, getZaloUserProfile, refreshZaloOaToken } from "./zalo-api.service";
+<<<<<<< HEAD
 import {
   extractLeadInformation,
   extractVietnamPhoneFromText,
@@ -14,6 +16,8 @@ import {
   resolveInboundLeadName,
   usedProfileNameFallback,
 } from "./zalo-extraction.service";
+=======
+>>>>>>> origin/create-connect-meta-to-get-data-in-message
 
 const refreshSafetyMs = 60 * 60 * 1000;
 const leadExtractionContextWindowMs = 15 * 60 * 1000;
@@ -21,7 +25,6 @@ const userProfileCacheMs = 7 * 24 * 60 * 60 * 1000;
 const userProfileRetryMs = 15 * 60 * 1000;
 
 export type SaveZaloConnectionInput = {
-  appId?: string;
   accessToken: string;
   refreshToken: string;
   accessTokenExpiresInHours: number;
@@ -35,16 +38,19 @@ function nextRefreshAt(accessTokenExpiresAt: Date) {
 }
 
 function connectionScope(user: AuthUser) {
-  if (user.accessScope === "ALL" || user.permissions.includes("system.manage")) return {};
+  const configuredAppId = env.ZALO_APP_ID?.trim();
+  const appScope = configuredAppId ? { app_id: configuredAppId } : {};
+  if (user.accessScope === "ALL" || user.permissions.includes("system.manage")) return appScope;
   if (user.institutionProgramIds.length > 0) {
     return {
+      ...appScope,
       OR: [
         { institution_program_id: { in: user.institutionProgramIds } },
         { created_by: user.id },
       ],
     };
   }
-  return { created_by: user.id };
+  return { ...appScope, created_by: user.id };
 }
 
 function serializeConnection(connection: {
@@ -140,8 +146,10 @@ export async function getZaloConnectionOptions(user: AuthUser) {
 
 export async function saveManualZaloConnection(user: AuthUser, input: SaveZaloConnectionInput) {
   if (!env.ZALO_TOKEN_ENCRYPTION_KEY) throw new Error("ZALO_TOKEN_ENCRYPTION_KEY chưa được cấu hình.");
-  const appId = input.appId?.trim() || env.ZALO_APP_ID;
+  const appId = env.ZALO_APP_ID?.trim();
   if (!appId) throw new Error("ZALO_APP_ID chưa được cấu hình.");
+
+  if (!/^\d+$/.test(appId)) throw new Error("ZALO_APP_ID phải là dãy số App ID của ứng dụng Zalo.");
 
   const [oaInfo, source, program] = await Promise.all([
     getZaloOaInfo(input.accessToken),
