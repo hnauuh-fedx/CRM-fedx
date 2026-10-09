@@ -89,7 +89,7 @@ async function verifyDirectorMajorManagement() {
       token: directorToken,
       programId: selectedProgram.id,
       method: "POST",
-      body: { name: `Ngành kiểm thử ${runId}`, code, facultyId: "" },
+      body: { name: `Ngành kiểm thử ${runId}`, code},
     });
     assert.equal(createResponse.status, 201);
     createdMajorId = createResponse.payload.id as string;
@@ -100,7 +100,7 @@ async function verifyDirectorMajorManagement() {
         token: directorToken,
         programId: selectedProgram.id,
         method: "POST",
-        body: { name: "Ngành trùng mã", code, facultyId: "" },
+        body: { name: "Ngành trùng mã", code},
       })).status,
       409,
     );
@@ -110,7 +110,7 @@ async function verifyDirectorMajorManagement() {
           token: directorToken,
           programId: otherProgram.id,
           method: "PATCH",
-          body: { name: "Không được sửa khác chương trình", code, facultyId: "" },
+          body: { name: "Không được sửa khác chương trình", code},
         })).status,
         404,
       );
@@ -121,7 +121,7 @@ async function verifyDirectorMajorManagement() {
         token: directorToken,
         programId: selectedProgram.id,
         method: "PATCH",
-        body: { name: `Ngành đã sửa ${runId}`, code, facultyId: "" },
+        body: { name: `Ngành đã sửa ${runId}`, code},
       })).status,
       200,
     );

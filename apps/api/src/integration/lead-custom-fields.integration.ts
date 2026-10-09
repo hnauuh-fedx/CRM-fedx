@@ -137,12 +137,12 @@ async function main() {
       server.once("error", reject);
     });
     const baseUrl = `http://127.0.0.1:${(server.address() as AddressInfo).port}/api`;
-    const full = await createActor("full", ["lead.view_all", "lead.update_all", "custom_field.view", "custom_field.view_sensitive", "custom_field.edit_sensitive"], "ALL");
-    const limited = await createActor("limited", ["lead.view_all", "lead.update_all", "custom_field.view"], "ALL");
+    const full = await createActor("full", ["lead.view_all", "lead.update_all", "custom_field.lead.manage"], "ALL");
+    const limited = await createActor("limited", ["lead.view_all", "lead.update_all"], "ALL");
     const noCustom = await createActor("no_custom", ["lead.view_all", "lead.update_all"], "ALL");
     const creator = await createActor("creator", ["lead.create"], "ALL");
-    const noUpdate = await createActor("no_update", ["lead.view_all", "custom_field.view", "custom_field.update"], "ALL");
-    const outside = await createActor("outside", ["lead.view_assigned", "lead.update_assigned", "custom_field.view"], "ASSIGNED_ONLY");
+    const noUpdate = await createActor("no_update", ["lead.view_all", "custom_field.lead.manage"], "ALL");
+    const outside = await createActor("outside", ["lead.view_assigned", "lead.update_assigned", "custom_field.lead.manage"], "ASSIGNED_ONLY");
     const [fullToken, limitedToken, noCustomToken, creatorToken, noUpdateToken, outsideToken] = await Promise.all([
       login(baseUrl, full.email), login(baseUrl, limited.email), login(baseUrl, noCustom.email), login(baseUrl, creator.email), login(baseUrl, noUpdate.email), login(baseUrl, outside.email),
     ]);
@@ -186,7 +186,7 @@ async function main() {
     equal(createDefinitions.status, 200, "Quyền tạo Lead phải được tải custom field mà không cần quyền quản trị cấu hình.");
     const createDefinitionIds = new Set(fields(createDefinitions.payload).map((field) => field.id));
     check(createDefinitionIds.has(globalId) && createDefinitionIds.has(programAId), "Form tạo Lead phải nhận field GLOBAL và field đúng chương trình.");
-    equal((await request(baseUrl, `/leads/${lead.id}/custom-fields`, noUpdateToken, "PATCH", { values: [{ fieldId: globalId, value: "blocked" }] })).status, 403, "custom_field.update không thay quyền sửa Lead.");
+    equal((await request(baseUrl, `/leads/${lead.id}/custom-fields`, noUpdateToken, "PATCH", { values: [{ fieldId: globalId, value: "blocked" }] })).status, 403, "custom_field.lead.manage không thay quyền sửa Lead.");
 
     const fileValue = [
       { name: "hoc-ba-1.jpg", size: 2048, type: "image/jpeg", lastModified: 1786492800000 },

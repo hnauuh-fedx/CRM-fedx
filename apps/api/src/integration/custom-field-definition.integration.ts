@@ -6,7 +6,7 @@ import { app } from "../app";
 import { prisma } from "../database/prisma";
 
 const run = randomUUID().slice(0, 8);
-const codes = ["custom_field.view", "custom_field.create", "custom_field.update", "custom_field.archive", "custom_field.manage_options", "custom_field.view_sensitive", "custom_field.edit_sensitive", "custom_field.manage_groups"];
+const codes = ["custom_field.lead.manage"];
 async function request(base: string, path: string, options: { token?: string; method?: string; body?: unknown; programId?: string } = {}) { const response = await fetch(`${base}${path}`, { method: options.method ?? "GET", headers: { "Content-Type": "application/json", ...(options.token ? { Authorization: `Bearer ${options.token}` } : {}), ...(options.programId ? { "x-institution-program-id": options.programId } : {}) }, body: options.body === undefined ? undefined : JSON.stringify(options.body) }); return { status: response.status, payload: await response.json().catch(() => ({})) as any }; }
 async function login(base: string, email = "director@tvu.edu.vn") { const result = await request(base, "/auth/login", { method: "POST", body: { email, password: "123456" } }); assert.equal(result.status, 200); return result.payload.accessToken as string; }
 async function main() {
@@ -16,7 +16,7 @@ async function main() {
   await prisma.user_roles.createMany({ data: [{ user_id: saleUser.id, role_id: saleRole.id }], skipDuplicates: true });
   const permissions = await Promise.all(codes.map((code) => prisma.permissions.upsert({ where: { code }, update: {}, create: { code, name: code, module: "custom_field" } })));
   await prisma.role_permissions.createMany({ data: permissions.map((permission) => ({ role_id: role.id, permission_id: permission.id })), skipDuplicates: true });
-  await prisma.role_permissions.createMany({ data: permissions.filter((permission) => !["custom_field.view_sensitive", "custom_field.edit_sensitive"].includes(permission.code)).map((permission) => ({ role_id: saleRole.id, permission_id: permission.id })), skipDuplicates: true });
+  await prisma.role_permissions.createMany({ data: permissions.map((permission) => ({ role_id: saleRole.id, permission_id: permission.id })), skipDuplicates: true });
   const program = await prisma.institution_programs.findFirstOrThrow({ select: { id: true } });
   const server = app.listen(0);
   try { await new Promise<void>((resolve) => server.once("listening", resolve)); const base = `http://127.0.0.1:${(server.address() as AddressInfo).port}/api`; const token = await login(base); const saleToken = await login(base, "sale.manager@tvu.edu.vn");
