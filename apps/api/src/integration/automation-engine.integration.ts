@@ -22,6 +22,7 @@ const permissionDefinitions = [
   { code: "automation.manage_global", name: "Quản lý Rule Automation toàn hệ thống", module: "system" },
   { code: "audit.view", name: "Xem audit log", module: "system" },
   { code: "lead.view_all", name: "Xem toàn bộ lead", module: "lead" },
+  { code: "lead.view_department", name: "Xem lead trong phòng ban", module: "lead" },
   { code: "lead.view_assigned", name: "Xem lead được phân công", module: "lead" },
   { code: "lead.update_all", name: "Cập nhật toàn bộ lead", module: "lead" },
   { code: "lead.assign", name: "Phân công lead", module: "lead" },
@@ -37,6 +38,7 @@ let prisma: PrismaHandle;
 let ruleId: string | null = null;
 const createdRuleIds: string[] = [];
 let pipelineId: string | null = null;
+let departmentId: string | null = null;
 const stageIds: string[] = [];
 const leadIds: string[] = [];
 const userIds: string[] = [];
@@ -112,6 +114,12 @@ async function ensurePermission(definition: typeof permissionDefinitions[number]
 }
 
 async function createFixtures() {
+  const program = await prisma.institution_programs.findFirst({
+    where: { status: "active" },
+    select: { id: true },
+    orderBy: { created_at: "asc" },
+  });
+  assert.ok(program, "Integration test yêu cầu ít nhất một chương trình tuyển sinh đang hoạt động.");
   const permissions = await Promise.all(permissionDefinitions.map(ensurePermission));
   const permissionByCode = new Map(permissions.map((permission) => [permission.code, permission]));
   const [actorRole, targetRole, scopedRole] = await Promise.all([
@@ -120,6 +128,16 @@ async function createFixtures() {
     prisma.roles.create({ data: { code: scopedRoleCode, name: `Automation Scoped ${runId}` } }),
   ]);
   roleIds.push(actorRole.id, targetRole.id, scopedRole.id);
+  await prisma.role_access_scopes.createMany({ data: [
+    { role_id: actorRole.id, scope_code: "ALL" },
+    { role_id: targetRole.id, scope_code: "ASSIGNED_ONLY" },
+    { role_id: scopedRole.id, scope_code: "ASSIGNED_ONLY" },
+  ] });
+  await prisma.role_institution_programs.createMany({ data: [
+    { role_id: actorRole.id, institution_program_id: program.id },
+    { role_id: targetRole.id, institution_program_id: program.id },
+    { role_id: scopedRole.id, institution_program_id: program.id },
+  ] });
   await prisma.role_permissions.createMany({ data: [
     ...permissions
       .filter((permission) => permission.code !== "lead.view_assigned")
@@ -128,10 +146,9 @@ async function createFixtures() {
       role_id: targetRole.id,
       permission_id: permissionByCode.get("lead.view_assigned")!.id,
     },
-    ...["automation.manage", "lead.view_assigned"].map((code) => ({
-      role_id: scopedRole.id,
-      permission_id: permissionByCode.get(code)!.id,
-    })),
+    ...permissions
+      .filter((permission) => !["automation.manage_global", "lead.view_all"].includes(permission.code))
+      .map((permission) => ({ role_id: scopedRole.id, permission_id: permission.id })),
   ] });
 
   const passwordHash = await hash(password, 10);
@@ -162,6 +179,14 @@ async function createFixtures() {
     }),
   ]);
   userIds.push(actor.id, target.id, scoped.id);
+  const department = await prisma.departments.create({
+    data: { code: `AUTO-${runId}`.toUpperCase(), name: `Automation Sale ${runId}` },
+    select: { id: true },
+  });
+  departmentId = department.id;
+  await prisma.user_departments.createMany({
+    data: [actor.id, target.id, scoped.id].map((userId) => ({ user_id: userId, department_id: department.id })),
+  });
   await prisma.user_roles.createMany({
     data: [
       { user_id: actor.id, role_id: actorRole.id },
@@ -172,7 +197,7 @@ async function createFixtures() {
   await prisma.user_access_scopes.createMany({
     data: [
       { user_id: actor.id, scope: "ALL" },
-      { user_id: target.id, scope: "ALL" },
+      { user_id: target.id, scope: "ASSIGNED_ONLY" },
       { user_id: scoped.id, scope: "ASSIGNED_ONLY" },
     ],
   });
@@ -191,12 +216,6 @@ async function createFixtures() {
   ]);
   stageIds.push(initialStage.id, targetStage.id);
 
-  const program = await prisma.institution_programs.findFirst({
-    where: { status: "active" },
-    select: { id: true },
-    orderBy: { created_at: "asc" },
-  });
-  assert.ok(program, "Integration test yêu cầu ít nhất một chương trình tuyển sinh đang hoạt động.");
   const major = await prisma.majors.findFirst({
     where: { OR: [{ institution_program_id: program.id }, { institution_program_id: null }] },
     select: { id: true },
@@ -266,7 +285,7 @@ async function createFixtures() {
       value_text: "VIP",
     },
   });
-  return { actor, target, scoped, initialStage, targetStage, matchingLead, nonMatchingLead, customField, major, initialAdmissionStatus, nextAdmissionStatus };
+  return { actor, target, scoped, program, initialStage, targetStage, matchingLead, nonMatchingLead, customField, major, initialAdmissionStatus, nextAdmissionStatus };
 }
 
 function automationGraph(targetUserId: string, targetStageId: string, customFieldId: string, majorId: string, initialAdmissionStatusId: string, nextAdmissionStatusId: string) {
@@ -315,10 +334,14 @@ async function cleanup() {
   await prisma.admission_profiles.deleteMany({ where: { lead_id: { in: leadIds } } });
   await prisma.leads.deleteMany({ where: { id: { in: leadIds } } });
   await prisma.user_access_scopes.deleteMany({ where: { user_id: { in: userIds } } });
+  await prisma.user_departments.deleteMany({ where: { user_id: { in: userIds } } });
   await prisma.user_roles.deleteMany({ where: { user_id: { in: userIds } } });
   await prisma.users.deleteMany({ where: { id: { in: userIds } } });
   await prisma.role_permissions.deleteMany({ where: { role_id: { in: roleIds } } });
+  await prisma.role_institution_programs.deleteMany({ where: { role_id: { in: roleIds } } });
+  await prisma.role_access_scopes.deleteMany({ where: { role_id: { in: roleIds } } });
   await prisma.roles.deleteMany({ where: { id: { in: roleIds } } });
+  if (departmentId) await prisma.departments.deleteMany({ where: { id: departmentId } });
   for (const permission of permissionSnapshots) {
     if (permission.existed) {
       await prisma.permissions.update({ where: { id: permission.id }, data: { is_active: permission.isActive } });
@@ -367,15 +390,16 @@ async function main() {
       "Thiếu automation.manage phải bị từ chối.",
     );
 
-    const forbiddenGlobalRule = await request(baseUrl, "/automations", {
+    const forbiddenOtherProgramRule = await request(baseUrl, "/automations", {
       token: scopedToken,
       method: "POST",
       body: {
-        name: `[INTEGRATION ${runId}] Global rule bị từ chối`,
+        name: `[INTEGRATION ${runId}] Rule ngoài chương trình bị từ chối`,
         triggerType: "lead_created",
+        institutionProgramId: randomUUID(),
       },
     });
-    assert.equal(forbiddenGlobalRule.status, 403, "Rule global phải yêu cầu automation.manage_global và scope ALL.");
+    assert.equal(forbiddenOtherProgramRule.status, 403, "Không được tạo rule cho chương trình ngoài phạm vi làm việc.");
 
     const created = await request(baseUrl, "/automations", {
       token: actorToken,
@@ -383,6 +407,7 @@ async function main() {
       body: {
         name: `[INTEGRATION ${runId}] Automation node actions`,
         triggerType: "lead_created",
+        institutionProgramId: fixtures.program.id,
         graphData: automationGraph(fixtures.target.id, fixtures.targetStage.id, fixtures.customField.id, fixtures.major.id, fixtures.initialAdmissionStatus.id, fixtures.nextAdmissionStatus.id),
       },
     });
@@ -424,7 +449,7 @@ async function main() {
       method: "POST",
       body: {},
     });
-    assert.equal(validation.status, 200, "Graph đầy đủ phải hợp lệ.");
+    assert.equal(validation.status, 200, `Graph đầy đủ phải hợp lệ: ${JSON.stringify(validation.payload)}`);
     assert.equal(validation.payload.valid, true);
 
     const duplicated = await request(baseUrl, `/automations/${ruleId}/duplicate`, {
