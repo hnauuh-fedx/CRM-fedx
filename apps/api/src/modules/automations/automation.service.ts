@@ -917,6 +917,9 @@ export async function getAutomationOptions(user: AuthUser, institutionProgramId?
   const resolvedInstitutionProgramId = institutionProgramId ??
     (accessibleProgramIds?.length === 1 ? accessibleProgramIds[0] : undefined);
   const canAssign = user.permissions.includes("lead.assign") || user.permissions.includes("lead.reassign");
+  const canBrowseAllAssignees = canAssign
+    && user.accessScope === "ALL"
+    && user.permissions.includes("lead.view_all");
   const scopedLeadWhere = { deleted_at: null, ...getLeadScopeWhere(user) };
   const eligibleAssigneeRoles = {
     some: { roles: {
@@ -941,7 +944,7 @@ export async function getAutomationOptions(user: AuthUser, institutionProgramId?
       select: { id: true, name: true, institution_name: true },
       orderBy: { name: "asc" },
     }),
-    canAssign && accessibleProgramIds === null
+    canBrowseAllAssignees
       ? prisma.users.findMany({
           where: {
             status: "active",
@@ -950,7 +953,7 @@ export async function getAutomationOptions(user: AuthUser, institutionProgramId?
               ? { user_roles: { some: { roles: { role_institution_programs: { some: { institution_program_id: resolvedInstitutionProgramId } } } } } }
               : {}),
           },
-          select: { id: true, full_name: true },
+          select: { id: true, full_name: true, user_departments: { select: { department_id: true } } },
           orderBy: { full_name: "asc" },
           take: 500,
         })
@@ -964,22 +967,22 @@ export async function getAutomationOptions(user: AuthUser, institutionProgramId?
                 : {}),
               user_departments: { some: { department_id: { in: user.departmentIds } } },
             },
-            select: { id: true, full_name: true },
+            select: { id: true, full_name: true, user_departments: { select: { department_id: true } } },
             orderBy: { full_name: "asc" },
             take: 500,
           })
         : prisma.users.findMany({
             where: { id: user.id, status: "active", deleted_at: null },
-            select: { id: true, full_name: true },
+            select: { id: true, full_name: true, user_departments: { select: { department_id: true } } },
           }),
-    canAssign && accessibleProgramIds === null
+    canBrowseAllAssignees
       ? prisma.users.findMany({
           where: {
             status: "active",
             deleted_at: null,
             user_roles: eligibleAssigneeRoles,
           },
-          select: { id: true, full_name: true },
+          select: { id: true, full_name: true, user_departments: { select: { department_id: true } } },
           orderBy: { full_name: "asc" },
           take: 500,
         })
@@ -991,17 +994,17 @@ export async function getAutomationOptions(user: AuthUser, institutionProgramId?
               user_roles: eligibleAssigneeRoles,
               user_departments: { some: { department_id: { in: user.departmentIds } } },
             },
-            select: { id: true, full_name: true },
+            select: { id: true, full_name: true, user_departments: { select: { department_id: true } } },
             orderBy: { full_name: "asc" },
             take: 500,
           })
         : prisma.users.findMany({
             where: { id: user.id, status: "active", deleted_at: null, user_roles: eligibleAssigneeRoles },
-            select: { id: true, full_name: true },
+            select: { id: true, full_name: true, user_departments: { select: { department_id: true } } },
           }),
     canAssign
       ? prisma.departments.findMany({
-          where: accessibleProgramIds === null ? undefined : { id: { in: user.departmentIds } },
+          where: canBrowseAllAssignees ? undefined : { id: { in: user.departmentIds } },
           select: { id: true, name: true },
           orderBy: { name: "asc" },
           take: 500,
@@ -1087,11 +1090,13 @@ export async function getAutomationOptions(user: AuthUser, institutionProgramId?
       id: assignee.id,
       fullName: assignee.full_name,
       assignedCount: assignmentCounts.find((item) => item.assigned_to === assignee.id)?._count._all ?? 0,
+      departmentIds: assignee.user_departments.map((membership) => membership.department_id),
     })),
     assignmentPoolAssignees: assignmentPoolAssignees.map((assignee) => ({
       id: assignee.id,
       fullName: assignee.full_name,
       assignedCount: assignmentCounts.find((item) => item.assigned_to === assignee.id)?._count._all ?? 0,
+      departmentIds: assignee.user_departments.map((membership) => membership.department_id),
     })),
     departments,
     pipelineStages: pipelineStages.map((stage) => ({

@@ -1,6 +1,17 @@
 import { useMemo } from "react";
 import { Plus, Trash2, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+  AlertDialogTrigger,
+} from "@/components/ui/alert-dialog";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Empty, EmptyDescription, EmptyHeader } from "@/components/ui/empty";
 import { Field, FieldDescription, FieldGroup, FieldLabel, FieldSet, FieldLegend } from "@/components/ui/field";
@@ -53,10 +64,11 @@ export type NodePropertiesPanelProps = {
   options?: AutomationOptions;
   isLoadingOptions: boolean;
   onNodeUpdate: (nodeId: string, data: Partial<AutomationNodeData>) => void;
+  onNodeDelete: (nodeId: string) => void;
   onClose: () => void;
 };
 
-export function NodePropertiesPanel({ selectedNodeId, nodes, options, isLoadingOptions, onNodeUpdate, onClose }: NodePropertiesPanelProps) {
+export function NodePropertiesPanel({ selectedNodeId, nodes, options, isLoadingOptions, onNodeUpdate, onNodeDelete, onClose }: NodePropertiesPanelProps) {
   const auth = useAuth();
   const canViewSensitiveLeadData = auth.can("lead.sensitive.view");
   const selectedNode = nodes.find((n) => n.id === selectedNodeId);
@@ -264,6 +276,7 @@ export function NodePropertiesPanel({ selectedNodeId, nodes, options, isLoadingO
                 <AssignmentPoolFields
                   data={localData}
                   assignees={options?.assignmentPoolAssignees ?? []}
+                  knownAssignees={options?.assignees ?? []}
                   isLoading={isLoadingOptions}
                   onChange={(patch) => onNodeUpdate(selectedNode.id, patch)}
                 />
@@ -278,6 +291,28 @@ export function NodePropertiesPanel({ selectedNodeId, nodes, options, isLoadingO
         )}
 
       </div>
+      <div className="shrink-0 border-t p-4">
+        <AlertDialog>
+          <AlertDialogTrigger asChild>
+            <Button type="button" variant="destructive" className="min-h-11 w-full">
+              <Trash2 data-icon="inline-start" aria-hidden="true" />
+              Xóa node
+            </Button>
+          </AlertDialogTrigger>
+          <AlertDialogContent>
+            <AlertDialogHeader>
+              <AlertDialogTitle>Xóa node “{localData.label || "Chưa đặt tên"}”?</AlertDialogTitle>
+              <AlertDialogDescription>
+                Node và tất cả kết nối đến node này sẽ bị xóa khỏi sơ đồ. Thay đổi chỉ có hiệu lực sau khi bạn lưu rule.
+              </AlertDialogDescription>
+            </AlertDialogHeader>
+            <AlertDialogFooter>
+              <AlertDialogCancel>Hủy</AlertDialogCancel>
+              <AlertDialogAction onClick={() => onNodeDelete(selectedNode.id)}>Xóa node</AlertDialogAction>
+            </AlertDialogFooter>
+          </AlertDialogContent>
+        </AlertDialog>
+      </div>
     </div>
   );
 }
@@ -285,19 +320,26 @@ export function NodePropertiesPanel({ selectedNodeId, nodes, options, isLoadingO
 function AssignmentPoolFields({
   data,
   assignees,
+  knownAssignees,
   isLoading,
   onChange,
 }: {
   data: AutomationNodeData;
   assignees: AutomationOptions["assignmentPoolAssignees"];
+  knownAssignees: AutomationOptions["assignees"];
   isLoading: boolean;
   onChange: (patch: Partial<AutomationNodeData>) => void;
 }) {
   const selectedIds = [...new Set(data.assigneeIds ?? [])];
   const selectedIdSet = new Set(selectedIds);
-  const assigneeById = useMemo(() => new Map(assignees.map((assignee) => [assignee.id, assignee])), [assignees]);
+  const scopedAssignees = useMemo(() => data.departmentId
+    ? assignees.filter((assignee) => assignee.departmentIds.includes(data.departmentId!))
+    : assignees, [assignees, data.departmentId]);
+  const poolAssigneeById = useMemo(() => new Map(assignees.map((assignee) => [assignee.id, assignee])), [assignees]);
+  const assigneeById = useMemo(() => new Map(scopedAssignees.map((assignee) => [assignee.id, assignee])), [scopedAssignees]);
+  const knownAssigneeById = useMemo(() => new Map(knownAssignees.map((assignee) => [assignee.id, assignee])), [knownAssignees]);
   const weightByAssignee = new Map((data.assigneeWeights ?? []).map((item) => [item.assigneeId, item.weight]));
-  const availableAssignees = assignees.filter((assignee) => !selectedIdSet.has(assignee.id));
+  const availableAssignees = scopedAssignees.filter((assignee) => !selectedIdSet.has(assignee.id));
   const strategy = data.assignmentStrategy ?? "round_robin";
 
   const updateSelectedIds = (nextIds: string[]) => onChange({
@@ -356,7 +398,7 @@ function AssignmentPoolFields({
           onValueChange={(assigneeId) => updateSelectedIds([...selectedIds, assigneeId])}
         >
           <SelectTrigger className="min-h-11" aria-label="Thêm Sale vào danh sách phân công">
-            <SelectValue placeholder={isLoading ? "Đang tải nhân viên..." : availableAssignees.length ? "Chọn Sale..." : "Đã chọn tất cả Sale khả dụng"} />
+            <SelectValue placeholder={isLoading ? "Đang tải nhân viên..." : availableAssignees.length ? "Chọn Sale..." : scopedAssignees.length ? "Đã chọn tất cả Sale đủ điều kiện" : "Không có Sale đủ điều kiện"} />
           </SelectTrigger>
           <SelectContent>
             <SelectGroup>
@@ -366,6 +408,9 @@ function AssignmentPoolFields({
             </SelectGroup>
           </SelectContent>
         </Select>
+        <FieldDescription>
+          Chỉ hiển thị tài khoản đang hoạt động trong chương trình, có quyền nhận Lead được phân công và thuộc phạm vi của bạn.
+        </FieldDescription>
       </Field>
 
       <Field className="gap-2">
@@ -383,10 +428,21 @@ function AssignmentPoolFields({
           </Empty>
         ) : selectedIds.map((assigneeId) => {
           const assignee = assigneeById.get(assigneeId);
+          const poolAssignee = poolAssigneeById.get(assigneeId);
+          const knownAssignee = knownAssigneeById.get(assigneeId);
+          const assigneeName = assignee?.fullName ?? poolAssignee?.fullName ?? knownAssignee?.fullName ?? "Người dùng không còn hoạt động";
+          const unavailableReason = assignee
+            ? null
+            : poolAssignee && data.departmentId
+              ? "Không thuộc team/phòng ban đã chọn"
+              : knownAssignee
+                ? "Không đủ quyền nhận Lead hoặc nằm ngoài phạm vi phân công"
+                : "Tài khoản không còn khả dụng";
           return (
             <Field key={assigneeId} orientation="horizontal" className="grid grid-cols-[minmax(0,1fr)_4.5rem_4.5rem_2.75rem] items-center gap-2 rounded-md border bg-background p-1">
-              <span className="min-w-0 truncate px-2 text-sm" title={assignee?.fullName ?? assigneeId}>
-                {assignee?.fullName ?? "Sale không còn khả dụng"}
+              <span className="min-w-0 px-2 text-sm" title={unavailableReason ?? assigneeName}>
+                <span className="block truncate">{assigneeName}</span>
+                {unavailableReason ? <span className="block truncate text-xs text-destructive">{unavailableReason}</span> : null}
               </span>
               <Input
                 type="number"
@@ -395,21 +451,21 @@ function AssignmentPoolFields({
                 inputMode="numeric"
                 className="min-h-11"
                 value={weightByAssignee.get(assigneeId) ?? 1}
-                aria-label={`Trọng số của ${assignee?.fullName ?? "Sale"}`}
+                aria-label={`Trọng số của ${assigneeName}`}
                 onChange={(event) => updateWeight(assigneeId, Number(event.target.value))}
               />
               <output
                 className="flex h-9 items-center rounded-md border bg-muted px-2 text-sm tabular-nums"
-                aria-label={`Số Lead đã gán cho ${assignee?.fullName ?? "Sale"}`}
+                aria-label={`Số Lead đã gán cho ${assigneeName}`}
               >
-                {assignee?.assignedCount ?? 0}
+                {assignee?.assignedCount ?? poolAssignee?.assignedCount ?? knownAssignee?.assignedCount ?? 0}
               </output>
               <Button
                 type="button"
                 variant="destructive"
                 size="icon"
                 className="size-11"
-                aria-label={`Xóa ${assignee?.fullName ?? "Sale"} khỏi danh sách`}
+                aria-label={`Xóa ${assigneeName} khỏi danh sách`}
                 onClick={() => updateSelectedIds(selectedIds.filter((id) => id !== assigneeId))}
               >
                 <Trash2 aria-hidden="true" />

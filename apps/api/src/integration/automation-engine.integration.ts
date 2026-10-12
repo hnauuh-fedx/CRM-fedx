@@ -140,7 +140,7 @@ async function createFixtures() {
   ] });
   await prisma.role_permissions.createMany({ data: [
     ...permissions
-      .filter((permission) => permission.code !== "lead.view_assigned")
+      .filter((permission) => !["lead.view_assigned", "lead.view_department"].includes(permission.code))
       .map((permission) => ({ role_id: actorRole.id, permission_id: permission.id })),
     {
       role_id: targetRole.id,
@@ -377,6 +377,22 @@ async function main() {
     });
     const baseUrl = `http://127.0.0.1:${(server.address() as AddressInfo).port}/api`;
     const fixtures = await createFixtures();
+    const [{ getAuthUser }, { getAutomationOptions }] = await Promise.all([
+      import("../modules/auth/auth.service.js"),
+      import("../modules/automations/automation.service.js"),
+    ]);
+    const programScopedActor = await getAuthUser(fixtures.actor.id, fixtures.program.id);
+    assert.ok(programScopedActor, "Phải đọc được actor với chương trình làm việc đã chọn.");
+    const programScopedOptions = await getAutomationOptions(programScopedActor, fixtures.program.id);
+    const eligibleTarget = programScopedOptions?.assignmentPoolAssignees.find((assignee) => assignee.id === fixtures.target.id);
+    assert.ok(
+      eligibleTarget,
+      "Actor scope ALL trong một chương trình phải chọn được Telesale hợp lệ của chương trình đó.",
+    );
+    assert.ok(
+      departmentId && eligibleTarget.departmentIds.includes(departmentId),
+      "Tuỳ chọn Sale phải kèm phòng ban để builder lọc cùng phạm vi với runtime.",
+    );
     const [actorToken, targetToken, scopedToken] = await Promise.all([
       login(baseUrl, fixtures.actor.email),
       login(baseUrl, fixtures.target.email),

@@ -106,6 +106,13 @@ export function AutomationBuilderPage() {
     setIsDirty(true);
   }, []);
 
+  const handleNodeDelete = useCallback((nodeId: string) => {
+    setNodes((previousNodes) => previousNodes.filter((node) => node.id !== nodeId));
+    setEdges((previousEdges) => previousEdges.filter((edge) => edge.source !== nodeId && edge.target !== nodeId));
+    setSelectedNodeId((currentNodeId) => currentNodeId === nodeId ? null : currentNodeId);
+    setIsDirty(true);
+  }, []);
+
   const rule = ruleQuery.data;
   const mutationError = saveMutation.error ?? toggleMutation.error;
   const canTestRun = ["lead.view_all", "lead.view_department", "lead.view_assigned"].some(auth.can);
@@ -229,6 +236,7 @@ export function AutomationBuilderPage() {
             options={optionsQuery.data}
             isLoadingOptions={optionsQuery.isLoading}
             onNodeUpdate={handleNodeUpdate}
+            onNodeDelete={handleNodeDelete}
             onClose={() => setSelectedNodeId(null)}
           />
         )}

@@ -173,8 +173,8 @@ export type AutomationOptions = {
   registry: AutomationRegistry;
   institutionPrograms: Array<{ id: string; name: string; institutionName: string }>;
   triggerTypes: string[];
-  assignees: Array<{ id: string; fullName: string; assignedCount: number }>;
-  assignmentPoolAssignees: Array<{ id: string; fullName: string; assignedCount: number }>;
+  assignees: Array<{ id: string; fullName: string; assignedCount: number; departmentIds: string[] }>;
+  assignmentPoolAssignees: Array<{ id: string; fullName: string; assignedCount: number; departmentIds: string[] }>;
   departments: Array<{ id: string; name: string }>;
   pipelineStages: Array<{ id: string; name: string; pipelineName: string | null }>;
   targetRoles: Array<{ id: string; code: string; name: string }>;
