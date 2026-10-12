@@ -918,7 +918,21 @@ export async function getAutomationOptions(user: AuthUser, institutionProgramId?
     (accessibleProgramIds?.length === 1 ? accessibleProgramIds[0] : undefined);
   const canAssign = user.permissions.includes("lead.assign") || user.permissions.includes("lead.reassign");
   const scopedLeadWhere = { deleted_at: null, ...getLeadScopeWhere(user) };
-  const [programs, assignees, departments, pipelineStages, targetRoles, customDataFields, sources, majors, admissionStatuses, admissionClasses, tags, customerLists, webhookEndpoints] = await Promise.all([
+  const eligibleAssigneeRoles = {
+    some: { roles: {
+      ...(resolvedInstitutionProgramId
+        ? { role_institution_programs: { some: { institution_program_id: resolvedInstitutionProgramId } } }
+        : {}),
+      role_permissions: { some: { permissions: { code: "lead.view_assigned" } } },
+    } },
+    none: { roles: {
+      ...(resolvedInstitutionProgramId
+        ? { role_institution_programs: { some: { institution_program_id: resolvedInstitutionProgramId } } }
+        : {}),
+      role_permissions: { some: { permissions: { code: { in: ["lead.view_department", "lead.view_all"] } } } },
+    } },
+  };
+  const [programs, assignees, assignmentPoolAssignees, departments, pipelineStages, targetRoles, customDataFields, sources, majors, admissionStatuses, admissionClasses, tags, customerLists, webhookEndpoints, assignmentCounts] = await Promise.all([
     prisma.institution_programs.findMany({
       where: {
         status: "active",
@@ -956,6 +970,33 @@ export async function getAutomationOptions(user: AuthUser, institutionProgramId?
           })
         : prisma.users.findMany({
             where: { id: user.id, status: "active", deleted_at: null },
+            select: { id: true, full_name: true },
+          }),
+    canAssign && accessibleProgramIds === null
+      ? prisma.users.findMany({
+          where: {
+            status: "active",
+            deleted_at: null,
+            user_roles: eligibleAssigneeRoles,
+          },
+          select: { id: true, full_name: true },
+          orderBy: { full_name: "asc" },
+          take: 500,
+        })
+      : canAssign && (user.accessScope === "DEPARTMENT" || user.permissions.includes("lead.view_department"))
+        ? prisma.users.findMany({
+            where: {
+              status: "active",
+              deleted_at: null,
+              user_roles: eligibleAssigneeRoles,
+              user_departments: { some: { department_id: { in: user.departmentIds } } },
+            },
+            select: { id: true, full_name: true },
+            orderBy: { full_name: "asc" },
+            take: 500,
+          })
+        : prisma.users.findMany({
+            where: { id: user.id, status: "active", deleted_at: null, user_roles: eligibleAssigneeRoles },
             select: { id: true, full_name: true },
           }),
     canAssign
@@ -1009,6 +1050,18 @@ export async function getAutomationOptions(user: AuthUser, institutionProgramId?
     listAccessibleAutomationLeadTags(user, resolvedInstitutionProgramId),
     listAccessibleAutomationCustomerLists(user, resolvedInstitutionProgramId),
     listAutomationWebhookEndpointOptions(user, resolvedInstitutionProgramId),
+    canAssign
+      ? prisma.leads.groupBy({
+          by: ["assigned_to"],
+          where: {
+            deleted_at: null,
+            assigned_to: { not: null },
+            ...getLeadScopeWhere(user, resolvedInstitutionProgramId),
+            ...(resolvedInstitutionProgramId ? { institution_program_id: resolvedInstitutionProgramId } : {}),
+          },
+          _count: { _all: true },
+        })
+      : Promise.resolve([]),
   ]);
   if (!webhookEndpoints) return null;
   return {
@@ -1030,7 +1083,16 @@ export async function getAutomationOptions(user: AuthUser, institutionProgramId?
     },
     institutionPrograms: programs.map((p) => ({ id: p.id, name: p.name, institutionName: p.institution_name })),
     triggerTypes: [...AUTOMATION_TRIGGER_TYPES],
-    assignees: assignees.map((assignee) => ({ id: assignee.id, fullName: assignee.full_name })),
+    assignees: assignees.map((assignee) => ({
+      id: assignee.id,
+      fullName: assignee.full_name,
+      assignedCount: assignmentCounts.find((item) => item.assigned_to === assignee.id)?._count._all ?? 0,
+    })),
+    assignmentPoolAssignees: assignmentPoolAssignees.map((assignee) => ({
+      id: assignee.id,
+      fullName: assignee.full_name,
+      assignedCount: assignmentCounts.find((item) => item.assigned_to === assignee.id)?._count._all ?? 0,
+    })),
     departments,
     pipelineStages: pipelineStages.map((stage) => ({
       id: stage.id,

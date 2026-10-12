@@ -2,10 +2,13 @@ import { useMemo } from "react";
 import { Plus, Trash2, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
+import { Empty, EmptyDescription, EmptyHeader } from "@/components/ui/empty";
+import { Field, FieldDescription, FieldGroup, FieldLabel, FieldSet, FieldLegend } from "@/components/ui/field";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Select, SelectContent, SelectGroup, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
 import { useAuth } from "@/modules/auth/auth-context";
 import { buildAutomationDataFields, normalizeAutomationFieldReference } from "../../automation-data-fields";
 import type {
@@ -257,17 +260,169 @@ export function NodePropertiesPanel({ selectedNodeId, nodes, options, isLoadingO
               onInsertToken={insertFieldToken}
             />
             {selectedNode.type === "action_assign_pool" ? (
-              <ReassignmentPolicyFields
-                policy={localData.reassignmentPolicy ?? defaultReassignmentPolicy}
-                emailProviderAvailable={options?.providerCapabilities.email ?? false}
-                onChange={(reassignmentPolicy) => handleChange("reassignmentPolicy", reassignmentPolicy)}
-              />
+              <>
+                <AssignmentPoolFields
+                  data={localData}
+                  assignees={options?.assignmentPoolAssignees ?? []}
+                  isLoading={isLoadingOptions}
+                  onChange={(patch) => onNodeUpdate(selectedNode.id, patch)}
+                />
+                <ReassignmentPolicyFields
+                  policy={localData.reassignmentPolicy ?? defaultReassignmentPolicy}
+                  emailProviderAvailable={options?.providerCapabilities.email ?? false}
+                  onChange={(reassignmentPolicy) => handleChange("reassignmentPolicy", reassignmentPolicy)}
+                />
+              </>
             ) : null}
           </>
         )}
 
       </div>
     </div>
+  );
+}
+
+function AssignmentPoolFields({
+  data,
+  assignees,
+  isLoading,
+  onChange,
+}: {
+  data: AutomationNodeData;
+  assignees: AutomationOptions["assignmentPoolAssignees"];
+  isLoading: boolean;
+  onChange: (patch: Partial<AutomationNodeData>) => void;
+}) {
+  const selectedIds = [...new Set(data.assigneeIds ?? [])];
+  const selectedIdSet = new Set(selectedIds);
+  const assigneeById = useMemo(() => new Map(assignees.map((assignee) => [assignee.id, assignee])), [assignees]);
+  const weightByAssignee = new Map((data.assigneeWeights ?? []).map((item) => [item.assigneeId, item.weight]));
+  const availableAssignees = assignees.filter((assignee) => !selectedIdSet.has(assignee.id));
+  const strategy = data.assignmentStrategy ?? "round_robin";
+
+  const updateSelectedIds = (nextIds: string[]) => onChange({
+    assigneeIds: nextIds,
+    assigneeWeights: nextIds.map((assigneeId) => ({
+      assigneeId,
+      weight: weightByAssignee.get(assigneeId) ?? 1,
+    })),
+  });
+
+  const updateWeight = (assigneeId: string, weight: number) => onChange({
+    assigneeWeights: selectedIds.map((selectedId) => ({
+      assigneeId: selectedId,
+      weight: selectedId === assigneeId
+        ? Math.min(100, Math.max(1, Math.round(weight) || 1))
+        : weightByAssignee.get(selectedId) ?? 1,
+    })),
+  });
+
+  return (
+    <FieldSet className="gap-4 rounded-lg border bg-muted/20 p-3">
+      <FieldLegend id="assignment-pool-heading" variant="label">Cách chia Sale</FieldLegend>
+      <FieldGroup className="gap-4">
+      <Field className="gap-2">
+        <ToggleGroup
+          type="single"
+          variant="outline"
+          value={strategy === "least_loaded" ? "" : strategy}
+          className="grid w-full grid-cols-2"
+          aria-label="Cách chia Sale"
+          onValueChange={(value) => {
+            if (value === "weighted" || value === "round_robin") {
+              onChange({ assignmentStrategy: value });
+            }
+          }}
+        >
+          <ToggleGroupItem value="weighted" className="min-h-11 w-full">
+            Theo trọng số
+          </ToggleGroupItem>
+          <ToggleGroupItem value="round_robin" className="min-h-11 w-full">
+            Chia đều
+          </ToggleGroupItem>
+        </ToggleGroup>
+        {strategy === "least_loaded" ? (
+          <FieldDescription>
+            Rule cũ đang dùng chế độ “Ít Lead nhất”. Chọn một chế độ phía trên để thay đổi.
+          </FieldDescription>
+        ) : null}
+      </Field>
+
+      <Field className="gap-2">
+        <FieldLabel>Thêm Sale vào danh sách</FieldLabel>
+        <Select
+          value=""
+          disabled={isLoading || availableAssignees.length === 0}
+          onValueChange={(assigneeId) => updateSelectedIds([...selectedIds, assigneeId])}
+        >
+          <SelectTrigger className="min-h-11" aria-label="Thêm Sale vào danh sách phân công">
+            <SelectValue placeholder={isLoading ? "Đang tải nhân viên..." : availableAssignees.length ? "Chọn Sale..." : "Đã chọn tất cả Sale khả dụng"} />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectGroup>
+              {availableAssignees.map((assignee) => (
+                <SelectItem key={assignee.id} value={assignee.id}>{assignee.fullName}</SelectItem>
+              ))}
+            </SelectGroup>
+          </SelectContent>
+        </Select>
+      </Field>
+
+      <Field className="gap-2">
+        <div className="grid grid-cols-[minmax(0,1fr)_4.5rem_4.5rem_2.75rem] items-end gap-2 px-1 text-xs font-medium text-muted-foreground">
+          <span>Sale</span>
+          <span>Trọng số</span>
+          <span>Đã gán</span>
+          <span className="sr-only">Thao tác</span>
+        </div>
+        {selectedIds.length === 0 ? (
+          <Empty className="border bg-background p-4">
+            <EmptyHeader>
+              <EmptyDescription>Chưa có Sale trong danh sách phân công.</EmptyDescription>
+            </EmptyHeader>
+          </Empty>
+        ) : selectedIds.map((assigneeId) => {
+          const assignee = assigneeById.get(assigneeId);
+          return (
+            <Field key={assigneeId} orientation="horizontal" className="grid grid-cols-[minmax(0,1fr)_4.5rem_4.5rem_2.75rem] items-center gap-2 rounded-md border bg-background p-1">
+              <span className="min-w-0 truncate px-2 text-sm" title={assignee?.fullName ?? assigneeId}>
+                {assignee?.fullName ?? "Sale không còn khả dụng"}
+              </span>
+              <Input
+                type="number"
+                min={1}
+                max={100}
+                inputMode="numeric"
+                className="min-h-11"
+                value={weightByAssignee.get(assigneeId) ?? 1}
+                aria-label={`Trọng số của ${assignee?.fullName ?? "Sale"}`}
+                onChange={(event) => updateWeight(assigneeId, Number(event.target.value))}
+              />
+              <output
+                className="flex h-9 items-center rounded-md border bg-muted px-2 text-sm tabular-nums"
+                aria-label={`Số Lead đã gán cho ${assignee?.fullName ?? "Sale"}`}
+              >
+                {assignee?.assignedCount ?? 0}
+              </output>
+              <Button
+                type="button"
+                variant="destructive"
+                size="icon"
+                className="size-11"
+                aria-label={`Xóa ${assignee?.fullName ?? "Sale"} khỏi danh sách`}
+                onClick={() => updateSelectedIds(selectedIds.filter((id) => id !== assigneeId))}
+              >
+                <Trash2 aria-hidden="true" />
+              </Button>
+            </Field>
+          );
+        })}
+        <FieldDescription>
+          “Đã gán” là số Lead hiện đang do Sale phụ trách trong chương trình làm việc.
+        </FieldDescription>
+      </Field>
+      </FieldGroup>
+    </FieldSet>
   );
 }
 
@@ -513,6 +668,7 @@ function RegistryNodeFields({
     <div className="space-y-4">
       {definition.configFields.filter((field) =>
         field.control !== "condition_group"
+        && !(nodeType === "action_assign_pool" && ["assignmentStrategy", "assigneeIds"].includes(field.key))
         && (!field.visibleForTriggerTypes || field.visibleForTriggerTypes.includes(data.triggerType ?? ""))).map((field) => {
         const value = data[field.key];
         const canInsertToken = ["title", "content", "activityContent", "reminderTitle", "reminderContent", "messageSubject", "messageContent", "webhookPayload"].includes(field.key);

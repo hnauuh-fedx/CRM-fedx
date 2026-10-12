@@ -90,6 +90,50 @@ test("registry validates the phase 3 assignment pool configuration", () => {
   assert.deepEqual(validateRegisteredAutomationNode(validPool), []);
 });
 
+test("registry validates weighted assignment configuration", () => {
+  const weightedPool: AutomationNode = {
+    id: "weighted-pool",
+    type: "action_assign_pool",
+    position: { x: 0, y: 0 },
+    data: {
+      label: "Chia Lead theo trọng số",
+      assignmentStrategy: "weighted",
+      assigneeIds: ["sale-a", "sale-b"],
+      assigneeWeights: [
+        { assigneeId: "sale-a", weight: 2 },
+        { assigneeId: "sale-b", weight: 1 },
+      ],
+    },
+  };
+
+  assert.deepEqual(validateRegisteredAutomationNode(weightedPool), []);
+  assert.equal(validateRegisteredAutomationNode({
+    ...weightedPool,
+    data: {
+      ...weightedPool.data,
+      assigneeWeights: [{ assigneeId: "sale-a", weight: 0 }],
+    },
+  }).length, 1);
+});
+
+test("registry rejects an unsupported assignment strategy", () => {
+  const invalidStrategy = {
+    id: "invalid-strategy",
+    type: "action_assign_pool",
+    position: { x: 0, y: 0 },
+    data: {
+      label: "Chia Lead",
+      assignmentStrategy: "random",
+      assigneeIds: ["sale-a"],
+    },
+  } as unknown as AutomationNode;
+
+  assert.deepEqual(
+    validateRegisteredAutomationNode(invalidStrategy),
+    ["Node chia Lead invalid-strategy dùng chiến lược phân công không được hỗ trợ."],
+  );
+});
+
 test("SLA duration is required only for the unprocessed-lead trigger", () => {
   const leadCreated: AutomationNode = {
     id: "trigger-1",

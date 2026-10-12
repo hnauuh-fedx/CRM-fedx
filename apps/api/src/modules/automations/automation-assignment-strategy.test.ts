@@ -1,7 +1,11 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
-import { selectLeastLoadedAssignee, selectRoundRobinAssignee } from "./automation-assignment-strategy";
+import {
+  selectLeastLoadedAssignee,
+  selectRoundRobinAssignee,
+  selectWeightedAssignee,
+} from "./automation-assignment-strategy";
 
 test("round-robin advances after the persisted cursor and wraps", () => {
   const candidates = ["sale-a", "sale-b", "sale-c"];
@@ -21,7 +25,34 @@ test("least-loaded picks the smallest active load with candidate order as determ
   assert.equal(selectLeastLoadedAssignee(candidates), "sale-b");
 });
 
+test("weighted assignment balances active load according to configured weights", () => {
+  const candidates = [
+    { id: "sale-a", activeLeadCount: 12, weight: 6 },
+    { id: "sale-b", activeLeadCount: 8, weight: 2 },
+    { id: "sale-c", activeLeadCount: 5, weight: 5 },
+  ];
+
+  assert.equal(selectWeightedAssignee(candidates), "sale-c");
+});
+
+test("weighted assignment uses candidate order as deterministic tie-break", () => {
+  const candidates = [
+    { id: "sale-a", activeLeadCount: 6, weight: 3 },
+    { id: "sale-b", activeLeadCount: 4, weight: 2 },
+  ];
+
+  assert.equal(selectWeightedAssignee(candidates), "sale-a");
+});
+
+test("weighted assignment rejects invalid weights", () => {
+  assert.throws(
+    () => selectWeightedAssignee([{ id: "sale-a", activeLeadCount: 0, weight: 0 }]),
+    /trọng số/i,
+  );
+});
+
 test("assignment strategies reject an empty candidate pool", () => {
   assert.throws(() => selectRoundRobinAssignee([], null), /ít nhất một nhân viên/i);
   assert.throws(() => selectLeastLoadedAssignee([]), /ít nhất một nhân viên/i);
+  assert.throws(() => selectWeightedAssignee([]), /ít nhất một nhân viên/i);
 });

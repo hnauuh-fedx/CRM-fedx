@@ -71,12 +71,13 @@ const nodes: AutomationNodeDefinition[] = [
     configFields: [{ key: "assignToUserId", label: "Nhân viên phụ trách", control: "select", required: true, optionsSource: "assignees" }],
   },
   {
-    type: "action_assign_pool", category: "action", label: "Chia Lead tự động", description: "Chia vòng hoặc chọn nhân viên đang có ít Lead nhất", icon: "users", tone: "purple", requiredCapabilities: ["assign"],
-    defaultData: { assignmentStrategy: "round_robin", assigneeIds: [] },
+    type: "action_assign_pool", category: "action", label: "Chia Lead tự động", description: "Chia đều hoặc phân bổ theo trọng số cho danh sách Sale", icon: "users", tone: "purple", requiredCapabilities: ["assign"],
+    defaultData: { assignmentStrategy: "round_robin", assigneeIds: [], assigneeWeights: [] },
     configFields: [
       { key: "assignmentStrategy", label: "Chiến lược phân công", control: "select", required: true, options: [
-        { code: "round_robin", label: "Chia vòng (Round-robin)" },
-        { code: "least_loaded", label: "Ít Lead đang phụ trách nhất" },
+        { code: "round_robin", label: "Chia đều" },
+        { code: "weighted", label: "Theo trọng số" },
+        { code: "least_loaded", label: "Ít Lead nhất (rule cũ)" },
       ] },
       { key: "departmentId", label: "Team / phòng ban (tuỳ chọn)", control: "select", required: false, optionsSource: "departments" },
       { key: "assigneeIds", label: "Danh sách nhân viên (tuỳ chọn)", control: "multi_select", required: false, optionsSource: "assignees" },
@@ -254,6 +255,27 @@ export function validateRegisteredAutomationNode(node: AutomationNode): string[]
 
   if (node.type === "action_assign_pool" && !node.data.departmentId && !node.data.assigneeIds?.length) {
     missing(`Node chia Lead ${node.id} phải chọn team/phòng ban hoặc ít nhất một nhân viên.`);
+  }
+
+  if (
+    node.type === "action_assign_pool"
+    && hasText(node.data.assignmentStrategy)
+    && !["round_robin", "least_loaded", "weighted"].includes(node.data.assignmentStrategy ?? "")
+  ) {
+    missing(`Node chia Lead ${node.id} dùng chiến lược phân công không được hỗ trợ.`);
+  }
+
+  if (node.type === "action_assign_pool" && node.data.assignmentStrategy === "weighted") {
+    const assigneeIds = [...new Set(node.data.assigneeIds ?? [])];
+    const weights = node.data.assigneeWeights ?? [];
+    const weightIds = weights.map((item) => item.assigneeId);
+    const validWeights = assigneeIds.length > 0
+      && weights.length === assigneeIds.length
+      && new Set(weightIds).size === weights.length
+      && weights.every((item) => assigneeIds.includes(item.assigneeId) && isBoundedInteger(item.weight, 1, 100));
+    if (!validWeights) {
+      missing(`Node chia Lead ${node.id} phải đặt trọng số từ 1 đến 100 cho từng nhân viên đã chọn.`);
+    }
   }
 
   if (node.type === "action_assign_pool" && node.data.reassignmentPolicy !== undefined) {

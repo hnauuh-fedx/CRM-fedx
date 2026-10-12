@@ -1,6 +1,8 @@
 import type { AutomationReassignmentPolicy } from "@admission-crm/shared/automation-reassignment-policy";
+import type { AutomationAssigneeWeight, AutomationAssignmentStrategy } from "@admission-crm/shared/automation-assignment";
 
 export type { AutomationReassignmentPolicy } from "@admission-crm/shared/automation-reassignment-policy";
+export type { AutomationAssigneeWeight, AutomationAssignmentStrategy } from "@admission-crm/shared/automation-assignment";
 
 export type AutomationRuleListItem = {
   id: string;
@@ -74,8 +76,9 @@ export type AutomationNodeData = {
   targetRole?: string;
   // Action: assign
   assignToUserId?: string;
-  assignmentStrategy?: "round_robin" | "least_loaded";
+  assignmentStrategy?: AutomationAssignmentStrategy;
   assigneeIds?: string[];
+  assigneeWeights?: AutomationAssigneeWeight[];
   departmentId?: string;
   reassignmentPolicy?: AutomationReassignmentPolicy;
   // Action: update stage
@@ -170,7 +173,8 @@ export type AutomationOptions = {
   registry: AutomationRegistry;
   institutionPrograms: Array<{ id: string; name: string; institutionName: string }>;
   triggerTypes: string[];
-  assignees: Array<{ id: string; fullName: string }>;
+  assignees: Array<{ id: string; fullName: string; assignedCount: number }>;
+  assignmentPoolAssignees: Array<{ id: string; fullName: string; assignedCount: number }>;
   departments: Array<{ id: string; name: string }>;
   pipelineStages: Array<{ id: string; name: string; pipelineName: string | null }>;
   targetRoles: Array<{ id: string; code: string; name: string }>;

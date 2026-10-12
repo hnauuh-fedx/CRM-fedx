@@ -1,8 +1,9 @@
 import { Prisma } from "../../generated/prisma/client";
+import type { AutomationAssigneeWeight, AutomationAssignmentStrategy } from "@admission-crm/shared/automation-assignment";
 
-import { selectLeastLoadedAssignee, selectRoundRobinAssignee } from "./automation-assignment-strategy";
+import { selectLeastLoadedAssignee, selectRoundRobinAssignee, selectWeightedAssignee } from "./automation-assignment-strategy";
 
-export type AutomationAssignmentStrategy = "least_loaded" | "round_robin";
+export type { AutomationAssigneeWeight, AutomationAssignmentStrategy } from "@admission-crm/shared/automation-assignment";
 
 export type AutomationAssigneePoolInput = {
   candidateIds: string[];
@@ -66,6 +67,7 @@ export async function resolveAutomationAssignee(
     ruleId: string;
     nodeId: string;
     strategy: AutomationAssignmentStrategy;
+    assigneeWeights?: AutomationAssigneeWeight[];
   },
 ) {
   await tx.$executeRaw(Prisma.sql`SELECT pg_advisory_xact_lock(hashtext(${`${input.ruleId}:${input.nodeId}`}))`);
@@ -73,20 +75,35 @@ export async function resolveAutomationAssignee(
     if (eligibleIds.length === 0) throw new Error("Không còn nhân viên đủ điều kiện trong danh sách phân công.");
 
     let selectedId: string;
-    if (input.strategy === "least_loaded") {
+    if (input.strategy === "least_loaded" || input.strategy === "weighted") {
       const loads = await tx.leads.groupBy({
         by: ["assigned_to"],
-        where: { deleted_at: null, assigned_to: { in: eligibleIds } },
+        where: {
+          deleted_at: null,
+          assigned_to: { in: eligibleIds },
+          ...(input.institutionProgramId ? { institution_program_id: input.institutionProgramId } : {}),
+        },
         _count: { _all: true },
       });
       const loadByUser = new Map(loads.map((load) => [load.assigned_to, load._count._all]));
-      selectedId = selectLeastLoadedAssignee(eligibleIds.map((id) => ({ id, activeLeadCount: loadByUser.get(id) ?? 0 })));
-    } else {
+      if (input.strategy === "weighted") {
+        const weightByUser = new Map((input.assigneeWeights ?? []).map((item) => [item.assigneeId, item.weight]));
+        selectedId = selectWeightedAssignee(eligibleIds.map((id) => ({
+          id,
+          activeLeadCount: loadByUser.get(id) ?? 0,
+          weight: weightByUser.get(id) ?? 1,
+        })));
+      } else {
+        selectedId = selectLeastLoadedAssignee(eligibleIds.map((id) => ({ id, activeLeadCount: loadByUser.get(id) ?? 0 })));
+      }
+    } else if (input.strategy === "round_robin") {
       const cursor = await tx.automation_assignment_cursors.findUnique({
         where: { rule_id_node_id: { rule_id: input.ruleId, node_id: input.nodeId } },
         select: { last_assignee_id: true },
       });
       selectedId = selectRoundRobinAssignee(eligibleIds, cursor?.last_assignee_id ?? null);
+    } else {
+      throw new Error("Chiến lược phân công không được hỗ trợ.");
     }
 
     await tx.automation_assignment_cursors.upsert({

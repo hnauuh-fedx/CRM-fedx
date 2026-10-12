@@ -119,7 +119,7 @@ async function executeAssignAction(node: AutomationNode, context: AutomationCont
 }
 
 async function executeAssignPoolAction(node: AutomationNode, context: AutomationContext, nodeExecutionId: string): Promise<AutomationActionResult> {
-  const { assignmentStrategy, assigneeIds, departmentId, reassignmentPolicy } = node.data;
+  const { assignmentStrategy, assigneeIds, assigneeWeights, departmentId, reassignmentPolicy } = node.data;
   if (!context.leadId || !assignmentStrategy || (!assigneeIds?.length && !departmentId)) throw new UnrecoverableError("Node chia Lead thiếu chiến lược, team/danh sách nhân viên hoặc lead context.");
   const actor = await requireActor(context);
   const result = { nextSourceHandle: "default", delayMinutes: 0 };
@@ -135,6 +135,7 @@ async function executeAssignPoolAction(node: AutomationNode, context: Automation
       allowedDepartmentIds: actor.departmentIds,
       allowAllCandidates: actor.accessScope === "ALL" && actor.permissions.includes("lead.view_all"),
       strategy: assignmentStrategy,
+      assigneeWeights,
     }),
   }, context.institutionProgramId, async (tx, assignment) => {
     await markActionCompleted(tx, nodeExecutionId, result);
@@ -149,6 +150,7 @@ async function executeAssignPoolAction(node: AutomationNode, context: Automation
         nodeSnapshot: {
           assignmentStrategy,
           assigneeIds: assigneeIds ?? [],
+          ...(assigneeWeights ? { assigneeWeights } : {}),
           ...(departmentId ? { departmentId } : {}),
         },
         policy: reassignmentPolicy,

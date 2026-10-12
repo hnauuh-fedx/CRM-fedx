@@ -7,6 +7,7 @@ import { assignVisibleLead, type LeadAssignmentTransactionContext } from "../lea
 import {
   listEligibleAutomationAssigneeIds,
   resolveAutomationAssignee,
+  type AutomationAssigneeWeight,
   type AutomationAssignmentStrategy,
 } from "./automation-assignment.service";
 import { getAutomationLeadData, getAutomationTemplateReferences, renderAutomationTemplate } from "./automation-data-field.service";
@@ -18,6 +19,7 @@ type TransactionClient = Prisma.TransactionClient;
 export type ReassignmentNodeSnapshot = {
   assignmentStrategy: AutomationAssignmentStrategy;
   assigneeIds: string[];
+  assigneeWeights?: AutomationAssigneeWeight[];
   departmentId?: string;
 };
 
@@ -103,6 +105,20 @@ function parseStringArray(value: Prisma.JsonValue): string[] {
   return Array.isArray(value) ? value.filter((item): item is string => typeof item === "string") : [];
 }
 
+function parseAssigneeWeights(value: unknown): AutomationAssigneeWeight[] | null {
+  if (!Array.isArray(value)) return null;
+  if (!value.every((item) => {
+    if (!item || typeof item !== "object" || Array.isArray(item)) return false;
+    const weight = (item as Record<string, unknown>).weight;
+    return typeof (item as Record<string, unknown>).assigneeId === "string"
+      && typeof weight === "number"
+      && Number.isInteger(weight)
+      && weight > 0
+      && weight <= 100;
+  })) return null;
+  return value as AutomationAssigneeWeight[];
+}
+
 function parsePolicy(value: Prisma.JsonValue): AutomationReassignmentPolicy | null {
   if (!value || typeof value !== "object" || Array.isArray(value)) return null;
   const policy = value as Record<string, unknown>;
@@ -136,15 +152,29 @@ function parsePolicy(value: Prisma.JsonValue): AutomationReassignmentPolicy | nu
 function parseNodeSnapshot(value: Prisma.JsonValue): ReassignmentNodeSnapshot | null {
   if (!value || typeof value !== "object" || Array.isArray(value)) return null;
   const node = value as Record<string, unknown>;
+  const assigneeIds = Array.isArray(node.assigneeIds)
+    && node.assigneeIds.every((id) => typeof id === "string")
+    ? node.assigneeIds as string[]
+    : null;
+  const assigneeWeights = node.assigneeWeights === undefined
+    ? undefined
+    : parseAssigneeWeights(node.assigneeWeights);
   if (
-    !["least_loaded", "round_robin"].includes(String(node.assignmentStrategy))
-    || !Array.isArray(node.assigneeIds)
-    || !node.assigneeIds.every((id) => typeof id === "string")
+    !["least_loaded", "round_robin", "weighted"].includes(String(node.assignmentStrategy))
+    || !assigneeIds
+    || assigneeWeights === null
+    || (node.assignmentStrategy === "weighted" && (
+      !assigneeWeights
+      || assigneeWeights.length !== assigneeIds.length
+      || new Set(assigneeWeights.map((item) => item.assigneeId)).size !== assigneeIds.length
+      || !assigneeIds.every((assigneeId) => assigneeWeights.some((item) => item.assigneeId === assigneeId))
+    ))
     || (node.departmentId !== undefined && typeof node.departmentId !== "string")
   ) return null;
   return {
     assignmentStrategy: node.assignmentStrategy as AutomationAssignmentStrategy,
-    assigneeIds: node.assigneeIds as string[],
+    assigneeIds,
+    ...(assigneeWeights ? { assigneeWeights } : {}),
     ...(typeof node.departmentId === "string" ? { departmentId: node.departmentId } : {}),
   };
 }
@@ -423,6 +453,7 @@ export async function processReassignmentExpiry(monitorId: string, now = new Dat
           departmentId: nodeSnapshot.departmentId,
           institutionProgramId: claimed.institution_program_id ?? undefined,
           strategy: nodeSnapshot.assignmentStrategy,
+          assigneeWeights: nodeSnapshot.assigneeWeights,
         });
       },
     }, claimed.institution_program_id ?? undefined, async (tx, assignment) => {

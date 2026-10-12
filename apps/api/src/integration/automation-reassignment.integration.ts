@@ -101,21 +101,23 @@ async function main() {
     { role_id: saleRole.id, permission_id: permissionByCode.get("lead.view_assigned")! },
   ] });
 
-  const [manager, firstSale, secondSale, thirdSale] = await Promise.all([
+  const [manager, firstSale, secondSale, thirdSale, fourthSale] = await Promise.all([
     prisma.users.create({ data: { email: `reassignment.manager.${runId}@example.test`, password_hash: "integration-only", full_name: `Manager ${runId}` }, select: { id: true } }),
     prisma.users.create({ data: { email: `reassignment.first.${runId}@example.test`, password_hash: "integration-only", full_name: `Sale 1 ${runId}` }, select: { id: true } }),
     prisma.users.create({ data: { email: `reassignment.second.${runId}@example.test`, password_hash: "integration-only", full_name: `Sale 2 ${runId}` }, select: { id: true } }),
     prisma.users.create({ data: { email: `reassignment.third.${runId}@example.test`, password_hash: "integration-only", full_name: `Sale 3 ${runId}` }, select: { id: true } }),
+    prisma.users.create({ data: { email: `reassignment.fourth.${runId}@example.test`, password_hash: "integration-only", full_name: `Sale 4 ${runId}` }, select: { id: true } }),
   ]);
-  userIds.push(manager.id, firstSale.id, secondSale.id, thirdSale.id);
+  userIds.push(manager.id, firstSale.id, secondSale.id, thirdSale.id, fourthSale.id);
   await prisma.user_roles.createMany({ data: [
     { user_id: manager.id, role_id: managerRole.id },
     { user_id: firstSale.id, role_id: saleRole.id },
     { user_id: secondSale.id, role_id: saleRole.id },
     { user_id: secondSale.id, role_id: managerRole.id },
     { user_id: thirdSale.id, role_id: saleRole.id },
+    { user_id: fourthSale.id, role_id: saleRole.id },
   ] });
-  await prisma.user_departments.createMany({ data: [manager.id, firstSale.id, secondSale.id, thirdSale.id].map((userId) => ({
+  await prisma.user_departments.createMany({ data: [manager.id, firstSale.id, secondSale.id, thirdSale.id, fourthSale.id].map((userId) => ({
     user_id: userId,
     department_id: department.id,
   })) });
@@ -177,7 +179,17 @@ async function main() {
       leadId: lead.id,
       actorId: manager.id,
       institutionProgramId: program.id,
-      nodeSnapshot: { assignmentStrategy: "round_robin", assigneeIds: [firstSale.id, secondSale.id, thirdSale.id], departmentId: department.id },
+      nodeSnapshot: {
+        assignmentStrategy: "weighted",
+        assigneeIds: [firstSale.id, secondSale.id, thirdSale.id, fourthSale.id],
+        assigneeWeights: [
+          { assigneeId: firstSale.id, weight: 1 },
+          { assigneeId: secondSale.id, weight: 2 },
+          { assigneeId: thirdSale.id, weight: 1 },
+          { assigneeId: fourthSale.id, weight: 3 },
+        ],
+        departmentId: department.id,
+      },
       policy: monitorPolicy,
     }));
     return { lead, assignment, monitor };
@@ -190,7 +202,7 @@ async function main() {
   ]);
   assert.ok(concurrentResults.some((result) => result.outcome === "reassigned"));
   const changedLead = await prisma.leads.findUniqueOrThrow({ where: { id: active.lead.id }, select: { assigned_to: true } });
-  assert.equal(changedLead.assigned_to, thirdSale.id, "Người có thêm vai trò quản lý phải bị loại khỏi pool Sale dù vẫn có vai trò telesale.");
+  assert.equal(changedLead.assigned_to, fourthSale.id, "Weighted reassignment phải chọn Sale có tỷ lệ tải/trọng số thấp nhất và loại người có thêm vai trò quản lý.");
   const oldMonitor = await prisma.automation_reassignment_monitors.findUniqueOrThrow({ where: { id: active.monitor.id } });
   assert.equal(oldMonitor.status, "reassigned");
   assert.ok(oldMonitor.next_assignment_id);
@@ -353,7 +365,7 @@ async function main() {
   assert.ok(metrics.reassignment.recent.some((item) => (
     item.id === active.monitor.id
     && item.previousAssignee.id === firstSale.id
-    && item.nextAssignee?.id === thirdSale.id
+    && item.nextAssignee?.id === fourthSale.id
     && item.completionReason === "sale_reassigned"
     && item.delayMs >= 0
   )), "Nhật ký gần đây phải có lý do, Sale cũ/mới và độ trễ.");

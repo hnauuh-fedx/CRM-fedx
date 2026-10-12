@@ -436,6 +436,18 @@ async function main() {
       options.payload.registry.nodes.some((node: JsonRecord) => node.type === "action_assign"),
       "Options phải trả node registry để builder dựng palette và properties panel.",
     );
+    assert.ok(
+      options.payload.assignees.some((assignee: JsonRecord) => assignee.id === fixtures.actor.id),
+      "Danh sách gán trực tiếp phải giữ người dùng có quyền rộng hơn Telesale.",
+    );
+    assert.ok(
+      !options.payload.assignmentPoolAssignees.some((assignee: JsonRecord) => assignee.id === fixtures.actor.id),
+      "Pool chia tự động chỉ được chứa Sale có phạm vi Lead được gán.",
+    );
+    const targetAssigneeBefore = options.payload.assignmentPoolAssignees.find((assignee: JsonRecord) => assignee.id === fixtures.target.id);
+    assert.ok(targetAssigneeBefore, "Options phải trả Sale đủ điều kiện trong chương trình làm việc.");
+    const targetAssignedCountBefore = Number(targetAssigneeBefore.assignedCount);
+    assert.ok(Number.isInteger(targetAssignedCountBefore), "Số Lead đã gán phải là số nguyên.");
     const filteredRules = await request(
       baseUrl,
       `/automations?search=${runId}&isActive=false&triggerType=lead_created&page=1&limit=20`,
@@ -514,6 +526,18 @@ async function main() {
     const matchingLead = await request(baseUrl, `/leads/${fixtures.matchingLead.id}`, { token: actorToken });
     assert.equal(matchingLead.status, 200);
     assert.equal(matchingLead.payload.data.assignments[0]?.assignee?.id, fixtures.target.id, "Action assign phải đổi người phụ trách.");
+    const optionsAfterAssignment = await request(
+      baseUrl,
+      `/automations/options?institutionProgramId=${fixtures.program.id}`,
+      { token: actorToken },
+    );
+    assert.equal(optionsAfterAssignment.status, 200);
+    const targetAssigneeAfter = optionsAfterAssignment.payload.assignmentPoolAssignees.find((assignee: JsonRecord) => assignee.id === fixtures.target.id);
+    assert.equal(
+      Number(targetAssigneeAfter?.assignedCount),
+      targetAssignedCountBefore + 1,
+      "Cột Đã gán phải phản ánh số Lead hiện do Sale phụ trách trong chương trình làm việc.",
+    );
     assert.equal(matchingLead.payload.data.stageHistory[0]?.toStage?.id, fixtures.targetStage.id, "Action stage phải ghi lịch sử pipeline.");
     assert.equal(
       matchingLead.payload.data.activities.filter((activity: JsonRecord) => activity.type === "lead_assigned").length,
