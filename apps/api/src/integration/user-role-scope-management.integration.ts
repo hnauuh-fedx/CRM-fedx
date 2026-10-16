@@ -45,7 +45,7 @@ async function request(
     headers: {
       "Content-Type": "application/json",
       ...(options.token ? { Authorization: `Bearer ${options.token}` } : {}),
-      ...(options.programId ? { "X-Institution-Program-Id": options.programId } : {}),
+      ...((options.programId ?? programId) ? { "X-Institution-Program-Id": options.programId ?? programId! } : {}),
     },
     body: options.body ? JSON.stringify(options.body) : undefined,
   });
@@ -157,11 +157,12 @@ async function preparePrincipal() {
   ]);
   managerUserId = managerUser.id;
   limitedUserId = limitedUser.id;
-  await prisma.user_roles.createMany({
+  await prisma.user_program_roles.createMany({
     data: [
-      { user_id: managerUser.id, role_id: managerRole.id },
-      { user_id: limitedUser.id, role_id: limitedRole.id },
-      { user_id: limitedUser.id, role_id: secondaryManagerRole.id },
+      { user_id: managerUser.id, role_id: managerRole.id, institution_program_id: program.id },
+      { user_id: managerUser.id, role_id: managerRole.id, institution_program_id: secondaryProgram.id },
+      { user_id: limitedUser.id, role_id: limitedRole.id, institution_program_id: program.id },
+      { user_id: limitedUser.id, role_id: secondaryManagerRole.id, institution_program_id: secondaryProgram.id },
     ],
   });
   await prisma.user_access_scopes.createMany({
@@ -194,7 +195,7 @@ async function cleanupStaleFixtures() {
   const roleIds = roles.map((role) => role.id);
   const departmentIds = departments.map((department) => department.id);
   const [roleUsers, departmentUsers, departmentManagers] = await Promise.all([
-    prisma.user_roles.findMany({
+    prisma.user_program_roles.findMany({
       where: { role_id: { in: roleIds } },
       select: { user_id: true },
     }),
@@ -235,7 +236,7 @@ async function cleanupStaleFixtures() {
         ],
       },
     }),
-    prisma.user_roles.deleteMany({ where: { OR: [{ user_id: { in: userIds } }, { role_id: { in: roleIds } }] } }),
+    prisma.user_program_roles.deleteMany({ where: { OR: [{ user_id: { in: userIds } }, { role_id: { in: roleIds } }] } }),
     prisma.departments.deleteMany({ where: { id: { in: departmentIds } } }),
     prisma.users.deleteMany({ where: { id: { in: userIds } } }),
     prisma.role_access_scopes.deleteMany({ where: { role_id: { in: roleIds } } }),
@@ -434,7 +435,7 @@ async function verifyUserRoleScopeManagement() {
       phone: "0907654321",
       status: "active",
       password: managedPassword,
-      roleIds: [managedRoleId],
+      programAssignments: [{ institutionProgramId: programId, roleId: managedRoleId }],
       departmentIds: [departmentId],
       accessScope: "ASSIGNED_ONLY",
     },
@@ -459,7 +460,7 @@ async function verifyUserRoleScopeManagement() {
         email: managedEmail,
         status: "active",
         password: managedPassword,
-        roleIds: [],
+        programAssignments: [{ institutionProgramId: programId, roleId: managedRoleId }],
         departmentIds: [],
         accessScope: "READ_ONLY",
       },
@@ -521,7 +522,7 @@ async function verifyUserRoleScopeManagement() {
       email: managedEmail,
       phone: "0907654322",
       status: "active",
-      roleIds: [managedRoleId],
+      programAssignments: [{ institutionProgramId: programId, roleId: managedRoleId }],
       departmentIds: [departmentId],
       accessScope: "READ_ONLY",
     },
@@ -586,7 +587,7 @@ async function cleanup() {
         ],
       },
     }),
-    prisma.user_roles.deleteMany({ where: { OR: [{ user_id: { in: userIds } }, { role_id: { in: roleIds } }] } }),
+    prisma.user_program_roles.deleteMany({ where: { OR: [{ user_id: { in: userIds } }, { role_id: { in: roleIds } }] } }),
     prisma.departments.deleteMany({ where: { id: { in: departmentIds } } }),
     prisma.users.deleteMany({ where: { id: { in: userIds } } }),
     prisma.role_access_scopes.deleteMany({ where: { role_id: { in: roleIds } } }),

@@ -1,3 +1,4 @@
+import { enrolledStudentWhere } from "./student-membership";
 import { prisma } from "../../database/prisma";
 import type { AuthUser } from "../auth/auth.types";
 import { getLeadScopeWhere } from "../leads/lead-list.service";
@@ -28,6 +29,7 @@ const studentSortFields = {
 export async function listStudents(user: AuthUser, query: StudentListQuery) {
   const where = {
     AND: [
+      enrolledStudentWhere,
       { leads: { is: getLeadScopeWhere(user) } },
       ...(query.search
         ? [
@@ -127,6 +129,7 @@ function findStudentDetail(user: AuthUser, id: string, institutionProgramId?: st
   return prisma.students.findFirst({
     where: {
       id,
+      ...enrolledStudentWhere,
       leads: { is: getLeadScopeWhere(user) },
       ...(institutionProgramId ? { institution_program_id: institutionProgramId } : {}),
     },
@@ -191,6 +194,7 @@ export async function updateStudentAcademicInfo(
   const existing = await prisma.students.findFirst({
     where: {
       id,
+      ...enrolledStudentWhere,
       leads: { is: getLeadScopeWhere(user) },
       ...(institutionProgramId ? { institution_program_id: institutionProgramId } : {}),
     },
@@ -242,6 +246,7 @@ export async function updateStudentAcademicInfo(
 
 export async function getStudentFilterOptions(user: AuthUser, institutionProgramId?: string) {
   const scopedStudentWhere = {
+    ...enrolledStudentWhere,
     leads: { is: getLeadScopeWhere(user) },
     ...(institutionProgramId ? { institution_program_id: institutionProgramId } : {}),
   };

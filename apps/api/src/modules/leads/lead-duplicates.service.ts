@@ -10,9 +10,17 @@ const emptyScope = Prisma.sql`FALSE`;
 // that the requesting user could not open in the ordinary lead list.
 function scopeSql(user: AuthUser) {
   const permissions = new Set(user.permissions);
+  const assignedScope = Prisma.sql`(l.assigned_to = ${user.id}::uuid OR l.secondary_assigned_to = ${user.id}::uuid OR EXISTS (
+    SELECT 1 FROM lead_assignments la
+    WHERE la.lead_id = l.id AND la.is_main_owner = TRUE AND la.assigned_to = ${user.id}::uuid
+  ))`;
+  if (!permissions.has("lead.view_all") && !permissions.has("lead.view_department")) {
+    return permissions.has("lead.view_assigned") ? assignedScope : emptyScope;
+  }
+
   if (user.accessScope === "ALL" && permissions.has("lead.view_all")) return Prisma.sql`TRUE`;
   if (user.accessScope === "OWNED_ONLY") return Prisma.sql`l.owner_id = ${user.id}::uuid`;
-  if (user.accessScope === "DEPARTMENT" || permissions.has("lead.view_department")) {
+  if (["ALL", "DEPARTMENT"].includes(user.accessScope)) {
     if (user.departmentIds.length === 0) return emptyScope;
     return Prisma.sql`EXISTS (
       SELECT 1 FROM lead_assignments la
@@ -20,11 +28,7 @@ function scopeSql(user: AuthUser) {
         AND la.department_id IN (${Prisma.join(user.departmentIds.map((id) => Prisma.sql`${id}::uuid`))})
     )`;
   }
-  if (!permissions.has("lead.view_assigned") && permissions.has("lead.view_all")) return Prisma.sql`TRUE`;
-  return Prisma.sql`(l.assigned_to = ${user.id}::uuid OR EXISTS (
-    SELECT 1 FROM lead_assignments la
-    WHERE la.lead_id = l.id AND la.is_main_owner = TRUE AND la.assigned_to = ${user.id}::uuid
-  ))`;
+  return assignedScope;
 }
 
 export function canCheckSensitiveDuplicates(user: AuthUser) {

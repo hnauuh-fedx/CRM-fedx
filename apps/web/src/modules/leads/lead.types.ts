@@ -1,8 +1,15 @@
 export type LeadListItem = {
+  recordType: "candidate" | "student";
+  lifecycleStatus: {
+    value: "ACTIVE" | "FAIL";
+    label: string;
+    failedStageId: string | null;
+  };
   id: string;
   leadCode: string | null;
   fullName: string;
   phone: string | null;
+  secondaryPhones: string[];
   email: string | null;
   gender: string | null;
   dateOfBirth: string | null;
@@ -63,17 +70,20 @@ export type LeadListItem = {
   gclid: string | null;
   tags: string;
   note: string | null;
+  latestNote?: string | null;
   temperature: string | null;
   source: { id: string; name: string } | null;
   origin: { id: string; name: string } | null;
   pipelineStage: { id: string; name: string; color: string | null } | null;
   assignee: { id: string; fullName: string } | null;
+  secondaryAssignee?: { id: string; fullName: string } | null;
   createdAt: string | null;
 };
 
 export type LeadSortField = "createdAt" | "fullName" | "leadCode" | "pipelineStage";
 
 export type LeadListFilters = {
+  status?: "" | "ACTIVE" | "FAIL";
   search: string;
   pipelineStageId: string;
   sourceId: string;
@@ -112,6 +122,8 @@ export type LeadFilterOptions = {
   }>;
   majors: Array<{ id: string; name: string }>;
   totalLeads: number;
+  failedLeads: number;
+  customFields?: LeadCustomField[];
 };
 
 export type DuplicateLeadField = "fullName" | "phone" | "email";
@@ -133,11 +145,6 @@ export type DuplicateLeadResponse = {
 };
 
 export type LeadDetail = LeadListItem & {
-  lifecycleStatus: {
-    value: "ACTIVE" | "FAIL";
-    label: string;
-    failedStageId: string | null;
-  };
   sourceOccurrences: Array<{
     id: string;
     sourceGroup: { id: string; name: string };
@@ -258,8 +265,10 @@ export type LeadDetail = LeadListItem & {
 export type LeadFormInput = {
   fullName: string;
   phone: string;
+  secondaryPhones?: string[];
   sourceId: string;
   assigneeId: string;
+  secondaryAssigneeId?: string;
   pipelineStageId: string;
   noteTemplateId?: string;
   noteContent?: string;

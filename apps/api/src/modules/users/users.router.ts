@@ -28,7 +28,7 @@ const userBodySchema = z.object({
   phone: z.string().trim().max(30).optional().or(z.literal("")).transform((value) => value || undefined),
   status: z.enum(["active", "inactive", "suspended"]).default("active"),
   password: z.string().min(8).max(100).optional().or(z.literal("")).transform((value) => value || undefined),
-  roleIds: z.array(z.uuid()).default([]),
+  programAssignments: z.array(z.object({ institutionProgramId: z.uuid(), roleId: z.uuid() })).min(1).max(100).refine((items) => new Set(items.map((item) => item.institutionProgramId)).size === items.length),
   departmentIds: z.array(z.uuid()).default([]),
   accessScope: z.enum(["ALL", "DEPARTMENT", "ASSIGNED_ONLY", "OWNED_ONLY", "READ_ONLY"]).default("DEPARTMENT"),
 });
@@ -38,8 +38,10 @@ export const usersRouter = Router();
 usersRouter.use(requireAuthentication, requireAnyPermission("user.manage"));
 
 function resultMessage(reason: string) {
+  if (reason === "program_forbidden") return "Bạn không có quyền quản lý người dùng trong chương trình đã chọn.";
+  if (reason === "invalid_program_assignments") return "Chọn chương trình và đúng một vai trò cho mỗi chương trình.";
   if (reason === "email_exists") return "Email đã được sử dụng cho tài khoản khác.";
-  if (reason === "role_not_found") return "Vai trò đã chọn không tồn tại.";
+  if (reason === "role_not_found") return "Vai trò đã chọn không thuộc chương trình hoặc chương trình không còn hoạt động.";
   if (reason === "department_not_found") return "Phòng ban đã chọn không tồn tại.";
   if (reason === "password_required") return "Vui lòng nhập mật khẩu ban đầu tối thiểu 8 ký tự.";
   return "Không tìm thấy tài khoản người dùng.";
@@ -52,7 +54,7 @@ usersRouter.get("/", async (request, response, next) => {
       response.status(400).json({ message: "Tham số danh sách người dùng không hợp lệ." });
       return;
     }
-    response.json(await listManagedUsers(parsed.data, getInstitutionProgramScope(request)!));
+    response.json(await listManagedUsers(parsed.data, getInstitutionProgramScope(request)!, request.authUser!));
   } catch (error) {
     next(error);
   }
@@ -60,7 +62,7 @@ usersRouter.get("/", async (request, response, next) => {
 
 usersRouter.get("/options", async (request, response, next) => {
   try {
-    response.json(await getUserManagementOptions(getInstitutionProgramScope(request)!));
+    response.json(await getUserManagementOptions(getInstitutionProgramScope(request)!, request.authUser!));
   } catch (error) {
     next(error);
   }
@@ -75,7 +77,7 @@ usersRouter.post("/", async (request, response, next) => {
     }
     const result = await createManagedUser(request.authUser!, parsed.data, getInstitutionProgramScope(request)!, request.ip);
     if (!result.ok) {
-      response.status(result.reason === "email_exists" ? 409 : 400).json({ message: resultMessage(result.reason) });
+      response.status(result.reason === "program_forbidden" ? 403 : result.reason === "email_exists" ? 409 : 400).json({ message: resultMessage(result.reason) });
       return;
     }
     response.status(201).json(result.data);

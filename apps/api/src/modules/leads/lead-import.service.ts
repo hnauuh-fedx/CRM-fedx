@@ -4,6 +4,7 @@ import type { AuthUser } from "../auth/auth.types";
 import { createLead } from "./application/create-lead.use-case";
 import type { LeadInput } from "./domain/lead-input";
 import { prisma } from "../../database/prisma";
+import { readBizflyRows, importBizflyRows } from "./bizfly-lead-import.service";
 
 type ImportRow = Record<string, unknown>;
 
@@ -134,6 +135,8 @@ export async function importLeadsFromWorkbook(
   scopedInstitutionProgramId?: string,
   ipAddress?: string,
 ): Promise<LeadImportResult> {
+  const bizflyRows = readBizflyRows(file);
+  if (bizflyRows) return importBizflyRows(user, bizflyRows, scopedInstitutionProgramId, ipAddress);
   const { headers, rows } = readRows(file);
   validateRequiredHeaders(headers, Boolean(scopedInstitutionProgramId));
   const referenceMaps = await getReferenceMaps(scopedInstitutionProgramId);

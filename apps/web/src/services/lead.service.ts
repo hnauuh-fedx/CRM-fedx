@@ -13,34 +13,42 @@ import type {
   DuplicateLeadResponse,
 } from "@/modules/leads/lead.types";
 import { apiFormRequest, apiRequest } from "./api";
+import type { FilterConditionState } from "@/modules/leads/filter-fields";
+import { serializeConditions } from "@/modules/leads/filter-serialization";
 
 type LeadListParams = {
+  audience?: "candidates" | "students" | "all";
   page: number;
   limit: number;
   sortBy: LeadSortField;
   sortOrder: "asc" | "desc";
+  filterConditions?: FilterConditionState[];
 } & LeadListFilters;
 
 export function getLeads(params: LeadListParams, accessToken: string) {
   const query = new URLSearchParams({
+    audience: params.audience ?? "candidates",
     page: String(params.page),
     limit: String(params.limit),
     sortBy: params.sortBy,
     sortOrder: params.sortOrder,
     search: params.search,
     pipelineStageId: params.pipelineStageId,
+    status: params.status ?? "",
     sourceId: params.sourceId,
     majorId: params.majorId,
     assigneeId: params.assigneeId,
     fromDate: params.fromDate,
     toDate: params.toDate,
   });
+  const filters = serializeConditions(params.filterConditions ?? []);
+  if (filters) query.set("filters", filters);
 
   return apiRequest<LeadListResponse>(`/leads?${query.toString()}`, {}, accessToken);
 }
 
-export function getLeadFilterOptions(accessToken: string) {
-  return apiRequest<LeadFilterOptions>("/leads/options", {}, accessToken);
+export function getLeadFilterOptions(accessToken: string, audience: "candidates" | "students" | "all" = "candidates") {
+  return apiRequest<LeadFilterOptions>(`/leads/options?audience=${audience}`, {}, accessToken);
 }
 
 export function getLead(leadId: string, accessToken: string) {
@@ -177,4 +185,9 @@ export function assignLeads(leadIds: string[], assigneeId: string, accessToken: 
     { method: "POST", body: JSON.stringify({ leadIds, assigneeId }) },
     accessToken,
   );
+}
+
+export function changeStudentMembership(leadId: string, target: "student" | "candidate", accessToken: string) {
+  return apiRequest<{ id: string; recordType: "student" | "candidate" }>(`/leads/${leadId}/membership`,
+    { method: "POST", body: JSON.stringify({ target }) }, accessToken);
 }

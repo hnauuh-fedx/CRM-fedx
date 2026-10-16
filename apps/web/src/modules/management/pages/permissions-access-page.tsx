@@ -90,6 +90,8 @@ const permissionCodeOptions = [
   { code: "admission_document.upload", name: "Upload tài liệu hồ sơ", module: "admission" },
   { code: "admission_major.manage", name: "Quản lý ngành tuyển sinh", module: "system" },
   { code: "institution_program.manage", name: "Quản lý chương trình tuyển sinh", module: "system" },
+  { code: "student.convert_from_lead", name: "Chuyển ứng viên sang học viên", module: "student" },
+  { code: "student.revert_to_candidate", name: "Chuyển học viên trở lại ứng viên", module: "student" },
   { code: "student.create_from_admission", name: "Chuyển hồ sơ thành sinh viên", module: "student" },
   { code: "student.view_all", name: "Xem toàn bộ sinh viên", module: "student" },
   { code: "student.view", name: "Xem sinh viên", module: "student" },

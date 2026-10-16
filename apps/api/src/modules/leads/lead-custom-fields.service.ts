@@ -4,6 +4,7 @@ import { prisma } from "../../database/prisma";
 import type { AuthUser } from "../auth/auth.types";
 import { vietnamProvinceCodes } from "../custom-fields/vietnam-provinces";
 import { getLeadScopeWhere } from "./lead-list.service";
+import { isEnrolledStudent } from "../students/student-membership";
 
 type Input = { fieldId: string; value: unknown };
 type Field = Awaited<ReturnType<typeof prisma.custom_fields.findMany>>[number];
@@ -126,7 +127,7 @@ async function leadFor(
         ? { institution_program_id: institutionProgramId }
         : {}),
     },
-    select: { id: true, institution_program_id: true },
+    select: { id: true, institution_program_id: true, students: { select: { status: true } } },
   });
 }
 
@@ -154,7 +155,8 @@ export async function getLeadCustomFields(
     orderBy: [{ custom_field_groups: { display_order: "asc" } }, { display_order: "asc" }, { id: "asc" }],
   });
   const viewSensitive = hasCustomFieldPermission(user.permissions, "LEAD", "view_sensitive");
-  const canEdit = user.permissions.some((permission) => ["lead.update_all", "lead.update_department", "lead.update_assigned"].includes(permission));
+  const canEdit = user.permissions.some((permission) => ["lead.update_all", "lead.update_department", "lead.update_assigned"].includes(permission))
+    && (!isEnrolledStudent(lead.students) || user.permissions.some((permission) => ["student.update", "student.update_all"].includes(permission)));
   return {
     fields: fields.map((field) => ({
       id: field.id,

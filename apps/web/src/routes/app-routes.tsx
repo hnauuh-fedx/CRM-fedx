@@ -292,6 +292,10 @@ export function AppRoutes() {
             >
               <Route path="/sale/leads" element={<LeadsListPage />} />
               <Route path="/sale/leads/:leadId" element={<LeadDetailPage />} />
+              <Route element={<ProtectedRoute anyPermissions={["student.view", "student.view_all"]} />}>
+                <Route path="/sale/students" element={<LeadsListPage audience="students" title="Học viên" detailBasePath="/sale/students" showLeadCreationActions={false} />} />
+                <Route path="/sale/students/:leadId" element={<LeadDetailPage listPath="/sale/students" listLabel="Học viên" eyebrow="CRM Sale / Học viên" />} />
+              </Route>
               <Route element={<ProtectedRoute anyPermissions={["lead.assign", "lead.reassign"]} />}>
                 <Route path="/sale/phan-cong" element={<LeadAssignmentsPage />} />
               </Route>
@@ -362,6 +366,7 @@ export function AppRoutes() {
                     title="Danh sách khách hàng"
                     description="Danh sách tất cả lead trong phạm vi dữ liệu bạn được quyền truy cập."
                     detailBasePath="/marketing/danh-sach-khach-hang"
+                    audience="all"
                     enableCustomerListAssignment
                   />
                 }

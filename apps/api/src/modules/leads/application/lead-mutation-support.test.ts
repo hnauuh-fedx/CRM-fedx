@@ -3,6 +3,7 @@ import { describe, it } from "node:test";
 
 import type { AuthUser } from "../../auth/auth.types";
 import {
+  normalizeLeadAssignees,
   selectAssigneeDepartment,
   toLeadData,
 } from "./lead-mutation-support";
@@ -61,5 +62,21 @@ describe("lead mutation support", () => {
       cccd: null,
       note: "Cần tư vấn",
     });
+  });
+});
+
+describe("normalizeLeadAssignees", () => {
+  it("keeps distinct main and secondary assignees", () => {
+    assert.deepEqual(normalizeLeadAssignees("main", "secondary"), { primary: "main", secondary: "secondary" });
+  });
+
+  it("promotes the secondary assignee when there is no main assignee", () => {
+    assert.deepEqual(normalizeLeadAssignees(null, "secondary"), { primary: "secondary", secondary: null });
+    assert.deepEqual(normalizeLeadAssignees("", "secondary"), { primary: "secondary", secondary: null });
+  });
+
+  it("drops a secondary assignee that duplicates the main assignee", () => {
+    assert.deepEqual(normalizeLeadAssignees("main", "main"), { primary: "main", secondary: null });
+    assert.deepEqual(normalizeLeadAssignees(undefined, undefined), { primary: null, secondary: null });
   });
 });

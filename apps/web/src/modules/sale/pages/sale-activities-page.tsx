@@ -188,7 +188,7 @@ function Results(props: {
 }
 
 function SortableTable({ table }: { table: DataTable<ActivityItem> }) {
-  return <Table className="min-w-260"><caption className="sr-only">Danh sách hoạt động sale</caption><TableHeader className="bg-muted/55 text-xs uppercase tracking-wide text-muted-foreground">{table.getHeaderGroups().map((group) => <TableRow key={group.id} className="hover:bg-muted/55">{group.headers.map((header) => <SortHeader key={header.id} header={header} />)}</TableRow>)}</TableHeader><TableBody>{table.getRowModel().rows.map((row) => <TableRow key={row.id}>{row.getVisibleCells().map((cell) => <TableCell key={cell.id} className="px-5 py-4">{flexRender(cell.column.columnDef.cell, cell.getContext())}</TableCell>)}</TableRow>)}</TableBody></Table>;
+  return <Table className="min-w-260"><caption className="sr-only">Danh sách hoạt động sale</caption><TableHeader className="bg-muted/55 text-xs uppercase tracking-wide text-muted-foreground">{table.getHeaderGroups().map((group) => <TableRow key={group.id} className="hover:bg-muted/55">{group.headers.map((header) => <SortHeader key={header.id} header={header} />)}</TableRow>)}</TableHeader><TableBody>{table.getRowModel().rows.map((row) => <TableRow key={row.id}>{row.getVisibleCells().map((cell) => <TableCell key={cell.id} className="px-2.5 py-2">{flexRender(cell.column.columnDef.cell, cell.getContext())}</TableCell>)}</TableRow>)}</TableBody></Table>;
 }
 
 function SortHeader({ header }: { header: Header<ActivityItem, unknown> }) {

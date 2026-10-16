@@ -381,6 +381,11 @@ export async function assignVisibleLead(
       where: { id: leadId },
       data: { assigned_to: assignee.id, updated_at: new Date() },
     });
+    // The new main assignee cannot also remain the secondary assignee.
+    await tx.leads.updateMany({
+      where: { id: leadId, secondary_assigned_to: assignee.id },
+      data: { secondary_assigned_to: null },
+    });
     await tx.lead_activities.create({
       data: {
         lead_id: leadId,

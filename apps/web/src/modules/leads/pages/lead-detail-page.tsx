@@ -1,3 +1,4 @@
+import { StudentMembershipAction } from "../components/student-membership-action";
 import { useState, type CSSProperties } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Activity, ArrowLeft, CalendarDays, ChevronDown, ExternalLink, FileText, History, Network, Pencil, StickyNote, Trash2, UserRound } from "lucide-react";
@@ -9,7 +10,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Empty, EmptyContent, EmptyDescription, EmptyHeader, EmptyTitle } from "@/components/ui/empty";
-import { Field, FieldGroup, FieldLabel } from "@/components/ui/field";
+import { Field, FieldDescription, FieldGroup, FieldLabel } from "@/components/ui/field";
 import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectGroup, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Separator } from "@/components/ui/separator";
@@ -31,6 +32,8 @@ import {
 import { LeadForm } from "../components/lead-form";
 import { LeadOpenInitialization } from "../components/lead-open-initialization";
 import { LeadCustomFieldsCard } from "../components/lead-custom-fields-card";
+import { LeadAssigneeLines } from "../components/lead-assignee";
+import { LeadPhoneLines } from "../components/lead-phone";
 import { useLeadWorkflowTransition } from "../components/transition-note-dialog";
 import { toLeadFormOptions, toLeadFormValues } from "../lead-form.helpers";
 import type { LeadActionOptions, LeadDetail, LeadFormInput } from "../lead.types";
@@ -110,17 +113,20 @@ export function LeadDetailPage({
 }: LeadDetailPageProps = {}) {
   const auth = useAuth();
   const { leadId = "" } = useParams();
-  const canUpdate = ["lead.update_all", "lead.update_department", "lead.update_assigned"].some(auth.can);
-  const canNote = canUpdate || auth.can("lead_note.create");
-  const canFile = canUpdate || auth.can("file.upload");
-  const canAssign = auth.can("lead.assign") || auth.can("lead.reassign");
-  const canDelete = auth.can("lead.delete");
-  const canAct = canUpdate || canNote || canFile || canAssign;
   const leadQuery = useQuery({
     queryKey: ["leads", "detail", leadId],
     queryFn: () => getLead(leadId, auth.accessToken!),
     enabled: Boolean(leadId),
   });
+  const canUpdateLead = ["lead.update_all", "lead.update_department", "lead.update_assigned"].some(auth.can);
+  const canUpdateStudent = ["student.update_all", "student.update"].some(auth.can);
+  const canUpdate = canUpdateLead && (leadQuery.data?.data.recordType !== "student" || canUpdateStudent);
+  const canWriteStudent = leadQuery.data?.data.recordType !== "student" || canUpdateStudent;
+  const canNote = canWriteStudent && (canUpdate || auth.can("lead_note.create"));
+  const canFile = canWriteStudent && (canUpdate || auth.can("file.upload"));
+  const canAssign = canWriteStudent && (auth.can("lead.assign") || auth.can("lead.reassign"));
+  const canDelete = canWriteStudent && auth.can("lead.delete");
+  const canAct = canUpdate || canNote || canFile || canAssign;
   const optionsQuery = useQuery({
     queryKey: ["leads", "action-options"],
     queryFn: () => getLeadActionOptions(auth.accessToken!),
@@ -315,6 +321,7 @@ export function PipelineProgressCard({
                 : "Chưa chọn tiến trình hiện tại."}
           </p>
         )}
+        <StudentMembershipAction lead={lead} />
         <LeadLifecycleStatusField
           lead={lead}
           onStatusChange={onStatusChange}
@@ -349,27 +356,25 @@ function LeadLifecycleStatusField({
       : "Hãy chọn tiến trình trước khi chuyển lead sang Fail.";
 
   return (
-    <div className="grid gap-2 border-t pt-4 sm:grid-cols-[minmax(0,20rem)_minmax(0,1fr)] sm:items-end">
-      <Field className="gap-2">
-        <FieldLabel htmlFor={`lead-status-${lead.id}`}>Trạng thái</FieldLabel>
-        <Select
-          value={lead.lifecycleStatus.value}
-          disabled={!onStatusChange || isChanging || (lead.lifecycleStatus.value === "ACTIVE" && !lead.pipelineStage)}
-          onValueChange={(value) => onStatusChange?.(value as "ACTIVE" | "FAIL")}
-        >
-          <SelectTrigger id={`lead-status-${lead.id}`} className="w-full" aria-label="Trạng thái lead">
-            <SelectValue />
-          </SelectTrigger>
-          <SelectContent>
-            <SelectGroup>
-              <SelectItem value="ACTIVE">Active</SelectItem>
-              <SelectItem value="FAIL">{failedStatusLabel}</SelectItem>
-            </SelectGroup>
-          </SelectContent>
-        </Select>
-      </Field>
-      <p className="pb-2 text-sm text-muted-foreground">{description}</p>
-    </div>
+    <Field className="gap-2 border-t pt-4">
+      <FieldLabel htmlFor={`lead-status-${lead.id}`}>Trạng thái</FieldLabel>
+      <FieldDescription id={`lead-status-description-${lead.id}`}>{description}</FieldDescription>
+      <Select
+        value={lead.lifecycleStatus.value}
+        disabled={!onStatusChange || isChanging || (lead.lifecycleStatus.value === "ACTIVE" && !lead.pipelineStage)}
+        onValueChange={(value) => onStatusChange?.(value as "ACTIVE" | "FAIL")}
+      >
+        <SelectTrigger id={`lead-status-${lead.id}`} className="w-full sm:max-w-80" aria-label="Trạng thái lead" aria-describedby={`lead-status-description-${lead.id}`}>
+          <SelectValue />
+        </SelectTrigger>
+        <SelectContent>
+          <SelectGroup>
+            <SelectItem value="ACTIVE">Active</SelectItem>
+            <SelectItem value="FAIL">{failedStatusLabel}</SelectItem>
+          </SelectGroup>
+        </SelectContent>
+      </Select>
+    </Field>
   );
 }
 
@@ -448,14 +453,14 @@ export function LeadSummaryCard({ lead, canUpdate, onEdit }: { lead: LeadDetail;
       <CardHeader className="flex flex-row items-start justify-between gap-4"><div><CardTitle>Thông tin cơ bản</CardTitle><CardDescription>Thông tin liên hệ và nghiệp vụ hiện tại.</CardDescription></div>{canUpdate && <Button type="button" size="icon-sm" variant="ghost" onClick={onEdit} aria-label="Chỉnh sửa thông tin Lead"><Pencil aria-hidden="true" /></Button>}</CardHeader>
       <CardContent><dl className="grid gap-4 sm:grid-cols-2 xl:grid-cols-1 2xl:grid-cols-2">
         <DetailValue label="Họ và tên" value={lead.fullName} />
-        <DetailValue label="Số điện thoại" value={lead.phone ?? "Chưa cập nhật"} />
+        <div><dt className="text-sm text-muted-foreground">Số điện thoại</dt><dd className="mt-1 text-sm font-medium"><LeadPhoneLines lead={lead} /></dd></div>
         <DetailValue label="Email" value={lead.email ?? "Chưa cập nhật"} />
         <DetailValue label="Ngày sinh" value={formatDate(lead.dateOfBirth)} />
         <DetailValue label="Địa chỉ" value={lead.currentAddress ?? lead.specificAddress ?? "Chưa cập nhật"} />
         <DetailValue label="Nhóm nguồn" value={lead.origin?.name ?? "Chưa cập nhật"} />
         <DetailValue label="Nguồn học viên" value={lead.source?.name ?? "Chưa chọn"} />
         <DetailValue label="Tiến trình" value={lead.pipelineStage?.name ?? "Chưa cập nhật"} />
-        <DetailValue label="Nhân viên phụ trách" value={lead.assignee?.fullName ?? "Chưa phân công"} />
+        <div><dt className="text-sm text-muted-foreground">Nhân viên phụ trách</dt><dd className="mt-1 text-sm font-medium"><LeadAssigneeLines lead={lead} /></dd></div>
         <DetailValue label="Mức độ quan tâm" value={lead.temperature ?? "-"} />
         <DetailValue label="Chương trình" value={lead.institutionProgram ? `${lead.institutionProgram.name} · ${lead.institutionProgram.institutionName}` : "Chưa chọn"} />
         <DetailValue label="Ngành đăng ký" value={lead.majorName ?? "Chưa chọn"} />
@@ -470,7 +475,7 @@ function LeadOwnershipCard({ lead }: { lead: LeadDetail }) {
     <Card className="border-border/70 shadow-xs">
       <CardHeader><CardTitle>Phụ trách hiện tại</CardTitle></CardHeader>
       <CardContent><dl className="grid gap-4">
-        <DetailValue label="Nhân viên phụ trách" value={lead.assignee?.fullName ?? "Chưa phân công"} />
+        <div><dt className="text-sm text-muted-foreground">Nhân viên phụ trách</dt><dd className="mt-1 text-sm font-medium"><LeadAssigneeLines lead={lead} /></dd></div>
         <DetailValue label="Người sở hữu" value={lead.owner?.fullName ?? "-"} />
       </dl></CardContent>
     </Card>

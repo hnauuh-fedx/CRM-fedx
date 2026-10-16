@@ -103,7 +103,7 @@ export async function listRoles(institutionProgramId: string) {
           },
         },
       },
-      _count: { select: { user_roles: true } },
+      _count: { select: { user_program_roles: { where: { institution_program_id: institutionProgramId } } } },
     },
     orderBy: [{ code: "asc" }],
   });
@@ -116,7 +116,7 @@ export async function listRoles(institutionProgramId: string) {
       name: role.name,
       description: role.description,
       scopeCode: scopeMap.get(role.id) ?? defaultScopeForRole(role.code),
-      userCount: role._count.user_roles,
+      userCount: role._count.user_program_roles,
       permissions: role.role_permissions.flatMap((grant) => grant.permissions ? [{ ...grant.permissions, isActive: grant.permissions.is_active ?? true }] : []),
       programs: role.role_institution_programs.map((grant) => ({
         id: grant.institution_programs.id,
@@ -244,6 +244,9 @@ export async function updateRole(actor: AuthUser, roleId: string, input: RoleInp
   if (await prisma.roles.findFirst({ where: { code, id: { not: roleId } }, select: { id: true } })) {
     return { ok: false as const, reason: "code_exists" as const };
   }
+  if (await prisma.user_program_roles.count({ where: { role_id: roleId, institution_program_id: { notIn: validation.programIds } } })) {
+    return { ok: false as const, reason: "role_in_use" as const };
+  }
   const oldScope = (await getRoleScopeMap([roleId])).get(roleId) ?? defaultScopeForRole(existing.code);
 
   return prisma.$transaction(async (tx) => {
@@ -257,8 +260,9 @@ export async function updateRole(actor: AuthUser, roleId: string, input: RoleInp
         data: validation.permissionIds.map((permissionId) => ({ role_id: roleId, permission_id: permissionId })),
       });
     }
-    await tx.role_institution_programs.deleteMany({ where: { role_id: roleId } });
+    await tx.role_institution_programs.deleteMany({ where: { role_id: roleId, institution_program_id: { notIn: validation.programIds } } });
     await tx.role_institution_programs.createMany({
+      skipDuplicates: true,
       data: validation.programIds.map((institutionProgramId) => ({
         role_id: roleId,
         institution_program_id: institutionProgramId,
@@ -298,10 +302,10 @@ export async function deleteRole(actor: AuthUser, roleId: string, institutionPro
       id: roleId,
       role_institution_programs: { some: { institution_program_id: institutionProgramId } },
     },
-    select: { id: true, code: true, name: true, _count: { select: { user_roles: true } } },
+    select: { id: true, code: true, name: true, _count: { select: { user_program_roles: true } } },
   });
   if (!role) return { ok: false as const, reason: "role_not_found" as const };
-  if (role._count.user_roles > 0) return { ok: false as const, reason: "role_in_use" as const };
+  if (role._count.user_program_roles > 0) return { ok: false as const, reason: "role_in_use" as const };
 
   await prisma.$transaction([
     prisma.roles.delete({ where: { id: roleId } }),

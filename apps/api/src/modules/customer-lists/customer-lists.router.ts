@@ -5,6 +5,7 @@ import { requireAnyPermission, requireAuthentication } from "../../middlewares/a
 import { getInstitutionProgramScope } from "../institutions/institution-program-scope";
 import { InstitutionProgramScopeError } from "../institutions/institution-program-scope";
 import { leadListPermissions, type LeadListQuery } from "../leads/lead-list.service";
+import { filterConditionsParamSchema, LeadFilterError } from "../leads/lead-filter.service";
 import {
   addLeadsToCustomerList,
   createCustomerList,
@@ -37,6 +38,7 @@ const leadQuerySchema = z.object({
   assigneeId: z.uuid().optional().or(z.literal("")).transform((value) => value || undefined),
   fromDate: z.iso.date().optional().or(z.literal("")).transform((value) => value || undefined),
   toDate: z.iso.date().optional().or(z.literal("")).transform((value) => value || undefined),
+  filters: filterConditionsParamSchema,
   sortBy: z.enum(["createdAt", "fullName", "leadCode", "pipelineStage"]).default("createdAt"),
   sortOrder: z.enum(["asc", "desc"]).default("desc"),
 }).refine((input) => !input.fromDate || !input.toDate || input.fromDate <= input.toDate, {
@@ -149,10 +151,14 @@ customerListsRouter.get("/:id/leads", requireAnyPermission(...customerListViewPe
     const id = idSchema.safeParse(request.params.id);
     const query = leadQuerySchema.safeParse(request.query);
     if (!id.success || !query.success) return void response.status(400).json({ message: "Tham số danh sách lead không hợp lệ." });
-    const result = await listCustomerListLeads(request.authUser!, id.data, programId(request), query.data as LeadListQuery);
+    const { filters, ...leadQuery } = query.data;
+    const result = await listCustomerListLeads(request.authUser!, id.data, programId(request), { ...leadQuery, filterConditions: filters } as LeadListQuery);
     if (!result) return void response.status(404).json({ message: "Không tìm thấy danh sách khách hàng." });
     response.json(result);
-  } catch (error) { next(error); }
+  } catch (error) {
+    if (error instanceof LeadFilterError) return void response.status(error.status).json({ message: error.message });
+    next(error);
+  }
 });
 
 customerListsRouter.post("/:id/leads", requireAnyPermission("customer_list.manage"), requireAnyPermission(...leadListPermissions), async (request, response, next) => {

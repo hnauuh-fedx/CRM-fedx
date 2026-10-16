@@ -12,10 +12,12 @@ export async function initializeLeadOnOpen(actor: AuthUser, leadId: string, inst
     const scope = { ...getLeadScopeWhere(actor, institutionProgramId), ...(institutionProgramId ? { institution_program_id: institutionProgramId } : {}) };
     const lead = await tx.leads.findFirst({
       where: { ...scope, id: leadId, deleted_at: null },
-      select: { assigned_to: true, pipeline_stage_id: true, status: true },
+      select: { assigned_to: true, secondary_assigned_to: true, pipeline_stage_id: true, status: true },
     });
     if (!lead) return { ok: false as const, reason: "lead_not_found" as const };
-    if (lead.assigned_to !== actor.id || lead.pipeline_stage_id || isFailedLeadStatus(lead.status)) {
+    // Main and secondary assignees work the lead equally.
+    const isAssignee = lead.assigned_to === actor.id || lead.secondary_assigned_to === actor.id;
+    if (!isAssignee || lead.pipeline_stage_id || isFailedLeadStatus(lead.status)) {
       return { ok: true as const, data: { id: leadId, changed: false } };
     }
     // Stages are global in the current schema. Never guess between multiple Sale L0 definitions.
@@ -28,7 +30,10 @@ export async function initializeLeadOnOpen(actor: AuthUser, leadId: string, inst
     const stage = candidates[0]!;
     // Compare-and-set protects against duplicate opens, reassignment and concurrent stage changes.
     const updated = await tx.leads.updateMany({
-      where: { ...scope, id: leadId, deleted_at: null, assigned_to: actor.id, pipeline_stage_id: null, status: lead.status },
+      where: {
+        AND: [scope, { OR: [{ assigned_to: actor.id }, { secondary_assigned_to: actor.id }] }],
+        id: leadId, deleted_at: null, pipeline_stage_id: null, status: lead.status,
+      },
       data: { pipeline_stage_id: stage.id, updated_at: new Date() },
     });
     if (!updated.count) return { ok: true as const, data: { id: leadId, changed: false } };

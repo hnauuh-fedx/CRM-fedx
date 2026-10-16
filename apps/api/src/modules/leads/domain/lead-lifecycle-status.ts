@@ -36,7 +36,7 @@ export function toLeadLifecycleStatus(
     };
   }
 
-  const marker = getPipelineStageMarker(failedStageName);
+  const marker = getPipelineStageMarker(failedStageName) ?? failedStageName?.trim();
   return {
     value: "FAIL" as const,
     label: marker ? `Fail | ${marker}` : "Fail",

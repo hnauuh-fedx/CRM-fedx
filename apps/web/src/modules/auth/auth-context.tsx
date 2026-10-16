@@ -8,6 +8,7 @@ import {
 } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 
+import { storeSelectedInstitutionProgramId } from "@/modules/institutions/institution-program-storage";
 import { ApiError, unauthorizedApiEvent } from "@/services/api";
 import { getCurrentUser, login } from "@/services/auth.service";
 import type { AuthUser, LoginInput } from "@/types/auth";
@@ -59,6 +60,9 @@ export function AuthProvider({ children }: PropsWithChildren) {
 
   async function signIn(input: LoginInput) {
     const session = await login(input);
+    if (session.user.workingInstitutionProgramId) {
+      storeSelectedInstitutionProgramId(session.user.workingInstitutionProgramId);
+    }
     persistAccessToken(session.accessToken, input.rememberDevice);
     setAccessToken(session.accessToken);
     setSignedInUser(session.user);

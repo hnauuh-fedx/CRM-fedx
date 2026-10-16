@@ -1,3 +1,4 @@
+import { enrolledStudentWhere } from "../students/student-membership";
 import { prisma } from "../../database/prisma";
 import { Prisma } from "../../generated/prisma/client";
 import type { AuthUser } from "../auth/auth.types";
@@ -63,7 +64,7 @@ export async function getMarketingDetailReport(user: CampaignViewer, query: Repo
       LEFT JOIN utm_trackings tracking ON tracking.campaign_id = campaign.id
       LEFT JOIN leads application_lead ON application_lead.id = tracking.lead_id AND application_lead.deleted_at IS NULL
       LEFT JOIN pipeline_stages application_stage ON application_stage.id = application_lead.pipeline_stage_id AND application_stage.name ILIKE ${APPLICATION_PIPELINE_STAGE_LIKE}
-      LEFT JOIN students student ON student.lead_id = tracking.lead_id
+      LEFT JOIN students student ON student.lead_id = tracking.lead_id AND student.status IS DISTINCT FROM 'candidate'
     `),
     prisma.$queryRaw<MarketingPerformanceRow[]>(Prisma.sql`
       SELECT
@@ -79,7 +80,7 @@ export async function getMarketingDetailReport(user: CampaignViewer, query: Repo
       LEFT JOIN utm_trackings tracking ON tracking.campaign_id = campaign.id
       LEFT JOIN leads application_lead ON application_lead.id = tracking.lead_id AND application_lead.deleted_at IS NULL
       LEFT JOIN pipeline_stages application_stage ON application_stage.id = application_lead.pipeline_stage_id AND application_stage.name ILIKE ${APPLICATION_PIPELINE_STAGE_LIKE}
-      LEFT JOIN students student ON student.lead_id = tracking.lead_id
+      LEFT JOIN students student ON student.lead_id = tracking.lead_id AND student.status IS DISTINCT FROM 'candidate'
       WHERE ${where}
       GROUP BY campaign.id, campaign.name, campaign.type, campaign.status
       ORDER BY COUNT(DISTINCT tracking.lead_id) DESC, campaign.created_at DESC, campaign.id ASC
@@ -96,7 +97,7 @@ export async function getMarketingDetailReport(user: CampaignViewer, query: Repo
       JOIN utm_trackings tracking ON tracking.campaign_id = campaign.id
       LEFT JOIN leads application_lead ON application_lead.id = tracking.lead_id AND application_lead.deleted_at IS NULL
       LEFT JOIN pipeline_stages application_stage ON application_stage.id = application_lead.pipeline_stage_id AND application_stage.name ILIKE ${APPLICATION_PIPELINE_STAGE_LIKE}
-      LEFT JOIN students student ON student.lead_id = tracking.lead_id
+      LEFT JOIN students student ON student.lead_id = tracking.lead_id AND student.status IS DISTINCT FROM 'candidate'
       WHERE ${where}
       GROUP BY tracking.utm_source
       ORDER BY COUNT(DISTINCT tracking.lead_id) DESC, tracking.utm_source ASC
@@ -206,6 +207,7 @@ export async function getSaleDetailReport(user: AuthUser, query: ReportDateRange
       assigneeId,
       total: await prisma.students.count({
         where: {
+          ...enrolledStudentWhere,
           leads: { is: { ...scopedLeadWhere, assigned_to: assigneeId } },
           ...dateWhereObject("created_at", query),
         },
@@ -282,7 +284,7 @@ export async function getAdmissionDetailReport(user: AuthUser, query: ReportDate
     recentApplications,
   ] = await prisma.$transaction([
     prisma.leads.count({ where: applicationLeadWhere }),
-    prisma.admission_profiles.count({ where: { AND: [admissionWhere, { students: { isNot: null } }] } }),
+    prisma.admission_profiles.count({ where: { AND: [admissionWhere, { students: { is: enrolledStudentWhere } }] } }),
     prisma.admission_profiles.aggregate({ where: admissionWhere, _sum: { monthly_revenue: true } }),
     prisma.admission_documents.count({
       where: { leads: { is: scopedLeadWhere }, ...dateWhereObject("uploaded_at", query) },
@@ -565,6 +567,7 @@ function buildAdmissionWhere(user: AuthUser, query: ReportDateRange): AdmissionW
 
 function buildStudentWhere(user: AuthUser, query: ReportDateRange): StudentWhere {
   return {
+    ...enrolledStudentWhere,
     AND: [
       { leads: { is: { deleted_at: null, ...getLeadScopeWhere(user) } } },
       ...(query.institutionProgramId ? [{ institution_program_id: query.institutionProgramId }] : []),

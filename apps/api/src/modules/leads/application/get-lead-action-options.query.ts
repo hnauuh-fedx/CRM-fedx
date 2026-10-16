@@ -46,7 +46,7 @@ export async function getLeadActionOptions(
             status: "active",
             deleted_at: null,
             ...(institutionProgramId
-              ? { user_roles: { some: { roles: { role_institution_programs: { some: { institution_program_id: institutionProgramId } } } } } }
+              ? { user_program_roles: { some: { institution_program_id: institutionProgramId } } }
               : {}),
             ...(!canAssignAll
               ? {
@@ -70,11 +70,11 @@ export async function getLeadActionOptions(
         deleted_at: null,
         ...(institutionProgramId
           ? {
-              user_roles: {
+              user_program_roles: {
                 some: {
+                  institution_program_id: institutionProgramId,
                   roles: {
-                    ...assignableSaleWhere.user_roles.some.roles,
-                    role_institution_programs: { some: { institution_program_id: institutionProgramId } },
+                    ...assignableSaleWhere.user_program_roles.some.roles,
                   },
                 },
               },

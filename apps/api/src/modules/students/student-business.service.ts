@@ -1,3 +1,4 @@
+import { enrolledStudentWhere } from "./student-membership";
 import { prisma } from "../../database/prisma";
 import type { AuthUser } from "../auth/auth.types";
 import { getLeadScopeWhere } from "../leads/lead-list.service";
@@ -76,6 +77,7 @@ export async function listStudentServices(user: AuthUser, query: ListQuery<"crea
 
 export async function getStudentServiceOptions(user: AuthUser, institutionProgramId?: string) {
   const studentScopeWhere = {
+    ...enrolledStudentWhere,
     leads: { is: getLeadScopeWhere(user) },
     ...(institutionProgramId ? { institution_program_id: institutionProgramId } : {}),
   };
@@ -171,7 +173,7 @@ export async function updateStudentServiceRequest(
   const existing = await prisma.student_services.findFirst({
     where: {
       id: serviceId,
-      students: { is: { leads: { is: getLeadScopeWhere(user) }, ...(institutionProgramId ? { institution_program_id: institutionProgramId } : {}) } },
+      students: { is: { ...enrolledStudentWhere, leads: { is: getLeadScopeWhere(user) }, ...(institutionProgramId ? { institution_program_id: institutionProgramId } : {}) } },
     },
     select: { type: true },
   });
@@ -225,7 +227,7 @@ export async function listStudentSupportHistory(user: AuthUser, query: ListQuery
 async function validateStudentServiceReferences(user: AuthUser, studentId: string, handledBy?: string | null, institutionProgramId?: string) {
   const [student, handler] = await Promise.all([
     prisma.students.findFirst({
-      where: { id: studentId, leads: { is: getLeadScopeWhere(user) }, ...(institutionProgramId ? { institution_program_id: institutionProgramId } : {}) },
+      where: { id: studentId, ...enrolledStudentWhere, leads: { is: getLeadScopeWhere(user) }, ...(institutionProgramId ? { institution_program_id: institutionProgramId } : {}) },
       select: { id: true },
     }),
     handledBy
@@ -240,7 +242,7 @@ async function validateStudentServiceReferences(user: AuthUser, studentId: strin
 function getStudentServiceWhere(user: AuthUser, search?: string, type?: string, status?: string, studentId?: string, institutionProgramId?: string) {
   return {
     AND: [
-      { students: { is: { leads: { is: getLeadScopeWhere(user) } } } },
+      { students: { is: { ...enrolledStudentWhere, leads: { is: getLeadScopeWhere(user) } } } },
       ...(search
         ? [
             {

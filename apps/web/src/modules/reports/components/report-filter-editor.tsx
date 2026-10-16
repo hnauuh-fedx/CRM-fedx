@@ -1,3 +1,4 @@
+import { useId } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { Plus, Trash2 } from "lucide-react";
 
@@ -6,6 +7,7 @@ import { DateRangeFilter } from "@/components/ui/date-range-filter";
 import { Field, FieldLabel, FieldLegend, FieldSet } from "@/components/ui/field";
 import { Select, SelectContent, SelectGroup, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import type { DashboardPipelineStage, PersonalReportDatasetDefinition, PersonalReportFilterCondition } from "@/modules/reports/report.types";
+import { useInstitutionProgram } from "@/modules/institutions/institution-program-context";
 import { getPersonalReportFilterValues } from "@/services/report.service";
 
 const numberFormatter = new Intl.NumberFormat("vi-VN");
@@ -74,21 +76,25 @@ function CategoryConditionFields({ dataset, condition, pipelineStages, accessTok
   accessToken: string;
   onChange: (condition: PersonalReportFilterCondition) => void;
 }) {
+  const conditionId = useId();
   const isPipelineStage = (dataset.key === "LEADS" || dataset.key === "QUALIFIED_LEADS") && condition.fieldKey === "PIPELINE_STAGE";
-  const comparesStagePosition = isPipelineStage && condition.operator === "GREATER_THAN_OR_EQUAL";
+  const { selectedProgramId } = useInstitutionProgram();
+  const comparesStagePosition = isPipelineStage && ["GREATER_THAN_OR_EQUAL", "LESS_THAN_OR_EQUAL"].includes(condition.operator);
+  const supportsPresence = ["ASSIGNEE", "SOURCE"].includes(condition.fieldKey) && ["LEADS", "QUALIFIED_LEADS"].includes(dataset.key);
+  const hasPresenceCondition = ["IS_NOT_EMPTY", "IS_EMPTY"].includes(condition.operator);
   const hasMultiplePipelines = new Set(pipelineStages.map((stage) => stage.pipelineId).filter(Boolean)).size > 1;
   const valuesQuery = useQuery({
-    queryKey: ["reports", "personal", "filter-values", dataset.key, condition.fieldKey],
+    queryKey: ["reports", "personal", "filter-values", selectedProgramId, dataset.key, condition.fieldKey],
     queryFn: () => getPersonalReportFilterValues(dataset.key, condition.fieldKey, accessToken),
-    enabled: !comparesStagePosition,
+    enabled: Boolean(selectedProgramId) && !comparesStagePosition && !hasPresenceCondition,
     staleTime: 60_000,
   });
 
   return <>
-    <Field><FieldLabel>Điều kiện</FieldLabel><Select value={condition.operator} onValueChange={(operator) => onChange({ fieldKey: condition.fieldKey, operator: operator as "EQUALS" | "NOT_EQUALS" | "GREATER_THAN_OR_EQUAL" })}><SelectTrigger className="w-full"><SelectValue /></SelectTrigger><SelectContent><SelectGroup><SelectItem value="EQUALS">Bằng</SelectItem><SelectItem value="NOT_EQUALS">Không bằng</SelectItem>{isPipelineStage && pipelineStages.length > 0 && <SelectItem value="GREATER_THAN_OR_EQUAL">Lớn hơn hoặc bằng (≥)</SelectItem>}</SelectGroup></SelectContent></Select></Field>
-    <Field><FieldLabel>Giá trị</FieldLabel><Select value={condition.value} onValueChange={(value) => onChange({ ...condition, value })}><SelectTrigger className="w-full"><SelectValue placeholder={comparesStagePosition ? "Chọn giai đoạn bắt đầu" : valuesQuery.isLoading ? "Đang tải…" : "Chọn giá trị"} /></SelectTrigger><SelectContent><SelectGroup>{comparesStagePosition
+    <Field><FieldLabel htmlFor={`${conditionId}-operator`}>Điều kiện</FieldLabel><Select value={condition.operator} onValueChange={(operator) => onChange({ fieldKey: condition.fieldKey, operator: operator as PersonalReportFilterCondition["operator"] })}><SelectTrigger id={`${conditionId}-operator`} className="w-full"><SelectValue /></SelectTrigger><SelectContent><SelectGroup><SelectItem value="EQUALS">Bằng</SelectItem><SelectItem value="NOT_EQUALS">Không bằng</SelectItem>{isPipelineStage && <><SelectItem value="GREATER_THAN_OR_EQUAL">Lớn hơn hoặc bằng (≥)</SelectItem><SelectItem value="LESS_THAN_OR_EQUAL">Nhỏ hơn hoặc bằng (≤)</SelectItem></>}{supportsPresence && <><SelectItem value="IS_NOT_EMPTY">Có dữ liệu</SelectItem><SelectItem value="IS_EMPTY">Không có dữ liệu</SelectItem></>}</SelectGroup></SelectContent></Select></Field>
+    {hasPresenceCondition ? <p className="text-sm text-muted-foreground">Không cần chọn giá trị.</p> : <Field><FieldLabel htmlFor={`${conditionId}-value`}>Giá trị</FieldLabel><Select value={condition.value} onValueChange={(value) => onChange({ ...condition, value })}><SelectTrigger id={`${conditionId}-value`} className="w-full"><SelectValue placeholder={comparesStagePosition ? "Chọn giai đoạn so sánh" : valuesQuery.isLoading ? "Đang tải…" : "Chọn giá trị"} /></SelectTrigger><SelectContent><SelectGroup>{comparesStagePosition
       ? pipelineStages.map((stage) => <SelectItem key={stage.id} value={stage.id}>{stage.position != null ? `${stage.position}. ` : ""}{stage.name}{hasMultiplePipelines && stage.pipelineName ? ` · ${stage.pipelineName}` : ""}</SelectItem>)
-      : valuesQuery.data?.items.map((item) => <SelectItem key={item.value} value={item.value}>{item.label} ({numberFormatter.format(item.count)})</SelectItem>)}</SelectGroup></SelectContent></Select></Field>
+      : valuesQuery.data?.items.map((item) => <SelectItem key={item.value} value={item.value}>{item.label} ({numberFormatter.format(item.count)})</SelectItem>)}</SelectGroup></SelectContent></Select></Field>}
   </>;
 }
 

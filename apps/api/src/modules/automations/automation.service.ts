@@ -110,6 +110,7 @@ function getAutomationLeadTagScopeSql(user: AuthUser, institutionProgramId?: str
   return Prisma.sql`
     AND (
       l.assigned_to = ${user.id}::uuid
+      OR l.secondary_assigned_to = ${user.id}::uuid
       OR EXISTS (
         SELECT 1
         FROM lead_assignments user_assignment
@@ -932,7 +933,7 @@ export async function getAutomationOptions(user: AuthUser, institutionProgramId?
             status: "active",
             deleted_at: null,
             ...(resolvedInstitutionProgramId
-              ? { user_roles: { some: { roles: { role_institution_programs: { some: { institution_program_id: resolvedInstitutionProgramId } } } } } }
+              ? { user_program_roles: { some: { institution_program_id: resolvedInstitutionProgramId } } }
               : {}),
           },
           select: { id: true, full_name: true },
@@ -945,7 +946,7 @@ export async function getAutomationOptions(user: AuthUser, institutionProgramId?
               status: "active",
               deleted_at: null,
               ...(resolvedInstitutionProgramId
-                ? { user_roles: { some: { roles: { role_institution_programs: { some: { institution_program_id: resolvedInstitutionProgramId } } } } } }
+                ? { user_program_roles: { some: { institution_program_id: resolvedInstitutionProgramId } } }
                 : {}),
               user_departments: { some: { department_id: { in: user.departmentIds } } },
             },

@@ -6,6 +6,8 @@ import type {
   LeadListResponse,
 } from "@/modules/marketing/customer-list.types";
 import { apiRequest } from "./api";
+import type { FilterConditionState } from "@/modules/leads/filter-fields";
+import { serializeConditions } from "@/modules/leads/filter-serialization";
 
 export function getCustomerLists(params: { page: number; limit: number; search?: string }, accessToken: string) {
   const query = new URLSearchParams({
@@ -44,7 +46,11 @@ export function addLeadsToCustomerList(id: string, leadIds: string[], accessToke
   );
 }
 
-export function getCustomerListLeads(id: string, params: CustomerListLeadParams, accessToken: string) {
+export function getCustomerListLeads(
+  id: string,
+  params: CustomerListLeadParams & { filterConditions?: FilterConditionState[] },
+  accessToken: string,
+) {
   const query = new URLSearchParams({
     page: String(params.page),
     limit: String(params.limit),
@@ -58,5 +64,7 @@ export function getCustomerListLeads(id: string, params: CustomerListLeadParams,
     fromDate: params.fromDate,
     toDate: params.toDate,
   });
+  const filters = serializeConditions(params.filterConditions ?? []);
+  if (filters) query.set("filters", filters);
   return apiRequest<LeadListResponse>(`/customer-lists/${id}/leads?${query.toString()}`, {}, accessToken);
 }

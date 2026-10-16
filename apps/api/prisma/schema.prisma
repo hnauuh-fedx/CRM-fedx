@@ -504,6 +504,7 @@ model institution_programs {
   webhooks                     webhooks[]
   automation_suppressions      automation_suppressions[]
   automation_webhook_endpoints automation_webhook_endpoints[]
+  user_program_roles           user_program_roles[]
 
   @@index([institution_name, status, name], map: "idx_institution_programs_institution_status")
 }
@@ -635,55 +636,59 @@ model lead_status_histories {
 }
 
 model leads {
-  id                             String                       @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
-  lead_code                      String?                      @unique @db.VarChar(100)
-  full_name                      String                       @db.VarChar(255)
-  gender                         String?                      @db.VarChar(20)
-  date_of_birth                  DateTime?                    @db.Date
-  phone                          String                       @db.VarChar(30)
-  email                          String?                      @db.VarChar(255)
-  cccd                           String?                      @db.VarChar(30)
-  source_id                      String?                      @db.Uuid
-  origin_id                      String?                      @db.Uuid
-  institution_program_id         String?                      @db.Uuid
-  major_id                       String?                      @db.Uuid
-  pipeline_stage_id              String?                      @db.Uuid
-  owner_id                       String?                      @db.Uuid
-  assigned_to                    String?                      @db.Uuid
-  status                         String                       @default("ACTIVE") @db.VarChar(50)
-  lead_score                     Int?                         @default(0)
-  temperature                    String?                      @db.VarChar(50)
-  note                           String?
-  created_at                     DateTime?                        @default(now()) @db.Timestamp(6)
-  updated_at                     DateTime?                        @default(now()) @db.Timestamp(6)
-  deleted_at                     DateTime?                        @db.Timestamp(6)
-  addresses                      addresses[]
-  admission_documents            admission_documents[]
-  admission_profiles             admission_profiles?
-  lead_activities                lead_activities[]
-  lead_assignments               lead_assignments[]
-  lead_notes                     lead_notes[]
-  lead_status_histories          lead_status_histories[]
-  customer_list_members          customer_list_members[]
-  marketing_form_submissions     marketing_form_submissions[]
-  users_leads_assigned_toTousers users?                           @relation("leads_assigned_toTousers", fields: [assigned_to], references: [id], onDelete: NoAction, onUpdate: NoAction)
-  users_leads_owner_idTousers    users?                           @relation("leads_owner_idTousers", fields: [owner_id], references: [id], onDelete: NoAction, onUpdate: NoAction)
-  pipeline_stages                pipeline_stages?                 @relation(fields: [pipeline_stage_id], references: [id], onDelete: NoAction, onUpdate: NoAction)
-  lead_sources                   lead_sources?                    @relation(fields: [source_id], references: [id], onDelete: NoAction, onUpdate: NoAction)
-  lead_origins                   lead_origins?                    @relation(fields: [origin_id], references: [id], onDelete: NoAction, onUpdate: NoAction)
-  institution_programs           institution_programs?            @relation(fields: [institution_program_id], references: [id], onDelete: NoAction, onUpdate: NoAction)
-  majors                         majors?                          @relation(fields: [major_id], references: [id], onDelete: NoAction, onUpdate: NoAction)
-  relatives                      relatives[]
-  reminders                      reminders[]
-  student_profiles               student_profiles?
-  students                       students?
-  utm_trackings                  utm_trackings[]
-  lead_source_occurrences        lead_source_occurrences[]
-  automation_sla_dispatches      automation_sla_dispatches[]
-  automation_bulk_dispatches     automation_bulk_dispatches[]
-  automation_contact_preferences automation_contact_preferences[]
+  id                                       String                           @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  lead_code                                String?                          @unique @db.VarChar(100)
+  full_name                                String                           @db.VarChar(255)
+  gender                                   String?                          @db.VarChar(20)
+  date_of_birth                            DateTime?                        @db.Date
+  phone                                    String                           @db.VarChar(30)
+  secondary_phones                         String[]                         @default([]) @db.VarChar(30)
+  email                                    String?                          @db.VarChar(255)
+  cccd                                     String?                          @db.VarChar(30)
+  source_id                                String?                          @db.Uuid
+  origin_id                                String?                          @db.Uuid
+  institution_program_id                   String?                          @db.Uuid
+  major_id                                 String?                          @db.Uuid
+  pipeline_stage_id                        String?                          @db.Uuid
+  owner_id                                 String?                          @db.Uuid
+  assigned_to                              String?                          @db.Uuid
+  secondary_assigned_to                    String?                          @db.Uuid
+  status                                   String                           @default("ACTIVE") @db.VarChar(50)
+  lead_score                               Int?                             @default(0)
+  temperature                              String?                          @db.VarChar(50)
+  note                                     String?
+  created_at                               DateTime?                        @default(now()) @db.Timestamp(6)
+  updated_at                               DateTime?                        @default(now()) @db.Timestamp(6)
+  deleted_at                               DateTime?                        @db.Timestamp(6)
+  addresses                                addresses[]
+  admission_documents                      admission_documents[]
+  admission_profiles                       admission_profiles?
+  lead_activities                          lead_activities[]
+  lead_assignments                         lead_assignments[]
+  lead_notes                               lead_notes[]
+  lead_status_histories                    lead_status_histories[]
+  customer_list_members                    customer_list_members[]
+  marketing_form_submissions               marketing_form_submissions[]
+  users_leads_assigned_toTousers           users?                           @relation("leads_assigned_toTousers", fields: [assigned_to], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  users_leads_secondary_assigned_toTousers users?                           @relation("leads_secondary_assigned_toTousers", fields: [secondary_assigned_to], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  users_leads_owner_idTousers              users?                           @relation("leads_owner_idTousers", fields: [owner_id], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  pipeline_stages                          pipeline_stages?                 @relation(fields: [pipeline_stage_id], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  lead_sources                             lead_sources?                    @relation(fields: [source_id], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  lead_origins                             lead_origins?                    @relation(fields: [origin_id], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  institution_programs                     institution_programs?            @relation(fields: [institution_program_id], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  majors                                   majors?                          @relation(fields: [major_id], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  relatives                                relatives[]
+  reminders                                reminders[]
+  student_profiles                         student_profiles?
+  students                                 students?
+  utm_trackings                            utm_trackings[]
+  lead_source_occurrences                  lead_source_occurrences[]
+  automation_sla_dispatches                automation_sla_dispatches[]
+  automation_bulk_dispatches               automation_bulk_dispatches[]
+  automation_contact_preferences           automation_contact_preferences[]
 
   @@index([assigned_to], map: "idx_leads_assigned_to")
+  @@index([secondary_assigned_to], map: "idx_leads_secondary_assigned_to")
   @@index([assigned_to, created_at, id], map: "idx_leads_assignee_created_page")
   @@index([cccd], map: "idx_leads_cccd")
   @@index([created_at], map: "idx_leads_created_at")
@@ -691,6 +696,7 @@ model leads {
   @@index([email], map: "idx_leads_email")
   @@index([owner_id], map: "idx_leads_owner_id")
   @@index([phone], map: "idx_leads_phone")
+  @@index([secondary_phones], map: "idx_leads_secondary_phones", type: Gin)
   @@index([pipeline_stage_id], map: "idx_leads_pipeline_stage")
   @@index([status, pipeline_stage_id], map: "idx_leads_status_pipeline_stage")
   @@index([source_id], map: "idx_leads_source_id")
@@ -985,6 +991,7 @@ model roles {
   role_institution_programs role_institution_programs[]
   role_permissions          role_permissions[]
   user_roles                user_roles[]
+  user_program_roles        user_program_roles[]
 }
 
 model role_institution_programs {
@@ -994,6 +1001,7 @@ model role_institution_programs {
   created_at             DateTime?            @default(now()) @db.Timestamp(6)
   roles                  roles                @relation(fields: [role_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
   institution_programs   institution_programs @relation(fields: [institution_program_id], references: [id], onDelete: Restrict, onUpdate: NoAction)
+  user_program_roles     user_program_roles[]
 
   @@unique([role_id, institution_program_id])
   @@index([institution_program_id, role_id], map: "idx_role_institution_programs_program_role")
@@ -1169,6 +1177,7 @@ model users {
   lead_notes                                           lead_notes[]
   lead_status_histories                                lead_status_histories[]
   leads_leads_assigned_toTousers                       leads[]                          @relation("leads_assigned_toTousers")
+  leads_leads_secondary_assigned_toTousers             leads[]                          @relation("leads_secondary_assigned_toTousers")
   leads_leads_owner_idTousers                          leads[]                          @relation("leads_owner_idTousers")
   marketing_forms                                      marketing_forms[]
   notifications                                        notifications[]
@@ -1186,6 +1195,7 @@ model users {
   personal_dashboard_settings                          personal_dashboard_settings[]
   user_program_access_scopes                           user_program_access_scopes[]
   webhooks_created_by                                  webhooks[]                       @relation("webhooks_created_by")
+  user_program_roles                                   user_program_roles[]
 
   @@index([email], map: "idx_users_email")
   @@index([status], map: "idx_users_status")
@@ -1523,4 +1533,20 @@ model automation_node_executions {
 
   @@unique([execution_log_id, node_id], map: "uq_automation_node_exec_log_node")
   @@index([status, started_at, id], map: "idx_automation_node_exec_status_started")
+}
+
+// Mirrors the existing database table used for per-program role assignments.
+model user_program_roles {
+  user_id                   String                    @db.Uuid
+  institution_program_id    String                    @db.Uuid
+  role_id                   String                    @db.Uuid
+  created_at                DateTime                  @default(now()) @db.Timestamp(6)
+  role_institution_programs role_institution_programs @relation(fields: [role_id, institution_program_id], references: [role_id, institution_program_id], onUpdate: NoAction, map: "user_program_roles_catalog_fk")
+  institution_programs      institution_programs      @relation(fields: [institution_program_id], references: [id], onUpdate: NoAction)
+  roles                     roles                     @relation(fields: [role_id], references: [id], onUpdate: NoAction)
+  users                     users                     @relation(fields: [user_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+
+  @@id([user_id, institution_program_id])
+  @@index([institution_program_id, role_id], map: "idx_user_program_roles_program_role")
+  @@index([role_id], map: "idx_user_program_roles_role")
 }

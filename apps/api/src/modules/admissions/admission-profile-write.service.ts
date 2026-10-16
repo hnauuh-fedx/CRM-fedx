@@ -104,4 +104,9 @@ export async function saveAdmissionProfile(tx: TransactionClient, leadId: string
     create: { lead_id: leadId, ...data },
     update: data,
   });
+  // The shared lead editor also edits enrolled records; keep academic references aligned.
+  await tx.students.updateMany({
+    where: { lead_id: leadId },
+    data: { institution_program_id: data.institution_program_id, major_id: data.major_id },
+  });
 }

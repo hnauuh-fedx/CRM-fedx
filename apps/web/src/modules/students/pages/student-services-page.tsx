@@ -195,14 +195,14 @@ export function StudentServicesPage() {
               <TableBody>
                 {records.map((record) => (
                   <TableRow key={record.id}>
-                    <TableCell className="px-5 py-4"><span className="font-medium">{record.studentName ?? "-"}</span><br /><span className="text-xs text-muted-foreground">{record.studentCode ?? "-"}</span></TableCell>
-                    <TableCell className="px-5 py-4">{record.className ?? "-"}</TableCell>
-                    <TableCell className="px-5 py-4">{record.type ?? "-"}</TableCell>
-                    <TableCell className="max-w-80 px-5 py-4">{record.content ?? "-"}</TableCell>
-                    <TableCell className="px-5 py-4"><Badge variant="secondary">{displayStatus(record.status)}</Badge></TableCell>
-                    <TableCell className="px-5 py-4">{record.handledBy ?? "Chưa phân công"}</TableCell>
-                    <TableCell className="px-5 py-4">{formatDate(record.createdAt)}</TableCell>
-                    {canUpdate && <TableCell className="px-5 py-4"><Button type="button" variant="outline" size="sm" onClick={() => { updateMutation.reset(); setDialog({ type: "edit", record }); }}><Pencil aria-hidden="true" />Cập nhật</Button></TableCell>}
+                    <TableCell className="px-2.5 py-2"><span className="font-medium">{record.studentName ?? "-"}</span><br /><span className="text-xs text-muted-foreground">{record.studentCode ?? "-"}</span></TableCell>
+                    <TableCell className="px-2.5 py-2">{record.className ?? "-"}</TableCell>
+                    <TableCell className="px-2.5 py-2">{record.type ?? "-"}</TableCell>
+                    <TableCell className="max-w-80 px-2.5 py-2">{record.content ?? "-"}</TableCell>
+                    <TableCell className="px-2.5 py-2"><Badge variant="secondary">{displayStatus(record.status)}</Badge></TableCell>
+                    <TableCell className="px-2.5 py-2">{record.handledBy ?? "Chưa phân công"}</TableCell>
+                    <TableCell className="px-2.5 py-2">{formatDate(record.createdAt)}</TableCell>
+                    {canUpdate && <TableCell className="px-2.5 py-2"><Button type="button" variant="outline" size="sm" onClick={() => { updateMutation.reset(); setDialog({ type: "edit", record }); }}><Pencil aria-hidden="true" />Cập nhật</Button></TableCell>}
                   </TableRow>
                 ))}
               </TableBody>
@@ -210,7 +210,7 @@ export function StudentServicesPage() {
           )}
         </CardContent>
         {pagination && pagination.total > 0 && (
-          <div className="flex flex-col items-center justify-between gap-3 border-t px-5 py-4 text-sm sm:flex-row">
+          <div className="flex flex-col items-center justify-between gap-3 border-t px-2.5 py-2 text-sm sm:flex-row">
             <p className="text-muted-foreground">Trang {pagination.page} / {pagination.totalPages}</p>
             <div className="flex gap-2">
               <Button type="button" variant="outline" size="sm" disabled={page <= 1 || listQuery.isFetching} onClick={() => setPage((current) => Math.max(1, current - 1))}><ChevronLeft aria-hidden="true" />Trang trước</Button>

@@ -45,8 +45,14 @@ const numberFormatter = new Intl.NumberFormat("vi-VN");
 const currencyFormatter = new Intl.NumberFormat("vi-VN", { style: "currency", currency: "VND", maximumFractionDigits: 0 });
 
 type FormState = PersonalReportInput;
+type PipelineStages = Awaited<ReturnType<typeof getPersonalDashboardConfig>>["pipelineStages"];
 
 export function PersonalReportsPage() {
+  const { selectedProgramId } = useInstitutionProgram();
+  return <PersonalReportsWorkspace key={selectedProgramId ?? "no-program"} />;
+}
+
+function PersonalReportsWorkspace() {
   const auth = useAuth();
   const { selectedProgramId } = useInstitutionProgram();
   const queryClient = useQueryClient();
@@ -57,8 +63,8 @@ export function PersonalReportsPage() {
   const [form, setForm] = useState<FormState>(() => emptyForm());
   const [message, setMessage] = useState<string | null>(null);
 
-  const optionsQuery = useQuery({ queryKey: ["reports", "personal", "options"], queryFn: () => getPersonalReportOptions(auth.accessToken!) });
-  const reportsQuery = useQuery({ queryKey: ["reports", "personal"], queryFn: () => listPersonalReports(auth.accessToken!) });
+  const optionsQuery = useQuery({ queryKey: ["reports", "personal", "options", selectedProgramId], queryFn: () => getPersonalReportOptions(auth.accessToken!) });
+  const reportsQuery = useQuery({ queryKey: ["reports", "personal", "list", selectedProgramId], queryFn: () => listPersonalReports(auth.accessToken!), enabled: Boolean(selectedProgramId) });
   const dashboardConfigQuery = useQuery({
     queryKey: ["reports", "personal", "dashboard", "config", selectedProgramId],
     queryFn: () => getPersonalDashboardConfig(auth.accessToken!),
@@ -66,9 +72,9 @@ export function PersonalReportsPage() {
   });
   const selectedReport = reportsQuery.data?.items.find((report) => report.id === selectedId) ?? null;
   const resultQuery = useQuery({
-    queryKey: ["reports", "personal", selectedId, "result"],
+    queryKey: ["reports", "personal", selectedId, "result", selectedProgramId],
     queryFn: () => getPersonalReportResult(selectedId!, auth.accessToken!),
-    enabled: Boolean(selectedId),
+    enabled: Boolean(selectedReport && selectedProgramId),
   });
   const selectedDefinition = optionsQuery.data?.modules.find((module) => module.key === form.module);
 
@@ -159,6 +165,7 @@ export function PersonalReportsPage() {
           definitions={optionsQuery.data?.modules ?? []}
           datasets={optionsQuery.data?.datasets ?? []}
           accessToken={auth.accessToken!}
+          pipelineStages={dashboardConfigQuery.data?.pipelineStages ?? []}
           isEditing={Boolean(editingId)}
           isPending={saveMutation.isPending}
           error={saveMutation.isError ? "Không thể lưu báo cáo. Vui lòng kiểm tra dữ liệu và thử lại." : null}
@@ -170,7 +177,7 @@ export function PersonalReportsPage() {
 
       <div className="grid gap-6 xl:grid-cols-[360px_minmax(0,1fr)]">
         <Card>
-          <CardHeader><CardTitle>Báo cáo đã lưu</CardTitle><CardDescription>Gồm báo cáo của bạn và mẫu được đồng nghiệp chia sẻ.</CardDescription></CardHeader>
+          <CardHeader><CardTitle>Báo cáo đã lưu</CardTitle><CardDescription>Gồm báo cáo của bạn và mẫu được đồng nghiệp chia sẻ trong chương trình đang làm việc.</CardDescription></CardHeader>
           <CardContent className="flex flex-col gap-2">
             {reportsQuery.isLoading ? <><Skeleton className="h-20" /><Skeleton className="h-20" /></> : reportsQuery.data?.items.length ? reportsQuery.data.items.map((report) => (
               <button key={report.id} type="button" onClick={() => setSelectedId(report.id)} className="flex min-h-16 w-full flex-col items-start gap-2 rounded-lg border p-3 text-left transition-colors hover:bg-muted/50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring" aria-pressed={selectedId === report.id}>
@@ -226,8 +233,9 @@ export function PersonalReportsPage() {
   );
 }
 
-function ReportBuilder({ form, definitions, datasets, accessToken, isEditing, isPending, error, onChange, onCancel, onSubmit }: {
+function ReportBuilder({ form, definitions, datasets, accessToken, pipelineStages, isEditing, isPending, error, onChange, onCancel, onSubmit }: {
   form: FormState;
+  pipelineStages: PipelineStages;
   definitions: Awaited<ReturnType<typeof getPersonalReportOptions>>["modules"];
   datasets: Awaited<ReturnType<typeof getPersonalReportOptions>>["datasets"];
   accessToken: string;
@@ -243,7 +251,9 @@ function ReportBuilder({ form, definitions, datasets, accessToken, isEditing, is
   const isSingle = form.mode === "SINGLE";
   const isPivot = form.mode === "PIVOT";
   const reportKind = isSingle ? `SINGLE_${form.singleDisplay ?? "TABLE"}` : (form.mode ?? "PIVOT");
-  const conditionsValid = (form.conditions ?? []).every((condition) => condition.operator === "DATE_BETWEEN"
+  const conditionsValid = (form.conditions ?? []).every((condition) => ["IS_NOT_EMPTY", "IS_EMPTY"].includes(condition.operator)
+    ? Boolean(dataset && ["LEADS", "QUALIFIED_LEADS"].includes(dataset.key) && ["ASSIGNEE", "SOURCE"].includes(condition.fieldKey))
+    : condition.operator === "DATE_BETWEEN"
     ? Boolean(condition.fromDate && condition.toDate && condition.toDate >= condition.fromDate)
     : Boolean(condition.value));
   const valid = form.name.trim().length >= 3 && (isSingle
@@ -282,7 +292,7 @@ function ReportBuilder({ form, definitions, datasets, accessToken, isEditing, is
               <div className="grid gap-5 md:grid-cols-2">
                 {dataset.fields.find((item) => item.key === form.singleDimensionKey)?.type === "DATE" && <Field><FieldLabel>Nhóm thời gian của Output</FieldLabel><Select value={form.dateGranularity} onValueChange={(value) => onChange({ ...form, dateGranularity: value as PersonalReportDateGranularity })}><SelectTrigger className="w-full"><SelectValue /></SelectTrigger><SelectContent><SelectGroup>{dataset.dateGranularities.map((item) => <SelectItem key={item.key} value={item.key}>{item.label}</SelectItem>)}</SelectGroup></SelectContent></Select></Field>}
               </div>
-              <ReportFilterEditor dataset={dataset} conditions={form.conditions ?? []} accessToken={accessToken} onChange={(conditions) => onChange({ ...form, conditions })} />
+              <ReportFilterEditor dataset={dataset} conditions={form.conditions ?? []} pipelineStages={pipelineStages} accessToken={accessToken} onChange={(conditions) => onChange({ ...form, conditions })} />
               <Alert><AlertTitle>Phép tính</AlertTitle><AlertDescription>Đếm số khách hàng theo {dataset.singleDimensions.find((item) => item.key === form.singleDimensionKey)?.label.toLocaleLowerCase("vi") ?? "Output 1"} và hiển thị dưới dạng {form.singleDisplay === "LINE" ? "biểu đồ đường" : "bảng có tỷ trọng"}.</AlertDescription></Alert>
             </> : isPivot && dataset ? <>
               <div className="grid gap-5 md:grid-cols-3">

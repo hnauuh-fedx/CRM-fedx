@@ -334,7 +334,7 @@ function Analytics(props: {
               <TableBody>
                 {response.data.map((group) => (
                   <TableRow key={group.groupKey}>
-                    <TableCell className="px-5 py-4 font-medium">{getGroupLabel(group, dimension)}</TableCell>
+                    <TableCell className="px-2.5 py-2 font-medium">{getGroupLabel(group, dimension)}</TableCell>
                     <TableCell className="tabular-nums">{integerFormatter.format(group.trackingCount)}</TableCell>
                     <TableCell className="tabular-nums">{integerFormatter.format(group.leadCount)}</TableCell>
                     <TableCell className="tabular-nums">{integerFormatter.format(group.applicationCount)}</TableCell>
@@ -498,7 +498,7 @@ function SortableTable({ table }: { table: DataTable<UtmTrackingItem> }) {
       <TableHeader className="bg-muted/55 text-xs uppercase tracking-wide text-muted-foreground">
         {table.getHeaderGroups().map((group) => <TableRow key={group.id} className="hover:bg-muted/55">{group.headers.map((header) => <SortHeader key={header.id} header={header} />)}</TableRow>)}
       </TableHeader>
-      <TableBody>{table.getRowModel().rows.map((row) => <TableRow key={row.id}>{row.getVisibleCells().map((cell) => <TableCell key={cell.id} className="px-5 py-4">{flexRender(cell.column.columnDef.cell, cell.getContext())}</TableCell>)}</TableRow>)}</TableBody>
+      <TableBody>{table.getRowModel().rows.map((row) => <TableRow key={row.id}>{row.getVisibleCells().map((cell) => <TableCell key={cell.id} className="px-2.5 py-2">{flexRender(cell.column.columnDef.cell, cell.getContext())}</TableCell>)}</TableRow>)}</TableBody>
     </Table>
   );
 }
@@ -509,5 +509,5 @@ function SortHeader({ header }: { header: Header<UtmTrackingItem, unknown> }) {
 }
 
 function Pager({ page, pagination, isFetching, onPrevious, onNext }: { page: number; pagination: UtmTrackingListResponse["pagination"]; isFetching: boolean; onPrevious: () => void; onNext: () => void }) {
-  return <div className="flex flex-col items-center justify-between gap-3 border-t px-5 py-4 text-sm sm:flex-row"><p className="text-muted-foreground">Trang {pagination.page} / {pagination.totalPages}</p><div className="flex gap-2"><Button type="button" variant="outline" size="sm" disabled={page <= 1 || isFetching} onClick={onPrevious}><ChevronLeft aria-hidden="true" />Trang trước</Button><Button type="button" variant="outline" size="sm" disabled={page >= pagination.totalPages || isFetching} onClick={onNext}>Trang sau<ChevronRight aria-hidden="true" /></Button></div></div>;
+  return <div className="flex flex-col items-center justify-between gap-3 border-t px-2.5 py-2 text-sm sm:flex-row"><p className="text-muted-foreground">Trang {pagination.page} / {pagination.totalPages}</p><div className="flex gap-2"><Button type="button" variant="outline" size="sm" disabled={page <= 1 || isFetching} onClick={onPrevious}><ChevronLeft aria-hidden="true" />Trang trước</Button><Button type="button" variant="outline" size="sm" disabled={page >= pagination.totalPages || isFetching} onClick={onNext}>Trang sau<ChevronRight aria-hidden="true" /></Button></div></div>;
 }

@@ -12,8 +12,11 @@ import { useInstitutionProgram } from "@/modules/institutions/institution-progra
 import { useAuth } from "@/modules/auth/auth-context";
 import { getLeadCustomFieldDefinitions, getLeadCustomFields } from "@/services/lead.service";
 import { DynamicFieldRenderer } from "./dynamic-field-renderer";
+import { LeadAssigneeSelects } from "./lead-assignee";
+import { CopyPhoneButton, nonStandardPhoneClass } from "./lead-phone";
 import { useTransitionNotePrompt } from "./transition-note-dialog";
 import { leadFormSchema } from "../lead.schema";
+import { getReadableTextColor, normalizeHexColor } from "../lead-stage-color.helpers";
 import type { LeadActionOptions, LeadCustomField, LeadCustomFieldValue, LeadFormInput } from "../lead.types";
 
 const genderOptions = [
@@ -131,7 +134,7 @@ export function LeadForm({ defaultValues, options, leadId, submitLabel, isPendin
       <FormSection title="Thông tin cơ bản" description="Thông tin nhận diện và liên hệ bắt buộc của ứng viên.">
         <FieldGroup className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
           <TextField name="fullName" id="lead-full-name" label={`Họ và tên${isRequired("fullName") ? " *" : ""}`} register={form.register} errors={form.formState.errors} autoComplete="name" />
-          <TextField name="phone" id="lead-phone" label={`Số điện thoại${isRequired("phone") ? " *" : ""}`} register={form.register} errors={form.formState.errors} type="tel" inputMode="numeric" autoComplete="tel" placeholder="Nhập đúng 10 chữ số" />
+          <PhoneFields form={form} label={`Số điện thoại${isRequired("phone") ? " *" : ""}`} />
           <Field data-invalid={Boolean(form.formState.errors.sourceId)}>
             <FieldLabel htmlFor="lead-form-source">Nguồn học viên{isRequired("sourceId") ? " *" : ""}</FieldLabel>
             <Select value={form.watch("sourceId")} onValueChange={(value) => form.setValue("sourceId", value, { shouldValidate: true })}>
@@ -256,18 +259,16 @@ export function LeadForm({ defaultValues, options, leadId, submitLabel, isPendin
       <FormSection title="Chăm sóc và phân loại" description="Thông tin phục vụ telesale, marketing và phân loại ứng viên.">
         <FieldGroup className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
           {canManageAssignment && (
-            <Field>
-              <FieldLabel htmlFor="lead-assignee">Sale phụ trách</FieldLabel>
-              <Select value={form.watch("assigneeId") || "__empty__"} onValueChange={(value) => form.setValue("assigneeId", value === "__empty__" ? "" : value)}>
-                <SelectTrigger id="lead-assignee" className="w-full"><SelectValue placeholder="Chọn Sale phụ trách" /></SelectTrigger>
-                <SelectContent>
-                  <SelectGroup>
-                    <SelectItem value="__empty__">Chưa phân công</SelectItem>
-                    {options.telesales.map((telesale) => <SelectItem key={telesale.id} value={telesale.id}>{telesale.fullName}</SelectItem>)}
-                  </SelectGroup>
-                </SelectContent>
-              </Select>
-            </Field>
+            <LeadAssigneeSelects
+              idPrefix="lead-assignee"
+              primaryId={form.watch("assigneeId")}
+              secondaryId={form.watch("secondaryAssigneeId") ?? ""}
+              options={options.telesales}
+              onChange={({ primaryId, secondaryId }) => {
+                form.setValue("assigneeId", primaryId, { shouldDirty: true });
+                form.setValue("secondaryAssigneeId", secondaryId, { shouldDirty: true });
+              }}
+            />
           )}
           <Field>
             <FieldLabel htmlFor="lead-pipeline-stage">Quy trình Telesale</FieldLabel>
@@ -348,7 +349,7 @@ function useLeadFormSubmission(
     const parsed = leadFormSchema.safeParse(values);
     if (!parsed.success) {
       parsed.error.issues.forEach((issue) => {
-        const field = issue.path[0] as keyof LeadFormInput;
+        const field = issue.path.join(".") as keyof LeadFormInput;
         form.setError(field, { message: issue.message });
       });
     }
@@ -405,28 +406,6 @@ function FormSection({ title, description, children }: { title: string; descript
   );
 }
 
-function normalizeHexColor(value: string | null | undefined, fallback: string) {
-  if (!value) {
-    return fallback;
-  }
-  const trimmed = value.trim();
-  if (/^#[0-9a-fA-F]{6}$/.test(trimmed)) {
-    return trimmed;
-  }
-  if (/^#[0-9a-fA-F]{3}$/.test(trimmed)) {
-    return `#${trimmed.slice(1).split("").map((item) => item + item).join("")}`;
-  }
-  return fallback;
-}
-
-function getReadableTextColor(hexColor: string) {
-  const red = Number.parseInt(hexColor.slice(1, 3), 16);
-  const green = Number.parseInt(hexColor.slice(3, 5), 16);
-  const blue = Number.parseInt(hexColor.slice(5, 7), 16);
-  const luminance = (0.299 * red + 0.587 * green + 0.114 * blue) / 255;
-  return luminance > 0.58 ? "#0f172a" : "#ffffff";
-}
-
 function formatProgressCount(count?: number) {
   return compactNumberFormatter.format(count ?? 0);
 }
@@ -438,6 +417,7 @@ export function LeadProgressSelector({
   clearLabel,
   allOptionLabel,
   allOptionCount,
+  allOptionSelected = !value,
   singleRowDesktop = false,
 }: {
   value: string;
@@ -446,6 +426,7 @@ export function LeadProgressSelector({
   clearLabel?: string;
   allOptionLabel?: string;
   allOptionCount?: number;
+  allOptionSelected?: boolean;
   singleRowDesktop?: boolean;
 }) {
   if (stages.length === 0) {
@@ -465,19 +446,19 @@ export function LeadProgressSelector({
         {allOptionLabel && (
           <button
             type="button"
-            aria-pressed={!value}
+            aria-pressed={allOptionSelected}
             onClick={() => onChange("")}
             className={`relative flex min-h-14 items-center justify-between gap-2 rounded-md border px-3 py-2 text-left text-xs font-semibold leading-tight transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring ${
               singleRowDesktop ? "min-w-0" : "min-w-36 flex-1"
             } ${
-              !value
+              allOptionSelected
                 ? "border-primary bg-primary text-primary-foreground"
                 : "border-border bg-muted/40 text-muted-foreground hover:border-primary/40 hover:bg-primary/5 hover:text-foreground"
             }`}
           >
             <span className="min-w-0 wrap-break-word">{allOptionLabel}</span>
             {allOptionCount !== undefined && (
-              <span className={`shrink-0 rounded-full px-2 py-0.5 text-[0.7rem] tabular-nums ${!value ? "bg-primary-foreground/20 text-primary-foreground" : "bg-background text-foreground"}`}>
+              <span className={`shrink-0 rounded-full px-2 py-0.5 text-[0.7rem] tabular-nums ${allOptionSelected ? "bg-primary-foreground/20 text-primary-foreground" : "bg-background text-foreground"}`}>
                 {formatProgressCount(allOptionCount)}
               </span>
             )}
@@ -523,6 +504,34 @@ export function LeadProgressSelector({
         </Button>
       )}
     </div>
+  );
+}
+
+/** Primary phone plus any secondary numbers (e.g. from Bizfly), one row each with a copy action. */
+function PhoneFields({ form, label }: { form: UseFormReturn<LeadFormInput>; label: string }) {
+  const phone = form.watch("phone") ?? "";
+  const secondaryPhones = form.watch("secondaryPhones") ?? [];
+  const errors = form.formState.errors;
+  const hasNonStandard = [phone, ...secondaryPhones].some((item) => nonStandardPhoneClass(item));
+  return (
+    <Field data-invalid={Boolean(errors.phone)}>
+      <FieldLabel htmlFor="lead-phone">{label}</FieldLabel>
+      <div className="flex items-center gap-1">
+        <Input id="lead-phone" type="tel" inputMode="numeric" autoComplete="tel" placeholder="Nhập đúng 10 chữ số" aria-invalid={Boolean(errors.phone)} className={nonStandardPhoneClass(phone)} {...form.register("phone")} />
+        {phone.trim() && <CopyPhoneButton phone={phone.trim()} />}
+      </div>
+      <FieldError errors={[errors.phone]} />
+      {secondaryPhones.map((secondaryPhone, index) => (
+        <div key={index} className="flex flex-col gap-1">
+          <div className="flex items-center gap-1">
+            <Input type="tel" inputMode="numeric" aria-label={`Số điện thoại ${index + 2}`} aria-invalid={Boolean(errors.secondaryPhones?.[index])} className={nonStandardPhoneClass(secondaryPhone)} {...form.register(`secondaryPhones.${index}`)} />
+            {secondaryPhone.trim() && <CopyPhoneButton phone={secondaryPhone.trim()} />}
+          </div>
+          <FieldError errors={[errors.secondaryPhones?.[index]]} />
+        </div>
+      ))}
+      {hasNonStandard && <FieldDescription className="text-purple-600 dark:text-purple-400">Số màu tím chưa đúng định dạng 10 chữ số bắt đầu bằng 0.</FieldDescription>}
+    </Field>
   );
 }
 

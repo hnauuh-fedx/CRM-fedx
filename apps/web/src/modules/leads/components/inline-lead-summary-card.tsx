@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState, type KeyboardEvent } from "react";
+import { useEffect, useMemo, useState, type KeyboardEvent, type ReactNode } from "react";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { Pencil } from "lucide-react";
 
@@ -12,6 +12,8 @@ import { useAuth } from "@/modules/auth/auth-context";
 import { ApiError } from "@/services/api";
 import { updateLead } from "@/services/lead.service";
 import { toLeadFormOptions, toLeadFormValues } from "../lead-form.helpers";
+import { LeadAssigneeLines, LeadAssigneeSelects } from "./lead-assignee";
+import { CopyPhoneButton, LeadPhoneLines, nonStandardPhoneClass } from "./lead-phone";
 import type { LeadActionOptions, LeadDetail, LeadFormInput } from "../lead.types";
 
 type EditableField =
@@ -41,7 +43,7 @@ function formatDate(value: string | null) {
 function validateDraft(values: LeadFormInput): FieldErrors {
   const errors: FieldErrors = {};
   if (values.fullName.trim().length < 2) errors.fullName = "Vui lòng nhập họ và tên ứng viên.";
-  if (!/^\d{10}$/.test(values.phone.trim())) errors.phone = "Số điện thoại phải gồm đúng 10 chữ số.";
+  if (!values.phone.trim()) errors.phone = "Vui lòng nhập số điện thoại.";
   if (!values.sourceId) errors.sourceId = "Vui lòng chọn nguồn học viên.";
   if (values.email && !/^\S+@\S+\.\S+$/.test(values.email.trim())) errors.email = "Email không hợp lệ.";
   return errors;
@@ -52,11 +54,13 @@ function ReadonlyValue({
   value,
   editable = false,
   onEdit,
+  children,
 }: {
   label: string;
   value: string;
   editable?: boolean;
   onEdit?: () => void;
+  children?: ReactNode;
 }) {
   const handleKeyDown = (event: KeyboardEvent<HTMLDivElement>) => {
     if (editable && (event.key === "Enter" || event.key === " ")) {
@@ -76,7 +80,7 @@ function ReadonlyValue({
       aria-label={editable ? `${label}: ${value}. Nhấn Enter hoặc nhấp đúp để chỉnh sửa.` : undefined}
     >
       <dt className="text-sm text-muted-foreground">{label}</dt>
-      <dd className="mt-1 text-sm font-medium">{value}</dd>
+      <dd className="mt-1 text-sm font-medium">{children ?? value}</dd>
     </div>
   );
 }
@@ -183,9 +187,10 @@ export function InlineLeadSummaryCard({
     if (field in errors) setErrors((current) => ({ ...current, [field]: undefined }));
   };
 
-  const editableValue = (field: EditableField, label: string, value: string) => (
-    <ReadonlyValue label={label} value={value} editable={canUpdate} onEdit={() => startEditingField(field)} />
+  const editableValue = (field: EditableField, label: string, value: string, children?: ReactNode) => (
+    <ReadonlyValue label={label} value={value} editable={canUpdate} onEdit={() => startEditingField(field)}>{children}</ReadonlyValue>
   );
+  const secondaryPhones = draft.secondaryPhones ?? [];
 
   return (
     <Card className="border-border/70 shadow-xs">
@@ -224,9 +229,27 @@ export function InlineLeadSummaryCard({
 
           {isEditing("phone") ? (
             <InlineField id="inline-lead-phone" label="Số điện thoại" error={errors.phone}>
-              <Input id="inline-lead-phone" type="tel" inputMode="numeric" value={draft.phone} onChange={(event) => update("phone", event.target.value)} autoComplete="tel" aria-invalid={Boolean(errors.phone)} autoFocus={lastOpenedField === "phone"} />
+              <div className="flex flex-col gap-2">
+                <div className="flex items-center gap-1">
+                  <Input id="inline-lead-phone" type="tel" inputMode="numeric" value={draft.phone} onChange={(event) => update("phone", event.target.value)} autoComplete="tel" aria-invalid={Boolean(errors.phone)} autoFocus={lastOpenedField === "phone"} className={nonStandardPhoneClass(draft.phone)} />
+                  {draft.phone.trim() && <CopyPhoneButton phone={draft.phone.trim()} />}
+                </div>
+                {secondaryPhones.map((phone, index) => (
+                  <div key={index} className="flex items-center gap-1">
+                    <Input
+                      type="tel"
+                      inputMode="numeric"
+                      value={phone}
+                      onChange={(event) => update("secondaryPhones", secondaryPhones.map((item, itemIndex) => itemIndex === index ? event.target.value : item))}
+                      aria-label={`Số điện thoại ${index + 2}`}
+                      className={nonStandardPhoneClass(phone)}
+                    />
+                    {phone.trim() && <CopyPhoneButton phone={phone.trim()} />}
+                  </div>
+                ))}
+              </div>
             </InlineField>
-          ) : editableValue("phone", "Số điện thoại", lead.phone ?? "Chưa cập nhật")}
+          ) : editableValue("phone", "Số điện thoại", [lead.phone, ...(lead.secondaryPhones ?? [])].filter(Boolean).join(", ") || "Chưa cập nhật", <LeadPhoneLines lead={lead} />)}
 
           {isEditing("email") ? (
             <InlineField id="inline-lead-email" label="Email" error={errors.email}>
@@ -260,14 +283,25 @@ export function InlineLeadSummaryCard({
           <ReadonlyValue label="Tiến trình" value={lead.pipelineStage?.name ?? "Chưa cập nhật"} />
 
           {canAssign && isEditing("assigneeId") ? (
-            <InlineField id="inline-lead-assignee" label="Nhân viên phụ trách">
-              <Select value={draft.assigneeId || "__empty__"} onValueChange={(value) => update("assigneeId", value === "__empty__" ? "" : value)}>
-                <SelectTrigger id="inline-lead-assignee" className="w-full" autoFocus={lastOpenedField === "assigneeId"}><SelectValue /></SelectTrigger>
-                <SelectContent><SelectGroup><SelectItem value="__empty__">Chưa phân công</SelectItem>{editOptions.telesales.map((user) => <SelectItem key={user.id} value={user.id}>{user.fullName}</SelectItem>)}</SelectGroup></SelectContent>
-              </Select>
-            </InlineField>
+            <div className="flex flex-col gap-3">
+              <LeadAssigneeSelects
+                idPrefix="inline-lead-assignee"
+                primaryId={draft.assigneeId}
+                secondaryId={draft.secondaryAssigneeId ?? ""}
+                options={editOptions.telesales}
+                autoFocus={lastOpenedField === "assigneeId"}
+                onChange={({ primaryId, secondaryId }) => setDraft((current) => ({ ...current, assigneeId: primaryId, secondaryAssigneeId: secondaryId }))}
+              />
+            </div>
           ) : (
-            <ReadonlyValue label="Nhân viên phụ trách" value={lead.assignee?.fullName ?? "Chưa phân công"} editable={canUpdate && canAssign} onEdit={() => startEditingField("assigneeId")} />
+            <ReadonlyValue
+              label="Nhân viên phụ trách"
+              value={[lead.assignee?.fullName, lead.secondaryAssignee?.fullName].filter(Boolean).join(", ") || "Chưa phân công"}
+              editable={canUpdate && canAssign}
+              onEdit={() => startEditingField("assigneeId")}
+            >
+              <LeadAssigneeLines lead={lead} />
+            </ReadonlyValue>
           )}
 
           {isEditing("temperature") ? (

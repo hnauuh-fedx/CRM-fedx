@@ -1,15 +1,21 @@
+import { LEAD_PHONE_MAX_LENGTH } from "@admission-crm/shared/lead-phone";
 import { z } from "zod";
 
 const optionalText = (max: number) => z.string().trim().max(max);
 const optionalDecimal = z.string().trim().regex(/^$|^\d+(\.\d{1,2})?$/, "Vui lòng nhập số hợp lệ, tối đa 2 chữ số thập phân.");
-const requiredPhone = z.string().trim().regex(/^\d{10}$/, "Số điện thoại phải gồm đúng 10 chữ số.");
+// Non-standard numbers (often imported) are allowed and highlighted instead of rejected.
+const requiredPhone = z.string().trim().min(1, "Vui lòng nhập số điện thoại.")
+  .max(LEAD_PHONE_MAX_LENGTH, `Số điện thoại tối đa ${LEAD_PHONE_MAX_LENGTH} ký tự.`);
+const secondaryPhone = z.string().trim().max(LEAD_PHONE_MAX_LENGTH, `Số điện thoại tối đa ${LEAD_PHONE_MAX_LENGTH} ký tự.`);
 const optionalPhone = z.string().trim().regex(/^$|^\d{10}$/, "Số điện thoại phải gồm đúng 10 chữ số.");
 
 export const leadFormSchema = z.object({
   fullName: z.string().trim().min(2, "Vui lòng nhập họ và tên ứng viên.").max(255),
   phone: requiredPhone,
+  secondaryPhones: z.array(secondaryPhone).max(5).optional(),
   sourceId: z.string().min(1, "Vui lòng chọn nguồn học viên."),
   assigneeId: z.string(),
+  secondaryAssigneeId: z.string().optional(),
   pipelineStageId: z.string(),
   noteTemplateId: z.uuid().optional(),
   noteContent: z.string().trim().min(1, "Nhập nội dung ghi chú.").max(1800, "Ghi chú tối đa 1.800 ký tự.").optional(),
@@ -77,7 +83,7 @@ export const leadFormSchema = z.object({
 });
 
 export const emptyLeadForm = {
-  fullName: "", phone: "", sourceId: "", assigneeId: "", pipelineStageId: "", email: "", gender: "", dateOfBirth: "", cccd: "", note: "",
+  fullName: "", phone: "", sourceId: "", assigneeId: "", secondaryAssigneeId: "", pipelineStageId: "", email: "", gender: "", dateOfBirth: "", cccd: "", note: "",
   temperature: "", birthPlace: "", cccdIssueDate: "", cccdIssuePlace: "", nationality: "",
   ethnicity: "", religion: "", graduationYear: "", graduationCertificate: "", previousGraduationCertificate: "",
   graduationMajor: "", graduationRank: "", diplomaIssuePlace: "", academicRank12: "", conductRank12: "",

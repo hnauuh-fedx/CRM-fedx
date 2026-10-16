@@ -9,6 +9,7 @@ import { saveLeadAttributionAndTags } from "../../campaigns/lead-attribution.ser
 import { saveCandidateProfile } from "../../students/candidate-profile.service";
 import type { AuthUser } from "../../auth/auth.types";
 import type { LeadInput } from "../domain/lead-input";
+import { createFailedLeadStatus } from "../domain/lead-lifecycle-status";
 import {
   canAssignLead,
   canCreateLead,
@@ -17,6 +18,9 @@ import {
 import {
   findActiveAssignableSale,
   getSelectedStage,
+  leadPhoneDuplicateWhere,
+  normalizeLeadAssignees,
+  recordSecondaryAssignment,
   recordStageChange,
   selectAssigneeDepartment,
   toLeadData,
@@ -26,6 +30,7 @@ export type CreateLeadOptions = {
   allowDuplicate?: boolean;
   allowMissingSource?: boolean;
   ipAddress?: string;
+  importInitialization?: { createdAt?: Date; lifecycleStatus?: "FAIL" };
 };
 
 type PersistLeadOptions = CreateLeadOptions & {
@@ -35,19 +40,21 @@ type PersistLeadOptions = CreateLeadOptions & {
 async function persistLeadInTransaction(
   tx: Prisma.TransactionClient,
   actor: AuthUser,
-  input: LeadInput,
+  rawInput: LeadInput,
   options: PersistLeadOptions = {},
 ) {
+  const assignees = normalizeLeadAssignees(rawInput.assigneeId, rawInput.secondaryAssigneeId);
+  const input: LeadInput = { ...rawInput, assigneeId: assignees.primary, secondaryAssigneeId: assignees.secondary };
   if (!options.skipAuthorization && !canCreateLead(actor)) {
     return { ok: false as const, reason: "permission_denied" as const };
   }
-  if (!options.skipAuthorization && input.assigneeId && !canAssignLead(actor)) {
+  if (!options.skipAuthorization && (input.assigneeId || input.secondaryAssigneeId) && !canAssignLead(actor)) {
     return { ok: false as const, reason: "assignment_forbidden" as const };
   }
   if (!options.allowDuplicate) {
     const duplicate = await tx.leads.findFirst({
       where: {
-        phone: input.phone.trim(),
+        ...leadPhoneDuplicateWhere(input),
         deleted_at: null,
         ...(input.institutionProgramId
           ? { institution_program_id: input.institutionProgramId }
@@ -80,7 +87,7 @@ async function persistLeadInTransaction(
   }
 
   const selectedStage = await getSelectedStage(tx, input.pipelineStageId);
-  if (input.pipelineStageId && !selectedStage) {
+  if ((input.pipelineStageId || options.importInitialization?.lifecycleStatus === "FAIL") && !selectedStage) {
     return { ok: false as const, reason: "stage_not_found" as const };
   }
 
@@ -95,6 +102,15 @@ async function persistLeadInTransaction(
   ) {
     return { ok: false as const, reason: "assignee_not_telesale" as const };
   }
+  const secondaryAssignee = input.secondaryAssigneeId
+    ? await findActiveAssignableSale(tx, input.secondaryAssigneeId, undefined, input.institutionProgramId)
+    : null;
+  if (
+    input.secondaryAssigneeId &&
+    (!secondaryAssignee || (!options.skipAuthorization && !isAssigneeInScope(actor, secondaryAssignee.user_departments)))
+  ) {
+    return { ok: false as const, reason: "secondary_assignee_invalid" as const };
+  }
 
   const lead = await tx.leads.create({
     data: {
@@ -103,6 +119,13 @@ async function persistLeadInTransaction(
       lead_code: `LD-${Date.now().toString(36).toUpperCase()}`,
       owner_id: actor.id,
       assigned_to: assignee?.id ?? null,
+      secondary_assigned_to: secondaryAssignee?.id ?? null,
+      ...(options.importInitialization?.lifecycleStatus === "FAIL" && selectedStage
+        ? { status: createFailedLeadStatus(selectedStage.id) }
+        : {}),
+      ...(options.importInitialization?.createdAt
+        ? { created_at: options.importInitialization.createdAt }
+        : {}),
     },
     select: { id: true },
   });
@@ -130,11 +153,12 @@ async function persistLeadInTransaction(
         fullName: input.fullName,
         sourceId: input.sourceId,
         assigneeId: assignee?.id ?? null,
+        secondaryAssigneeId: secondaryAssignee?.id ?? null,
       },
     },
   });
 
-  if (assignee) {
+  if (assignee && !options.importInitialization) {
     const departmentId = selectAssigneeDepartment(
       actor,
       assignee.user_departments,
@@ -175,6 +199,18 @@ async function persistLeadInTransaction(
         new_data: { assigneeId: assignee.id, departmentId },
       },
     });
+  }
+
+  // Imports initialize historical data silently, matching the main assignee behavior.
+  if (secondaryAssignee && !options.importInitialization) {
+    await recordSecondaryAssignment(
+      tx,
+      actor,
+      { id: lead.id, fullName: input.fullName },
+      null,
+      secondaryAssignee,
+      { ipAddress: options.ipAddress },
+    );
   }
 
   if (selectedStage) {
@@ -237,7 +273,7 @@ export async function createLead(
     return { ok: false as const, reason: "permission_denied" as const };
   }
   if (
-    input.assigneeId &&
+    (input.assigneeId || input.secondaryAssigneeId) &&
     !canAssignLead(actor)
   ) {
     return { ok: false as const, reason: "assignment_forbidden" as const };

@@ -1,9 +1,11 @@
 export type LeadInput = {
   fullName: string;
   phone: string;
+  secondaryPhones?: string[];
   sourceId: string;
   originId?: string;
   assigneeId?: string | null;
+  secondaryAssigneeId?: string | null;
   pipelineStageId?: string;
   noteTemplateId?: string;
   noteContent?: string;

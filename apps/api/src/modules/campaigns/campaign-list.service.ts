@@ -184,7 +184,7 @@ async function getCampaignPerformance(campaignIds: string[]) {
     FROM utm_trackings tracking
     LEFT JOIN leads application_lead ON application_lead.id = tracking.lead_id AND application_lead.deleted_at IS NULL
     LEFT JOIN pipeline_stages application_stage ON application_stage.id = application_lead.pipeline_stage_id AND application_stage.name ILIKE ${APPLICATION_PIPELINE_STAGE_LIKE}
-    LEFT JOIN students student ON student.lead_id = tracking.lead_id
+    LEFT JOIN students student ON student.lead_id = tracking.lead_id AND student.status IS DISTINCT FROM 'candidate'
     WHERE tracking.campaign_id IN (${Prisma.join(campaignIds)})
       AND tracking.lead_id IS NOT NULL
     GROUP BY tracking.campaign_id

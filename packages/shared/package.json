@@ -3,7 +3,9 @@
   "private": true,
   "type": "module",
   "exports": {
+    "./access-scope": "./src/access-scope.ts",
     "./lead-form-field-catalog": "./src/lead-form-field-catalog.ts",
+    "./lead-phone": "./src/lead-phone.ts",
     "./lead-source": "./src/lead-source.ts"
   },
   "dependencies": {

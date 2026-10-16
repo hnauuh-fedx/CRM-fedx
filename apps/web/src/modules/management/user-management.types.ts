@@ -11,6 +11,7 @@ export type ManagedUser = {
   createdAt: string | null;
   accessScope: AccessScope;
   roles: Array<{ id: string; code: string; name: string }>;
+  programAssignments: Array<{ institutionProgramId: string; roleId: string; programName: string; institutionName: string; roleName: string }>;
   departments: Array<{ id: string; code: string | null; name: string }>;
 };
 
@@ -34,6 +35,7 @@ export type UserListResponse = {
 };
 
 export type UserManagementOptions = {
+  programs: Array<{ id: string; code: string; name: string; institutionName: string; roles: Array<{ id: string; code: string; name: string; description: string | null; scopeCode: AccessScope }> }>;
   roles: Array<{ id: string; code: string; name: string; description: string | null }>;
   departments: Array<{ id: string; code: string | null; name: string }>;
   scopes: AccessScope[];
@@ -45,7 +47,7 @@ export type UserManagementInput = {
   phone: string;
   status: "active" | "inactive" | "suspended";
   password: string;
-  roleIds: string[];
+  programAssignments: Array<{ institutionProgramId: string; roleId: string }>;
   departmentIds: string[];
   accessScope: AccessScope;
 };

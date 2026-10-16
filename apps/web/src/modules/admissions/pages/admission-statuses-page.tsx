@@ -212,13 +212,13 @@ export function AdmissionStatusesPage() {
               <TableBody>
                 {statuses.map((status) => (
                   <TableRow key={status.id}>
-                    <TableCell className="px-5 py-4 font-medium">{status.name}</TableCell>
-                    <TableCell className="px-5 py-4">{status.code}</TableCell>
-                    <TableCell className="px-5 py-4"><ColorBadge status={status} /></TableCell>
-                    <TableCell className="px-5 py-4">{status.profileCount}</TableCell>
-                    <TableCell className="px-5 py-4">{formatDate(status.createdAt)}</TableCell>
+                    <TableCell className="px-2.5 py-2 font-medium">{status.name}</TableCell>
+                    <TableCell className="px-2.5 py-2">{status.code}</TableCell>
+                    <TableCell className="px-2.5 py-2"><ColorBadge status={status} /></TableCell>
+                    <TableCell className="px-2.5 py-2">{status.profileCount}</TableCell>
+                    <TableCell className="px-2.5 py-2">{formatDate(status.createdAt)}</TableCell>
                     {canManage && (
-                      <TableCell className="px-5 py-4">
+                      <TableCell className="px-2.5 py-2">
                         <div className="flex justify-end gap-2">
                           <Button type="button" size="sm" variant="outline" onClick={() => { updateMutation.reset(); setDialog({ type: "edit", status }); }} aria-label={`Sửa trạng thái ${status.name}`}>
                             <Pencil aria-hidden="true" />
@@ -238,7 +238,7 @@ export function AdmissionStatusesPage() {
           )}
         </CardContent>
         {pagination && pagination.total > 0 && (
-          <div className="flex flex-col items-center justify-between gap-3 border-t px-5 py-4 text-sm sm:flex-row">
+          <div className="flex flex-col items-center justify-between gap-3 border-t px-2.5 py-2 text-sm sm:flex-row">
             <p className="text-muted-foreground">Trang {pagination.page} / {pagination.totalPages}</p>
             <div className="flex gap-2">
               <Button type="button" variant="outline" size="sm" disabled={state.page <= 1 || listQuery.isFetching} onClick={() => dispatch({ type: "setPage", page: Math.max(1, state.page - 1) })}><ChevronLeft aria-hidden="true" />Trang trước</Button>

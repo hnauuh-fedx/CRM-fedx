@@ -1,3 +1,4 @@
+import { enrolledStudentWhere } from "../students/student-membership";
 import { prisma } from "../../database/prisma";
 import { applicationStageLeadWhere } from "../leads/pipeline-stage-semantics";
 
@@ -10,7 +11,7 @@ export async function getOverviewReport(institutionProgramId?: string) {
     leads: { is: { ...leadWhere, ...applicationStageLeadWhere() } },
   };
   const applicationLeadWhere = { ...leadWhere, ...applicationStageLeadWhere() };
-  const studentWhere = institutionProgramId ? { institution_program_id: institutionProgramId } : {};
+  const studentWhere = { ...enrolledStudentWhere, ...(institutionProgramId ? { institution_program_id: institutionProgramId } : {}) };
   const [
     totalLeads,
     totalApplications,
