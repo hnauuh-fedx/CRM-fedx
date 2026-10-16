@@ -1,0 +1,11 @@
+{
+  "extends": "./tsconfig.json",
+  "compilerOptions": { "types": ["vite/client"] },
+  "include": [
+    "src/modules/auth/**/*",
+    "src/services/api.ts",
+    "src/services/auth.service.ts",
+    "src/routes/protected-route.tsx"
+  ],
+  "references": []
+}

@@ -3,6 +3,7 @@ import { hash } from "bcryptjs";
 import { prisma } from "../../database/prisma";
 import { Prisma } from "../../generated/prisma/client";
 import type { AuthUser } from "../auth/auth.types";
+import { revokeUserSessions } from "../auth/auth-session.service";
 
 export type AccessScope = AuthUser["accessScope"];
 
@@ -342,6 +343,9 @@ export async function updateManagedUser(actor: AuthUser, userId: string, input: 
         ...(input.password ? { password_hash: await hash(input.password, 12) } : {}),
       },
     });
+    if (input.password || input.status !== "active") {
+      await revokeUserSessions(tx, userId, input.password ? "password_changed" : "account_disabled", actor.id, ipAddress);
+    }
     await tx.user_roles.deleteMany({ where: { user_id: userId, role_id: { in: programRoleIds } } });
     await tx.user_departments.deleteMany({ where: { user_id: userId } });
     if (references.roleIds.length > 0) {

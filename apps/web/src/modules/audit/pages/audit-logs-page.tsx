@@ -1,30 +1,46 @@
-import { useMemo, useState } from "react";
+import { ServerDataTable } from "@/components/shared/server-data-table";
+import { TablePagination } from "@/components/shared/table-pagination";
 import { useQuery } from "@tanstack/react-query";
 import {
-  flexRender,
   getCoreRowModel,
-  type ColumnDef,
-  type SortingState,
-  type Table as DataTable,
   useReactTable,
+  type ColumnDef,
+  type Table as DataTable,
+  type SortingState,
 } from "@tanstack/react-table";
-import { ArrowDown, ArrowUp, ArrowUpDown, ChevronLeft, ChevronRight, Eye, Search } from "lucide-react";
+import { Eye, Search } from "lucide-react";
+import { useMemo, useState } from "react";
 
-import { EmptyState } from "@/components/shared/data-states";
 import { AutoFilterActions } from "@/components/shared/auto-filter-actions";
+import { EmptyState } from "@/components/shared/data-states";
 import { ErrorState } from "@/components/shared/error-state";
 import { FilterSelect } from "@/components/shared/filter-select";
 import { PageHeader } from "@/components/shared/page-header";
 import { TableLoadingState } from "@/components/shared/table-loading-state";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
-import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import {
+  Card,
+  CardContent,
+  CardDescription,
+  CardHeader,
+  CardTitle,
+} from "@/components/ui/card";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
 import { Field, FieldGroup, FieldLabel } from "@/components/ui/field";
 import { Input } from "@/components/ui/input";
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { useAuth } from "@/modules/auth/auth-context";
-import { getAuditLogDetail, getAuditLogFilterOptions, getAuditLogs } from "@/services/audit-log.service";
+import {
+  getAuditLogDetail,
+  getAuditLogFilterOptions,
+  getAuditLogs,
+} from "@/services/audit-log.service";
 import type {
   AuditLogDetail,
   AuditLogFilterOptions,
@@ -43,7 +59,11 @@ const emptyFilters: AuditLogListFilters = {
   fromDate: "",
   toDate: "",
 };
-const sortableColumns = new Set<AuditLogSortField>(["createdAt", "action", "entityType"]);
+const sortableColumns = new Set<AuditLogSortField>([
+  "createdAt",
+  "action",
+  "entityType",
+]);
 const dateTimeFormatter = new Intl.DateTimeFormat("vi-VN", {
   day: "2-digit",
   month: "2-digit",
@@ -97,7 +117,9 @@ export function AuditLogsPage() {
   const [page, setPage] = useState(1);
   const [draftFilters, setDraftFilters] = useState(emptyFilters);
   const [filters, setFilters] = useState(emptyFilters);
-  const [sorting, setSorting] = useState<SortingState>([{ id: "createdAt", desc: true }]);
+  const [sorting, setSorting] = useState<SortingState>([
+    { id: "createdAt", desc: true },
+  ]);
   const [selectedAuditId, setSelectedAuditId] = useState<string | null>(null);
   const selectedSort = sorting[0] ?? { id: "createdAt", desc: true };
   const sortBy = sortableColumns.has(selectedSort.id as AuditLogSortField)
@@ -105,8 +127,20 @@ export function AuditLogsPage() {
     : "createdAt";
   const sortOrder = selectedSort.desc ? "desc" : "asc";
   const listQuery = useQuery({
-    queryKey: ["audit-logs", "list", page, pageSize, sortBy, sortOrder, filters],
-    queryFn: () => getAuditLogs({ page, limit: pageSize, sortBy, sortOrder, ...filters }, auth.accessToken!),
+    queryKey: [
+      "audit-logs",
+      "list",
+      page,
+      pageSize,
+      sortBy,
+      sortOrder,
+      filters,
+    ],
+    queryFn: () =>
+      getAuditLogs(
+        { page, limit: pageSize, sortBy, sortOrder, ...filters },
+        auth.accessToken!,
+      ),
     placeholderData: (previousData) => previousData,
   });
   const optionsQuery = useQuery({
@@ -118,7 +152,10 @@ export function AuditLogsPage() {
     queryFn: () => getAuditLogDetail(selectedAuditId!, auth.accessToken!),
     enabled: Boolean(selectedAuditId),
   });
-  const data = listQuery.data?.data ?? [];
+  const data = useMemo(
+    () => listQuery.data?.data ?? [],
+    [listQuery.data?.data],
+  );
   const table = useReactTable({
     data,
     columns: useAuditLogColumns({ onOpenDetail: setSelectedAuditId }),
@@ -128,7 +165,9 @@ export function AuditLogsPage() {
     onSortingChange: (updater) => {
       setSorting((current) => {
         const next = typeof updater === "function" ? updater(current) : updater;
-        return next.length ? next.slice(0, 1) : [{ id: "createdAt", desc: true }];
+        return next.length
+          ? next.slice(0, 1)
+          : [{ id: "createdAt", desc: true }];
       });
       setPage(1);
     },
@@ -146,7 +185,9 @@ export function AuditLogsPage() {
       <AuditLogFilters
         filters={draftFilters}
         options={optionsQuery.data}
-        onChange={(field, value) => setDraftFilters((current) => ({ ...current, [field]: value }))}
+        onChange={(field, value) =>
+          setDraftFilters((current) => ({ ...current, [field]: value }))
+        }
         onApply={() => {
           setFilters(draftFilters);
           setPage(1);
@@ -181,7 +222,11 @@ export function AuditLogsPage() {
   );
 }
 
-function useAuditLogColumns({ onOpenDetail }: { onOpenDetail: (id: string) => void }) {
+function useAuditLogColumns({
+  onOpenDetail,
+}: {
+  onOpenDetail: (id: string) => void;
+}) {
   return useMemo<ColumnDef<AuditLogListItem>[]>(
     () => [
       {
@@ -192,7 +237,11 @@ function useAuditLogColumns({ onOpenDetail }: { onOpenDetail: (id: string) => vo
       {
         accessorKey: "action",
         header: "Hành động",
-        cell: ({ row }) => <Badge variant="secondary">{displayAction(row.original.action)}</Badge>,
+        cell: ({ row }) => (
+          <Badge variant="secondary">
+            {displayAction(row.original.action)}
+          </Badge>
+        ),
       },
       {
         accessorKey: "entityType",
@@ -216,7 +265,12 @@ function useAuditLogColumns({ onOpenDetail }: { onOpenDetail: (id: string) => vo
         header: "Chi tiết",
         enableSorting: false,
         cell: ({ row }) => (
-          <Button type="button" variant="outline" size="sm" onClick={() => onOpenDetail(row.original.id)}>
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            onClick={() => onOpenDetail(row.original.id)}
+          >
             <Eye aria-hidden="true" />
             Xem
           </Button>
@@ -235,35 +289,98 @@ type FilterProps = {
   onReset: () => void;
 };
 
-function AuditLogFilters({ filters, options, onChange, onApply, onReset }: FilterProps) {
+function AuditLogFilters({
+  filters,
+  options,
+  onChange,
+  onApply,
+  onReset,
+}: FilterProps) {
   return (
     <Card className="gap-4 border-border/70 py-5 shadow-xs">
       <CardHeader className="gap-1 px-5">
         <CardTitle>Bộ lọc nhật ký</CardTitle>
-        <CardDescription>Tìm theo người thực hiện, đối tượng, hành động và khoảng thời gian.</CardDescription>
+        <CardDescription>
+          Tìm theo người thực hiện, đối tượng, hành động và khoảng thời gian.
+        </CardDescription>
       </CardHeader>
       <CardContent className="px-5">
-        <form onSubmit={(event) => { event.preventDefault(); onApply(); }}>
+        <form
+          onSubmit={(event) => {
+            event.preventDefault();
+            onApply();
+          }}
+        >
           <FieldGroup className="grid gap-4 lg:grid-cols-[minmax(240px,2fr)_repeat(5,minmax(150px,1fr))_auto]">
             <Field className="gap-2">
               <FieldLabel htmlFor="audit-search">Tìm kiếm</FieldLabel>
               <div className="relative">
-                <Search className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground" aria-hidden="true" />
-                <Input id="audit-search" className="pl-9" placeholder="Hành động, đối tượng hoặc mã tham chiếu" value={filters.search} onChange={(event) => onChange("search", event.target.value)} />
+                <Search
+                  className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground"
+                  aria-hidden="true"
+                />
+                <Input
+                  id="audit-search"
+                  className="pl-9"
+                  placeholder="Hành động, đối tượng hoặc mã tham chiếu"
+                  value={filters.search}
+                  onChange={(event) => onChange("search", event.target.value)}
+                />
               </div>
             </Field>
-            <FilterSelect id="audit-user" label="Người thực hiện" value={filters.userId} onChange={(value) => onChange("userId", value)} options={(options?.users ?? []).map((user) => ({ value: user.id, label: user.fullName }))} />
-            <FilterSelect id="audit-action" label="Hành động" value={filters.action} onChange={(value) => onChange("action", value)} options={(options?.actions ?? []).map((action) => ({ value: action, label: displayAction(action) }))} />
-            <FilterSelect id="audit-entity" label="Đối tượng" value={filters.entityType} onChange={(value) => onChange("entityType", value)} options={(options?.entityTypes ?? []).map((entity) => ({ value: entity, label: displayEntity(entity) }))} />
+            <FilterSelect
+              id="audit-user"
+              label="Người thực hiện"
+              value={filters.userId}
+              onChange={(value) => onChange("userId", value)}
+              options={(options?.users ?? []).map((user) => ({
+                value: user.id,
+                label: user.fullName,
+              }))}
+            />
+            <FilterSelect
+              id="audit-action"
+              label="Hành động"
+              value={filters.action}
+              onChange={(value) => onChange("action", value)}
+              options={(options?.actions ?? []).map((action) => ({
+                value: action,
+                label: displayAction(action),
+              }))}
+            />
+            <FilterSelect
+              id="audit-entity"
+              label="Đối tượng"
+              value={filters.entityType}
+              onChange={(value) => onChange("entityType", value)}
+              options={(options?.entityTypes ?? []).map((entity) => ({
+                value: entity,
+                label: displayEntity(entity),
+              }))}
+            />
             <Field className="gap-2">
               <FieldLabel htmlFor="audit-from-date">Từ thời điểm</FieldLabel>
-              <Input id="audit-from-date" type="datetime-local" value={filters.fromDate} onChange={(event) => onChange("fromDate", event.target.value)} />
+              <Input
+                id="audit-from-date"
+                type="datetime-local"
+                value={filters.fromDate}
+                onChange={(event) => onChange("fromDate", event.target.value)}
+              />
             </Field>
             <Field className="gap-2">
               <FieldLabel htmlFor="audit-to-date">Đến thời điểm</FieldLabel>
-              <Input id="audit-to-date" type="datetime-local" value={filters.toDate} onChange={(event) => onChange("toDate", event.target.value)} />
+              <Input
+                id="audit-to-date"
+                type="datetime-local"
+                value={filters.toDate}
+                onChange={(event) => onChange("toDate", event.target.value)}
+              />
             </Field>
-            <AutoFilterActions snapshot={filters} onApply={onApply} onReset={onReset} />
+            <AutoFilterActions
+              snapshot={filters}
+              onApply={onApply}
+              onReset={onReset}
+            />
           </FieldGroup>
         </form>
       </CardContent>
@@ -285,28 +402,56 @@ type ResultsProps = {
 };
 
 function AuditLogResults(props: ResultsProps) {
-  const { table, data, pagination, page, isLoading, isError, isFetching, onReload, onPrevious, onNext } = props;
+  const {
+    table,
+    data,
+    pagination,
+    page,
+    isLoading,
+    isError,
+    isFetching,
+    onReload,
+    onPrevious,
+    onNext,
+  } = props;
   return (
     <Card className="gap-0 overflow-hidden border-border/70 py-0 shadow-xs">
       <CardHeader className="gap-1 border-b py-5">
         <CardTitle>Sự kiện đã ghi nhận</CardTitle>
-        <CardDescription>{pagination ? `Hiển thị ${data.length} trong tổng số ${pagination.total} sự kiện` : "Đang lấy nhật ký hệ thống..."}</CardDescription>
+        <CardDescription>
+          {pagination
+            ? `Hiển thị ${data.length} trong tổng số ${pagination.total} sự kiện`
+            : "Đang lấy nhật ký hệ thống..."}
+        </CardDescription>
       </CardHeader>
       <CardContent className="p-0">
-        {isError ? <ErrorState title="Không thể tải nhật ký hệ thống" description="Vui lòng thử lại để cập nhật nhật ký." onReload={onReload} /> : isLoading ? (
+        {isError ? (
+          <ErrorState
+            title="Không thể tải nhật ký hệ thống"
+            description="Vui lòng thử lại để cập nhật nhật ký."
+            onReload={onReload}
+          />
+        ) : isLoading ? (
           <TableLoadingState label="Đang tải nhật ký hệ thống" />
         ) : data.length === 0 ? (
-          <EmptyState title="Chưa có sự kiện phù hợp với bộ lọc" description="Điều chỉnh bộ lọc để tìm sự kiện cần kiểm tra." />
-        ) : <SortableTable table={table} />}
+          <EmptyState
+            title="Chưa có sự kiện phù hợp với bộ lọc"
+            description="Điều chỉnh bộ lọc để tìm sự kiện cần kiểm tra."
+          />
+        ) : (
+          <SortableTable table={table} />
+        )}
       </CardContent>
       {pagination && pagination.total > 0 && (
-        <div className="flex flex-col items-center justify-between gap-3 border-t px-5 py-4 text-sm sm:flex-row">
-          <p className="text-muted-foreground">Trang {pagination.page} / {pagination.totalPages}</p>
-          <div className="flex gap-2">
-            <Button type="button" variant="outline" size="sm" disabled={page <= 1 || isFetching} onClick={onPrevious}><ChevronLeft aria-hidden="true" />Trang trước</Button>
-            <Button type="button" variant="outline" size="sm" disabled={page >= pagination.totalPages || isFetching} onClick={onNext}>Trang sau<ChevronRight aria-hidden="true" /></Button>
-          </div>
-        </div>
+        <TablePagination
+          page={page}
+          pagination={pagination}
+          isFetching={isFetching}
+          className="flex flex-col items-center justify-between gap-3 border-t px-5 py-4 text-sm sm:flex-row"
+          labels={{ previous: "Trang trước", next: "Trang sau" }}
+          onPrevious={onPrevious}
+          onNext={onNext}
+        />
       )}
     </Card>
   );
@@ -314,21 +459,11 @@ function AuditLogResults(props: ResultsProps) {
 
 function SortableTable({ table }: { table: DataTable<AuditLogListItem> }) {
   return (
-    <Table className="min-w-260">
-      <caption className="sr-only">Nhật ký hệ thống</caption>
-      <TableHeader className="bg-muted/55 text-xs uppercase tracking-wide text-muted-foreground">
-        {table.getHeaderGroups().map((group) => <TableRow key={group.id} className="hover:bg-muted/55">{group.headers.map((header) => {
-          const direction = header.column.getIsSorted();
-          return <TableHead key={header.id} scope="col" className="px-5 font-medium text-muted-foreground" aria-sort={direction === "asc" ? "ascending" : direction === "desc" ? "descending" : undefined}>
-            {header.column.getCanSort() ? <button type="button" className="inline-flex min-h-11 items-center gap-2 rounded-md focus-visible:outline-2 focus-visible:outline-ring" onClick={header.column.getToggleSortingHandler()}>
-              {flexRender(header.column.columnDef.header, header.getContext())}
-              {direction === "asc" ? <ArrowUp aria-hidden="true" /> : direction === "desc" ? <ArrowDown aria-hidden="true" /> : <ArrowUpDown aria-hidden="true" />}
-            </button> : flexRender(header.column.columnDef.header, header.getContext())}
-          </TableHead>;
-        })}</TableRow>)}
-      </TableHeader>
-      <TableBody>{table.getRowModel().rows.map((row) => <TableRow key={row.id}>{row.getVisibleCells().map((cell) => <TableCell key={cell.id} className="px-5 py-4">{flexRender(cell.column.columnDef.cell, cell.getContext())}</TableCell>)}</TableRow>)}</TableBody>
-    </Table>
+    <ServerDataTable
+      table={table}
+      caption="Nhật ký hệ thống"
+      className="min-w-260"
+    />
   );
 }
 
@@ -348,25 +483,48 @@ function AuditLogDetailDialog({
   onClose: () => void;
 }) {
   return (
-    <Dialog open={open} onOpenChange={(nextOpen) => { if (!nextOpen) onClose(); }}>
+    <Dialog
+      open={open}
+      onOpenChange={(nextOpen) => {
+        if (!nextOpen) onClose();
+      }}
+    >
       <DialogContent className="max-h-[90dvh] overflow-y-auto sm:max-w-4xl">
         <DialogHeader>
           <DialogTitle>Chi tiết nhật ký</DialogTitle>
           <DialogDescription>
-            {detail ? `${displayAction(detail.action)} - ${displayEntity(detail.entityType)}` : "Đang tải chi tiết nhật ký..."}
+            {detail
+              ? `${displayAction(detail.action)} - ${displayEntity(detail.entityType)}`
+              : "Đang tải chi tiết nhật ký..."}
           </DialogDescription>
         </DialogHeader>
         {isError ? (
-          <ErrorState title="Không thể tải chi tiết nhật ký" description="Vui lòng thử lại để xem payload đã kiểm soát." onReload={onReload} />
+          <ErrorState
+            title="Không thể tải chi tiết nhật ký"
+            description="Vui lòng thử lại để xem payload đã kiểm soát."
+            onReload={onReload}
+          />
         ) : isLoading || !detail ? (
           <TableLoadingState label="Đang tải chi tiết nhật ký" />
         ) : (
           <div className="grid gap-5">
             <div className="grid gap-3 rounded-md border p-4 sm:grid-cols-2">
-              <DetailItem label="Thời điểm" value={formatDateTime(detail.createdAt)} />
-              <DetailItem label="Người thực hiện" value={detail.actor?.fullName ?? "Hệ thống"} />
-              <DetailItem label="Đối tượng" value={displayEntity(detail.entityType)} />
-              <DetailItem label="Hành động" value={displayAction(detail.action)} />
+              <DetailItem
+                label="Thời điểm"
+                value={formatDateTime(detail.createdAt)}
+              />
+              <DetailItem
+                label="Người thực hiện"
+                value={detail.actor?.fullName ?? "Hệ thống"}
+              />
+              <DetailItem
+                label="Đối tượng"
+                value={displayEntity(detail.entityType)}
+              />
+              <DetailItem
+                label="Hành động"
+                value={displayAction(detail.action)}
+              />
               <DetailItem label="Mã tham chiếu" value={detail.entityId} />
               <DetailItem label="Địa chỉ IP" value={detail.ipAddress} />
             </div>
@@ -381,10 +539,18 @@ function AuditLogDetailDialog({
   );
 }
 
-function DetailItem({ label, value }: { label: string; value?: string | null }) {
+function DetailItem({
+  label,
+  value,
+}: {
+  label: string;
+  value?: string | null;
+}) {
   return (
     <div className="min-w-0">
-      <p className="text-xs font-medium uppercase text-muted-foreground">{label}</p>
+      <p className="text-xs font-medium uppercase text-muted-foreground">
+        {label}
+      </p>
       <p className="mt-1 wrap-break-word text-sm font-medium">{value || "-"}</p>
     </div>
   );

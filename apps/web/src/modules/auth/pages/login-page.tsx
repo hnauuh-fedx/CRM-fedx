@@ -5,6 +5,7 @@ import { Spinner } from "@/components/ui/spinner";
 import { ApiError } from "@/services/api";
 import { useAuth } from "../auth-context";
 import type { LoginFormValues } from "../login.schema";
+import { SessionRestoreError } from "../session-restore-error";
 
 type LoginLocationState = {
   from?: string;
@@ -27,8 +28,10 @@ export function LoginPage() {
     );
   }
 
+  if (auth.restoreError && !auth.user) return <SessionRestoreError message={auth.restoreError} onRetry={auth.retryRestore} />;
+
   if (auth.user) {
-    return <Navigate to="/tong-quan" replace />;
+    return <Navigate to={from} replace />;
   }
 
   async function handleLogin(values: LoginFormValues) {

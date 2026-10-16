@@ -1,0 +1,1480 @@
+{
+  "schemaVersion": 3,
+  "sourceRevision": "be11e1832757cd41e96043487b06e6dc1378dd8d",
+  "mode": "diff",
+  "reactDetected": true,
+  "version": "0.9.18",
+  "ok": true,
+  "directory": "D:\\Project Visual Studio Code\\crm_website\\admission-crm",
+  "diff": {
+    "baseBranch": "pull request target",
+    "currentBranch": null,
+    "changedFileCount": 13,
+    "isCurrentChanges": false
+  },
+  "projects": [
+    {
+      "directory": "D:\\Project Visual Studio Code\\crm_website\\admission-crm\\apps\\web",
+      "packageRoot": "D:\\Project Visual Studio Code\\crm_website\\admission-crm\\apps\\web",
+      "sourceFilterConfigHash": "bccba9af786c396a5fb90c4b05d568dfa2361741e7b91c1c423877cbaa48bf12",
+      "framework": "vite",
+      "project": {
+        "rootDirectory": "D:\\Project Visual Studio Code\\crm_website\\admission-crm\\apps\\web",
+        "projectName": "@admission-crm/web",
+        "reactVersion": "^19.2.6",
+        "reactMajorVersion": 19,
+        "tailwindVersion": "^4.3.0",
+        "zodVersion": "^4.4.3",
+        "zodMajorVersion": 4,
+        "mobxVersion": null,
+        "mobxMajorVersion": null,
+        "hasMobxReact": false,
+        "mobxReactVersion": null,
+        "hasMobxReactLite": false,
+        "mobxReactLiteVersion": null,
+        "hasMobxStateTree": false,
+        "hasMobxReactObserver": false,
+        "zustandVersion": null,
+        "zustandMajorVersion": null,
+        "framework": "vite",
+        "hasTypeScript": true,
+        "hasReactCompiler": false,
+        "hasReactCompilerLintPlugin": false,
+        "hasTanStackQuery": true,
+        "hasI18nLibrary": false,
+        "hasRadixUi": true,
+        "hasBaseUi": false,
+        "hasReactAriaComponents": false,
+        "hasTanstackTable": true,
+        "hasTanstackVirtual": false,
+        "hasTanstackForm": false,
+        "tanstackQueryVersion": "^5.100.14",
+        "styledComponentsVersion": null,
+        "valtioVersion": null,
+        "valtioMajorVersion": null,
+        "hasRemotion": false,
+        "remotionVersion": null,
+        "remotionMajorVersion": null,
+        "hasThree": false,
+        "threeVersion": null,
+        "threeRelease": null,
+        "hasReactThreeFiber": false,
+        "reactThreeFiberVersion": null,
+        "reactThreeFiberMajorVersion": null,
+        "hasSsrDependency": false,
+        "preactVersion": null,
+        "preactMajorVersion": null,
+        "hasReactNativeWorkspace": false,
+        "nextjsVersion": null,
+        "nextjsMajorVersion": null,
+        "reactRouterVersion": "^7.15.1",
+        "hasReactRouterFramework": false,
+        "expoVersion": null,
+        "shopifyFlashListVersion": null,
+        "shopifyFlashListMajorVersion": null,
+        "hasReanimated": false,
+        "reanimatedVersion": null,
+        "hasShadcnUi": true,
+        "isPreES2023Target": true,
+        "isStaticExport": false,
+        "sourceFileCount": 252
+      },
+      "diagnostics": [
+        {
+          "filePath": "src/components/shared/business-records-page.tsx",
+          "plugin": "react-doctor",
+          "rule": "duplicate-jsx-subtree",
+          "severity": "warning",
+          "title": "Duplicated JSX structure",
+          "message": "4 copies of this 7-node JSX tree appear across 4 files, repeating about 21 lines. Composition path: BusinessRecordsPage > div > Card > div.",
+          "help": "Consider extracting a shared component if these trees represent the same UI concept. Keep them separate when the resemblance is incidental or the variants are likely to evolve independently.",
+          "line": 273,
+          "column": 11,
+          "endLine": 299,
+          "endColumn": 17,
+          "category": "Maintainability",
+          "relatedLocations": [
+            {
+              "filePath": "src/modules/admissions/pages/admission-documents-page.tsx",
+              "line": 298,
+              "column": 11,
+              "endLine": 304,
+              "endColumn": 17,
+              "message": "Matching JSX subtree (2 of 4) at AdmissionDocumentsPage > div > Card > div."
+            },
+            {
+              "filePath": "src/modules/admissions/pages/admission-fees-page.tsx",
+              "line": 269,
+              "column": 11,
+              "endLine": 275,
+              "endColumn": 17,
+              "message": "Matching JSX subtree (3 of 4) at AdmissionFeesPage > div > Card > div."
+            },
+            {
+              "filePath": "src/modules/admissions/pages/admission-statuses-page.tsx",
+              "line": 241,
+              "column": 11,
+              "endLine": 247,
+              "endColumn": 17,
+              "message": "Matching JSX subtree (4 of 4) at AdmissionStatusesPage > div > Card > div."
+            }
+          ],
+          "fingerprint": "identity:a59d826edcdf0b1917b0dd71a60ec362b11243555fadf55b634adfd5b58a0f9e",
+          "id": "apps/web/src/components/shared/business-records-page.tsx::273:11::react-doctor/duplicate-jsx-subtree::83abe248708ffa991686adbaa9b7e9f9f0448b257d164212b13362cfb4e69b3a",
+          "normalizedFilePath": "src/components/shared/business-records-page.tsx",
+          "tags": [
+            "project-analysis"
+          ]
+        },
+        {
+          "filePath": "src/modules/admissions/pages/admission-fees-page.tsx",
+          "plugin": "react-doctor",
+          "rule": "no-high-complexity-react-function",
+          "severity": "warning",
+          "title": "React function has high control-flow complexity",
+          "message": "`PaymentDialog` has cyclomatic complexity 17, cognitive complexity 16, and maximum nesting depth 1, so its React logic is hard to understand and change. Extract independent branches into components or hooks.",
+          "help": "Extract independent render branches and state logic into focused components or hooks until the control flow is easy to follow.",
+          "line": 314,
+          "column": 1,
+          "offset": 15796,
+          "length": 3107,
+          "endLine": 361,
+          "category": "Maintainability",
+          "fingerprint": "63583d12c6d89dbbdad6a36d46514155ca250922995213c58a0b560fd79984bd",
+          "id": "apps/web/src/modules/admissions/pages/admission-fees-page.tsx::314:1::react-doctor/no-high-complexity-react-function::4fb2f41515c834c6ffc53361be3f6af3bfb302dd5bbdc2d8142ef4b974e0717b",
+          "normalizedFilePath": "src/modules/admissions/pages/admission-fees-page.tsx",
+          "tags": [
+            "react-jsx-only",
+            "test-noise"
+          ]
+        },
+        {
+          "filePath": "src/modules/admissions/pages/admission-statuses-page.tsx",
+          "plugin": "react-doctor",
+          "rule": "no-high-complexity-react-function",
+          "severity": "warning",
+          "title": "React function has high control-flow complexity",
+          "message": "`AdmissionStatusesPage` has cyclomatic complexity 16, cognitive complexity 17, and maximum nesting depth 3, so its React logic is hard to understand and change. Extract independent branches into components or hooks.",
+          "help": "Extract independent render branches and state logic into focused components or hooks until the control flow is easy to follow.",
+          "line": 86,
+          "column": 8,
+          "offset": 3369,
+          "length": 10176,
+          "endLine": 281,
+          "category": "Maintainability",
+          "fingerprint": "524729e60924710b8a32c890f092eb64ac5d19f340fd93a4d8c32954c8c40cc2",
+          "id": "apps/web/src/modules/admissions/pages/admission-statuses-page.tsx::86:8::react-doctor/no-high-complexity-react-function::48c991b3f9db397a408b3a0215db63866a65b3f8aff8b41d10fad87144b384ca",
+          "normalizedFilePath": "src/modules/admissions/pages/admission-statuses-page.tsx",
+          "tags": [
+            "react-jsx-only",
+            "test-noise"
+          ]
+        },
+        {
+          "filePath": "src/modules/admissions/pages/admission-statuses-page.tsx",
+          "plugin": "react-doctor",
+          "rule": "js-set-map-lookups",
+          "severity": "warning",
+          "title": "Array lookup inside a loop",
+          "message": "This scales poorly because `array.includes()` inside a loop scans the whole list every time. Use a Set for constant-time lookups.",
+          "help": "Use a `Set` or `Map` when you check for the same items over and over. `Array.includes`/`find` scans the whole list each time",
+          "line": 383,
+          "column": 32,
+          "offset": 17868,
+          "length": 28,
+          "endLine": 383,
+          "category": "Performance",
+          "fingerprint": "144d3fc05e507ec841a45738aeeefe9baaa7320296f99d72e7c9729500559051",
+          "id": "apps/web/src/modules/admissions/pages/admission-statuses-page.tsx::383:32::react-doctor/js-set-map-lookups::8ca162272c84d42896a45c0a801007a712bbbc2697f9f8e1c400af6faf47fe70",
+          "normalizedFilePath": "src/modules/admissions/pages/admission-statuses-page.tsx",
+          "tags": [
+            "test-noise"
+          ]
+        },
+        {
+          "filePath": "src/modules/admissions/pages/admissions-list-page.tsx",
+          "plugin": "react-doctor",
+          "rule": "tanstack-table-no-unstable-data-or-columns",
+          "severity": "warning",
+          "title": "Table data or columns recreated every render",
+          "message": "This `data` option gets a new array identity on every render, so the table rebuilds its row models each render and auto-reset features can re-render in a loop. Memoize it with useMemo/useState or hoist it to module scope.",
+          "help": "Give the table's data and columns options stable references: useMemo or useState inside the component, or a module-scope constant, so row and column models are not rebuilt on every render.",
+          "line": 186,
+          "column": 5,
+          "offset": 6895,
+          "length": 4,
+          "endLine": 186,
+          "category": "Bugs",
+          "fingerprint": "3a6eb0790f39ac87c94f3856b2dd2c5d110e6811602261a9a923d3bb23adc8b7",
+          "id": "apps/web/src/modules/admissions/pages/admissions-list-page.tsx::186:5::react-doctor/tanstack-table-no-unstable-data-or-columns::1419e94f3a92c375a4d5cf709a6d3ffc889dfb2ea5ced629c2d507fe075bd3da",
+          "normalizedFilePath": "src/modules/admissions/pages/admissions-list-page.tsx",
+          "tags": []
+        },
+        {
+          "filePath": "src/modules/admissions/pages/admissions-list-page.tsx",
+          "plugin": "react-doctor",
+          "rule": "duplicate-jsx-subtree",
+          "severity": "warning",
+          "title": "Duplicated JSX structure",
+          "message": "10 copies of this 7-node JSX tree appear across 10 files, repeating about 27 lines. Composition path: AdmissionResults > Card > div.",
+          "help": "Consider extracting a shared component if these trees represent the same UI concept. Keep them separate when the resemblance is incidental or the variants are likely to evolve independently.",
+          "line": 443,
+          "column": 9,
+          "endLine": 449,
+          "endColumn": 15,
+          "category": "Maintainability",
+          "relatedLocations": [
+            {
+              "filePath": "src/modules/audit/pages/audit-logs-page.tsx",
+              "line": 303,
+              "column": 9,
+              "endLine": 309,
+              "endColumn": 15,
+              "message": "Matching JSX subtree (2 of 10) at AuditLogResults > Card > div."
+            },
+            {
+              "filePath": "src/modules/marketing/pages/campaigns-list-page.tsx",
+              "line": 402,
+              "column": 9,
+              "endLine": 408,
+              "endColumn": 15,
+              "message": "Matching JSX subtree (3 of 10) at CampaignResults > Card > div."
+            },
+            {
+              "filePath": "src/modules/marketing/pages/lead-sources-page.tsx",
+              "line": 213,
+              "column": 10,
+              "endLine": 213,
+              "endColumn": 580,
+              "message": "Matching JSX subtree (4 of 10) at Pager > div."
+            },
+            {
+              "filePath": "src/modules/marketing/pages/marketing-forms-page.tsx",
+              "line": 1672,
+              "column": 10,
+              "endLine": 1672,
+              "endColumn": 580,
+              "message": "Matching JSX subtree (5 of 10) at Pager > div."
+            },
+            {
+              "filePath": "src/modules/marketing/pages/utm-trackings-page.tsx",
+              "line": 512,
+              "column": 10,
+              "endLine": 512,
+              "endColumn": 580,
+              "message": "Matching JSX subtree (6 of 10) at Pager > div."
+            },
+            {
+              "filePath": "src/modules/sale/pages/lead-assignments-page.tsx",
+              "line": 296,
+              "column": 10,
+              "endLine": 296,
+              "endColumn": 580,
+              "message": "Matching JSX subtree (7 of 10) at Pager > div."
+            },
+            {
+              "filePath": "src/modules/sale/pages/sale-activities-page.tsx",
+              "line": 200,
+              "column": 10,
+              "endLine": 200,
+              "endColumn": 580,
+              "message": "Matching JSX subtree (8 of 10) at Pager > div."
+            },
+            {
+              "filePath": "src/modules/sale/pages/sale-reminders-page.tsx",
+              "line": 211,
+              "column": 10,
+              "endLine": 211,
+              "endColumn": 580,
+              "message": "Matching JSX subtree (9 of 10) at Pager > div."
+            },
+            {
+              "filePath": "src/modules/students/pages/students-list-page.tsx",
+              "line": 408,
+              "column": 9,
+              "endLine": 414,
+              "endColumn": 15,
+              "message": "Matching JSX subtree (10 of 10) at StudentResults > Card > div."
+            }
+          ],
+          "fingerprint": "identity:7dbaa4be6f1b5638e8f8b2882159f04f832ff87ace12959cbeab9e2763959e91",
+          "id": "apps/web/src/modules/admissions/pages/admissions-list-page.tsx::443:9::react-doctor/duplicate-jsx-subtree::a7ec029af0bd8d557490b7a89a237e089ded5922cc697458178f26048929ecf1",
+          "normalizedFilePath": "src/modules/admissions/pages/admissions-list-page.tsx",
+          "tags": [
+            "project-analysis"
+          ]
+        },
+        {
+          "filePath": "src/modules/admissions/pages/admissions-list-page.tsx",
+          "plugin": "react-doctor",
+          "rule": "duplicate-jsx-subtree",
+          "severity": "warning",
+          "title": "Duplicated JSX structure",
+          "message": "4 copies of this 7-node JSX tree appear across 4 files, repeating about 33 lines. Composition path: SortableTable > Table > TableHeader.",
+          "help": "Consider extracting a shared component if these trees represent the same UI concept. Keep them separate when the resemblance is incidental or the variants are likely to evolve independently.",
+          "line": 459,
+          "column": 7,
+          "endLine": 469,
+          "endColumn": 21,
+          "category": "Maintainability",
+          "relatedLocations": [
+            {
+              "filePath": "src/modules/audit/pages/audit-logs-page.tsx",
+              "line": 319,
+              "column": 7,
+              "endLine": 329,
+              "endColumn": 21,
+              "message": "Matching JSX subtree (2 of 4) at SortableTable > Table > TableHeader."
+            },
+            {
+              "filePath": "src/modules/marketing/pages/campaigns-list-page.tsx",
+              "line": 418,
+              "column": 7,
+              "endLine": 428,
+              "endColumn": 21,
+              "message": "Matching JSX subtree (3 of 4) at SortableTable > Table > TableHeader."
+            },
+            {
+              "filePath": "src/modules/students/pages/students-list-page.tsx",
+              "line": 424,
+              "column": 9,
+              "endLine": 434,
+              "endColumn": 23,
+              "message": "Matching JSX subtree (4 of 4) at SortableTable > Table > TableHeader."
+            }
+          ],
+          "fingerprint": "identity:f0d768de3e636090271716e5048c17ea0ad233e7faaef1241e3a352989296041",
+          "id": "apps/web/src/modules/admissions/pages/admissions-list-page.tsx::459:7::react-doctor/duplicate-jsx-subtree::6a5f4641703449da7ce93ce7a94f3272c16fa4835f39218263ba86bb6591d0d4",
+          "normalizedFilePath": "src/modules/admissions/pages/admissions-list-page.tsx",
+          "tags": [
+            "project-analysis"
+          ]
+        },
+        {
+          "filePath": "src/modules/admissions/pages/admissions-list-page.tsx",
+          "plugin": "react-doctor",
+          "rule": "duplicate-jsx-subtree",
+          "severity": "warning",
+          "title": "Duplicated JSX structure",
+          "message": "5 copies of this 6-node JSX tree appear across 5 files, repeating about 31 lines. Composition path: SortableTable > Table > TableHeader > TableRow.",
+          "help": "Consider extracting a shared component if these trees represent the same UI concept. Keep them separate when the resemblance is incidental or the variants are likely to evolve independently.",
+          "line": 460,
+          "column": 49,
+          "endLine": 468,
+          "endColumn": 23,
+          "category": "Maintainability",
+          "relatedLocations": [
+            {
+              "filePath": "src/modules/audit/pages/audit-logs-page.tsx",
+              "line": 320,
+              "column": 49,
+              "endLine": 328,
+              "endColumn": 23,
+              "message": "Matching JSX subtree (2 of 5) at SortableTable > Table > TableHeader > TableRow."
+            },
+            {
+              "filePath": "src/modules/marketing/pages/campaigns-list-page.tsx",
+              "line": 419,
+              "column": 49,
+              "endLine": 427,
+              "endColumn": 23,
+              "message": "Matching JSX subtree (3 of 5) at SortableTable > Table > TableHeader > TableRow."
+            },
+            {
+              "filePath": "src/modules/marketing/pages/marketing-forms-page.tsx",
+              "line": 1584,
+              "column": 49,
+              "endLine": 1587,
+              "endColumn": 23,
+              "message": "Matching JSX subtree (4 of 5) at SortableTable > Table > TableHeader > TableRow."
+            },
+            {
+              "filePath": "src/modules/students/pages/students-list-page.tsx",
+              "line": 425,
+              "column": 51,
+              "endLine": 433,
+              "endColumn": 25,
+              "message": "Matching JSX subtree (5 of 5) at SortableTable > Table > TableHeader > TableRow."
+            }
+          ],
+          "fingerprint": "identity:e45f472fea9e57a234665c09fddb023584a9d300e3932ca571f2e9253912827b",
+          "id": "apps/web/src/modules/admissions/pages/admissions-list-page.tsx::460:49::react-doctor/duplicate-jsx-subtree::95cb4f37847b90d79366f553eaa0efb5b10a582e0f58c15e2de554ef12247792",
+          "normalizedFilePath": "src/modules/admissions/pages/admissions-list-page.tsx",
+          "tags": [
+            "project-analysis"
+          ]
+        },
+        {
+          "filePath": "src/modules/admissions/pages/admissions-list-page.tsx",
+          "plugin": "react-doctor",
+          "rule": "no-high-complexity-react-function",
+          "severity": "warning",
+          "title": "React function has high control-flow complexity",
+          "message": "`AdmissionProfileForm` has cyclomatic complexity 18, cognitive complexity 17, and maximum nesting depth 1, so its React logic is hard to understand and change. Extract independent branches into components or hooks.",
+          "help": "Extract independent render branches and state logic into focused components or hooks until the control flow is easy to follow.",
+          "line": 475,
+          "column": 1,
+          "offset": 20338,
+          "length": 6296,
+          "endLine": 561,
+          "category": "Maintainability",
+          "fingerprint": "8c7d446f2541cda3a8c714148b2c32e7ba3d37cc95e0a339a1246ef05b10f56f",
+          "id": "apps/web/src/modules/admissions/pages/admissions-list-page.tsx::475:1::react-doctor/no-high-complexity-react-function::259be6d06a0dfd4ee3ae6c1167d4f572ec9d6a0151445f5d761aba3276c95a3a",
+          "normalizedFilePath": "src/modules/admissions/pages/admissions-list-page.tsx",
+          "tags": [
+            "react-jsx-only",
+            "test-noise"
+          ]
+        },
+        {
+          "filePath": "src/modules/automations/pages/automation-monitoring-page.tsx",
+          "plugin": "react-doctor",
+          "rule": "no-high-complexity-react-function",
+          "severity": "warning",
+          "title": "React function has high control-flow complexity",
+          "message": "`AutomationMonitoringPage` has cyclomatic complexity 74, cognitive complexity 98, and maximum nesting depth 4, so its React logic is hard to understand and change. Extract independent branches into components or hooks.",
+          "help": "Extract independent render branches and state logic into focused components or hooks until the control flow is easy to follow.",
+          "line": 96,
+          "column": 8,
+          "offset": 4298,
+          "length": 25645,
+          "endLine": 379,
+          "category": "Maintainability",
+          "fingerprint": "46d2f4a247f90e5398943936b0c6ffae1e3b3b359b0106365a114a9481426a8c",
+          "id": "apps/web/src/modules/automations/pages/automation-monitoring-page.tsx::96:8::react-doctor/no-high-complexity-react-function::60ba14e04396dd2ee3e4bfdcfad14c3dde27eb9e1469ea6b96b3950bf669c6ce",
+          "normalizedFilePath": "src/modules/automations/pages/automation-monitoring-page.tsx",
+          "tags": [
+            "react-jsx-only",
+            "test-noise"
+          ]
+        },
+        {
+          "filePath": "src/modules/automations/pages/automation-monitoring-page.tsx",
+          "plugin": "react-doctor",
+          "rule": "duplicate-jsx-subtree",
+          "severity": "warning",
+          "title": "Duplicated JSX structure",
+          "message": "3 copies of this 7-node JSX tree appear across 3 files, repeating about 10 lines. Composition path: AutomationMonitoringPage > div > div > div > Card > CardContent > div > Table > TableHeader.",
+          "help": "Consider extracting a shared component if these trees represent the same UI concept. Keep them separate when the resemblance is incidental or the variants are likely to evolve independently.",
+          "line": 322,
+          "column": 21,
+          "endLine": 322,
+          "endColumn": 291,
+          "category": "Maintainability",
+          "relatedLocations": [
+            {
+              "filePath": "src/modules/management/pages/departments-access-page.tsx",
+              "line": 155,
+              "column": 17,
+              "endLine": 163,
+              "endColumn": 31,
+              "message": "Matching JSX subtree (2 of 3) at DepartmentsAccessPage > div > Card > CardContent > div > Table > TableHeader."
+            },
+            {
+              "filePath": "src/modules/management/pages/permissions-access-page.tsx",
+              "line": 257,
+              "column": 17,
+              "endLine": 265,
+              "endColumn": 31,
+              "message": "Matching JSX subtree (3 of 3) at PermissionsAccessPage > div > Card > CardContent > div > Table > TableHeader."
+            }
+          ],
+          "fingerprint": "identity:29bcd9bf2488004c01f97e5b2ea290e07c6375c426f767257d8d7b2f79f385f1",
+          "id": "apps/web/src/modules/automations/pages/automation-monitoring-page.tsx::322:21::react-doctor/duplicate-jsx-subtree::2133871afc69ad832dd6d8ecb1b1bf2cb872d7aa361cb55b11f224347ff34cfd",
+          "normalizedFilePath": "src/modules/automations/pages/automation-monitoring-page.tsx",
+          "tags": [
+            "project-analysis"
+          ]
+        },
+        {
+          "filePath": "src/modules/automations/pages/automation-monitoring-page.tsx",
+          "plugin": "react-doctor",
+          "rule": "duplicate-jsx-subtree",
+          "severity": "warning",
+          "title": "Duplicated JSX structure",
+          "message": "4 copies of this 7-node JSX tree appear across 4 files, repeating about 27 lines. Composition path: AutomationMonitoringPage > div > div > div > Card > div.",
+          "help": "Consider extracting a shared component if these trees represent the same UI concept. Keep them separate when the resemblance is incidental or the variants are likely to evolve independently.",
+          "line": 338,
+          "column": 57,
+          "endLine": 338,
+          "endColumn": 627,
+          "category": "Maintainability",
+          "relatedLocations": [
+            {
+              "filePath": "src/modules/admissions/pages/majors-management-page.tsx",
+              "line": 207,
+              "column": 11,
+              "endLine": 219,
+              "endColumn": 17,
+              "message": "Matching JSX subtree (2 of 4) at ProgramMajorsManagement > div > Card > div."
+            },
+            {
+              "filePath": "src/modules/management/pages/permissions-access-page.tsx",
+              "line": 297,
+              "column": 11,
+              "endLine": 309,
+              "endColumn": 17,
+              "message": "Matching JSX subtree (3 of 4) at PermissionsAccessPage > div > Card > div."
+            },
+            {
+              "filePath": "src/modules/management/pages/users-access-page.tsx",
+              "line": 210,
+              "column": 11,
+              "endLine": 222,
+              "endColumn": 17,
+              "message": "Matching JSX subtree (4 of 4) at UsersAccessPage > div > Card > div."
+            }
+          ],
+          "fingerprint": "identity:c8c6d47a258b8b5351c1192bf2013ab4807f7fe6a7fd61fbeaf3ab95b51cb79b",
+          "id": "apps/web/src/modules/automations/pages/automation-monitoring-page.tsx::338:57::react-doctor/duplicate-jsx-subtree::b3eadb32f4995ca4db0a1196af2dc3afff21d32f1bfcbd18ae49f17af3e07a85",
+          "normalizedFilePath": "src/modules/automations/pages/automation-monitoring-page.tsx",
+          "tags": [
+            "project-analysis"
+          ]
+        },
+        {
+          "filePath": "src/modules/automations/pages/automation-monitoring-page.tsx",
+          "plugin": "react-doctor",
+          "rule": "duplicate-jsx-subtree",
+          "severity": "warning",
+          "title": "Duplicated JSX structure",
+          "message": "3 copies of this 6-node JSX tree appear across 3 files, repeating about 2 lines. Composition path: AutomationMonitoringPage > div > Dialog > DialogContent > div > div > Table > TableHeader.",
+          "help": "Consider extracting a shared component if these trees represent the same UI concept. Keep them separate when the resemblance is incidental or the variants are likely to evolve independently.",
+          "line": 359,
+          "column": 73,
+          "endLine": 359,
+          "endColumn": 240,
+          "category": "Maintainability",
+          "relatedLocations": [
+            {
+              "filePath": "src/modules/management/pages/system-settings-page.tsx",
+              "line": 126,
+              "column": 15,
+              "endLine": 126,
+              "endColumn": 183,
+              "message": "Matching JSX subtree (2 of 3) at SystemSettingsPage > div > Fragment > SectionCard > Table > TableHeader."
+            },
+            {
+              "filePath": "src/modules/webhooks/pages/webhooks-page.tsx",
+              "line": 764,
+              "column": 17,
+              "endLine": 771,
+              "endColumn": 31,
+              "message": "Matching JSX subtree (3 of 3) at WebhookDetails > div > Card > CardContent > FieldSet > div > Table > TableHeader."
+            }
+          ],
+          "fingerprint": "identity:c47b6a6ba8b52155ec54e93c832fbef3726f39c120695f016dbb02b132234560",
+          "id": "apps/web/src/modules/automations/pages/automation-monitoring-page.tsx::359:73::react-doctor/duplicate-jsx-subtree::5a10ef750846a470fe19ff3f4eacd66ec995382c98b6834881561e248dc0db29",
+          "normalizedFilePath": "src/modules/automations/pages/automation-monitoring-page.tsx",
+          "tags": [
+            "project-analysis"
+          ]
+        },
+        {
+          "filePath": "src/modules/leads/pages/leads-list-page.tsx",
+          "plugin": "react-doctor",
+          "rule": "no-high-complexity-react-function",
+          "severity": "warning",
+          "title": "React function has high control-flow complexity",
+          "message": "`LeadsListPage` has cyclomatic complexity 44, cognitive complexity 44, and maximum nesting depth 3, so its React logic is hard to understand and change. Extract independent branches into components or hooks.",
+          "help": "Extract independent render branches and state logic into focused components or hooks until the control flow is easy to follow.",
+          "line": 328,
+          "column": 8,
+          "offset": 14752,
+          "length": 19051,
+          "endLine": 779,
+          "category": "Maintainability",
+          "fingerprint": "119eb30c0e3a25d985a00ac392d44b11555bb958adfaaccb906ce0bb8b07d76b",
+          "id": "apps/web/src/modules/leads/pages/leads-list-page.tsx::328:8::react-doctor/no-high-complexity-react-function::4d73bd75f7568455dd9c20b46507e62a8eb1d3dc9a0ee78aa9df469d08f00916",
+          "normalizedFilePath": "src/modules/leads/pages/leads-list-page.tsx",
+          "tags": [
+            "react-jsx-only",
+            "test-noise"
+          ]
+        },
+        {
+          "filePath": "src/modules/leads/pages/leads-list-page.tsx",
+          "plugin": "react-doctor",
+          "rule": "no-giant-component",
+          "severity": "warning",
+          "title": "Large component is hard to read and change",
+          "message": "Component \"LeadsListPage\" is over 300 lines long, which is hard to read & change. Split it into a few smaller components.",
+          "help": "Pull each section into its own component so the parent is easier to read, test, and change.",
+          "line": 328,
+          "column": 17,
+          "offset": 14761,
+          "length": 13,
+          "endLine": 328,
+          "category": "Maintainability",
+          "fingerprint": "69535b5f2cc00d0733ce3e0b3af29e07ff9c298b674bfd87c194e52d74ded337",
+          "id": "apps/web/src/modules/leads/pages/leads-list-page.tsx::328:17::react-doctor/no-giant-component::394a74e3744d91b89a1e16dbeaffd9cb9d0c89006fcc10e6ff139ff0e7120441",
+          "normalizedFilePath": "src/modules/leads/pages/leads-list-page.tsx",
+          "tags": [
+            "react-jsx-only",
+            "test-noise"
+          ]
+        },
+        {
+          "filePath": "src/modules/leads/pages/leads-list-page.tsx",
+          "plugin": "react-doctor",
+          "rule": "tanstack-table-no-unstable-data-or-columns",
+          "severity": "warning",
+          "title": "Table data or columns recreated every render",
+          "message": "This `data` option gets a new array identity on every render, so the table rebuilds its row models each render and auto-reset features can re-render in a loop. Memoize it with useMemo/useState or hoist it to module scope.",
+          "help": "Give the table's data and columns options stable references: useMemo or useState inside the component, or a module-scope constant, so row and column models are not rebuilt on every render.",
+          "line": 541,
+          "column": 5,
+          "offset": 23428,
+          "length": 4,
+          "endLine": 541,
+          "category": "Bugs",
+          "fingerprint": "3a6eb0790f39ac87c94f3856b2dd2c5d110e6811602261a9a923d3bb23adc8b7",
+          "id": "apps/web/src/modules/leads/pages/leads-list-page.tsx::541:5::react-doctor/tanstack-table-no-unstable-data-or-columns::1419e94f3a92c375a4d5cf709a6d3ffc889dfb2ea5ced629c2d507fe075bd3da",
+          "normalizedFilePath": "src/modules/leads/pages/leads-list-page.tsx",
+          "tags": []
+        },
+        {
+          "filePath": "src/modules/leads/pages/leads-list-page.tsx",
+          "plugin": "react-doctor",
+          "rule": "no-high-complexity-react-function",
+          "severity": "warning",
+          "title": "React function has high control-flow complexity",
+          "message": "`EditLeadDialog` has cyclomatic complexity 13, cognitive complexity 17, and maximum nesting depth 3, so its React logic is hard to understand and change. Extract independent branches into components or hooks.",
+          "help": "Extract independent render branches and state logic into focused components or hooks until the control flow is easy to follow.",
+          "line": 794,
+          "column": 1,
+          "offset": 34158,
+          "length": 3255,
+          "endLine": 859,
+          "category": "Maintainability",
+          "fingerprint": "3ff9ecfb39f0fa3b7b89cb8688e4f36870e569bb0bcae818afaadafbce05c51b",
+          "id": "apps/web/src/modules/leads/pages/leads-list-page.tsx::794:1::react-doctor/no-high-complexity-react-function::cdeff3e76d8c1d8fcc8deb167159b0497eb0828912f77116859dcc42e4c25136",
+          "normalizedFilePath": "src/modules/leads/pages/leads-list-page.tsx",
+          "tags": [
+            "react-jsx-only",
+            "test-noise"
+          ]
+        },
+        {
+          "filePath": "src/modules/marketing/pages/meta-connection-page.tsx",
+          "plugin": "react-doctor",
+          "rule": "no-high-complexity-react-function",
+          "severity": "warning",
+          "title": "React function has high control-flow complexity",
+          "message": "`MetaConnectionPage` has cyclomatic complexity 19, cognitive complexity 23, and maximum nesting depth 3, so its React logic is hard to understand and change. Extract independent branches into components or hooks.",
+          "help": "Extract independent render branches and state logic into focused components or hooks until the control flow is easy to follow.",
+          "line": 26,
+          "column": 8,
+          "offset": 2050,
+          "length": 4807,
+          "endLine": 61,
+          "category": "Maintainability",
+          "fingerprint": "5fe9f5b670016b3668b7a31a566662cdbdc7f2c107b4a7817cc065c8ff77581a",
+          "id": "apps/web/src/modules/marketing/pages/meta-connection-page.tsx::26:8::react-doctor/no-high-complexity-react-function::9d9a328d9336fe8d4c086e8ce9cc763ce725a6199f26f9d8a1e3df262f4f4d97",
+          "normalizedFilePath": "src/modules/marketing/pages/meta-connection-page.tsx",
+          "tags": [
+            "react-jsx-only",
+            "test-noise"
+          ]
+        },
+        {
+          "filePath": "src/modules/marketing/pages/meta-connection-page.tsx",
+          "plugin": "react-doctor",
+          "rule": "duplicate-jsx-subtree",
+          "severity": "warning",
+          "title": "Duplicated JSX structure",
+          "message": "2 copies of this 9-node JSX tree appear across 2 files, repeating about 1 line. Composition path: ConnectDialog > Dialog > DialogContent > form > FieldGroup > Field.",
+          "help": "Consider extracting a shared component if these trees represent the same UI concept. Keep them separate when the resemblance is incidental or the variants are likely to evolve independently.",
+          "line": 78,
+          "column": 5,
+          "endLine": 78,
+          "endColumn": 627,
+          "category": "Maintainability",
+          "relatedLocations": [
+            {
+              "filePath": "src/modules/marketing/pages/zalo-connection-page.tsx",
+              "line": 73,
+              "column": 5,
+              "endLine": 73,
+              "endColumn": 621,
+              "message": "Matching JSX subtree (2 of 2) at ConnectionDialog > Dialog > DialogContent > form > FieldGroup > Field."
+            }
+          ],
+          "fingerprint": "identity:c43be923275c4a13e0d53fe1e6b905d5554625dda6485b8a47e05cd664742f13",
+          "id": "apps/web/src/modules/marketing/pages/meta-connection-page.tsx::78:5::react-doctor/duplicate-jsx-subtree::dafa9f8ff6b2251d164c99dc727ecba3983dd93b238932f26b34d7e8c05e27d0",
+          "normalizedFilePath": "src/modules/marketing/pages/meta-connection-page.tsx",
+          "tags": [
+            "project-analysis"
+          ]
+        },
+        {
+          "filePath": "src/modules/sale/pages/lead-assignments-page.tsx",
+          "plugin": "react-doctor",
+          "rule": "tanstack-table-no-unstable-data-or-columns",
+          "severity": "warning",
+          "title": "Table data or columns recreated every render",
+          "message": "This `data` option gets a new array identity on every render, so the table rebuilds its row models each render and auto-reset features can re-render in a loop. Memoize it with useMemo/useState or hoist it to module scope.",
+          "help": "Give the table's data and columns options stable references: useMemo or useState inside the component, or a module-scope constant, so row and column models are not rebuilt on every render.",
+          "line": 73,
+          "column": 5,
+          "offset": 3608,
+          "length": 4,
+          "endLine": 73,
+          "category": "Bugs",
+          "fingerprint": "3a6eb0790f39ac87c94f3856b2dd2c5d110e6811602261a9a923d3bb23adc8b7",
+          "id": "apps/web/src/modules/sale/pages/lead-assignments-page.tsx::73:5::react-doctor/tanstack-table-no-unstable-data-or-columns::1419e94f3a92c375a4d5cf709a6d3ffc889dfb2ea5ced629c2d507fe075bd3da",
+          "normalizedFilePath": "src/modules/sale/pages/lead-assignments-page.tsx",
+          "tags": []
+        },
+        {
+          "filePath": "src/modules/sale/pages/lead-assignments-page.tsx",
+          "plugin": "react-doctor",
+          "rule": "no-high-complexity-react-function",
+          "severity": "warning",
+          "title": "React function has high control-flow complexity",
+          "message": "`Results` has cyclomatic complexity 12, cognitive complexity 20, and maximum nesting depth 4, so its React logic is hard to understand and change. Extract independent branches into components or hooks.",
+          "help": "Extract independent render branches and state logic into focused components or hooks until the control flow is easy to follow.",
+          "line": 249,
+          "column": 1,
+          "offset": 11292,
+          "length": 2576,
+          "endLine": 284,
+          "category": "Maintainability",
+          "fingerprint": "f881e0422cc309e5653ebeeb7527fa3532cac9752dd4b27b8c1addaed5218592",
+          "id": "apps/web/src/modules/sale/pages/lead-assignments-page.tsx::249:1::react-doctor/no-high-complexity-react-function::c58061b9f8838f9650fbde04c818c7c6fe6cb021c9997d2f166ae5532e672aa0",
+          "normalizedFilePath": "src/modules/sale/pages/lead-assignments-page.tsx",
+          "tags": [
+            "react-jsx-only",
+            "test-noise"
+          ]
+        }
+      ],
+      "score": {
+        "score": 85,
+        "label": "Great",
+        "rules": {
+          "react-doctor/duplicate-jsx-subtree": {
+            "priority": 52,
+            "tier": "P2"
+          },
+          "react-doctor/no-high-complexity-react-function": {
+            "priority": null,
+            "tier": "P3"
+          },
+          "react-doctor/js-set-map-lookups": {
+            "priority": 48,
+            "tier": "P3"
+          },
+          "react-doctor/tanstack-table-no-unstable-data-or-columns": {
+            "priority": null,
+            "tier": "P3"
+          },
+          "react-doctor/no-giant-component": {
+            "priority": 30,
+            "tier": "P3"
+          }
+        }
+      },
+      "skippedChecks": [],
+      "analyzedFiles": [
+        "src/components/shared/business-records-page.tsx",
+        "src/modules/admissions/pages/admission-documents-page.tsx",
+        "src/modules/admissions/pages/admission-fees-page.tsx",
+        "src/modules/admissions/pages/admission-statuses-page.tsx",
+        "src/modules/admissions/pages/admissions-list-page.tsx",
+        "src/modules/automations/pages/automation-monitoring-page.tsx",
+        "src/modules/dashboard/pages/director-dashboard-page.tsx",
+        "src/modules/leads/components/dynamic-field-renderer.tsx",
+        "src/modules/leads/lead-custom-field.helpers.ts",
+        "src/modules/leads/pages/leads-list-page.tsx",
+        "src/modules/marketing/marketing-form-fill.tsx",
+        "src/modules/marketing/pages/meta-connection-page.tsx",
+        "src/modules/sale/pages/lead-assignments-page.tsx"
+      ],
+      "analyzedFileCount": 13,
+      "complete": true,
+      "scannedFileCount": 13,
+      "elapsedMilliseconds": 2756.2146000000002
+    }
+  ],
+  "diagnostics": [
+    {
+      "filePath": "src/components/shared/business-records-page.tsx",
+      "plugin": "react-doctor",
+      "rule": "duplicate-jsx-subtree",
+      "severity": "warning",
+      "title": "Duplicated JSX structure",
+      "message": "4 copies of this 7-node JSX tree appear across 4 files, repeating about 21 lines. Composition path: BusinessRecordsPage > div > Card > div.",
+      "help": "Consider extracting a shared component if these trees represent the same UI concept. Keep them separate when the resemblance is incidental or the variants are likely to evolve independently.",
+      "line": 273,
+      "column": 11,
+      "endLine": 299,
+      "endColumn": 17,
+      "category": "Maintainability",
+      "relatedLocations": [
+        {
+          "filePath": "src/modules/admissions/pages/admission-documents-page.tsx",
+          "line": 298,
+          "column": 11,
+          "endLine": 304,
+          "endColumn": 17,
+          "message": "Matching JSX subtree (2 of 4) at AdmissionDocumentsPage > div > Card > div."
+        },
+        {
+          "filePath": "src/modules/admissions/pages/admission-fees-page.tsx",
+          "line": 269,
+          "column": 11,
+          "endLine": 275,
+          "endColumn": 17,
+          "message": "Matching JSX subtree (3 of 4) at AdmissionFeesPage > div > Card > div."
+        },
+        {
+          "filePath": "src/modules/admissions/pages/admission-statuses-page.tsx",
+          "line": 241,
+          "column": 11,
+          "endLine": 247,
+          "endColumn": 17,
+          "message": "Matching JSX subtree (4 of 4) at AdmissionStatusesPage > div > Card > div."
+        }
+      ],
+      "fingerprint": "identity:a59d826edcdf0b1917b0dd71a60ec362b11243555fadf55b634adfd5b58a0f9e",
+      "id": "apps/web/src/components/shared/business-records-page.tsx::273:11::react-doctor/duplicate-jsx-subtree::83abe248708ffa991686adbaa9b7e9f9f0448b257d164212b13362cfb4e69b3a",
+      "normalizedFilePath": "src/components/shared/business-records-page.tsx",
+      "tags": [
+        "project-analysis"
+      ]
+    },
+    {
+      "filePath": "src/modules/admissions/pages/admission-fees-page.tsx",
+      "plugin": "react-doctor",
+      "rule": "no-high-complexity-react-function",
+      "severity": "warning",
+      "title": "React function has high control-flow complexity",
+      "message": "`PaymentDialog` has cyclomatic complexity 17, cognitive complexity 16, and maximum nesting depth 1, so its React logic is hard to understand and change. Extract independent branches into components or hooks.",
+      "help": "Extract independent render branches and state logic into focused components or hooks until the control flow is easy to follow.",
+      "line": 314,
+      "column": 1,
+      "offset": 15796,
+      "length": 3107,
+      "endLine": 361,
+      "category": "Maintainability",
+      "fingerprint": "63583d12c6d89dbbdad6a36d46514155ca250922995213c58a0b560fd79984bd",
+      "id": "apps/web/src/modules/admissions/pages/admission-fees-page.tsx::314:1::react-doctor/no-high-complexity-react-function::4fb2f41515c834c6ffc53361be3f6af3bfb302dd5bbdc2d8142ef4b974e0717b",
+      "normalizedFilePath": "src/modules/admissions/pages/admission-fees-page.tsx",
+      "tags": [
+        "react-jsx-only",
+        "test-noise"
+      ]
+    },
+    {
+      "filePath": "src/modules/admissions/pages/admission-statuses-page.tsx",
+      "plugin": "react-doctor",
+      "rule": "no-high-complexity-react-function",
+      "severity": "warning",
+      "title": "React function has high control-flow complexity",
+      "message": "`AdmissionStatusesPage` has cyclomatic complexity 16, cognitive complexity 17, and maximum nesting depth 3, so its React logic is hard to understand and change. Extract independent branches into components or hooks.",
+      "help": "Extract independent render branches and state logic into focused components or hooks until the control flow is easy to follow.",
+      "line": 86,
+      "column": 8,
+      "offset": 3369,
+      "length": 10176,
+      "endLine": 281,
+      "category": "Maintainability",
+      "fingerprint": "524729e60924710b8a32c890f092eb64ac5d19f340fd93a4d8c32954c8c40cc2",
+      "id": "apps/web/src/modules/admissions/pages/admission-statuses-page.tsx::86:8::react-doctor/no-high-complexity-react-function::48c991b3f9db397a408b3a0215db63866a65b3f8aff8b41d10fad87144b384ca",
+      "normalizedFilePath": "src/modules/admissions/pages/admission-statuses-page.tsx",
+      "tags": [
+        "react-jsx-only",
+        "test-noise"
+      ]
+    },
+    {
+      "filePath": "src/modules/admissions/pages/admission-statuses-page.tsx",
+      "plugin": "react-doctor",
+      "rule": "js-set-map-lookups",
+      "severity": "warning",
+      "title": "Array lookup inside a loop",
+      "message": "This scales poorly because `array.includes()` inside a loop scans the whole list every time. Use a Set for constant-time lookups.",
+      "help": "Use a `Set` or `Map` when you check for the same items over and over. `Array.includes`/`find` scans the whole list each time",
+      "line": 383,
+      "column": 32,
+      "offset": 17868,
+      "length": 28,
+      "endLine": 383,
+      "category": "Performance",
+      "fingerprint": "144d3fc05e507ec841a45738aeeefe9baaa7320296f99d72e7c9729500559051",
+      "id": "apps/web/src/modules/admissions/pages/admission-statuses-page.tsx::383:32::react-doctor/js-set-map-lookups::8ca162272c84d42896a45c0a801007a712bbbc2697f9f8e1c400af6faf47fe70",
+      "normalizedFilePath": "src/modules/admissions/pages/admission-statuses-page.tsx",
+      "tags": [
+        "test-noise"
+      ]
+    },
+    {
+      "filePath": "src/modules/admissions/pages/admissions-list-page.tsx",
+      "plugin": "react-doctor",
+      "rule": "tanstack-table-no-unstable-data-or-columns",
+      "severity": "warning",
+      "title": "Table data or columns recreated every render",
+      "message": "This `data` option gets a new array identity on every render, so the table rebuilds its row models each render and auto-reset features can re-render in a loop. Memoize it with useMemo/useState or hoist it to module scope.",
+      "help": "Give the table's data and columns options stable references: useMemo or useState inside the component, or a module-scope constant, so row and column models are not rebuilt on every render.",
+      "line": 186,
+      "column": 5,
+      "offset": 6895,
+      "length": 4,
+      "endLine": 186,
+      "category": "Bugs",
+      "fingerprint": "3a6eb0790f39ac87c94f3856b2dd2c5d110e6811602261a9a923d3bb23adc8b7",
+      "id": "apps/web/src/modules/admissions/pages/admissions-list-page.tsx::186:5::react-doctor/tanstack-table-no-unstable-data-or-columns::1419e94f3a92c375a4d5cf709a6d3ffc889dfb2ea5ced629c2d507fe075bd3da",
+      "normalizedFilePath": "src/modules/admissions/pages/admissions-list-page.tsx",
+      "tags": []
+    },
+    {
+      "filePath": "src/modules/admissions/pages/admissions-list-page.tsx",
+      "plugin": "react-doctor",
+      "rule": "duplicate-jsx-subtree",
+      "severity": "warning",
+      "title": "Duplicated JSX structure",
+      "message": "10 copies of this 7-node JSX tree appear across 10 files, repeating about 27 lines. Composition path: AdmissionResults > Card > div.",
+      "help": "Consider extracting a shared component if these trees represent the same UI concept. Keep them separate when the resemblance is incidental or the variants are likely to evolve independently.",
+      "line": 443,
+      "column": 9,
+      "endLine": 449,
+      "endColumn": 15,
+      "category": "Maintainability",
+      "relatedLocations": [
+        {
+          "filePath": "src/modules/audit/pages/audit-logs-page.tsx",
+          "line": 303,
+          "column": 9,
+          "endLine": 309,
+          "endColumn": 15,
+          "message": "Matching JSX subtree (2 of 10) at AuditLogResults > Card > div."
+        },
+        {
+          "filePath": "src/modules/marketing/pages/campaigns-list-page.tsx",
+          "line": 402,
+          "column": 9,
+          "endLine": 408,
+          "endColumn": 15,
+          "message": "Matching JSX subtree (3 of 10) at CampaignResults > Card > div."
+        },
+        {
+          "filePath": "src/modules/marketing/pages/lead-sources-page.tsx",
+          "line": 213,
+          "column": 10,
+          "endLine": 213,
+          "endColumn": 580,
+          "message": "Matching JSX subtree (4 of 10) at Pager > div."
+        },
+        {
+          "filePath": "src/modules/marketing/pages/marketing-forms-page.tsx",
+          "line": 1672,
+          "column": 10,
+          "endLine": 1672,
+          "endColumn": 580,
+          "message": "Matching JSX subtree (5 of 10) at Pager > div."
+        },
+        {
+          "filePath": "src/modules/marketing/pages/utm-trackings-page.tsx",
+          "line": 512,
+          "column": 10,
+          "endLine": 512,
+          "endColumn": 580,
+          "message": "Matching JSX subtree (6 of 10) at Pager > div."
+        },
+        {
+          "filePath": "src/modules/sale/pages/lead-assignments-page.tsx",
+          "line": 296,
+          "column": 10,
+          "endLine": 296,
+          "endColumn": 580,
+          "message": "Matching JSX subtree (7 of 10) at Pager > div."
+        },
+        {
+          "filePath": "src/modules/sale/pages/sale-activities-page.tsx",
+          "line": 200,
+          "column": 10,
+          "endLine": 200,
+          "endColumn": 580,
+          "message": "Matching JSX subtree (8 of 10) at Pager > div."
+        },
+        {
+          "filePath": "src/modules/sale/pages/sale-reminders-page.tsx",
+          "line": 211,
+          "column": 10,
+          "endLine": 211,
+          "endColumn": 580,
+          "message": "Matching JSX subtree (9 of 10) at Pager > div."
+        },
+        {
+          "filePath": "src/modules/students/pages/students-list-page.tsx",
+          "line": 408,
+          "column": 9,
+          "endLine": 414,
+          "endColumn": 15,
+          "message": "Matching JSX subtree (10 of 10) at StudentResults > Card > div."
+        }
+      ],
+      "fingerprint": "identity:7dbaa4be6f1b5638e8f8b2882159f04f832ff87ace12959cbeab9e2763959e91",
+      "id": "apps/web/src/modules/admissions/pages/admissions-list-page.tsx::443:9::react-doctor/duplicate-jsx-subtree::a7ec029af0bd8d557490b7a89a237e089ded5922cc697458178f26048929ecf1",
+      "normalizedFilePath": "src/modules/admissions/pages/admissions-list-page.tsx",
+      "tags": [
+        "project-analysis"
+      ]
+    },
+    {
+      "filePath": "src/modules/admissions/pages/admissions-list-page.tsx",
+      "plugin": "react-doctor",
+      "rule": "duplicate-jsx-subtree",
+      "severity": "warning",
+      "title": "Duplicated JSX structure",
+      "message": "4 copies of this 7-node JSX tree appear across 4 files, repeating about 33 lines. Composition path: SortableTable > Table > TableHeader.",
+      "help": "Consider extracting a shared component if these trees represent the same UI concept. Keep them separate when the resemblance is incidental or the variants are likely to evolve independently.",
+      "line": 459,
+      "column": 7,
+      "endLine": 469,
+      "endColumn": 21,
+      "category": "Maintainability",
+      "relatedLocations": [
+        {
+          "filePath": "src/modules/audit/pages/audit-logs-page.tsx",
+          "line": 319,
+          "column": 7,
+          "endLine": 329,
+          "endColumn": 21,
+          "message": "Matching JSX subtree (2 of 4) at SortableTable > Table > TableHeader."
+        },
+        {
+          "filePath": "src/modules/marketing/pages/campaigns-list-page.tsx",
+          "line": 418,
+          "column": 7,
+          "endLine": 428,
+          "endColumn": 21,
+          "message": "Matching JSX subtree (3 of 4) at SortableTable > Table > TableHeader."
+        },
+        {
+          "filePath": "src/modules/students/pages/students-list-page.tsx",
+          "line": 424,
+          "column": 9,
+          "endLine": 434,
+          "endColumn": 23,
+          "message": "Matching JSX subtree (4 of 4) at SortableTable > Table > TableHeader."
+        }
+      ],
+      "fingerprint": "identity:f0d768de3e636090271716e5048c17ea0ad233e7faaef1241e3a352989296041",
+      "id": "apps/web/src/modules/admissions/pages/admissions-list-page.tsx::459:7::react-doctor/duplicate-jsx-subtree::6a5f4641703449da7ce93ce7a94f3272c16fa4835f39218263ba86bb6591d0d4",
+      "normalizedFilePath": "src/modules/admissions/pages/admissions-list-page.tsx",
+      "tags": [
+        "project-analysis"
+      ]
+    },
+    {
+      "filePath": "src/modules/admissions/pages/admissions-list-page.tsx",
+      "plugin": "react-doctor",
+      "rule": "duplicate-jsx-subtree",
+      "severity": "warning",
+      "title": "Duplicated JSX structure",
+      "message": "5 copies of this 6-node JSX tree appear across 5 files, repeating about 31 lines. Composition path: SortableTable > Table > TableHeader > TableRow.",
+      "help": "Consider extracting a shared component if these trees represent the same UI concept. Keep them separate when the resemblance is incidental or the variants are likely to evolve independently.",
+      "line": 460,
+      "column": 49,
+      "endLine": 468,
+      "endColumn": 23,
+      "category": "Maintainability",
+      "relatedLocations": [
+        {
+          "filePath": "src/modules/audit/pages/audit-logs-page.tsx",
+          "line": 320,
+          "column": 49,
+          "endLine": 328,
+          "endColumn": 23,
+          "message": "Matching JSX subtree (2 of 5) at SortableTable > Table > TableHeader > TableRow."
+        },
+        {
+          "filePath": "src/modules/marketing/pages/campaigns-list-page.tsx",
+          "line": 419,
+          "column": 49,
+          "endLine": 427,
+          "endColumn": 23,
+          "message": "Matching JSX subtree (3 of 5) at SortableTable > Table > TableHeader > TableRow."
+        },
+        {
+          "filePath": "src/modules/marketing/pages/marketing-forms-page.tsx",
+          "line": 1584,
+          "column": 49,
+          "endLine": 1587,
+          "endColumn": 23,
+          "message": "Matching JSX subtree (4 of 5) at SortableTable > Table > TableHeader > TableRow."
+        },
+        {
+          "filePath": "src/modules/students/pages/students-list-page.tsx",
+          "line": 425,
+          "column": 51,
+          "endLine": 433,
+          "endColumn": 25,
+          "message": "Matching JSX subtree (5 of 5) at SortableTable > Table > TableHeader > TableRow."
+        }
+      ],
+      "fingerprint": "identity:e45f472fea9e57a234665c09fddb023584a9d300e3932ca571f2e9253912827b",
+      "id": "apps/web/src/modules/admissions/pages/admissions-list-page.tsx::460:49::react-doctor/duplicate-jsx-subtree::95cb4f37847b90d79366f553eaa0efb5b10a582e0f58c15e2de554ef12247792",
+      "normalizedFilePath": "src/modules/admissions/pages/admissions-list-page.tsx",
+      "tags": [
+        "project-analysis"
+      ]
+    },
+    {
+      "filePath": "src/modules/admissions/pages/admissions-list-page.tsx",
+      "plugin": "react-doctor",
+      "rule": "no-high-complexity-react-function",
+      "severity": "warning",
+      "title": "React function has high control-flow complexity",
+      "message": "`AdmissionProfileForm` has cyclomatic complexity 18, cognitive complexity 17, and maximum nesting depth 1, so its React logic is hard to understand and change. Extract independent branches into components or hooks.",
+      "help": "Extract independent render branches and state logic into focused components or hooks until the control flow is easy to follow.",
+      "line": 475,
+      "column": 1,
+      "offset": 20338,
+      "length": 6296,
+      "endLine": 561,
+      "category": "Maintainability",
+      "fingerprint": "8c7d446f2541cda3a8c714148b2c32e7ba3d37cc95e0a339a1246ef05b10f56f",
+      "id": "apps/web/src/modules/admissions/pages/admissions-list-page.tsx::475:1::react-doctor/no-high-complexity-react-function::259be6d06a0dfd4ee3ae6c1167d4f572ec9d6a0151445f5d761aba3276c95a3a",
+      "normalizedFilePath": "src/modules/admissions/pages/admissions-list-page.tsx",
+      "tags": [
+        "react-jsx-only",
+        "test-noise"
+      ]
+    },
+    {
+      "filePath": "src/modules/automations/pages/automation-monitoring-page.tsx",
+      "plugin": "react-doctor",
+      "rule": "no-high-complexity-react-function",
+      "severity": "warning",
+      "title": "React function has high control-flow complexity",
+      "message": "`AutomationMonitoringPage` has cyclomatic complexity 74, cognitive complexity 98, and maximum nesting depth 4, so its React logic is hard to understand and change. Extract independent branches into components or hooks.",
+      "help": "Extract independent render branches and state logic into focused components or hooks until the control flow is easy to follow.",
+      "line": 96,
+      "column": 8,
+      "offset": 4298,
+      "length": 25645,
+      "endLine": 379,
+      "category": "Maintainability",
+      "fingerprint": "46d2f4a247f90e5398943936b0c6ffae1e3b3b359b0106365a114a9481426a8c",
+      "id": "apps/web/src/modules/automations/pages/automation-monitoring-page.tsx::96:8::react-doctor/no-high-complexity-react-function::60ba14e04396dd2ee3e4bfdcfad14c3dde27eb9e1469ea6b96b3950bf669c6ce",
+      "normalizedFilePath": "src/modules/automations/pages/automation-monitoring-page.tsx",
+      "tags": [
+        "react-jsx-only",
+        "test-noise"
+      ]
+    },
+    {
+      "filePath": "src/modules/automations/pages/automation-monitoring-page.tsx",
+      "plugin": "react-doctor",
+      "rule": "duplicate-jsx-subtree",
+      "severity": "warning",
+      "title": "Duplicated JSX structure",
+      "message": "3 copies of this 7-node JSX tree appear across 3 files, repeating about 10 lines. Composition path: AutomationMonitoringPage > div > div > div > Card > CardContent > div > Table > TableHeader.",
+      "help": "Consider extracting a shared component if these trees represent the same UI concept. Keep them separate when the resemblance is incidental or the variants are likely to evolve independently.",
+      "line": 322,
+      "column": 21,
+      "endLine": 322,
+      "endColumn": 291,
+      "category": "Maintainability",
+      "relatedLocations": [
+        {
+          "filePath": "src/modules/management/pages/departments-access-page.tsx",
+          "line": 155,
+          "column": 17,
+          "endLine": 163,
+          "endColumn": 31,
+          "message": "Matching JSX subtree (2 of 3) at DepartmentsAccessPage > div > Card > CardContent > div > Table > TableHeader."
+        },
+        {
+          "filePath": "src/modules/management/pages/permissions-access-page.tsx",
+          "line": 257,
+          "column": 17,
+          "endLine": 265,
+          "endColumn": 31,
+          "message": "Matching JSX subtree (3 of 3) at PermissionsAccessPage > div > Card > CardContent > div > Table > TableHeader."
+        }
+      ],
+      "fingerprint": "identity:29bcd9bf2488004c01f97e5b2ea290e07c6375c426f767257d8d7b2f79f385f1",
+      "id": "apps/web/src/modules/automations/pages/automation-monitoring-page.tsx::322:21::react-doctor/duplicate-jsx-subtree::2133871afc69ad832dd6d8ecb1b1bf2cb872d7aa361cb55b11f224347ff34cfd",
+      "normalizedFilePath": "src/modules/automations/pages/automation-monitoring-page.tsx",
+      "tags": [
+        "project-analysis"
+      ]
+    },
+    {
+      "filePath": "src/modules/automations/pages/automation-monitoring-page.tsx",
+      "plugin": "react-doctor",
+      "rule": "duplicate-jsx-subtree",
+      "severity": "warning",
+      "title": "Duplicated JSX structure",
+      "message": "4 copies of this 7-node JSX tree appear across 4 files, repeating about 27 lines. Composition path: AutomationMonitoringPage > div > div > div > Card > div.",
+      "help": "Consider extracting a shared component if these trees represent the same UI concept. Keep them separate when the resemblance is incidental or the variants are likely to evolve independently.",
+      "line": 338,
+      "column": 57,
+      "endLine": 338,
+      "endColumn": 627,
+      "category": "Maintainability",
+      "relatedLocations": [
+        {
+          "filePath": "src/modules/admissions/pages/majors-management-page.tsx",
+          "line": 207,
+          "column": 11,
+          "endLine": 219,
+          "endColumn": 17,
+          "message": "Matching JSX subtree (2 of 4) at ProgramMajorsManagement > div > Card > div."
+        },
+        {
+          "filePath": "src/modules/management/pages/permissions-access-page.tsx",
+          "line": 297,
+          "column": 11,
+          "endLine": 309,
+          "endColumn": 17,
+          "message": "Matching JSX subtree (3 of 4) at PermissionsAccessPage > div > Card > div."
+        },
+        {
+          "filePath": "src/modules/management/pages/users-access-page.tsx",
+          "line": 210,
+          "column": 11,
+          "endLine": 222,
+          "endColumn": 17,
+          "message": "Matching JSX subtree (4 of 4) at UsersAccessPage > div > Card > div."
+        }
+      ],
+      "fingerprint": "identity:c8c6d47a258b8b5351c1192bf2013ab4807f7fe6a7fd61fbeaf3ab95b51cb79b",
+      "id": "apps/web/src/modules/automations/pages/automation-monitoring-page.tsx::338:57::react-doctor/duplicate-jsx-subtree::b3eadb32f4995ca4db0a1196af2dc3afff21d32f1bfcbd18ae49f17af3e07a85",
+      "normalizedFilePath": "src/modules/automations/pages/automation-monitoring-page.tsx",
+      "tags": [
+        "project-analysis"
+      ]
+    },
+    {
+      "filePath": "src/modules/automations/pages/automation-monitoring-page.tsx",
+      "plugin": "react-doctor",
+      "rule": "duplicate-jsx-subtree",
+      "severity": "warning",
+      "title": "Duplicated JSX structure",
+      "message": "3 copies of this 6-node JSX tree appear across 3 files, repeating about 2 lines. Composition path: AutomationMonitoringPage > div > Dialog > DialogContent > div > div > Table > TableHeader.",
+      "help": "Consider extracting a shared component if these trees represent the same UI concept. Keep them separate when the resemblance is incidental or the variants are likely to evolve independently.",
+      "line": 359,
+      "column": 73,
+      "endLine": 359,
+      "endColumn": 240,
+      "category": "Maintainability",
+      "relatedLocations": [
+        {
+          "filePath": "src/modules/management/pages/system-settings-page.tsx",
+          "line": 126,
+          "column": 15,
+          "endLine": 126,
+          "endColumn": 183,
+          "message": "Matching JSX subtree (2 of 3) at SystemSettingsPage > div > Fragment > SectionCard > Table > TableHeader."
+        },
+        {
+          "filePath": "src/modules/webhooks/pages/webhooks-page.tsx",
+          "line": 764,
+          "column": 17,
+          "endLine": 771,
+          "endColumn": 31,
+          "message": "Matching JSX subtree (3 of 3) at WebhookDetails > div > Card > CardContent > FieldSet > div > Table > TableHeader."
+        }
+      ],
+      "fingerprint": "identity:c47b6a6ba8b52155ec54e93c832fbef3726f39c120695f016dbb02b132234560",
+      "id": "apps/web/src/modules/automations/pages/automation-monitoring-page.tsx::359:73::react-doctor/duplicate-jsx-subtree::5a10ef750846a470fe19ff3f4eacd66ec995382c98b6834881561e248dc0db29",
+      "normalizedFilePath": "src/modules/automations/pages/automation-monitoring-page.tsx",
+      "tags": [
+        "project-analysis"
+      ]
+    },
+    {
+      "filePath": "src/modules/leads/pages/leads-list-page.tsx",
+      "plugin": "react-doctor",
+      "rule": "no-high-complexity-react-function",
+      "severity": "warning",
+      "title": "React function has high control-flow complexity",
+      "message": "`LeadsListPage` has cyclomatic complexity 44, cognitive complexity 44, and maximum nesting depth 3, so its React logic is hard to understand and change. Extract independent branches into components or hooks.",
+      "help": "Extract independent render branches and state logic into focused components or hooks until the control flow is easy to follow.",
+      "line": 328,
+      "column": 8,
+      "offset": 14752,
+      "length": 19051,
+      "endLine": 779,
+      "category": "Maintainability",
+      "fingerprint": "119eb30c0e3a25d985a00ac392d44b11555bb958adfaaccb906ce0bb8b07d76b",
+      "id": "apps/web/src/modules/leads/pages/leads-list-page.tsx::328:8::react-doctor/no-high-complexity-react-function::4d73bd75f7568455dd9c20b46507e62a8eb1d3dc9a0ee78aa9df469d08f00916",
+      "normalizedFilePath": "src/modules/leads/pages/leads-list-page.tsx",
+      "tags": [
+        "react-jsx-only",
+        "test-noise"
+      ]
+    },
+    {
+      "filePath": "src/modules/leads/pages/leads-list-page.tsx",
+      "plugin": "react-doctor",
+      "rule": "no-giant-component",
+      "severity": "warning",
+      "title": "Large component is hard to read and change",
+      "message": "Component \"LeadsListPage\" is over 300 lines long, which is hard to read & change. Split it into a few smaller components.",
+      "help": "Pull each section into its own component so the parent is easier to read, test, and change.",
+      "line": 328,
+      "column": 17,
+      "offset": 14761,
+      "length": 13,
+      "endLine": 328,
+      "category": "Maintainability",
+      "fingerprint": "69535b5f2cc00d0733ce3e0b3af29e07ff9c298b674bfd87c194e52d74ded337",
+      "id": "apps/web/src/modules/leads/pages/leads-list-page.tsx::328:17::react-doctor/no-giant-component::394a74e3744d91b89a1e16dbeaffd9cb9d0c89006fcc10e6ff139ff0e7120441",
+      "normalizedFilePath": "src/modules/leads/pages/leads-list-page.tsx",
+      "tags": [
+        "react-jsx-only",
+        "test-noise"
+      ]
+    },
+    {
+      "filePath": "src/modules/leads/pages/leads-list-page.tsx",
+      "plugin": "react-doctor",
+      "rule": "tanstack-table-no-unstable-data-or-columns",
+      "severity": "warning",
+      "title": "Table data or columns recreated every render",
+      "message": "This `data` option gets a new array identity on every render, so the table rebuilds its row models each render and auto-reset features can re-render in a loop. Memoize it with useMemo/useState or hoist it to module scope.",
+      "help": "Give the table's data and columns options stable references: useMemo or useState inside the component, or a module-scope constant, so row and column models are not rebuilt on every render.",
+      "line": 541,
+      "column": 5,
+      "offset": 23428,
+      "length": 4,
+      "endLine": 541,
+      "category": "Bugs",
+      "fingerprint": "3a6eb0790f39ac87c94f3856b2dd2c5d110e6811602261a9a923d3bb23adc8b7",
+      "id": "apps/web/src/modules/leads/pages/leads-list-page.tsx::541:5::react-doctor/tanstack-table-no-unstable-data-or-columns::1419e94f3a92c375a4d5cf709a6d3ffc889dfb2ea5ced629c2d507fe075bd3da",
+      "normalizedFilePath": "src/modules/leads/pages/leads-list-page.tsx",
+      "tags": []
+    },
+    {
+      "filePath": "src/modules/leads/pages/leads-list-page.tsx",
+      "plugin": "react-doctor",
+      "rule": "no-high-complexity-react-function",
+      "severity": "warning",
+      "title": "React function has high control-flow complexity",
+      "message": "`EditLeadDialog` has cyclomatic complexity 13, cognitive complexity 17, and maximum nesting depth 3, so its React logic is hard to understand and change. Extract independent branches into components or hooks.",
+      "help": "Extract independent render branches and state logic into focused components or hooks until the control flow is easy to follow.",
+      "line": 794,
+      "column": 1,
+      "offset": 34158,
+      "length": 3255,
+      "endLine": 859,
+      "category": "Maintainability",
+      "fingerprint": "3ff9ecfb39f0fa3b7b89cb8688e4f36870e569bb0bcae818afaadafbce05c51b",
+      "id": "apps/web/src/modules/leads/pages/leads-list-page.tsx::794:1::react-doctor/no-high-complexity-react-function::cdeff3e76d8c1d8fcc8deb167159b0497eb0828912f77116859dcc42e4c25136",
+      "normalizedFilePath": "src/modules/leads/pages/leads-list-page.tsx",
+      "tags": [
+        "react-jsx-only",
+        "test-noise"
+      ]
+    },
+    {
+      "filePath": "src/modules/marketing/pages/meta-connection-page.tsx",
+      "plugin": "react-doctor",
+      "rule": "no-high-complexity-react-function",
+      "severity": "warning",
+      "title": "React function has high control-flow complexity",
+      "message": "`MetaConnectionPage` has cyclomatic complexity 19, cognitive complexity 23, and maximum nesting depth 3, so its React logic is hard to understand and change. Extract independent branches into components or hooks.",
+      "help": "Extract independent render branches and state logic into focused components or hooks until the control flow is easy to follow.",
+      "line": 26,
+      "column": 8,
+      "offset": 2050,
+      "length": 4807,
+      "endLine": 61,
+      "category": "Maintainability",
+      "fingerprint": "5fe9f5b670016b3668b7a31a566662cdbdc7f2c107b4a7817cc065c8ff77581a",
+      "id": "apps/web/src/modules/marketing/pages/meta-connection-page.tsx::26:8::react-doctor/no-high-complexity-react-function::9d9a328d9336fe8d4c086e8ce9cc763ce725a6199f26f9d8a1e3df262f4f4d97",
+      "normalizedFilePath": "src/modules/marketing/pages/meta-connection-page.tsx",
+      "tags": [
+        "react-jsx-only",
+        "test-noise"
+      ]
+    },
+    {
+      "filePath": "src/modules/marketing/pages/meta-connection-page.tsx",
+      "plugin": "react-doctor",
+      "rule": "duplicate-jsx-subtree",
+      "severity": "warning",
+      "title": "Duplicated JSX structure",
+      "message": "2 copies of this 9-node JSX tree appear across 2 files, repeating about 1 line. Composition path: ConnectDialog > Dialog > DialogContent > form > FieldGroup > Field.",
+      "help": "Consider extracting a shared component if these trees represent the same UI concept. Keep them separate when the resemblance is incidental or the variants are likely to evolve independently.",
+      "line": 78,
+      "column": 5,
+      "endLine": 78,
+      "endColumn": 627,
+      "category": "Maintainability",
+      "relatedLocations": [
+        {
+          "filePath": "src/modules/marketing/pages/zalo-connection-page.tsx",
+          "line": 73,
+          "column": 5,
+          "endLine": 73,
+          "endColumn": 621,
+          "message": "Matching JSX subtree (2 of 2) at ConnectionDialog > Dialog > DialogContent > form > FieldGroup > Field."
+        }
+      ],
+      "fingerprint": "identity:c43be923275c4a13e0d53fe1e6b905d5554625dda6485b8a47e05cd664742f13",
+      "id": "apps/web/src/modules/marketing/pages/meta-connection-page.tsx::78:5::react-doctor/duplicate-jsx-subtree::dafa9f8ff6b2251d164c99dc727ecba3983dd93b238932f26b34d7e8c05e27d0",
+      "normalizedFilePath": "src/modules/marketing/pages/meta-connection-page.tsx",
+      "tags": [
+        "project-analysis"
+      ]
+    },
+    {
+      "filePath": "src/modules/sale/pages/lead-assignments-page.tsx",
+      "plugin": "react-doctor",
+      "rule": "tanstack-table-no-unstable-data-or-columns",
+      "severity": "warning",
+      "title": "Table data or columns recreated every render",
+      "message": "This `data` option gets a new array identity on every render, so the table rebuilds its row models each render and auto-reset features can re-render in a loop. Memoize it with useMemo/useState or hoist it to module scope.",
+      "help": "Give the table's data and columns options stable references: useMemo or useState inside the component, or a module-scope constant, so row and column models are not rebuilt on every render.",
+      "line": 73,
+      "column": 5,
+      "offset": 3608,
+      "length": 4,
+      "endLine": 73,
+      "category": "Bugs",
+      "fingerprint": "3a6eb0790f39ac87c94f3856b2dd2c5d110e6811602261a9a923d3bb23adc8b7",
+      "id": "apps/web/src/modules/sale/pages/lead-assignments-page.tsx::73:5::react-doctor/tanstack-table-no-unstable-data-or-columns::1419e94f3a92c375a4d5cf709a6d3ffc889dfb2ea5ced629c2d507fe075bd3da",
+      "normalizedFilePath": "src/modules/sale/pages/lead-assignments-page.tsx",
+      "tags": []
+    },
+    {
+      "filePath": "src/modules/sale/pages/lead-assignments-page.tsx",
+      "plugin": "react-doctor",
+      "rule": "no-high-complexity-react-function",
+      "severity": "warning",
+      "title": "React function has high control-flow complexity",
+      "message": "`Results` has cyclomatic complexity 12, cognitive complexity 20, and maximum nesting depth 4, so its React logic is hard to understand and change. Extract independent branches into components or hooks.",
+      "help": "Extract independent render branches and state logic into focused components or hooks until the control flow is easy to follow.",
+      "line": 249,
+      "column": 1,
+      "offset": 11292,
+      "length": 2576,
+      "endLine": 284,
+      "category": "Maintainability",
+      "fingerprint": "f881e0422cc309e5653ebeeb7527fa3532cac9752dd4b27b8c1addaed5218592",
+      "id": "apps/web/src/modules/sale/pages/lead-assignments-page.tsx::249:1::react-doctor/no-high-complexity-react-function::c58061b9f8838f9650fbde04c818c7c6fe6cb021c9997d2f166ae5532e672aa0",
+      "normalizedFilePath": "src/modules/sale/pages/lead-assignments-page.tsx",
+      "tags": [
+        "react-jsx-only",
+        "test-noise"
+      ]
+    }
+  ],
+  "summary": {
+    "errorCount": 0,
+    "warningCount": 21,
+    "affectedFileCount": 8,
+    "totalDiagnosticCount": 21,
+    "score": 85,
+    "scoreLabel": "Great"
+  },
+  "elapsedMilliseconds": 2832.6942,
+  "error": null
+}

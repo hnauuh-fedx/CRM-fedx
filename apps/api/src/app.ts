@@ -1,4 +1,5 @@
 import cors from "cors";
+import { displayLayoutsRouter } from "./modules/display-layouts/display-layout.router";
 import express, { type ErrorRequestHandler } from "express";
 import path from "node:path";
 
@@ -10,6 +11,7 @@ import { auditLogsRouter } from "./modules/audit/audit-logs.router";
 import { campaignsRouter } from "./modules/campaigns/campaigns.router";
 import { customerListsRouter } from "./modules/customer-lists/customer-lists.router";
 import { formFieldsRouter, formsRouter } from "./modules/campaigns/forms.router";
+import { MarketingFormConfigError } from "./modules/campaigns/marketing-form-config.validation";
 import {
   leadSourcesRouter,
   marketingFormsRouter,
@@ -43,7 +45,7 @@ app.set("trust proxy", 1);
 const publicDirectory = path.resolve(__dirname, "../public");
 
 app.disable("x-powered-by");
-app.use(cors({ origin: env.WEB_ORIGIN }));
+app.use(cors({ origin: env.WEB_ORIGIN, credentials: true }));
 app.use("/api/webhooks", publicWebhookRouter);
 app.use(express.static(publicDirectory, {
   dotfiles: "ignore",
@@ -84,6 +86,7 @@ app.use("/api/permissions", permissionsRouter);
 app.use("/api/pipelines", pipelinesRouter);
 app.use("/api/students", studentsRouter);
 app.use("/api/system", systemRouter);
+app.use("/api/display-layouts", displayLayoutsRouter);
 app.use("/api/automations", automationsRouter);
 app.use("/api/utm-trackings", utmTrackingsRouter);
 app.use("/api/users", usersRouter);
@@ -93,6 +96,10 @@ app.use("/api/integrations/zalo", zaloRouter);
 app.use("/api/integrations/meta", metaRouter);
 
 const errorHandler: ErrorRequestHandler = (error, _request, response, _next) => {
+  if (error instanceof MarketingFormConfigError) {
+    response.status(400).json({ message: error.message, issues: error.issues });
+    return;
+  }
   if (error instanceof InstitutionProgramScopeError) {
     response.status(error.statusCode).json({ message: error.message });
     return;

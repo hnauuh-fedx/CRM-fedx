@@ -1,10 +1,12 @@
 import { compare } from "bcryptjs";
 import jwt from "jsonwebtoken";
+import { z } from "zod";
 
 import { env } from "../../config/env";
 import { prisma } from "../../database/prisma";
 import { Prisma } from "../../generated/prisma/client";
 import type { AccessTokenPayload, AuthUser } from "./auth.types";
+import { createAuthSession } from "./auth-session.service";
 
 type AccessScope = AuthUser["accessScope"];
 
@@ -135,7 +137,7 @@ async function serializeUser(user: {
       ),
     ),
   ].sort();
-  const selectedProgramId = requestedProgramId ?? institutionProgramIds[0];
+  const selectedProgramId = requestedProgramId && institutionProgramIds.includes(requestedProgramId) ? requestedProgramId : institutionProgramIds[0];
   const applicableAssignments = selectedProgramId
     ? user.user_roles.filter((assignment) => assignment.roles?.role_institution_programs.some(
         (grant) => grant.institution_program_id === selectedProgramId && grant.institution_programs.status === "active",
@@ -226,7 +228,7 @@ export async function getAuthUser(userId: string, institutionProgramId?: string)
   return user ? serializeUser(user, institutionProgramId) : null;
 }
 
-export async function loginWithPassword(email: string, password: string, ipAddress?: string, institutionProgramId?: string) {
+export async function loginWithPassword(email: string, password: string, ipAddress?: string, institutionProgramId?: string, rememberDevice = false) {
   const user = await prisma.users.findFirst({
     where: {
       email: email.trim().toLowerCase(),
@@ -253,50 +255,23 @@ export async function loginWithPassword(email: string, password: string, ipAddre
   }
 
   const authUser = await serializeUser(user, institutionProgramId);
-  await prisma.$transaction([
-    prisma.users.update({
-      where: { id: user.id },
-      data: { last_login_at: new Date() },
-    }),
-    prisma.audit_logs.create({
-      data: {
-        user_id: user.id,
-        entity_type: "auth_session",
-        entity_id: user.id,
-        action: "login",
-        ip_address: ipAddress,
-        new_data: { method: "password" },
-      },
-    }),
-  ]);
-
-  const payload: AccessTokenPayload = {
-    sub: user.id,
-    type: "access",
-  };
-  const accessToken = jwt.sign(payload, env.JWT_SECRET, {
-    expiresIn: env.JWT_EXPIRES_IN_SECONDS,
-  });
-
-  return {
-    accessToken,
-    expiresIn: env.JWT_EXPIRES_IN_SECONDS,
-    user: authUser,
-  };
+  const session = await createAuthSession(user.id, user.password_hash, rememberDevice, ipAddress);
+  return session ? { ...session, user: authUser } : null;
 }
 
 export function verifyAccessToken(token: string): AccessTokenPayload | null {
   try {
-    const payload = jwt.verify(token, env.JWT_SECRET);
+    const payload = jwt.verify(token, env.JWT_SECRET, { algorithms: ["HS256"] });
     if (
       typeof payload !== "object" ||
       payload.type !== "access" ||
-      typeof payload.sub !== "string"
+      !z.uuid().safeParse(payload.sub).success ||
+      !z.uuid().safeParse(payload.sid).success
     ) {
       return null;
     }
 
-    return { sub: payload.sub, type: "access" };
+    return { sub: payload.sub as string, sid: payload.sid as string, type: "access" };
   } catch {
     return null;
   }

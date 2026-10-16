@@ -2,16 +2,20 @@ import { Router } from "express";
 import { z } from "zod";
 
 import { requireAuthentication } from "../../middlewares/auth.middleware";
-import { loginWithPassword } from "./auth.service";
+import { getAuthUser, loginWithPassword } from "./auth.service";
+import { logoutAuthSession, refreshAuthSession } from "./auth-session.service";
+import { clearRefreshCookie, protectAuthMutation, readRefreshCookie, writeRefreshCookie } from "./auth-cookie";
 
 const loginSchema = z.object({
   email: z.string().trim().email(),
-  password: z.string().min(1),
+  password: z.string().min(1).max(100),
+  rememberDevice: z.boolean().default(false),
 });
 
 export const authRouter = Router();
+authRouter.use((_request, response, next) => { response.setHeader("Cache-Control", "no-store"); next(); });
 
-authRouter.post("/login", async (request, response, next) => {
+authRouter.post("/login", protectAuthMutation, async (request, response, next) => {
   try {
     const parsed = loginSchema.safeParse(request.body);
     if (!parsed.success) {
@@ -24,17 +28,46 @@ authRouter.post("/login", async (request, response, next) => {
       parsed.data.password,
       request.ip,
       z.uuid().safeParse(request.header("x-institution-program-id")).data,
+      parsed.data.rememberDevice,
     );
     if (!session) {
       response.status(401).json({ message: "Email hoặc mật khẩu không chính xác." });
       return;
     }
 
-    response.json(session);
+    await logoutAuthSession(readRefreshCookie(request), false, request.ip);
+    writeRefreshCookie(response, session.refreshToken, session.rememberDevice);
+    response.json({ accessToken: session.accessToken, expiresIn: session.expiresIn, user: session.user, sessionId: session.sessionId, rememberDevice: session.rememberDevice });
   } catch (error) {
     next(error);
   }
 });
+
+authRouter.post("/refresh", protectAuthMutation, async (request, response) => {
+  const session = await refreshAuthSession(readRefreshCookie(request), request.ip);
+  if (!session) {
+    clearRefreshCookie(response);
+    response.status(401).json({ message: "Phiên đăng nhập đã kết thúc. Vui lòng đăng nhập lại." });
+    return;
+  }
+  // Refresh is identity-only; business APIs still enforce the selected program.
+  const user = await getAuthUser(session.userId, z.uuid().safeParse(request.header("x-institution-program-id")).data);
+  if (!user) {
+    clearRefreshCookie(response);
+    response.status(401).json({ message: "Tài khoản không còn quyền truy cập." });
+    return;
+  }
+  writeRefreshCookie(response, session.refreshToken, session.rememberDevice);
+  response.json({ accessToken: session.accessToken, expiresIn: session.expiresIn, user, sessionId: session.sessionId, rememberDevice: session.rememberDevice });
+});
+
+for (const [path, all] of [["/logout", false], ["/logout-all", true]] as const) {
+  authRouter.post(path, protectAuthMutation, async (request, response) => {
+    await logoutAuthSession(readRefreshCookie(request), all, request.ip);
+    clearRefreshCookie(response);
+    response.json({ message: all ? "Đã đăng xuất khỏi tất cả thiết bị." : "Đã đăng xuất." });
+  });
+}
 
 authRouter.get("/me", requireAuthentication, (request, response) => {
   response.json({ user: request.authUser });

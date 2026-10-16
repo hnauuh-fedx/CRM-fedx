@@ -38,6 +38,9 @@ const SystemSettingsPage = lazy(() =>
     default: module.SystemSettingsPage,
   })),
 );
+const DisplayLayoutsPage = lazy(() =>
+  import("@/modules/management/pages/display-layouts-page").then(module => ({ default: module.DisplayLayoutsPage })),
+);
 const WebhooksPage = lazy(() =>
   import("@/modules/webhooks/pages/webhooks-page").then((module) => ({
     default: module.WebhooksPage,
@@ -282,6 +285,7 @@ export function AppRoutes() {
             </Route>
             <Route element={<ProtectedRoute anyPermissions={["system.manage"]} />}>
               <Route path="/quan-ly/cau-hinh" element={<SystemSettingsPage />} />
+              <Route path="/quan-ly/cau-hinh-hien-thi" element={<DisplayLayoutsPage />} />
             </Route>
             <Route element={<ProtectedRoute anyPermissions={["webhook.view", "webhook.manage"]} />}>
               <Route path="/quan-ly/tich-hop/webhooks" element={<WebhooksPage />} />

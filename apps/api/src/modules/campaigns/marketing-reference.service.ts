@@ -1,6 +1,9 @@
 import { prisma } from "../../database/prisma";
+import { z } from "zod";
+import { normalizeMarketingFormOptions } from "@admission-crm/shared/marketing-form-config";
 import type { CampaignViewer } from "./campaign-list.service";
 import { getCampaignVisibilityWhere } from "./campaign-list.service";
+import { getMarketingFormVisibility, type MarketingFormViewer } from "./marketing-form-scope";
 
 export type LeadSourceListQuery = {
   page: number;
@@ -42,6 +45,7 @@ export type MarketingFormSubmissionListQuery = {
   page: number;
   limit: number;
   status?: string;
+  search?: string;
 };
 
 const leadSourceSortFields = {
@@ -217,8 +221,8 @@ export async function getUtmTrackingFilterOptions(user: CampaignViewer) {
   };
 }
 
-export async function listMarketingForms(user: CampaignViewer, query: MarketingFormListQuery) {
-  const campaignVisibility = getReferenceCampaignVisibility(user);
+export async function listMarketingForms(user: MarketingFormViewer, query: MarketingFormListQuery) {
+  const campaignVisibility = getMarketingFormVisibility(user, query.institutionProgramId);
   const where = {
     AND: [
       ...campaignVisibility,
@@ -236,7 +240,7 @@ export async function listMarketingForms(user: CampaignViewer, query: MarketingF
       ...(query.status ? [{ status: query.status }] : []),
       ...(query.platform ? [{ platform: query.platform }] : []),
       ...(query.campaignId ? [{ campaign_id: query.campaignId }] : []),
-      ...(query.institutionProgramId ? [{ campaigns: { is: { institution_program_id: query.institutionProgramId } } }] : []),
+      ...(query.institutionProgramId ? [{ institution_program_id: query.institutionProgramId }] : []),
     ],
   };
   const [items, total] = await prisma.$transaction([
@@ -331,7 +335,7 @@ export async function listMarketingForms(user: CampaignViewer, query: MarketingF
         placeholder: field.placeholder,
         fieldType: field.field_type,
         isRequired: field.is_required,
-        options: Array.isArray(field.options) ? field.options.filter((option): option is string => typeof option === "string") : [],
+        options: normalizeMarketingFormOptions(field.options),
         validationRules: field.validation_rules,
         leadField: field.lead_field,
         crmMappingField: field.crm_mapping_field ?? field.lead_field,
@@ -361,9 +365,9 @@ export async function listMarketingForms(user: CampaignViewer, query: MarketingF
   };
 }
 
-export async function listMarketingFormSubmissions(user: CampaignViewer, formId: string, query: MarketingFormSubmissionListQuery) {
+export async function listMarketingFormSubmissions(user: MarketingFormViewer, formId: string, query: MarketingFormSubmissionListQuery) {
   const form = await prisma.marketing_forms.findFirst({
-    where: { id: formId, AND: getReferenceCampaignVisibility(user) },
+    where: { id: formId, AND: getMarketingFormVisibility(user) },
     select: { id: true },
   });
   if (!form) {
@@ -372,6 +376,10 @@ export async function listMarketingFormSubmissions(user: CampaignViewer, formId:
   const where = {
     marketing_form_id: formId,
     ...(query.status ? { status: query.status } : {}),
+    ...(query.search ? { OR: [
+      ...(z.uuid().safeParse(query.search).success ? [{ id: query.search }] : []),
+      { leads: { is: { OR: [{ full_name: { contains: query.search, mode: "insensitive" as const } }, { phone: { contains: query.search } }] } } },
+    ] } : {}),
   };
   const [items, total] = await prisma.$transaction([
     prisma.marketing_form_submissions.findMany({
@@ -382,6 +390,7 @@ export async function listMarketingFormSubmissions(user: CampaignViewer, formId:
         raw_payload: true,
         normalized_payload: true,
         answers: true,
+        configuration_snapshot: true,
         source: true,
         status: true,
         error_message: true,
@@ -406,6 +415,8 @@ export async function listMarketingFormSubmissions(user: CampaignViewer, formId:
         rawPayload: submission.raw_payload,
         normalizedPayload: submission.normalized_payload,
         answers: submission.answers,
+        configurationSnapshot: submission.configuration_snapshot,
+        isLegacyConfiguration: submission.configuration_snapshot === null,
         source: submission.source,
         status: submission.status,
         errorMessage: submission.error_message,
@@ -417,8 +428,8 @@ export async function listMarketingFormSubmissions(user: CampaignViewer, formId:
   };
 }
 
-export async function getMarketingFormFilterOptions(user: CampaignViewer, institutionProgramId?: string) {
-  const campaignVisibility = getReferenceCampaignVisibility(user);
+export async function getMarketingFormFilterOptions(user: MarketingFormViewer, institutionProgramId?: string) {
+  const campaignVisibility = getMarketingFormVisibility(user, institutionProgramId);
   const [statuses, platforms, campaigns] = await prisma.$transaction([
     prisma.marketing_forms.findMany({ where: { AND: campaignVisibility }, select: { status: true }, distinct: ["status"], take: 100 }),
     prisma.marketing_forms.findMany({ where: { AND: campaignVisibility }, select: { platform: true }, distinct: ["platform"], take: 100 }),

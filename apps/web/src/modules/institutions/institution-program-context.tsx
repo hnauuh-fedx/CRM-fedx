@@ -1,8 +1,9 @@
-import { createContext, use, useCallback, useMemo, useState, type ReactNode } from "react";
+import { createContext, use, useCallback, useMemo, useRef, useState, type ReactNode } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 
 import { apiRequest } from "@/services/api";
 import { readSelectedInstitutionProgramId, storeSelectedInstitutionProgramId } from "./institution-program-storage";
+import { attemptInstitutionProgramChange, type InstitutionProgramChangeGuard } from "./institution-program-change";
 
 export type InstitutionProgramOption = {
   id: string;
@@ -16,7 +17,8 @@ type InstitutionProgramContextValue = {
   selectedProgramId: string | null;
   isLoading: boolean;
   hasSelectedProgram: boolean;
-  selectProgram: (programId: string) => void;
+  selectProgram: (programId: string) => boolean;
+  registerProgramChangeGuard: (guard: InstitutionProgramChangeGuard) => () => void;
 };
 
 const InstitutionProgramContext = createContext<InstitutionProgramContextValue | null>(null);
@@ -24,6 +26,11 @@ const InstitutionProgramContext = createContext<InstitutionProgramContextValue |
 export function InstitutionProgramProvider({ accessToken, children }: { accessToken: string; children: ReactNode }) {
   const queryClient = useQueryClient();
   const [changedProgramId, setChangedProgramId] = useState<string | null>(null);
+  const changeGuards = useRef(new Set<InstitutionProgramChangeGuard>());
+  const registerProgramChangeGuard = useCallback((guard: InstitutionProgramChangeGuard) => {
+    changeGuards.current.add(guard);
+    return () => { changeGuards.current.delete(guard); };
+  }, []);
   const optionsQuery = useQuery({
     queryKey: ["institution-programs", "options"],
     queryFn: async () => {
@@ -44,15 +51,14 @@ export function InstitutionProgramProvider({ accessToken, children }: { accessTo
     : (optionsQuery.data?.selectedProgramId ?? null);
 
   const selectProgram = useCallback((programId: string) => {
-    if (programId === selectedProgramId) {
-      return;
-    }
-    storeSelectedInstitutionProgramId(programId);
-    setChangedProgramId(programId);
-    void queryClient.invalidateQueries({
-      predicate: (query) => query.queryKey[0] !== "institution-programs",
+    return attemptInstitutionProgramChange(programId, selectedProgramId, programs.map(program => program.id), changeGuards.current, (nextProgramId) => {
+      storeSelectedInstitutionProgramId(nextProgramId);
+      setChangedProgramId(nextProgramId);
+      void queryClient.invalidateQueries({
+        predicate: (query) => query.queryKey[0] !== "institution-programs",
+      });
     });
-  }, [queryClient, selectedProgramId]);
+  }, [programs, queryClient, selectedProgramId]);
   const value = useMemo(
     () => ({
       programs,
@@ -60,8 +66,9 @@ export function InstitutionProgramProvider({ accessToken, children }: { accessTo
       isLoading: optionsQuery.isLoading,
       hasSelectedProgram: programs.some((program) => program.id === selectedProgramId),
       selectProgram,
+      registerProgramChangeGuard,
     }),
-    [optionsQuery.isLoading, programs, selectProgram, selectedProgramId],
+    [optionsQuery.isLoading, programs, registerProgramChangeGuard, selectProgram, selectedProgramId],
   );
   return (
     <InstitutionProgramContext.Provider value={value}>

@@ -1,4 +1,4 @@
-import { Router } from "express";
+import { Router, type Request } from "express";
 import { z } from "zod";
 
 import {
@@ -26,6 +26,11 @@ import {
   updateMarketingForm,
 } from "./marketing-form-management.service";
 import { getPublicMarketingFormConfig, submitMarketingForm } from "./marketing-form-public.service";
+
+function workingFormActor(request: Request) {
+  const programId = getInstitutionProgramScope(request);
+  return { ...request.authUser!, institutionProgramIds: programId ? [programId] : [] };
+}
 
 const leadSourceQuerySchema = z.object({
   page: z.coerce.number().int().min(1).default(1),
@@ -95,7 +100,7 @@ const marketingFormBodySchema = z.object({
     placeholder: z.string().trim().max(255).optional().or(z.literal("")).transform((value) => value || undefined),
     fieldType: z.enum(supportedMarketingFormFieldTypes),
     isRequired: z.boolean(),
-    options: z.array(z.string().trim().min(1).max(255)).max(100).default([]),
+    options: z.array(z.union([z.string().trim().min(1).max(255), z.object({ value: z.string().min(1).max(255), label: z.string().trim().min(1).max(255) })])).max(100).default([]),
     leadField: z.enum(supportedLeadMappingFields).optional(),
     sortOrder: z.number().int().min(0).max(1000).default(0),
     isActive: z.boolean().default(true),
@@ -132,15 +137,33 @@ const marketingFormBodySchema = z.object({
   }
 });
 const submissionQuerySchema = z.object({
+  search: z.string().trim().max(150).optional().transform((value) => value || undefined),
   page: z.coerce.number().int().min(1).default(1),
   limit: z.coerce.number().int().min(1).max(100).default(20),
   status: z.string().trim().max(50).optional().transform((value) => value || undefined),
 });
 const publicPayloadSchema = z.record(z.string(), z.unknown());
+const publicFormPayloadSchema = publicPayloadSchema.superRefine((value, context) => {
+  if (Object.keys(value).length > 120) context.addIssue({ code: "custom", message: "Biểu mẫu có quá nhiều trường dữ liệu." });
+  if (Buffer.byteLength(JSON.stringify(value), "utf8") > 64 * 1024) context.addIssue({ code: "custom", message: "Dữ liệu biểu mẫu vượt quá 64 KB." });
+});
 
 const publicRateLimits = new Map<string, { count: number; resetAt: number }>();
+const maxPublicRateLimitKeys = 10_000;
+let publicRateLimitChecks = 0;
 function isPublicRateLimited(key: string) {
   const now = Date.now();
+  publicRateLimitChecks += 1;
+  if (publicRateLimitChecks % 100 === 0 || publicRateLimits.size >= maxPublicRateLimitKeys) {
+    for (const [storedKey, value] of publicRateLimits) {
+      if (value.resetAt <= now) publicRateLimits.delete(storedKey);
+    }
+    while (publicRateLimits.size >= maxPublicRateLimitKeys) {
+      const oldestKey = publicRateLimits.keys().next().value as string | undefined;
+      if (!oldestKey) break;
+      publicRateLimits.delete(oldestKey);
+    }
+  }
   const current = publicRateLimits.get(key);
   if (!current || current.resetAt <= now) {
     publicRateLimits.set(key, { count: 1, resetAt: now + 60_000 });
@@ -242,7 +265,7 @@ marketingFormsRouter.get("/", requireAuthentication, requireAnyPermission("campa
       response.status(400).json({ message: "Tham số danh sách biểu mẫu không hợp lệ." });
       return;
     }
-    response.json(await listMarketingForms(request.authUser!, {
+    response.json(await listMarketingForms(workingFormActor(request), {
       ...parsed.data,
       institutionProgramId: getInstitutionProgramScope(request),
     }));
@@ -254,7 +277,7 @@ marketingFormsRouter.get("/", requireAuthentication, requireAnyPermission("campa
 marketingFormsRouter.get("/options", requireAuthentication, requireAnyPermission("campaign.view_all", "marketing_form.manage", "marketing_form.create", "marketing_form.update_own"), async (request, response, next) => {
   try {
     response.json({
-      ...(await getMarketingFormFilterOptions(request.authUser!, getInstitutionProgramScope(request))),
+      ...(await getMarketingFormFilterOptions(workingFormActor(request), getInstitutionProgramScope(request))),
       leadFields: supportedLeadMappingFields,
       fieldTypes: supportedMarketingFormFieldTypes,
       formTypes: supportedMarketingFormTypes,
@@ -271,7 +294,7 @@ marketingFormsRouter.post("/", requireAuthentication, requireAnyPermission("mark
       response.status(400).json({ message: "Dữ liệu tạo biểu mẫu marketing không hợp lệ." });
       return;
     }
-    const result = await createMarketingForm(request.authUser!, parsed.data, getInstitutionProgramScope(request), request.ip);
+    const result = await createMarketingForm(workingFormActor(request), parsed.data, getInstitutionProgramScope(request), request.ip);
     if (!result.ok) {
       response.status(404).json({ message: "Không tìm thấy chiến dịch trong phạm vi được quản lý." });
       return;
@@ -290,7 +313,7 @@ marketingFormsRouter.get("/:id/submissions", requireAuthentication, requireAnyPe
       response.status(400).json({ message: "Tham số danh sách dữ liệu gửi vào không hợp lệ." });
       return;
     }
-    const result = await listMarketingFormSubmissions(request.authUser!, parsedId.data, parsedQuery.data);
+    const result = await listMarketingFormSubmissions(workingFormActor(request), parsedId.data, parsedQuery.data);
     if (!result.ok) {
       response.status(404).json({ message: "Không tìm thấy biểu mẫu trong phạm vi được quản lý." });
       return;
@@ -308,7 +331,7 @@ marketingFormsRouter.post("/:id/rotate-secret", requireAuthentication, requireAn
       response.status(400).json({ message: "Mã biểu mẫu không hợp lệ." });
       return;
     }
-    const result = await rotateMarketingFormWebhookSecret(request.authUser!, parsedId.data, request.ip);
+    const result = await rotateMarketingFormWebhookSecret(workingFormActor(request), parsedId.data, request.ip);
     if (!result.ok) {
       response.status(404).json({ message: "Không tìm thấy biểu mẫu trong phạm vi được quản lý." });
       return;
@@ -327,7 +350,7 @@ marketingFormsRouter.patch("/:id", requireAuthentication, requireAnyPermission("
       response.status(400).json({ message: "Dữ liệu cập nhật biểu mẫu marketing không hợp lệ." });
       return;
     }
-    const result = await updateMarketingForm(request.authUser!, parsedId.data, parsedBody.data, getInstitutionProgramScope(request), request.ip);
+    const result = await updateMarketingForm(workingFormActor(request), parsedId.data, parsedBody.data, getInstitutionProgramScope(request), request.ip);
     if (!result.ok) {
       response.status(404).json({
         message: result.reason === "form_not_found"
@@ -349,7 +372,7 @@ marketingFormsRouter.delete("/:id", requireAuthentication, requireAnyPermission(
       response.status(400).json({ message: "Mã biểu mẫu không hợp lệ." });
       return;
     }
-    const result = await deleteMarketingForm(request.authUser!, parsedId.data, request.ip);
+    const result = await deleteMarketingForm(workingFormActor(request), parsedId.data, request.ip);
     if (!result.ok) {
       response.status(404).json({ message: "Không tìm thấy biểu mẫu trong phạm vi được quản lý." });
       return;
@@ -381,7 +404,7 @@ publicMarketingFormsRouter.get("/forms/:publicKey", async (request, response, ne
 publicMarketingFormsRouter.post("/forms/:publicKey/submit", async (request, response, next) => {
   try {
     const publicKey = z.string().trim().min(2).max(160).safeParse(request.params.publicKey);
-    const payload = publicPayloadSchema.safeParse(request.body);
+    const payload = publicFormPayloadSchema.safeParse(request.body);
     if (!publicKey.success || !payload.success) {
       response.status(400).json({ message: "Dữ liệu gửi lên không hợp lệ." });
       return;
@@ -390,14 +413,15 @@ publicMarketingFormsRouter.post("/forms/:publicKey/submit", async (request, resp
       response.status(429).json({ message: "Bạn gửi quá nhiều lần. Vui lòng thử lại sau." });
       return;
     }
-    const result = await submitMarketingForm({
-      publicKey: publicKey.data,
-      payload: payload.data,
+      const result = await submitMarketingForm({
+        publicKey: publicKey.data,
+        idempotencyKey: request.get("idempotency-key"),
+        payload: payload.data,
       ipAddress: request.ip,
       userAgent: request.get("user-agent"),
     });
     if (!result.ok) {
-      response.status(result.status).json({ message: result.message, submissionId: result.submissionId, redirectUrl: result.redirectUrl });
+      response.status(result.status).json({ message: result.message, submissionId: result.submissionId, redirectUrl: result.redirectUrl, redirectMode: result.redirectMode });
       return;
     }
     response.status(201).json(result.data);
@@ -418,9 +442,10 @@ publicMarketingFormsRouter.post("/webhooks/forms/:publicKey", async (request, re
       response.status(429).json({ message: "Webhook gửi quá nhiều lần. Vui lòng thử lại sau." });
       return;
     }
-    const result = await submitMarketingForm({
-      publicKey: publicKey.data,
-      payload: payload.data,
+      const result = await submitMarketingForm({
+        publicKey: publicKey.data,
+        idempotencyKey: request.get("idempotency-key"),
+        payload: payload.data,
       webhookSecret: request.get("x-webhook-secret"),
       ipAddress: request.ip,
       userAgent: request.get("user-agent"),

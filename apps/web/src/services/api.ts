@@ -1,4 +1,7 @@
 import { readSelectedInstitutionProgramId } from "@/modules/institutions/institution-program-storage";
+import { fetchWithSession } from "@/modules/auth/session-client";
+import { ApiError } from "./api-error";
+export { ApiError } from "./api-error";
 
 const apiUrl = import.meta.env.VITE_API_URL ?? "http://localhost:3000/api";
 
@@ -21,16 +24,6 @@ function authorizedHeaders(accessToken?: string | null) {
   return headers;
 }
 
-export class ApiError extends Error {
-  constructor(
-    message: string,
-    public readonly status: number,
-    public readonly details?: unknown,
-  ) {
-    super(message);
-  }
-}
-
 export async function apiRequest<T>(
   path: string,
   init: RequestInit = {},
@@ -46,10 +39,10 @@ export async function apiRequest<T>(
     }
   }
 
-  const response = await fetch(`${apiUrl}${path}`, {
+  const response = await fetchWithSession(`${apiUrl}${path}`, {
     ...init,
     headers,
-  });
+  }, accessToken);
 
   const payload = (await response.json().catch(() => ({}))) as {
     message?: string;
@@ -80,11 +73,11 @@ export async function apiFormRequest<T>(
     }
   }
 
-  const response = await fetch(`${apiUrl}${path}`, {
+  const response = await fetchWithSession(`${apiUrl}${path}`, {
     method: "POST",
     headers,
     body,
-  });
+  }, accessToken);
   const payload = (await response.json().catch(() => ({}))) as {
     message?: string;
   };
@@ -99,10 +92,13 @@ export async function apiFormRequest<T>(
   return payload as T;
 }
 
-export async function apiDownload(path: string, accessToken: string) {
-  const response = await fetch(`${apiUrl}${path}`, {
-    headers: authorizedHeaders(accessToken),
-  });
+export async function apiDownload(path: string, accessToken: string, init: RequestInit = {}) {
+  const headers = authorizedHeaders(accessToken);
+  new Headers(init.headers).forEach((value, key) => headers.set(key, value));
+  const response = await fetchWithSession(`${apiUrl}${path}`, {
+    ...init,
+    headers,
+  }, accessToken);
   if (!response.ok) {
     notifyUnauthorizedRequest(response, accessToken);
     const payload = (await response.json().catch(() => ({}))) as {

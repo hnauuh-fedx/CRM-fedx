@@ -1,6 +1,6 @@
-import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { LoaderCircle, Play, Users } from "lucide-react";
+import { useState } from "react";
 
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
@@ -13,7 +13,13 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { Label } from "@/components/ui/label";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import { ApiError } from "@/services/api";
 import {
   getAutomationBulkRun,
@@ -21,9 +27,17 @@ import {
   previewAutomationBulkRun,
   startAutomationBulkRun,
 } from "@/services/automation.service";
-import type { AutomationBulkJob, AutomationBulkPreview, AutomationRuleListItem } from "../automation.types";
+import type {
+  AutomationBulkJob,
+  AutomationBulkPreview,
+  AutomationRuleListItem,
+} from "../automation.types";
 
-const TERMINAL_STATUSES = new Set(["completed", "completed_with_errors", "failed"]);
+const TERMINAL_STATUSES = new Set([
+  "completed",
+  "completed_with_errors",
+  "failed",
+]);
 
 export function AutomationBulkRunDialog({
   open,
@@ -44,7 +58,8 @@ export function AutomationBulkRunDialog({
 
   const optionsQuery = useQuery({
     queryKey: ["automations", "options", rule.institutionProgramId],
-    queryFn: () => getAutomationOptions(accessToken, rule.institutionProgramId ?? undefined),
+    queryFn: () =>
+      getAutomationOptions(accessToken, rule.institutionProgramId ?? undefined),
     enabled: open,
   });
 
@@ -58,10 +73,7 @@ export function AutomationBulkRunDialog({
     },
   });
   const currentJob = progressQuery.data ?? job;
-  const finishedCount = currentJob ? currentJob.processedCount + currentJob.failedCount : 0;
-  const progress = currentJob && currentJob.totalCount > 0
-    ? Math.min(100, Math.round((finishedCount / currentJob.totalCount) * 100))
-    : 0;
+  const { finishedCount, progress } = getBulkRunProgress(currentJob);
 
   async function handlePreview() {
     if (!customerListId) return;
@@ -69,7 +81,9 @@ export function AutomationBulkRunDialog({
     setErrorMessage("");
     setJob(null);
     try {
-      setPreview(await previewAutomationBulkRun(rule.id, customerListId, accessToken));
+      setPreview(
+        await previewAutomationBulkRun(rule.id, customerListId, accessToken),
+      );
     } catch (error) {
       setPreview(null);
       setErrorMessage(toMessage(error, "Không thể xem trước tập Lead."));
@@ -83,9 +97,13 @@ export function AutomationBulkRunDialog({
     setIsWorking(true);
     setErrorMessage("");
     try {
-      setJob(await startAutomationBulkRun(rule.id, customerListId, accessToken));
+      setJob(
+        await startAutomationBulkRun(rule.id, customerListId, accessToken),
+      );
     } catch (error) {
-      setErrorMessage(toMessage(error, "Không thể bắt đầu lượt chạy hàng loạt."));
+      setErrorMessage(
+        toMessage(error, "Không thể bắt đầu lượt chạy hàng loạt."),
+      );
     } finally {
       setIsWorking(false);
     }
@@ -98,7 +116,8 @@ export function AutomationBulkRunDialog({
         <DialogHeader>
           <DialogTitle>Chạy rule cho danh sách Lead</DialogTitle>
           <DialogDescription>
-            Xem trước số Lead và mẫu dữ liệu trước khi xác nhận. Hệ thống xử lý nền tối đa 100 Lead/phút.
+            Xem trước số Lead và mẫu dữ liệu trước khi xác nhận. Hệ thống xử lý
+            nền tối đa 100 Lead/phút.
           </DialogDescription>
         </DialogHeader>
 
@@ -106,7 +125,9 @@ export function AutomationBulkRunDialog({
           <div className="grid gap-4" aria-live="polite">
             <div className="flex items-center justify-between gap-3 text-sm">
               <span>Tiến độ xử lý</span>
-              <strong>{finishedCount}/{currentJob.totalCount} Lead ({progress}%)</strong>
+              <strong>
+                {finishedCount}/{currentJob.totalCount} Lead ({progress}%)
+              </strong>
             </div>
             <div
               className="h-2 overflow-hidden rounded-full bg-muted"
@@ -116,63 +137,88 @@ export function AutomationBulkRunDialog({
               aria-valuemax={100}
               aria-valuenow={progress}
             >
-              <div className="h-full bg-primary transition-[width]" style={{ width: `${progress}%` }} />
+              <div
+                className="h-full bg-primary transition-[width]"
+                style={{ width: `${progress}%` }}
+              />
             </div>
             <p className="text-sm text-muted-foreground">
-              Đã đưa vào hàng đợi: {currentJob.processedCount} · Lỗi khởi chạy: {currentJob.failedCount} · Trạng thái: {bulkStatusLabel(currentJob.status)}
+              Đã đưa vào hàng đợi: {currentJob.processedCount} · Lỗi khởi chạy:{" "}
+              {currentJob.failedCount} · Trạng thái:{" "}
+              {bulkStatusLabel(currentJob.status)}
             </p>
-            {currentJob.errorMessage && <p role="alert" className="text-sm text-destructive">{currentJob.errorMessage}</p>}
+            {currentJob.errorMessage && (
+              <p role="alert" className="text-sm text-destructive">
+                {currentJob.errorMessage}
+              </p>
+            )}
           </div>
         ) : (
           <div className="grid gap-4">
             <div className="grid gap-2">
-              <Label htmlFor="automation-customer-list">Danh sách khách hàng</Label>
-              <Select value={customerListId} onValueChange={(value) => { setCustomerListId(value); setPreview(null); }}>
-                <SelectTrigger id="automation-customer-list" className="min-h-11 w-full">
-                  <SelectValue placeholder={optionsQuery.isLoading ? "Đang tải danh sách..." : "Chọn danh sách Lead"} />
+              <Label htmlFor="automation-customer-list">
+                Danh sách khách hàng
+              </Label>
+              <Select
+                value={customerListId}
+                onValueChange={(value) => {
+                  setCustomerListId(value);
+                  setPreview(null);
+                }}
+              >
+                <SelectTrigger
+                  id="automation-customer-list"
+                  className="min-h-11 w-full"
+                >
+                  <SelectValue
+                    placeholder={
+                      optionsQuery.isLoading
+                        ? "Đang tải danh sách..."
+                        : "Chọn danh sách Lead"
+                    }
+                  />
                 </SelectTrigger>
                 <SelectContent>
-                  {lists.map((list) => <SelectItem key={list.id} value={list.id}>{list.name}</SelectItem>)}
+                  {lists.map((list) => (
+                    <SelectItem key={list.id} value={list.id}>
+                      {list.name}
+                    </SelectItem>
+                  ))}
                 </SelectContent>
               </Select>
               {!optionsQuery.isLoading && lists.length === 0 && (
-                <p className="text-sm text-muted-foreground">Không có danh sách khách hàng phù hợp trong phạm vi của rule.</p>
+                <p className="text-sm text-muted-foreground">
+                  Không có danh sách khách hàng phù hợp trong phạm vi của rule.
+                </p>
               )}
             </div>
 
-            {preview && (
-              <Alert>
-                <Users aria-hidden="true" />
-                <AlertTitle>{preview.total.toLocaleString("vi-VN")} Lead sẽ được xử lý</AlertTitle>
-                <AlertDescription>
-                  {preview.sample.length > 0
-                    ? `Mẫu: ${preview.sample.slice(0, 5).map((lead) => lead.fullName).join(", ")}${preview.total > 5 ? "…" : ""}`
-                    : "Danh sách không có Lead phù hợp."}
-                  {preview.actions.length > 0 && (
-                    <span className="mt-1 block">Action dự kiến: {preview.actions.map((action) => action.label).join(" → ")}.</span>
-                  )}
-                </AlertDescription>
-              </Alert>
-            )}
+            <BulkRunPreview preview={preview} />
           </div>
         )}
 
-        {errorMessage && <p role="alert" className="text-sm text-destructive">{errorMessage}</p>}
+        {errorMessage && (
+          <p role="alert" className="text-sm text-destructive">
+            {errorMessage}
+          </p>
+        )}
         <DialogFooter>
-          <Button type="button" variant="outline" className="min-h-11" onClick={() => onOpenChange(false)}>Đóng</Button>
-          {!currentJob && (
-            preview ? (
-              <Button type="button" className="min-h-11" disabled={isWorking || preview.total === 0} onClick={handleStart}>
-                {isWorking ? <LoaderCircle className="animate-spin" aria-hidden="true" /> : <Play aria-hidden="true" />}
-                Xác nhận chạy
-              </Button>
-            ) : (
-              <Button type="button" className="min-h-11" disabled={isWorking || !customerListId} onClick={handlePreview}>
-                {isWorking && <LoaderCircle className="animate-spin" aria-hidden="true" />}
-                Xem trước
-              </Button>
-            )
-          )}
+          <Button
+            type="button"
+            variant="outline"
+            className="min-h-11"
+            onClick={() => onOpenChange(false)}
+          >
+            Đóng
+          </Button>
+          <BulkRunFooter
+            currentJob={currentJob}
+            preview={preview}
+            isWorking={isWorking}
+            handleStart={handleStart}
+            customerListId={customerListId}
+            handlePreview={handlePreview}
+          />
         </DialogFooter>
       </DialogContent>
     </Dialog>
@@ -189,4 +235,96 @@ function bulkStatusLabel(status: string) {
 
 function toMessage(error: unknown, fallback: string) {
   return error instanceof ApiError ? error.message : fallback;
+}
+
+function BulkRunPreview({
+  preview,
+}: {
+  preview: AutomationBulkPreview | null;
+}) {
+  return (
+    preview && (
+      <Alert>
+        <Users aria-hidden="true" />
+        <AlertTitle>
+          {preview.total.toLocaleString("vi-VN")} Lead sẽ được xử lý
+        </AlertTitle>
+        <AlertDescription>
+          {preview.sample.length > 0
+            ? `Mẫu: ${preview.sample
+                .slice(0, 5)
+                .map((lead) => lead.fullName)
+                .join(", ")}${preview.total > 5 ? "…" : ""}`
+            : "Danh sách không có Lead phù hợp."}
+          {preview.actions.length > 0 && (
+            <span className="mt-1 block">
+              Action dự kiến:{" "}
+              {preview.actions.map((action) => action.label).join(" → ")}.
+            </span>
+          )}
+        </AlertDescription>
+      </Alert>
+    )
+  );
+}
+
+function getBulkRunProgress(currentJob: AutomationBulkJob | null) {
+  const finishedCount = currentJob
+    ? currentJob.processedCount + currentJob.failedCount
+    : 0;
+  const progress =
+    currentJob && currentJob.totalCount > 0
+      ? Math.min(100, Math.round((finishedCount / currentJob.totalCount) * 100))
+      : 0;
+
+  return { finishedCount, progress };
+}
+
+type BulkRunFooterProps = {
+  currentJob: AutomationBulkJob | null;
+  preview: AutomationBulkPreview | null;
+  isWorking: boolean;
+  handleStart: () => Promise<void>;
+  customerListId: string;
+  handlePreview: () => Promise<void>;
+};
+
+function BulkRunFooter({
+  currentJob,
+  preview,
+  isWorking,
+  handleStart,
+  customerListId,
+  handlePreview,
+}: BulkRunFooterProps) {
+  return (
+    !currentJob &&
+    (preview ? (
+      <Button
+        type="button"
+        className="min-h-11"
+        disabled={isWorking || preview.total === 0}
+        onClick={handleStart}
+      >
+        {isWorking ? (
+          <LoaderCircle className="animate-spin" aria-hidden="true" />
+        ) : (
+          <Play aria-hidden="true" />
+        )}
+        Xác nhận chạy
+      </Button>
+    ) : (
+      <Button
+        type="button"
+        className="min-h-11"
+        disabled={isWorking || !customerListId}
+        onClick={handlePreview}
+      >
+        {isWorking && (
+          <LoaderCircle className="animate-spin" aria-hidden="true" />
+        )}
+        Xem trước
+      </Button>
+    ))
+  );
 }

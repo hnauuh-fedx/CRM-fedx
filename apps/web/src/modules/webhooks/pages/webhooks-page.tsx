@@ -1,6 +1,6 @@
-import { useState } from "react";
+import { useAsyncTask } from "@/hooks/use-async-task";
+import { StaticTableHeader } from "@/components/shared/static-table-header";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { Controller, useFieldArray, useForm } from "react-hook-form";
 import {
   Check,
   Clipboard,
@@ -15,7 +15,8 @@ import {
   Trash2,
   Webhook,
 } from "lucide-react";
-
+import { useState } from "react";
+import { Controller, useFieldArray, useForm } from "react-hook-form";
 import { EmptyState } from "@/components/shared/data-states";
 import { ErrorState } from "@/components/shared/error-state";
 import { PageHeader } from "@/components/shared/page-header";
@@ -45,8 +46,8 @@ import {
   FieldError,
   FieldGroup,
   FieldLabel,
-  FieldSet,
   FieldLegend,
+  FieldSet,
 } from "@/components/ui/field";
 import { Input } from "@/components/ui/input";
 import {
@@ -70,15 +71,6 @@ import { Textarea } from "@/components/ui/textarea";
 import { useAuth } from "@/modules/auth/auth-context";
 import { useInstitutionProgram } from "@/modules/institutions/institution-program-context";
 import { ApiError } from "@/services/api";
-import type {
-  WebhookDetail,
-  WebhookField,
-  WebhookInput,
-  WebhookLog,
-  WebhookLogDetail,
-  WebhookRequestStatus,
-  WebhookSummary,
-} from "../webhook.types";
 import {
   createWebhook,
   deleteWebhook,
@@ -94,7 +86,15 @@ import {
   updateWebhook,
   updateWebhookStatus,
 } from "@/services/webhook.service";
-
+import type {
+  WebhookDetail,
+  WebhookField,
+  WebhookInput,
+  WebhookLog,
+  WebhookLogDetail,
+  WebhookRequestStatus,
+  WebhookSummary,
+} from "../webhook.types";
 const dateFormatter = new Intl.DateTimeFormat("vi-VN", {
   dateStyle: "short",
   timeStyle: "short",
@@ -180,7 +180,8 @@ const webhookRequestStatusLabels: Record<WebhookRequestStatus, string> = {
 
 function webhookStatusVariant(status: WebhookRequestStatus) {
   if (status === "SUCCEEDED") return "default" as const;
-  if (["FAILED", "DEAD_LETTER", "QUEUE_FAILED"].includes(status)) return "destructive" as const;
+  if (["FAILED", "DEAD_LETTER", "QUEUE_FAILED"].includes(status))
+    return "destructive" as const;
   if (["PROCESSING", "RETRYING"].includes(status)) return "secondary" as const;
   return "outline" as const;
 }
@@ -214,7 +215,9 @@ export function WebhooksPage() {
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [page, setPage] = useState(1);
   const [logPage, setLogPage] = useState(1);
-  const [logStatus, setLogStatus] = useState<"ALL" | WebhookRequestStatus>("ALL");
+  const [logStatus, setLogStatus] = useState<"ALL" | WebhookRequestStatus>(
+    "ALL",
+  );
   const [logRequestId, setLogRequestId] = useState("");
   const [logFrom, setLogFrom] = useState("");
   const [logTo, setLogTo] = useState("");
@@ -227,7 +230,8 @@ export function WebhooksPage() {
     webhook: WebhookSummary;
   } | null>(null);
   const [selectedLog, setSelectedLog] = useState<WebhookLogDetail | null>(null);
-  const [reprocessTarget, setReprocessTarget] = useState<WebhookLogDetail | null>(null);
+  const [reprocessTarget, setReprocessTarget] =
+    useState<WebhookLogDetail | null>(null);
   const [testOpen, setTestOpen] = useState(false);
   const [testJson, setTestJson] = useState(samplePayload);
   const [testValidation, setTestValidation] = useState("");
@@ -247,13 +251,27 @@ export function WebhooksPage() {
     enabled: Boolean(selectedId),
   });
   const logsQuery = useQuery({
-    queryKey: ["webhooks", selectedId, "logs", logPage, logStatus, logRequestId, logFrom, logTo],
-    queryFn: () => getWebhookLogs(selectedId!, logPage, auth.accessToken!, {
-      ...(logStatus !== "ALL" ? { status: logStatus } : {}),
-      ...(logRequestId.trim() ? { requestId: logRequestId.trim() } : {}),
-      ...(logFrom ? { from: new Date(`${logFrom}T00:00:00`).toISOString() } : {}),
-      ...(logTo ? { to: new Date(`${logTo}T23:59:59.999`).toISOString() } : {}),
-    }),
+    queryKey: [
+      "webhooks",
+      selectedId,
+      "logs",
+      logPage,
+      logStatus,
+      logRequestId,
+      logFrom,
+      logTo,
+    ],
+    queryFn: () =>
+      getWebhookLogs(selectedId!, logPage, auth.accessToken!, {
+        ...(logStatus !== "ALL" ? { status: logStatus } : {}),
+        ...(logRequestId.trim() ? { requestId: logRequestId.trim() } : {}),
+        ...(logFrom
+          ? { from: new Date(`${logFrom}T00:00:00`).toISOString() }
+          : {}),
+        ...(logTo
+          ? { to: new Date(`${logTo}T23:59:59.999`).toISOString() }
+          : {}),
+      }),
     enabled: Boolean(selectedId),
   });
 
@@ -268,7 +286,8 @@ export function WebhooksPage() {
         ? updateWebhook(editor.webhook.id, input, auth.accessToken!)
         : createWebhook(input, auth.accessToken!),
     onSuccess: (result) => {
-      if ("secret" in result && typeof result.secret === "string") setSecret(result.secret);
+      if ("secret" in result && typeof result.secret === "string")
+        setSecret(result.secret);
       void refresh(result.id);
     },
   });
@@ -298,8 +317,8 @@ export function WebhooksPage() {
       void refresh(id);
     },
   });
-  const logMutation = useMutation({
-    mutationFn: ({ webhookId, logId }: { webhookId: string; logId: string }) =>
+  const logMutation = useAsyncTask({
+    task: ({ webhookId, logId }: { webhookId: string; logId: string }) =>
       getWebhookLog(webhookId, logId, auth.accessToken!),
     onSuccess: setSelectedLog,
   });
@@ -313,11 +332,14 @@ export function WebhooksPage() {
     },
   });
   const reprocessMutation = useMutation({
-    mutationFn: (log: WebhookLogDetail) => reprocessWebhookRequest(selectedId!, log.id, auth.accessToken!),
+    mutationFn: (log: WebhookLogDetail) =>
+      reprocessWebhookRequest(selectedId!, log.id, auth.accessToken!),
     onSuccess: () => {
       setReprocessTarget(null);
       setSelectedLog(null);
-      void queryClient.invalidateQueries({ queryKey: ["webhooks", selectedId, "logs"] });
+      void queryClient.invalidateQueries({
+        queryKey: ["webhooks", selectedId, "logs"],
+      });
     },
   });
 
@@ -331,148 +353,23 @@ export function WebhooksPage() {
         title="Inbound Webhooks"
         description="Nhận dữ liệu JSON từ website hoặc ứng dụng bên ngoài và tạo Lead trong đúng chương trình đang làm việc."
       />
-      <Card className="gap-0 overflow-hidden border-border/70 py-0 shadow-xs">
-        <CardHeader className="flex-row items-start justify-between gap-4 border-b py-5">
-          <div className="flex flex-col gap-1">
-            <CardTitle>Danh sách webhook</CardTitle>
-            <CardDescription>
-              Secret chỉ hiển thị một lần khi tạo hoặc cấp lại.
-            </CardDescription>
-          </div>
-          {canManage && (
-            <Button
-              type="button"
-              onClick={() => {
-                saveMutation.reset();
-                void metadataQuery.refetch();
-                setEditor({ mode: "create" });
-              }}
-            >
-              <Plus aria-hidden="true" />
-              Webhook mới
-            </Button>
-          )}
-        </CardHeader>
-        <CardContent className="p-0">
-          {listQuery.isError ? (
-            <ErrorState
-              title="Không thể tải webhook"
-              description="Vui lòng thử tải lại danh sách."
-              onReload={() => listQuery.refetch()}
-            />
-          ) : listQuery.isLoading ? (
-            <TableLoadingState label="Đang tải webhook" />
-          ) : items.length === 0 ? (
-            <EmptyState
-              title="Chưa có webhook"
-              description="Tạo webhook đầu tiên để nhận lead từ hệ thống bên ngoài."
-            />
-          ) : (
-            <div className="overflow-x-auto">
-              <Table>
-                <TableHeader>
-                  <TableRow>
-                    <TableHead className="px-5">Tên</TableHead>
-                    <TableHead>Module</TableHead>
-                    <TableHead>Trạng thái</TableHead>
-                    <TableHead>Lần nhận cuối</TableHead>
-                    <TableHead>Ngày tạo</TableHead>
-                    <TableHead className="text-right">Thao tác</TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {items.map((item) => (
-                    <TableRow key={item.id}>
-                      <TableCell className="px-5 font-medium">
-                        {item.name}
-                      </TableCell>
-                      <TableCell>Lead</TableCell>
-                      <TableCell>
-                        <Badge
-                          variant={
-                            item.status === "ACTIVE" ? "default" : "outline"
-                          }
-                        >
-                          {item.status === "ACTIVE" ? "Đang bật" : "Đã tắt"}
-                        </Badge>
-                      </TableCell>
-                      <TableCell>{formatDate(item.lastReceivedAt)}</TableCell>
-                      <TableCell>{formatDate(item.createdAt)}</TableCell>
-                      <TableCell>
-                        <div className="flex justify-end gap-2">
-                          <Button
-                            type="button"
-                            size="sm"
-                            variant="outline"
-                            onClick={() => {
-                              setSelectedId(item.id);
-                              setLogPage(1);
-                              setLogStatus("ALL");
-                              setLogRequestId("");
-                              setLogFrom("");
-                              setLogTo("");
-                            }}
-                          >
-                            <Eye aria-hidden="true" />
-                            Chi tiết
-                          </Button>
-                          {canManage && (
-                            <Button
-                              type="button"
-                              size="sm"
-                              variant="outline"
-                              disabled={statusMutation.isPending}
-                              onClick={() =>
-                                statusMutation.mutate({
-                                  id: item.id,
-                                  status:
-                                    item.status === "ACTIVE"
-                                      ? "DISABLED"
-                                      : "ACTIVE",
-                                })
-                              }
-                            >
-                              <Power aria-hidden="true" />
-                              {item.status === "ACTIVE" ? "Tắt" : "Bật"}
-                            </Button>
-                          )}
-                        </div>
-                      </TableCell>
-                    </TableRow>
-                  ))}
-                </TableBody>
-              </Table>
-            </div>
-          )}
-          {listQuery.data && listQuery.data.pagination.totalPages > 1 && (
-            <div className="flex items-center justify-between gap-3 border-t px-5 py-3">
-              <p className="text-sm text-muted-foreground">
-                Trang {page}/{listQuery.data.pagination.totalPages}
-              </p>
-              <div className="flex gap-2">
-                <Button
-                  type="button"
-                  size="sm"
-                  variant="outline"
-                  disabled={page === 1}
-                  onClick={() => setPage((current) => current - 1)}
-                >
-                  Trước
-                </Button>
-                <Button
-                  type="button"
-                  size="sm"
-                  variant="outline"
-                  disabled={page >= listQuery.data.pagination.totalPages}
-                  onClick={() => setPage((current) => current + 1)}
-                >
-                  Sau
-                </Button>
-              </div>
-            </div>
-          )}
-        </CardContent>
-      </Card>
+      <WebhookResults
+        canManage={canManage}
+        saveMutation={saveMutation}
+        metadataQuery={metadataQuery}
+        setEditor={setEditor}
+        listQuery={listQuery}
+        items={items}
+        setSelectedId={setSelectedId}
+        setLogPage={setLogPage}
+        setLogStatus={setLogStatus}
+        setLogRequestId={setLogRequestId}
+        setLogFrom={setLogFrom}
+        setLogTo={setLogTo}
+        statusMutation={statusMutation}
+        page={page}
+        setPage={setPage}
+      />
 
       {selectedId &&
         (detailQuery.isLoading ? (
@@ -496,10 +393,22 @@ export function WebhooksPage() {
             logRequestId={logRequestId}
             logFrom={logFrom}
             logTo={logTo}
-            onLogStatus={(value) => { setLogStatus(value); setLogPage(1); }}
-            onLogRequestId={(value) => { setLogRequestId(value); setLogPage(1); }}
-            onLogFrom={(value) => { setLogFrom(value); setLogPage(1); }}
-            onLogTo={(value) => { setLogTo(value); setLogPage(1); }}
+            onLogStatus={(value) => {
+              setLogStatus(value);
+              setLogPage(1);
+            }}
+            onLogRequestId={(value) => {
+              setLogRequestId(value);
+              setLogPage(1);
+            }}
+            onLogFrom={(value) => {
+              setLogFrom(value);
+              setLogPage(1);
+            }}
+            onLogTo={(value) => {
+              setLogTo(value);
+              setLogPage(1);
+            }}
             onLogPage={setLogPage}
             onReloadLogs={() => void logsQuery.refetch()}
             onEdit={() => {
@@ -515,74 +424,17 @@ export function WebhooksPage() {
               setConfirm({ type: "regenerate", webhook: detail })
             }
             onDelete={() => setConfirm({ type: "delete", webhook: detail })}
-            onLog={(logId) =>
-              logMutation.mutate({ webhookId: detail.id, logId })
-            }
+            onLog={(logId) => logMutation.run({ webhookId: detail.id, logId })}
           />
         ))}
 
-      <Dialog
-        open={Boolean(editor)}
-        onOpenChange={(open) => !open && setEditor(null)}
-      >
-        <DialogContent className="max-h-[90vh] overflow-y-auto sm:max-w-4xl">
-          <DialogHeader>
-            <DialogTitle>
-              {editor?.mode === "edit"
-                ? "Cập nhật webhook"
-                : "Tạo inbound webhook"}
-            </DialogTitle>
-            <DialogDescription>
-              Mapping chỉ cho phép các trường Lead trong danh sách an toàn. Test
-              webhook sẽ tạo Lead thật.
-            </DialogDescription>
-          </DialogHeader>
-          {editor && metadataQuery.isError && !metadataQuery.data ? (
-            <ErrorState
-              title="Không thể tải danh sách trường CRM"
-              description="Vui lòng tải lại metadata trước khi cấu hình mapping."
-              onReload={() => metadataQuery.refetch()}
-            />
-          ) : editor && metadataQuery.isLoading ? (
-            <TableLoadingState label="Đang tải danh sách trường CRM" />
-          ) : editor && metadataQuery.data ? (
-            <WebhookForm
-              key={editor.mode === "edit" ? editor.webhook.id : "new"}
-              initialValue={
-                editor.mode === "edit"
-                  ? {
-                      name: editor.webhook.name,
-                      targetModule: "LEAD",
-                      status: editor.webhook.status,
-                      duplicatePolicy: editor.webhook.duplicatePolicy,
-                      mappings: editor.webhook.mappings.map(
-                        ({
-                          incomingKey,
-                          crmField,
-                          isRequired,
-                          defaultValue,
-                        }) => ({
-                          incomingKey,
-                          crmField,
-                          isRequired,
-                          defaultValue,
-                        }),
-                      ),
-                    }
-                  : emptyWebhook
-              }
-              fields={metadataQuery.data.fields}
-              canViewCustomFields={auth.can("custom_field.lead.manage")}
-              onRefreshFields={() => void metadataQuery.refetch()}
-              refreshingFields={metadataQuery.isFetching}
-              refreshFieldsError={metadataQuery.isError}
-              pending={saveMutation.isPending}
-              error={saveMutation.error}
-              onSubmit={(value) => saveMutation.mutate(value)}
-            />
-          ) : null}
-        </DialogContent>
-      </Dialog>
+      <WebhookEditorDialog
+        editor={editor}
+        setEditor={setEditor}
+        metadataQuery={metadataQuery}
+        auth={auth}
+        saveMutation={saveMutation}
+      />
 
       <SecretDialog secret={secret} onClose={() => setSecret(null)} />
       <ConfirmDialog
@@ -598,7 +450,15 @@ export function WebhooksPage() {
       />
       <LogDialog
         log={selectedLog}
-        canReprocess={canManage && Boolean(selectedLog && ["FAILED", "DEAD_LETTER", "QUEUE_FAILED"].includes(selectedLog.status))}
+        canReprocess={
+          canManage &&
+          Boolean(
+            selectedLog &&
+              ["FAILED", "DEAD_LETTER", "QUEUE_FAILED"].includes(
+                selectedLog.status,
+              ),
+          )
+        }
         onReprocess={() => selectedLog && setReprocessTarget(selectedLog)}
         onClose={() => setSelectedLog(null)}
       />
@@ -607,87 +467,47 @@ export function WebhooksPage() {
         pending={reprocessMutation.isPending}
         error={reprocessMutation.error}
         onClose={() => setReprocessTarget(null)}
-        onConfirm={() => reprocessTarget && reprocessMutation.mutate(reprocessTarget)}
+        onConfirm={() =>
+          reprocessTarget && reprocessMutation.mutate(reprocessTarget)
+        }
       />
-      <Dialog open={testOpen} onOpenChange={setTestOpen}>
-        <DialogContent className="sm:max-w-2xl">
-          <DialogHeader>
-            <DialogTitle>Test webhook</DialogTitle>
-            <DialogDescription>
-              Payload này chạy cùng pipeline production và áp dụng chính sách dữ
-              liệu trùng thật.
-            </DialogDescription>
-          </DialogHeader>
-          <Field data-invalid={Boolean(testValidation)}>
-            <FieldLabel htmlFor="test-payload">Payload JSON</FieldLabel>
-            <Textarea
-              id="test-payload"
-              className="min-h-64 font-mono"
-              value={testJson}
-              aria-invalid={Boolean(testValidation)}
-              onChange={(event) => setTestJson(event.target.value)}
-            />
-            <FieldError>{testValidation}</FieldError>
-          </Field>
-          {testMutation.isError &&
-          duplicateRecordFromError(testMutation.error) ? (
-            <Alert variant="destructive">
-              <FileJson aria-hidden="true" />
-              <AlertTitle>Test bị từ chối</AlertTitle>
-              <AlertDescription>
-                Đã tồn tại Lead trùng:{" "}
-                {duplicateRecordFromError(testMutation.error)}
-              </AlertDescription>
-            </Alert>
-          ) : testMutation.isError ? (
-            <p role="alert" className="text-sm text-destructive">
-              {errorMessage(testMutation.error)}
-            </p>
-          ) : null}
-          {testMutation.data && (
-            <Alert>
-              <Check aria-hidden="true" />
-              <AlertTitle>Test thành công</AlertTitle>
-              <AlertDescription>
-                Lead đã được{" "}
-                {testMutation.data.data.action === "updated"
-                  ? "cập nhật"
-                  : "tạo"}
-                {testMutation.data.data.record_id
-                  ? `: ${testMutation.data.data.record_id}`
-                  : "."}
-              </AlertDescription>
-            </Alert>
-          )}
-          <DialogFooter showCloseButton>
-            <Button
-              type="button"
-              disabled={testMutation.isPending}
-              onClick={() => {
-                try {
-                  const parsed = JSON.parse(testJson);
-                  if (
-                    !parsed ||
-                    Array.isArray(parsed) ||
-                    typeof parsed !== "object"
-                  )
-                    throw new Error();
-                  setTestValidation("");
-                  testMutation.mutate(parsed);
-                } catch {
-                  setTestValidation("Payload phải là JSON object hợp lệ.");
-                }
-              }}
-            >
-              <Send aria-hidden="true" />
-              {testMutation.isPending ? "Đang gửi..." : "Gửi test"}
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
+      <WebhookTestDialog
+        testOpen={testOpen}
+        setTestOpen={setTestOpen}
+        testValidation={testValidation}
+        testJson={testJson}
+        setTestJson={setTestJson}
+        testMutation={testMutation}
+        setTestValidation={setTestValidation}
+      />
     </div>
   );
 }
+
+type WebhookDetailsProps = {
+  webhook: WebhookDetail;
+  canManage: boolean;
+  logs: WebhookLog[];
+  logsLoading: boolean;
+  logsError: boolean;
+  logPage: number;
+  logTotalPages: number;
+  logStatus: "ALL" | WebhookRequestStatus;
+  logRequestId: string;
+  logFrom: string;
+  logTo: string;
+  onLogStatus: (status: "ALL" | WebhookRequestStatus) => void;
+  onLogRequestId: (value: string) => void;
+  onLogFrom: (value: string) => void;
+  onLogTo: (value: string) => void;
+  onLogPage: (page: number) => void;
+  onReloadLogs: () => void;
+  onEdit: () => void;
+  onTest: () => void;
+  onRegenerate: () => void;
+  onDelete: () => void;
+  onLog: (id: string) => void;
+};
 
 function WebhookDetails({
   webhook,
@@ -712,30 +532,7 @@ function WebhookDetails({
   onRegenerate,
   onDelete,
   onLog,
-}: {
-  webhook: WebhookDetail;
-  canManage: boolean;
-  logs: WebhookLog[];
-  logsLoading: boolean;
-  logsError: boolean;
-  logPage: number;
-  logTotalPages: number;
-  logStatus: "ALL" | WebhookRequestStatus;
-  logRequestId: string;
-  logFrom: string;
-  logTo: string;
-  onLogStatus: (status: "ALL" | WebhookRequestStatus) => void;
-  onLogRequestId: (value: string) => void;
-  onLogFrom: (value: string) => void;
-  onLogTo: (value: string) => void;
-  onLogPage: (page: number) => void;
-  onReloadLogs: () => void;
-  onEdit: () => void;
-  onTest: () => void;
-  onRegenerate: () => void;
-  onDelete: () => void;
-  onLog: (id: string) => void;
-}) {
+}: WebhookDetailsProps) {
   const url = getAbsoluteWebhookUrl(webhook.webhookUrl);
   return (
     <div className="grid gap-6 xl:grid-cols-[minmax(0,1fr)_minmax(0,1.2fr)]">
@@ -761,14 +558,14 @@ function WebhookDetails({
             <FieldLegend>Field mapping</FieldLegend>
             <div className="overflow-x-auto">
               <Table>
-                <TableHeader>
-                  <TableRow>
-                    <TableHead>Incoming key</TableHead>
-                    <TableHead>Trường CRM</TableHead>
-                    <TableHead>Bắt buộc</TableHead>
-                    <TableHead>Mặc định</TableHead>
-                  </TableRow>
-                </TableHeader>
+                <StaticTableHeader
+                  columns={[
+                    { label: "Incoming key" },
+                    { label: "Trường CRM" },
+                    { label: "Bắt buộc" },
+                    { label: "Mặc định" },
+                  ]}
+                />
                 <TableBody>
                   {webhook.mappings.map((mapping) => (
                     <TableRow key={mapping.id ?? mapping.incomingKey}>
@@ -827,27 +624,60 @@ function WebhookDetails({
           <div className="grid gap-3 pt-2 sm:grid-cols-2 xl:grid-cols-4">
             <Field>
               <FieldLabel>Trạng thái</FieldLabel>
-              <Select value={logStatus} onValueChange={(value) => onLogStatus(value as "ALL" | WebhookRequestStatus)}>
-                <SelectTrigger className="w-full" aria-label="Lọc trạng thái request"><SelectValue /></SelectTrigger>
+              <Select
+                value={logStatus}
+                onValueChange={(value) =>
+                  onLogStatus(value as "ALL" | WebhookRequestStatus)
+                }
+              >
+                <SelectTrigger
+                  className="w-full"
+                  aria-label="Lọc trạng thái request"
+                >
+                  <SelectValue />
+                </SelectTrigger>
                 <SelectContent>
                   <SelectGroup>
                     <SelectItem value="ALL">Tất cả</SelectItem>
-                    {Object.entries(webhookRequestStatusLabels).map(([value, label]) => <SelectItem key={value} value={value}>{label}</SelectItem>)}
+                    {Object.entries(webhookRequestStatusLabels).map(
+                      ([value, label]) => (
+                        <SelectItem key={value} value={value}>
+                          {label}
+                        </SelectItem>
+                      ),
+                    )}
                   </SelectGroup>
                 </SelectContent>
               </Select>
             </Field>
             <Field>
-              <FieldLabel htmlFor="webhook-request-id-filter">Request ID</FieldLabel>
-              <Input id="webhook-request-id-filter" defaultValue={logRequestId} onBlur={(event) => onLogRequestId(event.target.value)} placeholder="UUID request" />
+              <FieldLabel htmlFor="webhook-request-id-filter">
+                Request ID
+              </FieldLabel>
+              <Input
+                id="webhook-request-id-filter"
+                defaultValue={logRequestId}
+                onBlur={(event) => onLogRequestId(event.target.value)}
+                placeholder="UUID request"
+              />
             </Field>
             <Field>
               <FieldLabel htmlFor="webhook-log-from">Từ ngày</FieldLabel>
-              <Input id="webhook-log-from" type="date" value={logFrom} onChange={(event) => onLogFrom(event.target.value)} />
+              <Input
+                id="webhook-log-from"
+                type="date"
+                value={logFrom}
+                onChange={(event) => onLogFrom(event.target.value)}
+              />
             </Field>
             <Field>
               <FieldLabel htmlFor="webhook-log-to">Đến ngày</FieldLabel>
-              <Input id="webhook-log-to" type="date" value={logTo} onChange={(event) => onLogTo(event.target.value)} />
+              <Input
+                id="webhook-log-to"
+                type="date"
+                value={logTo}
+                onChange={(event) => onLogTo(event.target.value)}
+              />
             </Field>
           </div>
         </CardHeader>
@@ -889,11 +719,13 @@ function WebhookDetails({
                         </TableCell>
                         <TableCell>
                           <Badge
-                            variant={
-                              webhookStatusVariant(log.status as WebhookRequestStatus)
-                            }
+                            variant={webhookStatusVariant(
+                              log.status as WebhookRequestStatus,
+                            )}
                           >
-                            {webhookRequestStatusLabels[log.status as WebhookRequestStatus] ?? log.status}
+                            {webhookRequestStatusLabels[
+                              log.status as WebhookRequestStatus
+                            ] ?? log.status}
                           </Badge>
                         </TableCell>
                         <TableCell>
@@ -907,7 +739,9 @@ function WebhookDetails({
                           {log.recordId ?? "—"}
                         </TableCell>
                         <TableCell>{log.responseCode}</TableCell>
-                        <TableCell>{log.attemptCount}/{log.maxAttempts}</TableCell>
+                        <TableCell>
+                          {log.attemptCount}/{log.maxAttempts}
+                        </TableCell>
                         <TableCell>{log.processingTimeMs} ms</TableCell>
                         <TableCell>
                           <Button
@@ -959,6 +793,18 @@ function WebhookDetails({
   );
 }
 
+type WebhookFormProps = {
+  initialValue: WebhookInput;
+  fields: WebhookField[];
+  canViewCustomFields: boolean;
+  onRefreshFields: () => void;
+  refreshingFields: boolean;
+  refreshFieldsError: boolean;
+  pending: boolean;
+  error: Error | null;
+  onSubmit: (value: WebhookInput) => void;
+};
+
 function WebhookForm({
   initialValue,
   fields,
@@ -969,17 +815,7 @@ function WebhookForm({
   pending,
   error,
   onSubmit,
-}: {
-  initialValue: WebhookInput;
-  fields: WebhookField[];
-  canViewCustomFields: boolean;
-  onRefreshFields: () => void;
-  refreshingFields: boolean;
-  refreshFieldsError: boolean;
-  pending: boolean;
-  error: Error | null;
-  onSubmit: (value: WebhookInput) => void;
-}) {
+}: WebhookFormProps) {
   const form = useForm<WebhookInput>({ defaultValues: initialValue });
   const mappings = useFieldArray({ control: form.control, name: "mappings" });
   const standardFields = fields.filter((field) => field.group === "STANDARD");
@@ -1056,7 +892,8 @@ function WebhookForm({
             )}
           />
           <FieldDescription>
-            Khi trùng số điện thoại, hệ thống giữ một Lead và thêm lần phát sinh nguồn mới.
+            Khi trùng số điện thoại, hệ thống giữ một Lead và thêm lần phát sinh
+            nguồn mới.
             {form.watch("duplicatePolicy") === "UPDATE_EXISTING"
               ? " Các trường có trong request sẽ cập nhật Lead hiện có; trường không được gửi sẽ được giữ nguyên."
               : ""}
@@ -1072,7 +909,8 @@ function WebhookForm({
             </FieldDescription>
             {customFields.length === 0 && (
               <FieldDescription>
-                Chương trình này chưa có trường Lead tùy chỉnh đang dùng. Tạo trường ở trang cấu hình rồi tải lại danh sách.
+                Chương trình này chưa có trường Lead tùy chỉnh đang dùng. Tạo
+                trường ở trang cấu hình rồi tải lại danh sách.
               </FieldDescription>
             )}
             {refreshFieldsError && (
@@ -1084,12 +922,22 @@ function WebhookForm({
           <div className="flex flex-wrap gap-2">
             {canViewCustomFields && (
               <Button type="button" variant="outline" size="sm" asChild>
-                <a href="/sale/cau-hinh-truong?form=lead" target="_blank" rel="noopener noreferrer">
+                <a
+                  href="/sale/cau-hinh-truong?form=lead"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                >
                   Quản lý trường Lead
                 </a>
               </Button>
             )}
-            <Button type="button" variant="outline" size="sm" onClick={onRefreshFields} disabled={refreshingFields}>
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              onClick={onRefreshFields}
+              disabled={refreshingFields}
+            >
               <RefreshCw aria-hidden="true" data-icon="inline-start" />
               {refreshingFields ? "Đang tải trường..." : "Tải lại trường"}
             </Button>
@@ -1157,22 +1005,26 @@ function WebhookForm({
                         <SelectGroup>
                           <SelectLabel>Trường hệ thống</SelectLabel>
                           {standardFields.map((option) => (
-                              <SelectItem key={option.key} value={option.key}>
-                                {option.label} · {option.type}
-                              </SelectItem>
-                            ))}
-                        </SelectGroup>
-                        <SelectGroup>
-                          <SelectLabel>Trường tùy chỉnh ({customFields.length})</SelectLabel>
-                          {customFields.length === 0 ? (
-                            <p className="px-2 py-1.5 text-sm text-muted-foreground">
-                              Chưa có trường Lead tùy chỉnh đang dùng.
-                            </p>
-                          ) : customFields.map((option) => (
                             <SelectItem key={option.key} value={option.key}>
                               {option.label} · {option.type}
                             </SelectItem>
                           ))}
+                        </SelectGroup>
+                        <SelectGroup>
+                          <SelectLabel>
+                            Trường tùy chỉnh ({customFields.length})
+                          </SelectLabel>
+                          {customFields.length === 0 ? (
+                            <p className="px-2 py-1.5 text-sm text-muted-foreground">
+                              Chưa có trường Lead tùy chỉnh đang dùng.
+                            </p>
+                          ) : (
+                            customFields.map((option) => (
+                              <SelectItem key={option.key} value={option.key}>
+                                {option.label} · {option.type}
+                              </SelectItem>
+                            ))
+                          )}
                         </SelectGroup>
                       </SelectContent>
                     </Select>
@@ -1268,19 +1120,21 @@ function SecretDialog({
   );
 }
 
+type ConfirmDialogProps = {
+  state: { type: "delete" | "regenerate"; webhook: WebhookSummary } | null;
+  pending: boolean;
+  error: Error | null;
+  onClose: () => void;
+  onConfirm: () => void;
+};
+
 function ConfirmDialog({
   state,
   pending,
   error,
   onClose,
   onConfirm,
-}: {
-  state: { type: "delete" | "regenerate"; webhook: WebhookSummary } | null;
-  pending: boolean;
-  error: Error | null;
-  onClose: () => void;
-  onConfirm: () => void;
-}) {
+}: ConfirmDialogProps) {
   return (
     <Dialog open={Boolean(state)} onOpenChange={(open) => !open && onClose()}>
       <DialogContent>
@@ -1370,7 +1224,9 @@ function LogDialog({
               </div>
               <div>
                 <p className="text-sm text-muted-foreground">Trạng thái</p>
-                <Badge variant={webhookStatusVariant(log.status)}>{webhookRequestStatusLabels[log.status]}</Badge>
+                <Badge variant={webhookStatusVariant(log.status)}>
+                  {webhookRequestStatusLabels[log.status]}
+                </Badge>
               </div>
               <div>
                 <p className="text-sm text-muted-foreground">Hành động</p>
@@ -1393,20 +1249,36 @@ function LogDialog({
                 <div className="flex items-center justify-between gap-3 rounded-md border p-3">
                   <div>
                     <p className="font-medium">Đã nhận</p>
-                    <p className="text-sm text-muted-foreground">{formatDate(log.receivedAt)}</p>
+                    <p className="text-sm text-muted-foreground">
+                      {formatDate(log.receivedAt)}
+                    </p>
                   </div>
                   <Badge variant="outline">Request</Badge>
                 </div>
                 {log.attempts.map((attempt) => (
-                  <div key={attempt.id} className="flex items-start justify-between gap-3 rounded-md border p-3">
+                  <div
+                    key={attempt.id}
+                    className="flex items-start justify-between gap-3 rounded-md border p-3"
+                  >
                     <div className="flex flex-col gap-1">
-                      <p className="font-medium">Lần thử {attempt.attemptNumber} · {attempt.status}</p>
-                      <p className="text-sm text-muted-foreground">
-                        {formatDate(attempt.startedAt)}{attempt.durationMs != null ? ` · ${attempt.durationMs} ms` : ""}
+                      <p className="font-medium">
+                        Lần thử {attempt.attemptNumber} · {attempt.status}
                       </p>
-                      {attempt.errorMessage && <p className="text-sm text-destructive">{attempt.errorMessage}</p>}
+                      <p className="text-sm text-muted-foreground">
+                        {formatDate(attempt.startedAt)}
+                        {attempt.durationMs != null
+                          ? ` · ${attempt.durationMs} ms`
+                          : ""}
+                      </p>
+                      {attempt.errorMessage && (
+                        <p className="text-sm text-destructive">
+                          {attempt.errorMessage}
+                        </p>
+                      )}
                     </div>
-                    {attempt.errorCategory && <Badge variant="outline">{attempt.errorCategory}</Badge>}
+                    {attempt.errorCategory && (
+                      <Badge variant="outline">{attempt.errorCategory}</Badge>
+                    )}
                   </div>
                 ))}
               </div>
@@ -1468,11 +1340,16 @@ function ReprocessDialog({
         <DialogHeader>
           <DialogTitle>Xử lý lại request</DialogTitle>
           <DialogDescription>
-            Yêu cầu này sẽ được đưa trở lại hàng đợi. Payload gốc và cấu hình webhook hiện tại sẽ được sử dụng.
+            Yêu cầu này sẽ được đưa trở lại hàng đợi. Payload gốc và cấu hình
+            webhook hiện tại sẽ được sử dụng.
           </DialogDescription>
         </DialogHeader>
         {log && <p className="break-all font-mono text-sm">{log.requestId}</p>}
-        {error && <p role="alert" className="text-sm text-destructive">{errorMessage(error)}</p>}
+        {error && (
+          <p role="alert" className="text-sm text-destructive">
+            {errorMessage(error)}
+          </p>
+        )}
         <DialogFooter showCloseButton>
           <Button type="button" disabled={pending} onClick={onConfirm}>
             <RotateCcw data-icon="inline-start" aria-hidden="true" />
@@ -1482,4 +1359,487 @@ function ReprocessDialog({
       </DialogContent>
     </Dialog>
   );
+}
+
+type WebhookResultsProps = {
+  canManage: boolean;
+  saveMutation: import("@tanstack/react-query").UseMutationResult<
+    WebhookDetail,
+    Error,
+    WebhookInput,
+    unknown
+  >;
+  metadataQuery: import("@tanstack/react-query").UseQueryResult<
+    NoInfer<{
+      targetModules: Array<{ value: "LEAD"; label: string }>;
+      fields: WebhookField[];
+    }>,
+    Error
+  >;
+  setEditor: import("react").Dispatch<
+    import("react").SetStateAction<
+      { mode: "create" } | { mode: "edit"; webhook: WebhookDetail } | null
+    >
+  >;
+  listQuery: import("@tanstack/react-query").UseQueryResult<
+    NoInfer<{
+      data: WebhookSummary[];
+      pagination: {
+        page: number;
+        limit: number;
+        total: number;
+        totalPages: number;
+      };
+    }>,
+    Error
+  >;
+  items: WebhookSummary[];
+  setSelectedId: import("react").Dispatch<
+    import("react").SetStateAction<string | null>
+  >;
+  setLogPage: import("react").Dispatch<import("react").SetStateAction<number>>;
+  setLogStatus: import("react").Dispatch<
+    import("react").SetStateAction<WebhookRequestStatus | "ALL">
+  >;
+  setLogRequestId: import("react").Dispatch<
+    import("react").SetStateAction<string>
+  >;
+  setLogFrom: import("react").Dispatch<import("react").SetStateAction<string>>;
+  setLogTo: import("react").Dispatch<import("react").SetStateAction<string>>;
+  statusMutation: import("@tanstack/react-query").UseMutationResult<
+    { id: string; status: import("../webhook.types").WebhookStatus },
+    Error,
+    { id: string; status: "ACTIVE" | "DISABLED" },
+    unknown
+  >;
+  page: number;
+  setPage: import("react").Dispatch<import("react").SetStateAction<number>>;
+};
+
+function WebhookResults({
+  canManage,
+  saveMutation,
+  metadataQuery,
+  setEditor,
+  listQuery,
+  items,
+  setSelectedId,
+  setLogPage,
+  setLogStatus,
+  setLogRequestId,
+  setLogFrom,
+  setLogTo,
+  statusMutation,
+  page,
+  setPage,
+}: WebhookResultsProps) {
+  return (
+    <Card className="gap-0 overflow-hidden border-border/70 py-0 shadow-xs">
+      <CardHeader className="flex-row items-start justify-between gap-4 border-b py-5">
+        <div className="flex flex-col gap-1">
+          <CardTitle>Danh sách webhook</CardTitle>
+          <CardDescription>
+            Secret chỉ hiển thị một lần khi tạo hoặc cấp lại.
+          </CardDescription>
+        </div>
+        {canManage && (
+          <Button
+            type="button"
+            onClick={() => {
+              saveMutation.reset();
+              void metadataQuery.refetch();
+              setEditor({ mode: "create" });
+            }}
+          >
+            <Plus aria-hidden="true" />
+            Webhook mới
+          </Button>
+        )}
+      </CardHeader>
+      <CardContent className="p-0">
+        {listQuery.isError ? (
+          <ErrorState
+            title="Không thể tải webhook"
+            description="Vui lòng thử tải lại danh sách."
+            onReload={() => listQuery.refetch()}
+          />
+        ) : listQuery.isLoading ? (
+          <TableLoadingState label="Đang tải webhook" />
+        ) : items.length === 0 ? (
+          <EmptyState
+            title="Chưa có webhook"
+            description="Tạo webhook đầu tiên để nhận lead từ hệ thống bên ngoài."
+          />
+        ) : (
+          <div className="overflow-x-auto">
+            <Table>
+              <StaticTableHeader
+                columns={[
+                  { label: "Tên", className: "px-5" },
+                  { label: "Module" },
+                  { label: "Trạng thái" },
+                  { label: "Lần nhận cuối" },
+                  { label: "Ngày tạo" },
+                  { label: "Thao tác", className: "text-right" },
+                ]}
+              />
+              <TableBody>
+                {items.map((item) => (
+                  <TableRow key={item.id}>
+                    <TableCell className="px-5 font-medium">
+                      {item.name}
+                    </TableCell>
+                    <TableCell>Lead</TableCell>
+                    <TableCell>
+                      <Badge
+                        variant={
+                          item.status === "ACTIVE" ? "default" : "outline"
+                        }
+                      >
+                        {item.status === "ACTIVE" ? "Đang bật" : "Đã tắt"}
+                      </Badge>
+                    </TableCell>
+                    <TableCell>{formatDate(item.lastReceivedAt)}</TableCell>
+                    <TableCell>{formatDate(item.createdAt)}</TableCell>
+                    <TableCell>
+                      <div className="flex justify-end gap-2">
+                        <Button
+                          type="button"
+                          size="sm"
+                          variant="outline"
+                          onClick={() => {
+                            setSelectedId(item.id);
+                            setLogPage(1);
+                            setLogStatus("ALL");
+                            setLogRequestId("");
+                            setLogFrom("");
+                            setLogTo("");
+                          }}
+                        >
+                          <Eye aria-hidden="true" />
+                          Chi tiết
+                        </Button>
+                        {canManage && (
+                          <Button
+                            type="button"
+                            size="sm"
+                            variant="outline"
+                            disabled={statusMutation.isPending}
+                            onClick={() =>
+                              statusMutation.mutate({
+                                id: item.id,
+                                status:
+                                  item.status === "ACTIVE"
+                                    ? "DISABLED"
+                                    : "ACTIVE",
+                              })
+                            }
+                          >
+                            <Power aria-hidden="true" />
+                            {item.status === "ACTIVE" ? "Tắt" : "Bật"}
+                          </Button>
+                        )}
+                      </div>
+                    </TableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
+          </div>
+        )}
+        {listQuery.data && listQuery.data.pagination.totalPages > 1 && (
+          <div className="flex items-center justify-between gap-3 border-t px-5 py-3">
+            <p className="text-sm text-muted-foreground">
+              Trang {page}/{listQuery.data.pagination.totalPages}
+            </p>
+            <div className="flex gap-2">
+              <Button
+                type="button"
+                size="sm"
+                variant="outline"
+                disabled={page === 1}
+                onClick={() => setPage((current) => current - 1)}
+              >
+                Trước
+              </Button>
+              <Button
+                type="button"
+                size="sm"
+                variant="outline"
+                disabled={page >= listQuery.data.pagination.totalPages}
+                onClick={() => setPage((current) => current + 1)}
+              >
+                Sau
+              </Button>
+            </div>
+          </div>
+        )}
+      </CardContent>
+    </Card>
+  );
+}
+
+type WebhookEditorDialogProps = {
+  editor: { mode: "create" } | { mode: "edit"; webhook: WebhookDetail } | null;
+  setEditor: import("react").Dispatch<
+    import("react").SetStateAction<
+      { mode: "create" } | { mode: "edit"; webhook: WebhookDetail } | null
+    >
+  >;
+  metadataQuery: import("@tanstack/react-query").UseQueryResult<
+    NoInfer<{
+      targetModules: Array<{ value: "LEAD"; label: string }>;
+      fields: WebhookField[];
+    }>,
+    Error
+  >;
+  auth: {
+    accessToken: string | null;
+    user: import("../../../types/auth").AuthUser | null;
+    isRestoring: boolean;
+    restoreError: string | null;
+    retryRestore: () => void;
+    signIn: (input: import("../../../types/auth").LoginInput) => Promise<void>;
+    signOut: () => Promise<void>;
+    can: (permission: string) => boolean;
+  };
+  saveMutation: import("@tanstack/react-query").UseMutationResult<
+    WebhookDetail,
+    Error,
+    WebhookInput,
+    unknown
+  >;
+};
+
+function WebhookEditorDialog({
+  editor,
+  setEditor,
+  metadataQuery,
+  auth,
+  saveMutation,
+}: WebhookEditorDialogProps) {
+  return (
+    <Dialog
+      open={Boolean(editor)}
+      onOpenChange={(open) => !open && setEditor(null)}
+    >
+      <DialogContent className="max-h-[90vh] overflow-y-auto sm:max-w-4xl">
+        <DialogHeader>
+          <DialogTitle>
+            <WebhookEditorTitle editor={editor} />
+          </DialogTitle>
+          <DialogDescription>
+            Mapping chỉ cho phép các trường Lead trong danh sách an toàn. Test
+            webhook sẽ tạo Lead thật.
+          </DialogDescription>
+        </DialogHeader>
+        <WebhookEditorContent
+          editor={editor}
+          metadataQuery={metadataQuery}
+          auth={auth}
+          saveMutation={saveMutation}
+        />
+      </DialogContent>
+    </Dialog>
+  );
+}
+
+type WebhookTestDialogProps = {
+  testOpen: boolean;
+  setTestOpen: import("react").Dispatch<
+    import("react").SetStateAction<boolean>
+  >;
+  testValidation: string;
+  testJson: string;
+  setTestJson: import("react").Dispatch<import("react").SetStateAction<string>>;
+  testMutation: import("@tanstack/react-query").UseMutationResult<
+    {
+      success: true;
+      data: {
+        record_id?: string;
+        request_id: string;
+        action: "created" | "updated";
+      };
+    },
+    Error,
+    Record<string, unknown>,
+    unknown
+  >;
+  setTestValidation: import("react").Dispatch<
+    import("react").SetStateAction<string>
+  >;
+};
+
+function WebhookTestDialog({
+  testOpen,
+  setTestOpen,
+  testValidation,
+  testJson,
+  setTestJson,
+  testMutation,
+  setTestValidation,
+}: WebhookTestDialogProps) {
+  return (
+    <Dialog open={testOpen} onOpenChange={setTestOpen}>
+      <DialogContent className="sm:max-w-2xl">
+        <DialogHeader>
+          <DialogTitle>Test webhook</DialogTitle>
+          <DialogDescription>
+            Payload này chạy cùng pipeline production và áp dụng chính sách dữ
+            liệu trùng thật.
+          </DialogDescription>
+        </DialogHeader>
+        <Field data-invalid={Boolean(testValidation)}>
+          <FieldLabel htmlFor="test-payload">Payload JSON</FieldLabel>
+          <Textarea
+            id="test-payload"
+            className="min-h-64 font-mono"
+            value={testJson}
+            aria-invalid={Boolean(testValidation)}
+            onChange={(event) => setTestJson(event.target.value)}
+          />
+          <FieldError>{testValidation}</FieldError>
+        </Field>
+        {testMutation.isError &&
+        duplicateRecordFromError(testMutation.error) ? (
+          <Alert variant="destructive">
+            <FileJson aria-hidden="true" />
+            <AlertTitle>Test bị từ chối</AlertTitle>
+            <AlertDescription>
+              Đã tồn tại Lead trùng:{" "}
+              {duplicateRecordFromError(testMutation.error)}
+            </AlertDescription>
+          </Alert>
+        ) : testMutation.isError ? (
+          <p role="alert" className="text-sm text-destructive">
+            {errorMessage(testMutation.error)}
+          </p>
+        ) : null}
+        {testMutation.data && (
+          <Alert>
+            <Check aria-hidden="true" />
+            <AlertTitle>Test thành công</AlertTitle>
+            <AlertDescription>
+              Lead đã được{" "}
+              {testMutation.data.data.action === "updated" ? "cập nhật" : "tạo"}
+              {testMutation.data.data.record_id
+                ? `: ${testMutation.data.data.record_id}`
+                : "."}
+            </AlertDescription>
+          </Alert>
+        )}
+        <DialogFooter showCloseButton>
+          <Button
+            type="button"
+            disabled={testMutation.isPending}
+            onClick={() => {
+              try {
+                const parsed = JSON.parse(testJson);
+                if (
+                  !parsed ||
+                  Array.isArray(parsed) ||
+                  typeof parsed !== "object"
+                )
+                  throw new Error();
+                setTestValidation("");
+                testMutation.mutate(parsed);
+              } catch {
+                setTestValidation("Payload phải là JSON object hợp lệ.");
+              }
+            }}
+          >
+            <Send aria-hidden="true" />
+            {testMutation.isPending ? "Đang gửi..." : "Gửi test"}
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
+function WebhookEditorTitle({
+  editor,
+}: {
+  editor: { mode: "create" } | { mode: "edit"; webhook: WebhookDetail } | null;
+}) {
+  if (editor?.mode === "edit") return "Cập nhật webhook";
+  return "Tạo inbound webhook";
+}
+
+type WebhookEditorContentProps = {
+  editor: { mode: "create" } | { mode: "edit"; webhook: WebhookDetail } | null;
+  metadataQuery: import("@tanstack/react-query").UseQueryResult<
+    NoInfer<{
+      targetModules: Array<{ value: "LEAD"; label: string }>;
+      fields: WebhookField[];
+    }>,
+    Error
+  >;
+  auth: {
+    accessToken: string | null;
+    user: import("../../../types/auth").AuthUser | null;
+    isRestoring: boolean;
+    restoreError: string | null;
+    retryRestore: () => void;
+    signIn: (input: import("../../../types/auth").LoginInput) => Promise<void>;
+    signOut: () => Promise<void>;
+    can: (permission: string) => boolean;
+  };
+  saveMutation: import("@tanstack/react-query").UseMutationResult<
+    WebhookDetail,
+    Error,
+    WebhookInput,
+    unknown
+  >;
+};
+
+function WebhookEditorContent({
+  editor,
+  metadataQuery,
+  auth,
+  saveMutation,
+}: WebhookEditorContentProps) {
+  if (editor && metadataQuery.isError && !metadataQuery.data)
+    return (
+      <ErrorState
+        title="Không thể tải danh sách trường CRM"
+        description="Vui lòng tải lại metadata trước khi cấu hình mapping."
+        onReload={() => metadataQuery.refetch()}
+      />
+    );
+  if (editor && metadataQuery.isLoading)
+    return <TableLoadingState label="Đang tải danh sách trường CRM" />;
+  if (editor && metadataQuery.data)
+    return (
+      <WebhookForm
+        key={editor.mode === "edit" ? editor.webhook.id : "new"}
+        initialValue={
+          editor.mode === "edit"
+            ? {
+                name: editor.webhook.name,
+                targetModule: "LEAD",
+                status: editor.webhook.status,
+                duplicatePolicy: editor.webhook.duplicatePolicy,
+                mappings: editor.webhook.mappings.map(
+                  ({ incomingKey, crmField, isRequired, defaultValue }) => ({
+                    incomingKey,
+                    crmField,
+                    isRequired,
+                    defaultValue,
+                  }),
+                ),
+              }
+            : emptyWebhook
+        }
+        fields={metadataQuery.data.fields}
+        canViewCustomFields={auth.can("custom_field.lead.manage")}
+        onRefreshFields={() => void metadataQuery.refetch()}
+        refreshingFields={metadataQuery.isFetching}
+        refreshFieldsError={metadataQuery.isError}
+        pending={saveMutation.isPending}
+        error={saveMutation.error}
+        onSubmit={(value) => saveMutation.mutate(value)}
+      />
+    );
+  return null;
 }

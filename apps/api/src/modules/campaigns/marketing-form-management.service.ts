@@ -1,10 +1,12 @@
 import { randomBytes } from "node:crypto";
+import { newMarketingFormSubmissionSettings } from "@admission-crm/shared/marketing-form-submission-policy";
+import { normalizeMarketingFormOptions, type MarketingFormOptionInput } from "@admission-crm/shared/marketing-form-config";
 
 import { prisma } from "../../database/prisma";
 import { Prisma } from "../../generated/prisma/client";
-import type { AuthUser } from "../auth/auth.types";
 import { getCampaignVisibilityWhere } from "./campaign-list.service";
-import { getReferenceCampaignVisibility } from "./marketing-reference.service";
+import { getMarketingFormVisibility, type MarketingFormViewer } from "./marketing-form-scope";
+import { assertPublishableMarketingForm, assertMarketingFormSubmissionPolicy, assertMarketingFormLayout, MarketingFormConfigError } from "./marketing-form-config.validation";
 
 export const supportedLeadMappingFields = [
   "full_name",
@@ -46,7 +48,7 @@ type MarketingFormFieldInput = {
   placeholder?: string;
   fieldType: typeof supportedMarketingFormFieldTypes[number];
   isRequired: boolean;
-  options?: string[];
+  options?: MarketingFormOptionInput[];
   validationRules?: Record<string, unknown> | null;
   leadField?: typeof supportedLeadMappingFields[number];
   crmMappingField?: typeof supportedLeadMappingFields[number];
@@ -91,7 +93,7 @@ export type MarketingFormInput = {
   }>;
 };
 
-type MarketingFormActor = Pick<AuthUser, "id" | "permissions" | "departmentIds" | "accessScope">;
+type MarketingFormActor = MarketingFormViewer;
 
 function normalizeStatus(status: MarketingFormInput["status"]) {
   if (status === "active") return "published";
@@ -131,7 +133,9 @@ async function uniqueSlug(base: string, existingId?: string) {
   return `${slug}-${randomBytes(4).toString("hex")}`;
 }
 
-function toData(input: MarketingFormInput, slug: string) {
+function toData(input: MarketingFormInput, slug: string | null) {
+  assertMarketingFormSubmissionPolicy(input.duplicateSettings);
+  assertMarketingFormLayout(input.displaySettings, input.fields ?? defaultFieldsFromMappings(input));
   return {
     name: input.name.trim(),
     slug,
@@ -204,7 +208,7 @@ function defaultFieldsFromMappings(input: MarketingFormInput): MarketingFormFiel
 }
 
 function toFields(input: MarketingFormInput) {
-  const fields = input.fields?.length ? input.fields : defaultFieldsFromMappings(input);
+  const fields = input.fields !== undefined ? input.fields : defaultFieldsFromMappings(input);
   return fields.map((field, index) => {
     const crmMappingField = field.crmMappingField ?? field.leadField ?? null;
     return {
@@ -213,7 +217,7 @@ function toFields(input: MarketingFormInput) {
       placeholder: field.placeholder?.trim() || null,
       field_type: field.fieldType,
       is_required: field.isRequired,
-      options: (field.options ?? []).filter(Boolean) as Prisma.InputJsonValue,
+      options: normalizeMarketingFormOptions(field.options) as Prisma.InputJsonValue,
       validation_rules: (field.validationRules ?? {}) as Prisma.InputJsonValue,
       lead_field: crmMappingField,
       crm_mapping_field: crmMappingField,
@@ -227,13 +231,16 @@ function toFields(input: MarketingFormInput) {
 
 function toMappings(input: MarketingFormInput, fields: Array<{ field_key: string; crm_mapping_field: string | null; is_required: boolean }>) {
   const explicit = input.mappings ?? [];
-  const source = explicit.length
+  const source = input.fields === undefined && explicit.length
     ? explicit
     : fields.flatMap((field) => field.crm_mapping_field
         ? [{ sourceField: field.field_key, targetTable: "leads", targetColumn: field.crm_mapping_field, leadField: field.crm_mapping_field as typeof supportedLeadMappingFields[number], isRequired: field.is_required, transformRule: {} }]
         : []);
   return source.map((mapping) => {
     const targetColumn = mapping.targetColumn ?? mapping.leadField ?? "note";
+    if ((mapping.targetTable && mapping.targetTable !== "leads") || !supportedLeadMappingFields.some((field) => field === targetColumn)) {
+      throw new MarketingFormConfigError([{ path: ["mappings"], message: "Mapping chỉ hỗ trợ các trường Lead đã cho phép." }]);
+    }
     return {
       source_field: mapping.sourceField.trim(),
       lead_field: mapping.leadField ?? (targetColumn as typeof supportedLeadMappingFields[number]),
@@ -288,6 +295,7 @@ function selectFormDetail() {
     platform: true,
     form_code: true,
     campaign_id: true,
+    institution_program_id: true,
     source_id: true,
     form_type: true,
     title: true,
@@ -348,6 +356,7 @@ export function serializeMarketingForm(form: Prisma.marketing_formsGetPayload<{ 
     platform: form.platform,
     formCode: form.form_code,
     campaignId: form.campaign_id,
+    institutionProgramId: form.institution_program_id,
     sourceId: form.source_id,
     formType: form.form_type ?? "lead_form",
     title: form.title,
@@ -384,7 +393,7 @@ export function serializeMarketingForm(form: Prisma.marketing_formsGetPayload<{ 
       fieldType: field.field_type,
       isRequired: field.is_required,
       required: field.is_required,
-      options: Array.isArray(field.options) ? field.options.filter((option): option is string => typeof option === "string") : [],
+      options: normalizeMarketingFormOptions(field.options),
       validationRules: field.validation_rules,
       leadField: field.lead_field,
       crmMappingField: field.crm_mapping_field ?? field.lead_field,
@@ -413,8 +422,12 @@ export async function createMarketingForm(
   institutionProgramId?: string,
   ipAddress?: string,
 ) {
+  institutionProgramId ??= actor.institutionProgramIds?.[0];
+  if (!institutionProgramId || !actor.institutionProgramIds?.includes(institutionProgramId)) return { ok: false as const, reason: "program_not_found" as const };
+  input = { ...input, duplicateSettings: newMarketingFormSubmissionSettings(input.formType ?? "lead_form", input.duplicateSettings) };
   const linkError = await assertLinks(actor, input, institutionProgramId);
   if (linkError) return { ok: false as const, reason: linkError };
+  if (normalizeStatus(input.status) === "published") await assertPublishableMarketingForm(input.fields ?? defaultFieldsFromMappings(input), input.formType ?? "lead_form", institutionProgramId, prisma, input.duplicateSettings);
   const slug = await uniqueSlug(input.slug || input.name);
   const data = toData(input, slug);
   const fields = toFields(input);
@@ -424,6 +437,7 @@ export async function createMarketingForm(
     const form = await tx.marketing_forms.create({
       data: {
         ...data,
+        institution_program_id: institutionProgramId,
         public_key: generatePublicKey(),
         webhook_secret: webhookSecret,
         created_by: actor.id,
@@ -449,7 +463,7 @@ export async function createMarketingForm(
 
 export async function getMarketingFormById(actor: MarketingFormActor, formId: string) {
   const form = await prisma.marketing_forms.findFirst({
-    where: { id: formId, AND: getReferenceCampaignVisibility(actor) },
+    where: { id: formId, AND: getMarketingFormVisibility(actor) },
     select: selectFormDetail(),
   });
   return form ? { ok: true as const, data: serializeMarketingForm(form) } : { ok: false as const, reason: "form_not_found" as const };
@@ -462,20 +476,25 @@ export async function updateMarketingForm(
   institutionProgramId?: string,
   ipAddress?: string,
 ) {
+  institutionProgramId ??= actor.institutionProgramIds?.[0];
+  if (!institutionProgramId || !actor.institutionProgramIds?.includes(institutionProgramId)) return { ok: false as const, reason: "program_not_found" as const };
   const linkError = await assertLinks(actor, input, institutionProgramId);
   if (linkError) return { ok: false as const, reason: linkError };
-  const slug = await uniqueSlug(input.slug || input.name, formId);
-  const data = toData(input, slug);
   const fields = toFields(input);
   const mappings = toMappings(input, fields);
   return prisma.$transaction(async (tx) => {
+    await lockFormConfiguration(tx, formId);
     const existing = await tx.marketing_forms.findFirst({
-      where: { id: formId, AND: getReferenceCampaignVisibility(actor) },
+      where: { id: formId, AND: getMarketingFormVisibility(actor, institutionProgramId) },
       select: selectFormDetail(),
     });
     if (!existing) {
       return { ok: false as const, reason: "form_not_found" as const };
     }
+    // Renaming a form is not consent to change an already-shared URL.
+    const slug = input.slug ? await uniqueSlug(input.slug, formId) : existing.slug;
+    const data = toData(input, slug);
+    if (normalizeStatus(input.status) === "published") await assertPublishableMarketingForm(input.fields ?? defaultFieldsFromMappings(input), input.formType ?? "lead_form", institutionProgramId, tx, input.duplicateSettings);
     await tx.marketing_forms.update({
       where: { id: formId },
       data: {
@@ -507,15 +526,14 @@ export async function updateMarketingForm(
 
 export async function publishMarketingForm(actor: MarketingFormActor, formId: string, ipAddress?: string) {
   return prisma.$transaction(async (tx) => {
+    await lockFormConfiguration(tx, formId);
     const existing = await tx.marketing_forms.findFirst({
-      where: { id: formId, AND: getReferenceCampaignVisibility(actor) },
-      select: { id: true, status: true, slug: true, public_key: true, marketing_form_fields: { where: { is_active: true }, select: { crm_mapping_field: true, lead_field: true } } },
+      where: { id: formId, AND: getMarketingFormVisibility(actor) },
+      select: selectFormDetail(),
     });
     if (!existing) return { ok: false as const, reason: "form_not_found" as const };
-    const mapped = new Set(existing.marketing_form_fields.map((field) => field.crm_mapping_field ?? field.lead_field).filter(Boolean));
-    if (!mapped.has("full_name") || !mapped.has("phone")) {
-      return { ok: false as const, reason: "missing_required_mapping" as const };
-    }
+    assertMarketingFormLayout(existing.display_settings, serializeMarketingForm(existing).fields);
+    await assertPublishableMarketingForm(serializeMarketingForm(existing).fields, existing.form_type ?? "lead_form", existing.institution_program_id, tx, existing.duplicate_settings);
     await tx.marketing_forms.update({ where: { id: formId }, data: { status: "published", updated_at: new Date() } });
     await tx.audit_logs.create({
       data: { user_id: actor.id, entity_type: "marketing_form", entity_id: formId, action: "publish", ip_address: ipAddress, old_data: { status: existing.status }, new_data: { status: "published" } },
@@ -527,7 +545,7 @@ export async function publishMarketingForm(actor: MarketingFormActor, formId: st
 export async function duplicateMarketingForm(actor: MarketingFormActor, formId: string, ipAddress?: string) {
   return prisma.$transaction(async (tx) => {
     const existing = await tx.marketing_forms.findFirst({
-      where: { id: formId, AND: getReferenceCampaignVisibility(actor) },
+      where: { id: formId, AND: getMarketingFormVisibility(actor) },
       select: selectFormDetail(),
     });
     if (!existing) return { ok: false as const, reason: "form_not_found" as const };
@@ -539,6 +557,7 @@ export async function duplicateMarketingForm(actor: MarketingFormActor, formId: 
         platform: existing.platform,
         form_code: existing.form_code,
         campaign_id: existing.campaign_id,
+        institution_program_id: existing.institution_program_id,
         source_id: existing.source_id,
         form_type: existing.form_type,
         title: existing.title,
@@ -601,7 +620,7 @@ export async function rotateMarketingFormWebhookSecret(actor: MarketingFormActor
   const webhookSecret = generateWebhookSecret();
   return prisma.$transaction(async (tx) => {
     const existing = await tx.marketing_forms.findFirst({
-      where: { id: formId, AND: getReferenceCampaignVisibility(actor) },
+      where: { id: formId, AND: getMarketingFormVisibility(actor) },
       select: { id: true, webhook_secret: true },
     });
     if (!existing) {
@@ -627,7 +646,7 @@ export async function rotateMarketingFormWebhookSecret(actor: MarketingFormActor
 export async function deleteMarketingForm(actor: MarketingFormActor, formId: string, ipAddress?: string) {
   return prisma.$transaction(async (tx) => {
     const existing = await tx.marketing_forms.findFirst({
-      where: { id: formId, AND: getReferenceCampaignVisibility(actor) },
+      where: { id: formId, AND: getMarketingFormVisibility(actor) },
       select: selectFormDetail(),
     });
     if (!existing) {
@@ -653,9 +672,20 @@ export async function listMarketingFormFields(actor: MarketingFormActor, formId:
   return form.ok ? { ok: true as const, data: form.data.fields } : form;
 }
 
+async function assertStoredPublishedForm(tx: Prisma.TransactionClient, formId: string) {
+  const form = await tx.marketing_forms.findUniqueOrThrow({ where: { id: formId }, select: selectFormDetail() });
+  assertMarketingFormLayout(form.display_settings, serializeMarketingForm(form).fields);
+  if (form.status === "published" || form.status === "active") await assertPublishableMarketingForm(serializeMarketingForm(form).fields, form.form_type ?? "lead_form", form.institution_program_id, tx, form.duplicate_settings);
+}
+
+async function lockFormConfiguration(tx: Prisma.TransactionClient, formId: string) {
+  await tx.$queryRaw`SELECT pg_advisory_xact_lock(hashtext(${`marketing-form:${formId}`}))::text`;
+}
+
 export async function createMarketingFormField(actor: MarketingFormActor, formId: string, input: MarketingFormFieldInput, ipAddress?: string) {
   return prisma.$transaction(async (tx) => {
-    const form = await tx.marketing_forms.findFirst({ where: { id: formId, AND: getReferenceCampaignVisibility(actor) }, select: { id: true } });
+    await lockFormConfiguration(tx, formId);
+    const form = await tx.marketing_forms.findFirst({ where: { id: formId, AND: getMarketingFormVisibility(actor) }, select: { id: true } });
     if (!form) return { ok: false as const, reason: "form_not_found" as const };
     const fieldData = toFields({ name: "field", status: "draft", fields: [input] })[0];
     const field = await tx.marketing_form_fields.create({ data: { ...fieldData, marketing_form_id: formId }, select: { id: true } });
@@ -674,6 +704,7 @@ export async function createMarketingFormField(actor: MarketingFormActor, formId
         },
       });
     }
+    await assertStoredPublishedForm(tx, formId);
     await tx.audit_logs.create({ data: { user_id: actor.id, entity_type: "marketing_form", entity_id: formId, action: "field_create", ip_address: ipAddress, new_data: fieldData } });
     return { ok: true as const, data: field };
   });
@@ -682,13 +713,20 @@ export async function createMarketingFormField(actor: MarketingFormActor, formId
 export async function updateMarketingFormField(actor: MarketingFormActor, fieldId: string, input: MarketingFormFieldInput, ipAddress?: string) {
   return prisma.$transaction(async (tx) => {
     const existing = await tx.marketing_form_fields.findFirst({
-      where: { id: fieldId, marketing_forms: { AND: getReferenceCampaignVisibility(actor) } },
+      where: { id: fieldId, marketing_forms: { AND: getMarketingFormVisibility(actor) } },
       select: { id: true, marketing_form_id: true, field_key: true },
     });
     if (!existing) return { ok: false as const, reason: "field_not_found" as const };
+    await lockFormConfiguration(tx, existing.marketing_form_id);
+    if (!await tx.marketing_form_fields.findUnique({ where: { id: fieldId }, select: { id: true } })) return { ok: false as const, reason: "field_not_found" as const };
     const fieldData = toFields({ name: "field", status: "draft", fields: [input] })[0];
     await tx.marketing_form_fields.update({ where: { id: fieldId }, data: fieldData });
-    await tx.marketing_form_field_mappings.deleteMany({ where: { form_field_id: fieldId } });
+    await tx.marketing_form_field_mappings.deleteMany({
+      where: {
+        marketing_form_id: existing.marketing_form_id,
+        OR: [{ form_field_id: fieldId }, { source_field: existing.field_key }],
+      },
+    });
     const targetColumn = fieldData.crm_mapping_field ?? fieldData.lead_field;
     if (targetColumn) {
       await tx.marketing_form_field_mappings.upsert({
@@ -714,6 +752,7 @@ export async function updateMarketingFormField(actor: MarketingFormActor, fieldI
         },
       });
     }
+    await assertStoredPublishedForm(tx, existing.marketing_form_id);
     await tx.audit_logs.create({ data: { user_id: actor.id, entity_type: "marketing_form", entity_id: existing.marketing_form_id, action: "field_update", ip_address: ipAddress, old_data: { fieldKey: existing.field_key }, new_data: fieldData } });
     return { ok: true as const, data: { id: fieldId } };
   });
@@ -722,11 +761,15 @@ export async function updateMarketingFormField(actor: MarketingFormActor, fieldI
 export async function deleteMarketingFormField(actor: MarketingFormActor, fieldId: string, ipAddress?: string) {
   return prisma.$transaction(async (tx) => {
     const existing = await tx.marketing_form_fields.findFirst({
-      where: { id: fieldId, marketing_forms: { AND: getReferenceCampaignVisibility(actor) } },
+      where: { id: fieldId, marketing_forms: { AND: getMarketingFormVisibility(actor) } },
       select: { id: true, marketing_form_id: true, field_key: true, label: true },
     });
     if (!existing) return { ok: false as const, reason: "field_not_found" as const };
+    await lockFormConfiguration(tx, existing.marketing_form_id);
+    if (!await tx.marketing_form_fields.findUnique({ where: { id: fieldId }, select: { id: true } })) return { ok: false as const, reason: "field_not_found" as const };
+    await tx.marketing_form_field_mappings.deleteMany({ where: { marketing_form_id: existing.marketing_form_id, OR: [{ form_field_id: fieldId }, { source_field: existing.field_key }] } });
     await tx.marketing_form_fields.delete({ where: { id: fieldId } });
+    await assertStoredPublishedForm(tx, existing.marketing_form_id);
     await tx.audit_logs.create({ data: { user_id: actor.id, entity_type: "marketing_form", entity_id: existing.marketing_form_id, action: "field_delete", ip_address: ipAddress, old_data: existing } });
     return { ok: true as const, data: { id: fieldId } };
   });
@@ -734,7 +777,7 @@ export async function deleteMarketingFormField(actor: MarketingFormActor, fieldI
 
 export async function reorderMarketingFormFields(actor: MarketingFormActor, formId: string, fieldIds: string[], ipAddress?: string) {
   return prisma.$transaction(async (tx) => {
-    const form = await tx.marketing_forms.findFirst({ where: { id: formId, AND: getReferenceCampaignVisibility(actor) }, select: { id: true } });
+    const form = await tx.marketing_forms.findFirst({ where: { id: formId, AND: getMarketingFormVisibility(actor) }, select: { id: true } });
     if (!form) return { ok: false as const, reason: "form_not_found" as const };
     for (const [index, fieldId] of fieldIds.entries()) {
       await tx.marketing_form_fields.updateMany({ where: { id: fieldId, marketing_form_id: formId }, data: { sort_order: index, updated_at: new Date() } });

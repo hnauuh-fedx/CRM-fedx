@@ -1,10 +1,11 @@
 import { UnrecoverableError } from "bullmq";
+import { isAutomationProviderConfigured } from "./automation-provider-readiness";
 
 import { env } from "../../config/env";
 import { classifyAutomationDeliveryHttpStatus } from "./automation-delivery-state.service";
 
 export function isAutomationEmailProviderAvailable() {
-  return Boolean(env.AUTOMATION_EMAIL_PROVIDER_URL && env.AUTOMATION_EMAIL_PROVIDER_TOKEN);
+  return isAutomationProviderConfigured(env.AUTOMATION_EMAIL_PROVIDER_URL, env.AUTOMATION_EMAIL_PROVIDER_TOKEN, process.env.NODE_ENV === "integration");
 }
 
 export async function sendAutomationInternalEmail(input: {

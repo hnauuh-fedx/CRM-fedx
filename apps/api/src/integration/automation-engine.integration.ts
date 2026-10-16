@@ -37,6 +37,7 @@ const permissionDefinitions = [
 let prisma: PrismaHandle;
 let ruleId: string | null = null;
 const createdRuleIds: string[] = [];
+const formEventJobIds: string[] = [];
 let pipelineId: string | null = null;
 let departmentId: string | null = null;
 const stageIds: string[] = [];
@@ -393,6 +394,10 @@ async function main() {
       departmentId && eligibleTarget.departmentIds.includes(departmentId),
       "Tuỳ chọn Sale phải kèm phòng ban để builder lọc cùng phạm vi với runtime.",
     );
+    assert.equal(eligibleTarget.canReceiveLead, true, "Telesale hợp lệ phải chọn được để nhận Lead.");
+    const programEmployee = programScopedOptions?.assignmentPoolAssignees.find((assignee) => assignee.id === fixtures.actor.id);
+    assert.ok(programEmployee, "Danh sách phải hiển thị cả nhân viên chương trình không phải Telesale.");
+    assert.equal(programEmployee.canReceiveLead, false, "Hiển thị nhân viên không được tự cấp quyền nhận Lead.");
     const [actorToken, targetToken, scopedToken] = await Promise.all([
       login(baseUrl, fixtures.actor.email),
       login(baseUrl, fixtures.target.email),
@@ -442,7 +447,7 @@ async function main() {
       "Danh sách Lead chạy thử phải ẩn số điện thoại khi thiếu lead.sensitive.view.",
     );
 
-    const options = await request(baseUrl, "/automations/options", { token: actorToken });
+    const options = await request(baseUrl, `/automations/options?institutionProgramId=${fixtures.program.id}`, { token: actorToken });
     assert.equal(options.status, 200);
     assert.ok(
       options.payload.customDataFields.some((field: JsonRecord) => field.reference === `custom:${fixtures.customField.id}`),
@@ -457,8 +462,8 @@ async function main() {
       "Danh sách gán trực tiếp phải giữ người dùng có quyền rộng hơn Telesale.",
     );
     assert.ok(
-      !options.payload.assignmentPoolAssignees.some((assignee: JsonRecord) => assignee.id === fixtures.actor.id),
-      "Pool chia tự động chỉ được chứa Sale có phạm vi Lead được gán.",
+      options.payload.assignmentPoolAssignees.some((assignee: JsonRecord) => assignee.id === fixtures.actor.id && assignee.canReceiveLead === false),
+      "Danh sách hiển thị nhân viên toàn chương trình nhưng không tự cấp quyền nhận Lead.",
     );
     const targetAssigneeBefore = options.payload.assignmentPoolAssignees.find((assignee: JsonRecord) => assignee.id === fixtures.target.id);
     assert.ok(targetAssigneeBefore, "Options phải trả Sale đủ điều kiện trong chương trình làm việc.");
@@ -682,8 +687,86 @@ async function main() {
     assert.equal(logsAfterArchive.status, 200, "Lịch sử rule đã lưu trữ phải còn truy cập được để tra soát.");
     assert.equal(logsAfterArchive.payload.pagination.total, 2, "Lưu trữ rule phải giữ nguyên lịch sử thực thi.");
 
-    console.log("Automation integration passed: API, RBAC, archive, Redis worker, branching and all action nodes verified.");
+    const eventFormId = randomUUID();
+    const eventNotificationTitle = `[G6 ${runId}] Khảo sát không Lead`;
+    const eventGraph = {
+      nodes: [
+        { id: "trigger", type: "trigger" as const, position: { x: 0, y: 0 }, data: { label: "Khảo sát hoàn thành", triggerType: "survey_completed" } },
+        { id: "condition", type: "condition" as const, position: { x: 200, y: 0 }, data: { label: "Đúng form và đáp án", conditionCombinator: "AND" as const, conditions: [
+          { field: "event:formId", operator: "equals", value: eventFormId },
+          { field: "event:answer:satisfaction", operator: "equals", value: "5" },
+        ] } },
+        { id: "notification", type: "action_notification" as const, position: { x: 400, y: 0 }, data: { label: "Thông báo nội bộ", title: eventNotificationTitle, content: "Có phản hồi khảo sát mới.", targetRole: targetRoleCode } },
+      ],
+      edges: [
+        { id: "t-c", source: "trigger", target: "condition" },
+        { id: "c-n", source: "condition", target: "notification", sourceHandle: "default" },
+      ],
+    };
+    const eventRule = await prisma.automation_rules.create({ data: {
+      name: `[G6 ${runId}] Survey event`, trigger_type: "survey_completed", institution_program_id: fixtures.program.id, is_active: true,
+      created_by: fixtures.actor.id, graph_data: eventGraph,
+    } });
+    createdRuleIds.push(eventRule.id);
+    const eventId = randomUUID();
+    const { automationEventExecutionId } = await import("../modules/automations/automation-event-id.js");
+    const executionId = automationEventExecutionId(eventId, eventRule.id);
+    const eventContext = { institutionProgramId: fixtures.program.id, marketingFormSubmissionId: eventId, marketingFormId: eventFormId,
+      payload: { formId: eventFormId, answers: { satisfaction: "5" } } };
+    const executableRule = { id: eventRule.id, version: eventRule.version, triggerType: "survey_completed", graphData: eventGraph,
+      institutionProgramId: fixtures.program.id, createdBy: fixtures.actor.id };
+    const firstEvent = await engine.startAutomationExecution(executableRule, eventContext, "event", null, undefined, executionId, true);
+    assert.ok(firstEvent.ok);
+    for (let attempt = 0; attempt < 150; attempt += 1) {
+      const execution = await prisma.automation_execution_logs.findUniqueOrThrow({ where: { id: executionId } });
+      if (execution.status === "completed" || execution.status === "failed") break;
+      await new Promise((resolve) => setTimeout(resolve, 100));
+    }
+    assert.equal((await prisma.automation_execution_logs.findUniqueOrThrow({ where: { id: executionId } })).status, "completed");
+    const replayEvent = await engine.startAutomationExecution(executableRule, eventContext, "event", null, undefined, executionId, true);
+    assert.ok(replayEvent.ok && !replayEvent.data.created);
+    assert.equal(await prisma.notifications.count({ where: { title: eventNotificationTitle } }), 1, "Một event không Lead phải chỉ tạo một thông báo qua Redis worker.");
+    assert.equal(await prisma.automation_execution_logs.count({ where: { id: executionId } }), 1);
+    const { createMarketingFormAutomationEvent, dispatchMarketingFormAutomationEvent, recoverMarketingFormAutomationEvents } = await import("../modules/automations/marketing-form-automation-event.service.js");
+    formEventJobIds.push(eventId);
+    await prisma.$transaction((tx) => createMarketingFormAutomationEvent(tx, {
+      triggerType: "survey_completed", submissionId: eventId, formId: eventFormId, institutionProgramId: fixtures.program.id,
+      configurationVersion: "fixture-v1", leadId: null, actorId: fixtures.actor.id, answers: { satisfaction: "5" },
+    }));
+    const outage = await dispatchMarketingFormAutomationEvent(eventId, async () => ({ matched: 1, started: 0, failed: 0, unavailable: true }));
+    assert.equal(outage.ok, false);
+    await prisma.automation_jobs.update({ where: { id: eventId }, data: { run_at: new Date(Date.now() - 1000) } });
+    const recoveredEvent = await recoverMarketingFormAutomationEvents(1, async (_trigger, context, options) => {
+      const restarted = await engine.startAutomationExecution(executableRule, context, "event", null, undefined,
+        automationEventExecutionId(options.eventId, eventRule.id), options.retryFailedExecutions);
+      return { matched: 1, started: restarted.ok ? 1 : 0, failed: restarted.ok ? 0 : 1, unavailable: false };
+    }, [eventId]);
+    assert.deepEqual(recoveredEvent, { scanned: 1, completed: 1 });
+    assert.equal((await prisma.automation_jobs.findUniqueOrThrow({ where: { id: eventId } })).status, "completed");
+    assert.equal(await prisma.notifications.count({ where: { title: eventNotificationTitle } }), 1, "Recovery sau mất ACK không được chạy lại action đã hoàn tất.");
+    const { executeRegisteredAutomationNode } = await import("../modules/automations/automation-action-registry.js");
+    const authenticatedEventContext = { ...eventContext, ruleId: eventRule.id, actorId: fixtures.actor.id };
+    await assert.rejects(executeRegisteredAutomationNode({ id: "assign", type: "action_assign", position: { x: 0, y: 0 },
+      data: { label: "Phân công", assignToUserId: fixtures.target.id } }, authenticatedEventContext, randomUUID()), /thiếu nhân viên hoặc lead context/);
+    await assert.rejects(executeRegisteredAutomationNode(eventGraph.nodes[1], {
+      ...authenticatedEventContext, institutionProgramId: randomUUID(),
+    }, randomUUID()), /không còn quyền automation/);
+    const assignmentLog = await prisma.automation_execution_logs.create({ data: {
+      rule_id: eventRule.id, status: "processing", execution_actor_id: fixtures.actor.id,
+    } });
+    const assignmentNode = await prisma.automation_node_executions.create({ data: {
+      execution_log_id: assignmentLog.id, node_id: "preserve-assignment", node_type: "action_assign_pool",
+    } });
+    const assignmentsBefore = await prisma.lead_assignments.count({ where: { lead_id: fixtures.matchingLead.id } });
+    await executeRegisteredAutomationNode({ id: "preserve-assignment", type: "action_assign_pool", position: { x: 0, y: 0 },
+      data: { label: "Giữ Sale hiện tại", assignmentStrategy: "round_robin", assigneeIds: [fixtures.target.id] } },
+    { ...authenticatedEventContext, leadId: fixtures.matchingLead.id }, assignmentNode.id);
+    assert.equal(await prisma.lead_assignments.count({ where: { lead_id: fixtures.matchingLead.id } }), assignmentsBefore);
+    assert.ok((await prisma.automation_node_executions.findUniqueOrThrow({ where: { id: assignmentNode.id } })).action_completed_at,
+      "Giữ Sale hiện tại vẫn phải hoàn tất node, không treo execution khi retry.");
+    console.log("Automation integration passed: API, RBAC, archive, Redis worker, branching, action nodes and idempotent no-Lead Form/Survey events verified.");
   } finally {
+    await prisma.automation_jobs.deleteMany({ where: { id: { in: formEventJobIds } } });
     server.closeAllConnections();
     await new Promise<void>((resolve) => server.close(() => resolve()));
     await engine.automationQueue?.obliterate({ force: true });

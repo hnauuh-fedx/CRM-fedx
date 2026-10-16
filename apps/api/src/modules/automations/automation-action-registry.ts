@@ -15,6 +15,7 @@ import {
 import { resolveAutomationAssignee } from "./automation-assignment.service";
 import { createReassignmentMonitor } from "./automation-reassignment.service";
 import { evaluateAutomationConditions } from "./automation-condition-evaluator";
+import { getAutomationEventValues } from "./automation-event-values";
 import { getAutomationLeadData, getAutomationTemplateReferences, renderAutomationTemplate } from "./automation-data-field.service";
 import { sendAutomationMessage } from "./automation-message-delivery.service";
 import { callAutomationWebhook } from "./automation-webhook.service";
@@ -49,6 +50,7 @@ export async function executeRegisteredAutomationNode(
   nodeExecutionId: string,
 ): Promise<AutomationActionResult> {
   if (node.type === "trigger") throw new UnrecoverableError("Node khởi động không được thực thi như một action.");
+  if (context.marketingFormSubmissionId) await requireActor(context);
   const executor: AutomationActionExecutor | undefined = executors[node.type];
   if (!executor) throw new UnrecoverableError(`Loại node không được hỗ trợ: ${String(node.type)}`);
   return executor(node, context, nodeExecutionId);
@@ -70,16 +72,23 @@ async function evaluateCondition(node: AutomationNode, context: AutomationContex
   const conditions = node.data.conditions ?? (node.data.field && node.data.operator
     ? [{ field: node.data.field, operator: node.data.operator, value: node.data.value }]
     : []);
-  if (conditions.length === 0 || !context.leadId) throw new UnrecoverableError("Node điều kiện thiếu tiêu chí hoặc lead context.");
-  const actor = await requireActor(context);
-  const leadData = await getAutomationLeadData(actor, context.leadId, context.institutionProgramId, conditions.map((condition) => condition.field));
-  if (!leadData) throw new UnrecoverableError("Lead không tồn tại trong phạm vi của tài khoản kích hoạt.");
+  if (conditions.length === 0) throw new UnrecoverableError("Node điều kiện thiếu tiêu chí.");
+  const values = getAutomationEventValues(context);
+  const leadReferences = conditions.map((condition) => condition.field).filter((field) => !field.startsWith("event:"));
+  if (leadReferences.length > 0) {
+    if (!context.leadId) throw new UnrecoverableError("Rule dùng trường Lead nhưng phản hồi Form/Survey không tạo hoặc liên kết Lead.");
+    const actor = await requireActor(context);
+    const leadData = await getAutomationLeadData(actor, context.leadId, context.institutionProgramId, leadReferences);
+    if (!leadData) throw new UnrecoverableError("Lead không tồn tại trong phạm vi của tài khoản kích hoạt.");
+    for (const [key, value] of leadData) values.set(key, value);
+  }
   try {
-    return evaluateAutomationConditions(leadData, node.data.conditionCombinator ?? "AND", conditions);
+    return evaluateAutomationConditions(values, node.data.conditionCombinator ?? "AND", conditions);
   } catch (error) {
     throw new UnrecoverableError(toErrorMessage(error));
   }
 }
+
 
 async function executeNotificationAction(node: AutomationNode, context: AutomationContext, nodeExecutionId: string): Promise<AutomationActionResult> {
   const { title, content, targetRole } = node.data;
@@ -113,8 +122,9 @@ async function executeAssignAction(node: AutomationNode, context: AutomationCont
   if (!assignToUserId || !context.leadId) throw new UnrecoverableError("Node phân công thiếu nhân viên hoặc lead context.");
   const actor = await requireActor(context);
   const result = { nextSourceHandle: "default", delayMinutes: 0 };
-  const mutation = await assignVisibleLead(actor, context.leadId, { assigneeId: assignToUserId }, context.institutionProgramId, async (tx) => markActionCompleted(tx, nodeExecutionId, result));
+  const mutation = await assignVisibleLead(actor, context.leadId, { assigneeId: assignToUserId, skipIfAssigned: Boolean(context.marketingFormSubmissionId) }, context.institutionProgramId, async (tx) => markActionCompleted(tx, nodeExecutionId, result));
   if (!mutation.ok) throw new UnrecoverableError(`Không thể phân công lead: ${mutation.reason}`);
+  if ("preserved" in mutation.data) await markActionCompleted(prisma, nodeExecutionId, result);
   return result;
 }
 
@@ -126,6 +136,7 @@ async function executeAssignPoolAction(node: AutomationNode, context: Automation
   let monitorId: string | null = null;
   const mutation = await assignVisibleLead(actor, context.leadId, {
     departmentId,
+    skipIfAssigned: Boolean(context.marketingFormSubmissionId),
     resolveAssigneeId: (tx) => resolveAutomationAssignee(tx, {
       ruleId: context.ruleId,
       nodeId: node.id,
@@ -159,6 +170,7 @@ async function executeAssignPoolAction(node: AutomationNode, context: Automation
     }
   });
   if (!mutation.ok) throw new UnrecoverableError(`Không thể chia Lead tự động: ${mutation.reason}`);
+  if ("preserved" in mutation.data) await markActionCompleted(prisma, nodeExecutionId, result);
   if (monitorId) {
     const { enqueueReassignmentMonitorJobs } = await import("./automation-reassignment-queue.service.js");
     await enqueueReassignmentMonitorJobs(monitorId).catch((error) => {
@@ -388,6 +400,11 @@ async function requireActor(context: AutomationContext) {
   if (!context.actorId) throw new UnrecoverableError("Automation context không có tài khoản kích hoạt.");
   const actor = await getAuthUser(context.actorId, context.institutionProgramId);
   if (!actor) throw new UnrecoverableError("Tài khoản kích hoạt automation không còn hoạt động.");
+  if (context.marketingFormSubmissionId && (
+    !context.institutionProgramId
+    || !actor.institutionProgramIds.includes(context.institutionProgramId)
+    || !actor.permissions.some((permission) => ["automation.manage", "automation.manage_global"].includes(permission))
+  )) throw new UnrecoverableError("Tài khoản kích hoạt không còn quyền automation trong chương trình của Form/Survey.");
   return actor;
 }
 

@@ -1,31 +1,55 @@
-import { useMemo, useState } from "react";
+import { ServerDataTable } from "@/components/shared/server-data-table";
+import { TablePagination } from "@/components/shared/table-pagination";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import {
-  flexRender,
   getCoreRowModel,
-  type ColumnDef,
-  type SortingState,
-  type Table as DataTable,
   useReactTable,
+  type ColumnDef,
+  type Table as DataTable,
+  type SortingState,
 } from "@tanstack/react-table";
-import { ArrowDown, ArrowUp, ArrowUpDown, ChevronLeft, ChevronRight, Eye, Pencil, Search } from "lucide-react";
+import { Eye, Pencil, Search } from "lucide-react";
+import { useMemo, useState } from "react";
 
-import { EmptyState } from "@/components/shared/data-states";
 import { AutoFilterActions } from "@/components/shared/auto-filter-actions";
+import { EmptyState } from "@/components/shared/data-states";
 import { ErrorState } from "@/components/shared/error-state";
 import { FilterSelect } from "@/components/shared/filter-select";
 import { PageHeader } from "@/components/shared/page-header";
 import { TableLoadingState } from "@/components/shared/table-loading-state";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
-import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import {
+  Card,
+  CardContent,
+  CardDescription,
+  CardHeader,
+  CardTitle,
+} from "@/components/ui/card";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
 import { Field, FieldGroup, FieldLabel } from "@/components/ui/field";
 import { Input } from "@/components/ui/input";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import { useAuth } from "@/modules/auth/auth-context";
-import { getStudentDetail, getStudentFilterOptions, getStudents, updateStudentAcademicInfo } from "@/services/student.service";
+import {
+  getStudentDetail,
+  getStudentFilterOptions,
+  getStudents,
+  updateStudentAcademicInfo,
+} from "@/services/student.service";
 import type {
   StudentDetail,
   StudentFilterOptions,
@@ -37,10 +61,24 @@ import type {
 } from "../student.types";
 
 const pageSize = 20;
-const emptyFilters: StudentListFilters = { search: "", status: "", majorId: "", classId: "" };
-const sortableColumns = new Set<StudentSortField>(["enrolledAt", "studentCode", "status"]);
+const emptyFilters: StudentListFilters = {
+  search: "",
+  status: "",
+  majorId: "",
+  classId: "",
+};
+const sortableColumns = new Set<StudentSortField>([
+  "enrolledAt",
+  "studentCode",
+  "status",
+]);
 const dateFormatter = new Intl.DateTimeFormat("vi-VN");
-const statusLabels: Record<string, string> = { active: "Đang học", graduated: "Đã tốt nghiệp", suspended: "Tạm dừng", withdrawn: "Thôi học" };
+const statusLabels: Record<string, string> = {
+  active: "Đang học",
+  graduated: "Đã tốt nghiệp",
+  suspended: "Tạm dừng",
+  withdrawn: "Thôi học",
+};
 const defaultStatuses = ["active", "graduated", "suspended", "withdrawn"];
 
 function displayStatus(status: string | null) {
@@ -57,8 +95,12 @@ export function StudentsListPage() {
   const [page, setPage] = useState(1);
   const [draftFilters, setDraftFilters] = useState(emptyFilters);
   const [filters, setFilters] = useState(emptyFilters);
-  const [sorting, setSorting] = useState<SortingState>([{ id: "enrolledAt", desc: true }]);
-  const [selectedStudentId, setSelectedStudentId] = useState<string | null>(null);
+  const [sorting, setSorting] = useState<SortingState>([
+    { id: "enrolledAt", desc: true },
+  ]);
+  const [selectedStudentId, setSelectedStudentId] = useState<string | null>(
+    null,
+  );
   const selectedSort = sorting[0] ?? { id: "enrolledAt", desc: true };
   const sortBy = sortableColumns.has(selectedSort.id as StudentSortField)
     ? (selectedSort.id as StudentSortField)
@@ -66,7 +108,11 @@ export function StudentsListPage() {
   const sortOrder = selectedSort.desc ? "desc" : "asc";
   const listQuery = useQuery({
     queryKey: ["students", "list", page, pageSize, sortBy, sortOrder, filters],
-    queryFn: () => getStudents({ page, limit: pageSize, sortBy, sortOrder, ...filters }, auth.accessToken!),
+    queryFn: () =>
+      getStudents(
+        { page, limit: pageSize, sortBy, sortOrder, ...filters },
+        auth.accessToken!,
+      ),
     placeholderData: (previousData) => previousData,
   });
   const optionsQuery = useQuery({
@@ -86,8 +132,12 @@ export function StudentsListPage() {
       queryClient.setQueryData(["students", "detail", student.id], student);
     },
   });
-  const data = listQuery.data?.data ?? [];
-  const canUpdate = auth.can("student.update") || auth.can("student.update_all");
+  const data = useMemo(
+    () => listQuery.data?.data ?? [],
+    [listQuery.data?.data],
+  );
+  const canUpdate =
+    auth.can("student.update") || auth.can("student.update_all");
   const table = useReactTable({
     data,
     columns: useStudentColumns({ canUpdate, onOpen: setSelectedStudentId }),
@@ -97,7 +147,9 @@ export function StudentsListPage() {
     onSortingChange: (updater) => {
       setSorting((current) => {
         const next = typeof updater === "function" ? updater(current) : updater;
-        return next.length ? next.slice(0, 1) : [{ id: "enrolledAt", desc: true }];
+        return next.length
+          ? next.slice(0, 1)
+          : [{ id: "enrolledAt", desc: true }];
       });
       setPage(1);
     },
@@ -115,7 +167,9 @@ export function StudentsListPage() {
       <StudentFilters
         filters={draftFilters}
         options={optionsQuery.data}
-        onChange={(field, value) => setDraftFilters((current) => ({ ...current, [field]: value }))}
+        onChange={(field, value) =>
+          setDraftFilters((current) => ({ ...current, [field]: value }))
+        }
         onApply={() => {
           setFilters(draftFilters);
           setPage(1);
@@ -151,14 +205,21 @@ export function StudentsListPage() {
           updateMutation.reset();
         }}
         onSubmit={(input) => {
-          if (selectedStudentId) updateMutation.mutate({ id: selectedStudentId, input });
+          if (selectedStudentId)
+            updateMutation.mutate({ id: selectedStudentId, input });
         }}
       />
     </div>
   );
 }
 
-function useStudentColumns({ canUpdate, onOpen }: { canUpdate: boolean; onOpen: (id: string) => void }) {
+function useStudentColumns({
+  canUpdate,
+  onOpen,
+}: {
+  canUpdate: boolean;
+  onOpen: (id: string) => void;
+}) {
   return useMemo<ColumnDef<StudentListItem>[]>(
     () => [
       { accessorKey: "studentCode", header: "Mã sinh viên" },
@@ -166,7 +227,11 @@ function useStudentColumns({ canUpdate, onOpen }: { canUpdate: boolean; onOpen: 
         id: "fullName",
         header: "Họ và tên",
         enableSorting: false,
-        cell: ({ row }) => <span className="font-medium">{row.original.lead?.fullName ?? "-"}</span>,
+        cell: ({ row }) => (
+          <span className="font-medium">
+            {row.original.lead?.fullName ?? "-"}
+          </span>
+        ),
       },
       {
         id: "admissionCode",
@@ -178,7 +243,8 @@ function useStudentColumns({ canUpdate, onOpen }: { canUpdate: boolean; onOpen: 
         id: "programMajor",
         header: "Chương trình / Ngành",
         enableSorting: false,
-        cell: ({ row }) => `${row.original.institutionProgram?.name ?? "-"} / ${row.original.major?.name ?? "-"}`,
+        cell: ({ row }) =>
+          `${row.original.institutionProgram?.name ?? "-"} / ${row.original.major?.name ?? "-"}`,
       },
       {
         id: "studentClass",
@@ -195,14 +261,27 @@ function useStudentColumns({ canUpdate, onOpen }: { canUpdate: boolean; onOpen: 
           </Badge>
         ),
       },
-      { accessorKey: "enrolledAt", header: "Ngày nhập học", cell: ({ row }) => formatDate(row.original.enrolledAt) },
+      {
+        accessorKey: "enrolledAt",
+        header: "Ngày nhập học",
+        cell: ({ row }) => formatDate(row.original.enrolledAt),
+      },
       {
         id: "actions",
         header: "Thao tác",
         enableSorting: false,
         cell: ({ row }) => (
-          <Button type="button" variant="outline" size="sm" onClick={() => onOpen(row.original.id)}>
-            {canUpdate ? <Pencil aria-hidden="true" /> : <Eye aria-hidden="true" />}
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            onClick={() => onOpen(row.original.id)}
+          >
+            {canUpdate ? (
+              <Pencil aria-hidden="true" />
+            ) : (
+              <Eye aria-hidden="true" />
+            )}
             {canUpdate ? "Chi tiết / sửa" : "Chi tiết"}
           </Button>
         ),
@@ -225,15 +304,32 @@ type DetailDialogProps = {
 };
 
 function StudentDetailDialog(props: DetailDialogProps) {
-  const { open, student, options, canUpdate, isLoading, isSaving, error, onClose, onSubmit } = props;
+  const {
+    open,
+    student,
+    options,
+    canUpdate,
+    isLoading,
+    isSaving,
+    error,
+    onClose,
+    onSubmit,
+  } = props;
 
   return (
-    <Dialog open={open} onOpenChange={(nextOpen) => { if (!nextOpen) onClose(); }}>
+    <Dialog
+      open={open}
+      onOpenChange={(nextOpen) => {
+        if (!nextOpen) onClose();
+      }}
+    >
       <DialogContent className="max-h-[90dvh] overflow-y-auto sm:max-w-3xl">
         <DialogHeader>
           <DialogTitle>Chi tiết sinh viên</DialogTitle>
           <DialogDescription>
-            {student ? `${student.studentCode} - ${student.lead?.fullName ?? "Chưa có họ tên"}` : "Đang tải thông tin sinh viên..."}
+            {student
+              ? `${student.studentCode} - ${student.lead?.fullName ?? "Chưa có họ tên"}`
+              : "Đang tải thông tin sinh viên..."}
           </DialogDescription>
         </DialogHeader>
         {isLoading || !student ? (
@@ -242,14 +338,29 @@ function StudentDetailDialog(props: DetailDialogProps) {
           <div className="grid gap-5">
             <div className="grid gap-3 rounded-md border p-4 sm:grid-cols-2">
               <DetailItem label="Mã sinh viên" value={student.studentCode} />
-              <DetailItem label="Trạng thái" value={displayStatus(student.status)} />
+              <DetailItem
+                label="Trạng thái"
+                value={displayStatus(student.status)}
+              />
               <DetailItem label="Họ và tên" value={student.lead?.fullName} />
-              <DetailItem label="Ngày sinh" value={formatDate(student.lead?.dateOfBirth ?? null)} />
-              <DetailItem label="Chương trình" value={student.institutionProgram?.name} />
+              <DetailItem
+                label="Ngày sinh"
+                value={formatDate(student.lead?.dateOfBirth ?? null)}
+              />
+              <DetailItem
+                label="Chương trình"
+                value={student.institutionProgram?.name}
+              />
               <DetailItem label="Ngành" value={student.major?.name} />
               <DetailItem label="Lớp" value={student.studentClass?.name} />
-              <DetailItem label="Mã hồ sơ" value={student.admissionProfile?.admissionCode} />
-              <DetailItem label="Ngày nhập học" value={formatDate(student.enrolledAt)} />
+              <DetailItem
+                label="Mã hồ sơ"
+                value={student.admissionProfile?.admissionCode}
+              />
+              <DetailItem
+                label="Ngày nhập học"
+                value={formatDate(student.enrolledAt)}
+              />
             </div>
             {canUpdate && (
               <StudentAcademicForm
@@ -262,13 +373,28 @@ function StudentDetailDialog(props: DetailDialogProps) {
                 onSubmit={onSubmit}
               />
             )}
-            {!canUpdate && <DialogFooter><Button type="button" variant="outline" onClick={onClose}>Đóng</Button></DialogFooter>}
+            {!canUpdate && (
+              <DialogFooter>
+                <Button type="button" variant="outline" onClick={onClose}>
+                  Đóng
+                </Button>
+              </DialogFooter>
+            )}
           </div>
         )}
       </DialogContent>
     </Dialog>
   );
 }
+
+type StudentAcademicFormProps = {
+  student: StudentDetail;
+  options?: StudentFilterOptions;
+  error: unknown;
+  isSaving: boolean;
+  onClose: () => void;
+  onSubmit: (input: StudentUpdateInput) => void;
+};
 
 function StudentAcademicForm({
   student,
@@ -277,19 +403,14 @@ function StudentAcademicForm({
   isSaving,
   onClose,
   onSubmit,
-}: {
-  student: StudentDetail;
-  options?: StudentFilterOptions;
-  error: unknown;
-  isSaving: boolean;
-  onClose: () => void;
-  onSubmit: (input: StudentUpdateInput) => void;
-}) {
+}: StudentAcademicFormProps) {
   const [form, setForm] = useState<StudentUpdateInput>({
     status: student.status ?? "active",
     classId: student.studentClass?.id,
   });
-  const statusOptions = Array.from(new Set([...defaultStatuses, ...(options?.statuses ?? [])]));
+  const statusOptions = Array.from(
+    new Set([...defaultStatuses, ...(options?.statuses ?? [])]),
+  );
 
   return (
     <form
@@ -302,39 +423,80 @@ function StudentAcademicForm({
       <div className="grid gap-4 sm:grid-cols-2">
         <Field className="gap-2">
           <FieldLabel>Trạng thái</FieldLabel>
-          <Select value={form.status} onValueChange={(value) => setForm((current) => ({ ...current, status: value }))}>
-            <SelectTrigger><SelectValue placeholder="Chọn trạng thái" /></SelectTrigger>
+          <Select
+            value={form.status}
+            onValueChange={(value) =>
+              setForm((current) => ({ ...current, status: value }))
+            }
+          >
+            <SelectTrigger>
+              <SelectValue placeholder="Chọn trạng thái" />
+            </SelectTrigger>
             <SelectContent>
-              {statusOptions.map((status) => <SelectItem key={status} value={status}>{displayStatus(status)}</SelectItem>)}
+              {statusOptions.map((status) => (
+                <SelectItem key={status} value={status}>
+                  {displayStatus(status)}
+                </SelectItem>
+              ))}
             </SelectContent>
           </Select>
         </Field>
         <Field className="gap-2">
           <FieldLabel>Lớp</FieldLabel>
-          <Select value={form.classId ?? "none"} onValueChange={(value) => setForm((current) => ({ ...current, classId: value === "none" ? undefined : value }))}>
-            <SelectTrigger><SelectValue placeholder="Chọn lớp" /></SelectTrigger>
+          <Select
+            value={form.classId ?? "none"}
+            onValueChange={(value) =>
+              setForm((current) => ({
+                ...current,
+                classId: value === "none" ? undefined : value,
+              }))
+            }
+          >
+            <SelectTrigger>
+              <SelectValue placeholder="Chọn lớp" />
+            </SelectTrigger>
             <SelectContent>
               <SelectItem value="none">Chưa phân lớp</SelectItem>
               {(options?.classes ?? []).map((item) => (
-                <SelectItem key={item.id} value={item.id}>{item.name}</SelectItem>
+                <SelectItem key={item.id} value={item.id}>
+                  {item.name}
+                </SelectItem>
               ))}
             </SelectContent>
           </Select>
         </Field>
       </div>
-      {error ? <p className="text-sm text-destructive">{error instanceof Error ? error.message : "Không thể cập nhật sinh viên."}</p> : null}
+      {error ? (
+        <p className="text-sm text-destructive">
+          {error instanceof Error
+            ? error.message
+            : "Không thể cập nhật sinh viên."}
+        </p>
+      ) : null}
       <DialogFooter>
-        <Button type="button" variant="outline" onClick={onClose}>Đóng</Button>
-        <Button type="submit" disabled={isSaving}>{isSaving ? "Đang lưu..." : "Lưu cập nhật"}</Button>
+        <Button type="button" variant="outline" onClick={onClose}>
+          Đóng
+        </Button>
+        <Button type="submit" disabled={isSaving}>
+          {isSaving ? "Đang lưu..." : "Lưu cập nhật"}
+        </Button>
       </DialogFooter>
     </form>
   );
 }
 
-function DetailItem({ label, value }: { label: string; value?: string | null }) {
+function DetailItem({
+  label,
+  value,
+}: {
+  label: string;
+  value?: string | null;
+}) {
   return (
     <div className="min-w-0">
-      <p className="text-xs font-medium uppercase text-muted-foreground">{label}</p>
+      <p className="text-xs font-medium uppercase text-muted-foreground">
+        {label}
+      </p>
       <p className="mt-1 break-words text-sm font-medium">{value || "-"}</p>
     </div>
   );
@@ -348,7 +510,13 @@ type FilterProps = {
   onReset: () => void;
 };
 
-function StudentFilters({ filters, options, onChange, onApply, onReset }: FilterProps) {
+function StudentFilters({
+  filters,
+  options,
+  onChange,
+  onApply,
+  onReset,
+}: FilterProps) {
   return (
     <Card className="gap-4 border-border/70 py-5 shadow-xs">
       <CardHeader className="gap-1 px-5">
@@ -356,19 +524,64 @@ function StudentFilters({ filters, options, onChange, onApply, onReset }: Filter
         <CardDescription>Tìm theo mã sinh viên hoặc họ tên.</CardDescription>
       </CardHeader>
       <CardContent className="px-5">
-        <form onSubmit={(event) => { event.preventDefault(); onApply(); }}>
+        <form
+          onSubmit={(event) => {
+            event.preventDefault();
+            onApply();
+          }}
+        >
           <FieldGroup className="grid gap-4 lg:grid-cols-[minmax(210px,2fr)_repeat(4,minmax(145px,1fr))_auto]">
-          <Field className="gap-2">
-            <FieldLabel htmlFor="student-search">Tìm kiếm</FieldLabel>
-            <div className="relative">
-              <Search className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground" aria-hidden="true" />
-              <Input id="student-search" className="pl-9" placeholder="Nhập mã sinh viên hoặc họ tên" value={filters.search} onChange={(event) => onChange("search", event.target.value)} />
-            </div>
-          </Field>
-          <FilterSelect id="student-status" label="Trạng thái" value={filters.status} onChange={(value) => onChange("status", value)} options={(options?.statuses ?? []).map((status) => ({ value: status, label: displayStatus(status) }))} />
-          <FilterSelect id="student-major" label="Ngành" value={filters.majorId} onChange={(value) => onChange("majorId", value)} options={(options?.majors ?? []).map((item) => ({ value: item.id, label: item.name }))} />
-          <FilterSelect id="student-class" label="Lớp" value={filters.classId} onChange={(value) => onChange("classId", value)} options={(options?.classes ?? []).map((item) => ({ value: item.id, label: item.name }))} />
-          <AutoFilterActions snapshot={filters} onApply={onApply} onReset={onReset} />
+            <Field className="gap-2">
+              <FieldLabel htmlFor="student-search">Tìm kiếm</FieldLabel>
+              <div className="relative">
+                <Search
+                  className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground"
+                  aria-hidden="true"
+                />
+                <Input
+                  id="student-search"
+                  className="pl-9"
+                  placeholder="Nhập mã sinh viên hoặc họ tên"
+                  value={filters.search}
+                  onChange={(event) => onChange("search", event.target.value)}
+                />
+              </div>
+            </Field>
+            <FilterSelect
+              id="student-status"
+              label="Trạng thái"
+              value={filters.status}
+              onChange={(value) => onChange("status", value)}
+              options={(options?.statuses ?? []).map((status) => ({
+                value: status,
+                label: displayStatus(status),
+              }))}
+            />
+            <FilterSelect
+              id="student-major"
+              label="Ngành"
+              value={filters.majorId}
+              onChange={(value) => onChange("majorId", value)}
+              options={(options?.majors ?? []).map((item) => ({
+                value: item.id,
+                label: item.name,
+              }))}
+            />
+            <FilterSelect
+              id="student-class"
+              label="Lớp"
+              value={filters.classId}
+              onChange={(value) => onChange("classId", value)}
+              options={(options?.classes ?? []).map((item) => ({
+                value: item.id,
+                label: item.name,
+              }))}
+            />
+            <AutoFilterActions
+              snapshot={filters}
+              onApply={onApply}
+              onReset={onReset}
+            />
           </FieldGroup>
         </form>
       </CardContent>
@@ -390,28 +603,56 @@ type ResultsProps = {
 };
 
 function StudentResults(props: ResultsProps) {
-  const { table, data, pagination, page, isLoading, isError, isFetching, onReload, onPrevious, onNext } = props;
+  const {
+    table,
+    data,
+    pagination,
+    page,
+    isLoading,
+    isError,
+    isFetching,
+    onReload,
+    onPrevious,
+    onNext,
+  } = props;
   return (
     <Card className="gap-0 overflow-hidden border-border/70 py-0 shadow-xs">
       <CardHeader className="gap-1 border-b py-5">
         <CardTitle>Sinh viên nhập học</CardTitle>
-        <CardDescription>{pagination ? `Hiển thị ${data.length} trong tổng số ${pagination.total} sinh viên` : "Đang lấy dữ liệu sinh viên…"}</CardDescription>
+        <CardDescription>
+          {pagination
+            ? `Hiển thị ${data.length} trong tổng số ${pagination.total} sinh viên`
+            : "Đang lấy dữ liệu sinh viên…"}
+        </CardDescription>
       </CardHeader>
       <CardContent className="p-0">
-        {isError ? <ErrorState title="Không thể tải danh sách sinh viên" description="Vui lòng thử lại để cập nhật dữ liệu sinh viên." onReload={onReload} /> : isLoading ? (
+        {isError ? (
+          <ErrorState
+            title="Không thể tải danh sách sinh viên"
+            description="Vui lòng thử lại để cập nhật dữ liệu sinh viên."
+            onReload={onReload}
+          />
+        ) : isLoading ? (
           <TableLoadingState label="Đang tải danh sách sinh viên" />
         ) : data.length === 0 ? (
-          <EmptyState title="Chưa có sinh viên phù hợp với bộ lọc" description="Điều chỉnh bộ lọc để tìm sinh viên cần theo dõi." />
-        ) : <SortableTable table={table} />}
+          <EmptyState
+            title="Chưa có sinh viên phù hợp với bộ lọc"
+            description="Điều chỉnh bộ lọc để tìm sinh viên cần theo dõi."
+          />
+        ) : (
+          <SortableTable table={table} />
+        )}
       </CardContent>
       {pagination && pagination.total > 0 && (
-        <div className="flex flex-col items-center justify-between gap-3 border-t px-5 py-4 text-sm sm:flex-row">
-          <p className="text-muted-foreground">Trang {pagination.page} / {pagination.totalPages}</p>
-          <div className="flex gap-2">
-            <Button type="button" variant="outline" size="sm" disabled={page <= 1 || isFetching} onClick={onPrevious}><ChevronLeft aria-hidden="true" />Trang trước</Button>
-            <Button type="button" variant="outline" size="sm" disabled={page >= pagination.totalPages || isFetching} onClick={onNext}>Trang sau<ChevronRight aria-hidden="true" /></Button>
-          </div>
-        </div>
+        <TablePagination
+          page={page}
+          pagination={pagination}
+          isFetching={isFetching}
+          className="flex flex-col items-center justify-between gap-3 border-t px-5 py-4 text-sm sm:flex-row"
+          labels={{ previous: "Trang trước", next: "Trang sau" }}
+          onPrevious={onPrevious}
+          onNext={onNext}
+        />
       )}
     </Card>
   );
@@ -419,20 +660,10 @@ function StudentResults(props: ResultsProps) {
 
 function SortableTable({ table }: { table: DataTable<StudentListItem> }) {
   return (
-      <Table className="min-w-220">
-        <caption className="sr-only">Danh sách sinh viên</caption>
-        <TableHeader className="bg-muted/55 text-xs uppercase tracking-wide text-muted-foreground">
-          {table.getHeaderGroups().map((group) => <TableRow key={group.id} className="hover:bg-muted/55">{group.headers.map((header) => {
-            const direction = header.column.getIsSorted();
-            return <TableHead key={header.id} scope="col" className="px-5 font-medium text-muted-foreground" aria-sort={direction === "asc" ? "ascending" : direction === "desc" ? "descending" : undefined}>
-              {header.column.getCanSort() ? <button type="button" className="inline-flex min-h-11 items-center gap-2 rounded-md focus-visible:outline-2 focus-visible:outline-ring" onClick={header.column.getToggleSortingHandler()}>
-                {flexRender(header.column.columnDef.header, header.getContext())}
-                {direction === "asc" ? <ArrowUp aria-hidden="true" /> : direction === "desc" ? <ArrowDown aria-hidden="true" /> : <ArrowUpDown aria-hidden="true" />}
-              </button> : flexRender(header.column.columnDef.header, header.getContext())}
-            </TableHead>;
-          })}</TableRow>)}
-        </TableHeader>
-        <TableBody>{table.getRowModel().rows.map((row) => <TableRow key={row.id}>{row.getVisibleCells().map((cell) => <TableCell key={cell.id} className="px-5 py-4">{flexRender(cell.column.columnDef.cell, cell.getContext())}</TableCell>)}</TableRow>)}</TableBody>
-      </Table>
+    <ServerDataTable
+      table={table}
+      caption="Danh sách sinh viên"
+      className="min-w-220"
+    />
   );
 }

@@ -390,6 +390,12 @@ const navigationSections: NavigationSection[] = [
         permissions: ["system.manage"],
       },
       {
+        label: "Cấu hình hiển thị",
+        href: "/quan-ly/cau-hinh-hien-thi",
+        icon: Settings,
+        permissions: ["system.manage"],
+      },
+      {
         label: "Tích hợp · Webhooks",
         href: "/quan-ly/tich-hop/webhooks",
         icon: Webhook,

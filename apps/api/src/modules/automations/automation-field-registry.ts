@@ -8,10 +8,17 @@ export type AutomationSystemFieldDefinition = {
   dataType: string;
   groupKey: string;
   groupLabel: string;
-  source: "system";
+  source: "system" | "event";
   isSensitive: boolean;
   optionSource?: string;
 };
+
+export const AUTOMATION_EVENT_FIELDS: AutomationSystemFieldDefinition[] = [
+  { reference: "event:eventType", key: "eventType", label: "Loại sự kiện Form/Survey", description: "Phân biệt biểu mẫu tạo Lead và khảo sát hoàn thành.", dataType: "SELECT", groupKey: "form_event", groupLabel: "Sự kiện Form & Survey", source: "event", isSensitive: false, optionSource: "marketing_form_event_types" },
+  { reference: "event:formId", key: "formId", label: "Biểu mẫu", description: "ID biểu mẫu phát sinh phản hồi.", dataType: "SELECT", groupKey: "form_event", groupLabel: "Sự kiện Form & Survey", source: "event", isSensitive: false, optionSource: "marketing_forms" },
+  { reference: "event:submissionId", key: "submissionId", label: "Mã phản hồi", description: "Correlation ID của phản hồi Form/Survey.", dataType: "TEXT", groupKey: "form_event", groupLabel: "Sự kiện Form & Survey", source: "event", isSensitive: false },
+  { reference: "event:configurationVersion", key: "configurationVersion", label: "Phiên bản cấu hình", description: "Phiên bản snapshot cấu hình tại thời điểm gửi.", dataType: "TEXT", groupKey: "form_event", groupLabel: "Sự kiện Form & Survey", source: "event", isSensitive: false },
+];
 
 export const AUTOMATION_SYSTEM_FIELDS: AutomationSystemFieldDefinition[] = leadFormFieldCatalog.flatMap((group) =>
   group.fields.map((field) => ({

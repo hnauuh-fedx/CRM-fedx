@@ -1,21 +1,58 @@
-import { useMemo, useReducer, useState } from "react";
+import type { Dispatch } from "react";
+import type { UseQueryResult } from "@tanstack/react-query";
+import { TablePagination } from "@/components/shared/table-pagination";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { ArrowDown, ArrowUp, ArrowUpDown, CheckCircle2, ChevronLeft, ChevronRight, FileUp, Search, XCircle } from "lucide-react";
+import {
+  ArrowDown,
+  ArrowUp,
+  ArrowUpDown,
+  CheckCircle2,
+  FileUp,
+  Search,
+  XCircle,
+} from "lucide-react";
+import { useMemo, useReducer, useState } from "react";
 
-import { EmptyState } from "@/components/shared/data-states";
 import { AutoFilterActions } from "@/components/shared/auto-filter-actions";
+import { EmptyState } from "@/components/shared/data-states";
 import { ErrorState } from "@/components/shared/error-state";
 import { FilterSelect } from "@/components/shared/filter-select";
 import { PageHeader } from "@/components/shared/page-header";
 import { TableLoadingState } from "@/components/shared/table-loading-state";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
-import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import {
+  Card,
+  CardContent,
+  CardDescription,
+  CardHeader,
+  CardTitle,
+} from "@/components/ui/card";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
 import { Field, FieldGroup, FieldLabel } from "@/components/ui/field";
 import { Input } from "@/components/ui/input";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from "@/components/ui/table";
 import { Textarea } from "@/components/ui/textarea";
 import { useAuth } from "@/modules/auth/auth-context";
 import { RuntimeCustomFieldsSection } from "@/modules/custom-fields/runtime-custom-fields-section";
@@ -60,7 +97,11 @@ type Action =
 
 type DialogState =
   | { type: "upload" }
-  | { type: "status"; document: AdmissionDocumentItem; status: AdmissionDocumentStatus }
+  | {
+      type: "status";
+      document: AdmissionDocumentItem;
+      status: AdmissionDocumentStatus;
+    }
   | null;
 
 const statusLabels: Record<AdmissionDocumentStatus, string> = {
@@ -80,9 +121,24 @@ function reducer(state: State, action: Action): State {
     case "setType":
       return { ...state, type: action.value };
     case "applyFilters":
-      return { ...state, page: 1, appliedSearch: state.search, appliedStatus: state.status, appliedType: state.type };
+      return {
+        ...state,
+        page: 1,
+        appliedSearch: state.search,
+        appliedStatus: state.status,
+        appliedType: state.type,
+      };
     case "resetFilters":
-      return { ...state, page: 1, search: "", status: "", type: "", appliedSearch: "", appliedStatus: "", appliedType: "" };
+      return {
+        ...state,
+        page: 1,
+        search: "",
+        status: "",
+        type: "",
+        appliedSearch: "",
+        appliedStatus: "",
+        appliedType: "",
+      };
     case "setPage":
       return { ...state, page: action.page };
     case "toggleSort":
@@ -90,7 +146,10 @@ function reducer(state: State, action: Action): State {
         ...state,
         page: 1,
         sortBy: action.sortBy,
-        sortOrder: state.sortBy === action.sortBy && state.sortOrder === "desc" ? "asc" : "desc",
+        sortOrder:
+          state.sortBy === action.sortBy && state.sortOrder === "desc"
+            ? "asc"
+            : "desc",
       };
     default:
       return state;
@@ -102,11 +161,18 @@ function formatDate(value: string | null) {
 }
 
 function getErrorMessage(error: unknown) {
-  return error instanceof Error ? error.message : "Không thể thực hiện thao tác.";
+  return error instanceof Error
+    ? error.message
+    : "Không thể thực hiện thao tác.";
 }
 
 function normalizeStatus(value: string | null): AdmissionDocumentStatus {
-  if (value === "approved" || value === "rejected" || value === "missing" || value === "supplement_requested") {
+  if (
+    value === "approved" ||
+    value === "rejected" ||
+    value === "missing" ||
+    value === "supplement_requested"
+  ) {
     return value;
   }
   return "pending";
@@ -167,17 +233,26 @@ export function AdmissionDocumentsPage() {
     enabled: canUpload || canApprove,
   });
 
-  const invalidateDocuments = () => queryClient.invalidateQueries({ queryKey: ["admissions", "documents"] });
+  const invalidateDocuments = () =>
+    queryClient.invalidateQueries({ queryKey: ["admissions", "documents"] });
   const uploadMutation = useMutation({
-    mutationFn: (input: AdmissionDocumentInput) => uploadAdmissionDocument(input, auth.accessToken!),
+    mutationFn: (input: AdmissionDocumentInput) =>
+      uploadAdmissionDocument(input, auth.accessToken!),
     onSuccess: () => {
       setDialog(null);
       invalidateDocuments();
     },
   });
   const statusMutation = useMutation({
-    mutationFn: ({ id, status, note }: { id: string; status: AdmissionDocumentStatus; note?: string }) =>
-      updateAdmissionDocumentStatus(id, status, note, auth.accessToken!),
+    mutationFn: ({
+      id,
+      status,
+      note,
+    }: {
+      id: string;
+      status: AdmissionDocumentStatus;
+      note?: string;
+    }) => updateAdmissionDocumentStatus(id, status, note, auth.accessToken!),
     onSuccess: () => {
       setDialog(null);
       invalidateDocuments();
@@ -187,15 +262,29 @@ export function AdmissionDocumentsPage() {
   const documents = listQuery.data?.data ?? [];
   const pagination = listQuery.data?.pagination;
   const typeOptions = optionsQuery.data?.types ?? [];
-  const statusOptions = (optionsQuery.data?.statuses ?? ["pending", "approved", "rejected", "missing", "supplement_requested"]);
+  const statusOptions = optionsQuery.data?.statuses ?? [
+    "pending",
+    "approved",
+    "rejected",
+    "missing",
+    "supplement_requested",
+  ];
   const columns = useMemo(
     () => [
       { key: "admissionCode", label: "Mã hồ sơ" },
       { key: "candidateName", label: "Thí sinh" },
-      { key: "documentType", label: "Loại tài liệu", sortable: "documentType" as const },
+      {
+        key: "documentType",
+        label: "Loại tài liệu",
+        sortable: "documentType" as const,
+      },
       { key: "status", label: "Trạng thái", sortable: "status" as const },
       { key: "fileName", label: "Tệp đính kèm" },
-      { key: "uploadedAt", label: "Ngày tải lên", sortable: "uploadedAt" as const },
+      {
+        key: "uploadedAt",
+        label: "Ngày tải lên",
+        sortable: "uploadedAt" as const,
+      },
     ],
     [],
   );
@@ -209,7 +298,13 @@ export function AdmissionDocumentsPage() {
         description="Upload, duyệt và theo dõi tình trạng bổ sung tài liệu cho hồ sơ tuyển sinh."
         actions={
           canUpload ? (
-            <Button type="button" onClick={() => { uploadMutation.reset(); setDialog({ type: "upload" }); }}>
+            <Button
+              type="button"
+              onClick={() => {
+                uploadMutation.reset();
+                setDialog({ type: "upload" });
+              }}
+            >
               <FileUp aria-hidden="true" />
               Upload tài liệu
             </Button>
@@ -219,91 +314,85 @@ export function AdmissionDocumentsPage() {
       <Card className="gap-4 border-border/70 py-5 shadow-xs">
         <CardHeader className="gap-1 px-5">
           <CardTitle>Bộ lọc tài liệu</CardTitle>
-          <CardDescription>Tìm theo mã hồ sơ, thí sinh hoặc loại tài liệu.</CardDescription>
+          <CardDescription>
+            Tìm theo mã hồ sơ, thí sinh hoặc loại tài liệu.
+          </CardDescription>
         </CardHeader>
         <CardContent className="px-5">
-          <form onSubmit={(event) => { event.preventDefault(); dispatch({ type: "applyFilters" }); }}>
+          <form
+            onSubmit={(event) => {
+              event.preventDefault();
+              dispatch({ type: "applyFilters" });
+            }}
+          >
             <FieldGroup className="grid gap-4 lg:grid-cols-[minmax(240px,2fr)_repeat(2,minmax(180px,1fr))_auto]">
               <Field className="gap-2">
-                <FieldLabel htmlFor="admission-document-search">Tìm kiếm</FieldLabel>
+                <FieldLabel htmlFor="admission-document-search">
+                  Tìm kiếm
+                </FieldLabel>
                 <div className="relative">
-                  <Search className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground" aria-hidden="true" />
-                  <Input id="admission-document-search" className="pl-9" placeholder="Nhập mã hồ sơ, thí sinh hoặc loại tài liệu" value={state.search} onChange={(event) => dispatch({ type: "setSearch", value: event.target.value })} />
+                  <Search
+                    className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground"
+                    aria-hidden="true"
+                  />
+                  <Input
+                    id="admission-document-search"
+                    className="pl-9"
+                    placeholder="Nhập mã hồ sơ, thí sinh hoặc loại tài liệu"
+                    value={state.search}
+                    onChange={(event) =>
+                      dispatch({ type: "setSearch", value: event.target.value })
+                    }
+                  />
                 </div>
               </Field>
-              <FilterSelect id="admission-document-status" label="Trạng thái" value={state.status} onChange={(value) => dispatch({ type: "setStatus", value })} options={statusOptions.map((status) => ({ value: status, label: statusLabels[normalizeStatus(status)] ?? status }))} />
-              <FilterSelect id="admission-document-type" label="Loại tài liệu" value={state.type} onChange={(value) => dispatch({ type: "setType", value })} options={typeOptions.map((type) => ({ value: type, label: type }))} />
-              <AutoFilterActions snapshot={{ search: state.search, status: state.status, type: state.type }} onApply={() => dispatch({ type: "applyFilters" })} onReset={() => dispatch({ type: "resetFilters" })} />
+              <FilterSelect
+                id="admission-document-status"
+                label="Trạng thái"
+                value={state.status}
+                onChange={(value) => dispatch({ type: "setStatus", value })}
+                options={statusOptions.map((status) => ({
+                  value: status,
+                  label: statusLabels[normalizeStatus(status)] ?? status,
+                }))}
+              />
+              <FilterSelect
+                id="admission-document-type"
+                label="Loại tài liệu"
+                value={state.type}
+                onChange={(value) => dispatch({ type: "setType", value })}
+                options={typeOptions.map((type) => ({
+                  value: type,
+                  label: type,
+                }))}
+              />
+              <AutoFilterActions
+                snapshot={{
+                  search: state.search,
+                  status: state.status,
+                  type: state.type,
+                }}
+                onApply={() => dispatch({ type: "applyFilters" })}
+                onReset={() => dispatch({ type: "resetFilters" })}
+              />
             </FieldGroup>
           </form>
         </CardContent>
       </Card>
-      <Card className="gap-0 overflow-hidden border-border/70 py-0 shadow-xs">
-        <CardHeader className="gap-1 border-b py-5">
-          <CardTitle>Tài liệu hồ sơ</CardTitle>
-          <CardDescription>{pagination ? `Hiển thị ${documents.length} trong tổng số ${pagination.total} tài liệu` : "Đang lấy dữ liệu tài liệu..."}</CardDescription>
-        </CardHeader>
-        <CardContent className="overflow-x-auto p-0">
-          {listQuery.isError ? (
-            <ErrorState title="Không thể tải danh sách tài liệu" description="Vui lòng thử lại để cập nhật danh sách tài liệu hồ sơ." onReload={() => listQuery.refetch()} />
-          ) : listQuery.isLoading ? (
-            <TableLoadingState label="Đang tải danh sách tài liệu" />
-          ) : documents.length === 0 ? (
-            <EmptyState title="Chưa có tài liệu phù hợp" description="Điều chỉnh bộ lọc hoặc upload tài liệu mới cho hồ sơ tuyển sinh." />
-          ) : (
-            <Table className="min-w-240">
-              <caption className="sr-only">Danh sách tài liệu hồ sơ tuyển sinh</caption>
-              <TableHeader className="bg-muted/55 text-xs uppercase tracking-wide text-muted-foreground">
-                <TableRow className="hover:bg-muted/55">
-                  {columns.map((column) => (
-                    <TableHead key={column.key} scope="col" className="px-5 font-medium text-muted-foreground">
-                      {column.sortable ? (
-                        <button type="button" className="inline-flex min-h-11 items-center gap-2 rounded-md focus-visible:outline-2 focus-visible:outline-ring" onClick={() => dispatch({ type: "toggleSort", sortBy: column.sortable })}>
-                          {column.label}
-                          {state.sortBy === column.sortable ? (state.sortOrder === "asc" ? <ArrowUp aria-hidden="true" /> : <ArrowDown aria-hidden="true" />) : <ArrowUpDown aria-hidden="true" />}
-                        </button>
-                      ) : column.label}
-                    </TableHead>
-                  ))}
-                  <TableHead scope="col" className="px-5 text-right font-medium text-muted-foreground">Thao tác</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {documents.map((document) => (
-                  <TableRow key={document.id}>
-                    <TableCell className="px-5 py-4">{document.admissionCode ?? "-"}</TableCell>
-                    <TableCell className="px-5 py-4 font-medium">{document.candidateName ?? "-"}</TableCell>
-                    <TableCell className="px-5 py-4">{document.documentType}</TableCell>
-                    <TableCell className="px-5 py-4"><DocumentStatusBadge status={document.status} /></TableCell>
-                    <TableCell className="px-5 py-4">{document.fileUrl ? <a className="text-primary underline-offset-4 hover:underline" href={document.fileUrl} target="_blank" rel="noreferrer">{document.fileName ?? "Mở tệp"}</a> : document.fileName ?? "-"}</TableCell>
-                    <TableCell className="px-5 py-4">{formatDate(document.uploadedAt)}</TableCell>
-                    <TableCell className="px-5 py-4">
-                      <DocumentActions
-                        document={document}
-                        canApprove={canApprove}
-                        canUpload={canUpload}
-                        onAction={(status) => {
-                          statusMutation.reset();
-                          setDialog({ type: "status", document, status });
-                        }}
-                      />
-                    </TableCell>
-                  </TableRow>
-                ))}
-              </TableBody>
-            </Table>
-          )}
-        </CardContent>
-        {pagination && pagination.total > 0 && (
-          <div className="flex flex-col items-center justify-between gap-3 border-t px-5 py-4 text-sm sm:flex-row">
-            <p className="text-muted-foreground">Trang {pagination.page} / {pagination.totalPages}</p>
-            <div className="flex gap-2">
-              <Button type="button" variant="outline" size="sm" disabled={state.page <= 1 || listQuery.isFetching} onClick={() => dispatch({ type: "setPage", page: Math.max(1, state.page - 1) })}><ChevronLeft aria-hidden="true" />Trang trước</Button>
-              <Button type="button" variant="outline" size="sm" disabled={state.page >= pagination.totalPages || listQuery.isFetching} onClick={() => dispatch({ type: "setPage", page: state.page + 1 })}>Trang sau<ChevronRight aria-hidden="true" /></Button>
-            </div>
-          </div>
-        )}
-      </Card>
+      <AdmissionDocumentResults
+        pagination={pagination}
+        documents={documents}
+        listQuery={listQuery}
+        columns={columns}
+        state={state}
+        dispatch={dispatch}
+        canApprove={canApprove}
+        canUpload={canUpload}
+        onStatusAction={(document, status) => {
+          statusMutation.reset();
+          setDialog({ type: "status", document, status });
+        }}
+      />
       <UploadDocumentDialog
         open={dialog?.type === "upload"}
         options={actionOptionsQuery.data}
@@ -317,7 +406,14 @@ export function AdmissionDocumentsPage() {
         isSubmitting={statusMutation.isPending}
         error={statusMutation.error}
         onClose={() => setDialog(null)}
-        onSubmit={(note) => dialog?.type === "status" && statusMutation.mutate({ id: dialog.document.id, status: dialog.status, note })}
+        onSubmit={(note) =>
+          dialog?.type === "status" &&
+          statusMutation.mutate({
+            id: dialog.document.id,
+            status: dialog.status,
+            note,
+          })
+        }
       />
     </div>
   );
@@ -325,7 +421,12 @@ export function AdmissionDocumentsPage() {
 
 function DocumentStatusBadge({ status }: { status: string | null }) {
   const normalized = normalizeStatus(status);
-  const variant = normalized === "approved" ? "default" : normalized === "rejected" || normalized === "missing" ? "destructive" : "secondary";
+  const variant =
+    normalized === "approved"
+      ? "default"
+      : normalized === "rejected" || normalized === "missing"
+        ? "destructive"
+        : "secondary";
   return <Badge variant={variant}>{statusLabels[normalized]}</Badge>;
 }
 
@@ -340,11 +441,23 @@ function DocumentActions(props: {
     <div className="flex min-w-64 flex-wrap justify-end gap-2">
       {canApprove && (
         <>
-          <Button type="button" size="sm" variant="outline" onClick={() => onAction("approved")} disabled={document.status === "approved"}>
+          <Button
+            type="button"
+            size="sm"
+            variant="outline"
+            onClick={() => onAction("approved")}
+            disabled={document.status === "approved"}
+          >
             <CheckCircle2 aria-hidden="true" />
             Duyệt
           </Button>
-          <Button type="button" size="sm" variant="outline" onClick={() => onAction("rejected")} disabled={document.status === "rejected"}>
+          <Button
+            type="button"
+            size="sm"
+            variant="outline"
+            onClick={() => onAction("rejected")}
+            disabled={document.status === "rejected"}
+          >
             <XCircle aria-hidden="true" />
             Từ chối
           </Button>
@@ -352,8 +465,24 @@ function DocumentActions(props: {
       )}
       {canUpload && (
         <>
-          <Button type="button" size="sm" variant="outline" onClick={() => onAction("missing")} disabled={document.status === "missing"}>Thiếu</Button>
-          <Button type="button" size="sm" variant="outline" onClick={() => onAction("supplement_requested")} disabled={document.status === "supplement_requested"}>Bổ sung</Button>
+          <Button
+            type="button"
+            size="sm"
+            variant="outline"
+            onClick={() => onAction("missing")}
+            disabled={document.status === "missing"}
+          >
+            Thiếu
+          </Button>
+          <Button
+            type="button"
+            size="sm"
+            variant="outline"
+            onClick={() => onAction("supplement_requested")}
+            disabled={document.status === "supplement_requested"}
+          >
+            Bổ sung
+          </Button>
         </>
       )}
     </div>
@@ -368,52 +497,139 @@ function UploadDocumentDialog(props: {
   onClose: () => void;
   onSubmit: (input: AdmissionDocumentInput) => void;
 }) {
-  const [form, setForm] = useState<AdmissionDocumentInput>({ leadId: "", documentType: "", fileName: "", fileUrl: "", mimeType: "", fileSize: undefined, customFieldValues: {} });
+  const [form, setForm] = useState<AdmissionDocumentInput>({
+    leadId: "",
+    documentType: "",
+    fileName: "",
+    fileUrl: "",
+    mimeType: "",
+    fileSize: undefined,
+    customFieldValues: {},
+  });
   const setValue = (field: keyof AdmissionDocumentInput, value: string) => {
-    setForm((current) => ({ ...current, [field]: field === "fileSize" ? (value ? Number(value) : undefined) : value }));
+    setForm((current) => ({
+      ...current,
+      [field]:
+        field === "fileSize" ? (value ? Number(value) : undefined) : value,
+    }));
   };
 
   return (
-    <Dialog open={props.open} onOpenChange={(open) => { if (!open) props.onClose(); }}>
+    <Dialog
+      open={props.open}
+      onOpenChange={(open) => {
+        if (!open) props.onClose();
+      }}
+    >
       <DialogContent className="max-h-[calc(100dvh-2rem)] overflow-y-auto sm:max-w-2xl">
         <DialogHeader>
           <DialogTitle>Upload tài liệu hồ sơ</DialogTitle>
-          <DialogDescription>Khai báo tài liệu theo hồ sơ tuyển sinh và lưu metadata tệp đính kèm.</DialogDescription>
+          <DialogDescription>
+            Khai báo tài liệu theo hồ sơ tuyển sinh và lưu metadata tệp đính
+            kèm.
+          </DialogDescription>
         </DialogHeader>
-        <form onSubmit={(event) => { event.preventDefault(); props.onSubmit(form); }} className="space-y-5">
+        <form
+          onSubmit={(event) => {
+            event.preventDefault();
+            props.onSubmit(form);
+          }}
+          className="space-y-5"
+        >
           <FieldGroup className="grid gap-4 md:grid-cols-2">
             <Field className="md:col-span-2">
-              <FieldLabel htmlFor="document-profile">Hồ sơ tuyển sinh</FieldLabel>
-              <Select value={form.leadId} onValueChange={(value) => setValue("leadId", value)}>
-                <SelectTrigger id="document-profile" className="w-full"><SelectValue placeholder="Chọn hồ sơ" /></SelectTrigger>
-                <SelectContent>{(props.options?.profiles ?? []).map((profile) => <SelectItem key={profile.leadId} value={profile.leadId}>{profile.admissionCode ?? profile.leadCode ?? "Chưa có mã"} - {profile.candidateName}</SelectItem>)}</SelectContent>
+              <FieldLabel htmlFor="document-profile">
+                Hồ sơ tuyển sinh
+              </FieldLabel>
+              <Select
+                value={form.leadId}
+                onValueChange={(value) => setValue("leadId", value)}
+              >
+                <SelectTrigger id="document-profile" className="w-full">
+                  <SelectValue placeholder="Chọn hồ sơ" />
+                </SelectTrigger>
+                <SelectContent>
+                  {(props.options?.profiles ?? []).map((profile) => (
+                    <SelectItem key={profile.leadId} value={profile.leadId}>
+                      {profile.admissionCode ??
+                        profile.leadCode ??
+                        "Chưa có mã"}{" "}
+                      - {profile.candidateName}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
               </Select>
             </Field>
             <Field>
               <FieldLabel htmlFor="document-type">Loại tài liệu</FieldLabel>
-              <Input id="document-type" value={form.documentType} onChange={(event) => setValue("documentType", event.target.value)} placeholder="Ví dụ: Học bạ THPT" />
+              <Input
+                id="document-type"
+                value={form.documentType}
+                onChange={(event) =>
+                  setValue("documentType", event.target.value)
+                }
+                placeholder="Ví dụ: Học bạ THPT"
+              />
             </Field>
             <Field>
               <FieldLabel htmlFor="document-file-name">Tên tệp</FieldLabel>
-              <Input id="document-file-name" value={form.fileName ?? ""} onChange={(event) => setValue("fileName", event.target.value)} placeholder="hoc-ba-thpt.pdf" />
+              <Input
+                id="document-file-name"
+                value={form.fileName ?? ""}
+                onChange={(event) => setValue("fileName", event.target.value)}
+                placeholder="hoc-ba-thpt.pdf"
+              />
             </Field>
             <Field className="md:col-span-2">
               <FieldLabel htmlFor="document-file-url">Đường dẫn tệp</FieldLabel>
-              <Input id="document-file-url" value={form.fileUrl ?? ""} onChange={(event) => setValue("fileUrl", event.target.value)} placeholder="https://storage.example.test/admissions/hoc-ba.pdf" />
+              <Input
+                id="document-file-url"
+                value={form.fileUrl ?? ""}
+                onChange={(event) => setValue("fileUrl", event.target.value)}
+                placeholder="https://storage.example.test/admissions/hoc-ba.pdf"
+              />
             </Field>
             <Field>
               <FieldLabel htmlFor="document-mime">Định dạng</FieldLabel>
-              <Input id="document-mime" value={form.mimeType ?? ""} onChange={(event) => setValue("mimeType", event.target.value)} placeholder="application/pdf" />
+              <Input
+                id="document-mime"
+                value={form.mimeType ?? ""}
+                onChange={(event) => setValue("mimeType", event.target.value)}
+                placeholder="application/pdf"
+              />
             </Field>
             <Field>
               <FieldLabel htmlFor="document-size">Dung lượng byte</FieldLabel>
-              <Input id="document-size" type="number" min={1} value={form.fileSize ?? ""} onChange={(event) => setValue("fileSize", event.target.value)} />
+              <Input
+                id="document-size"
+                type="number"
+                min={1}
+                value={form.fileSize ?? ""}
+                onChange={(event) => setValue("fileSize", event.target.value)}
+              />
             </Field>
           </FieldGroup>
-          <RuntimeCustomFieldsSection entityType="ADMISSION_DOCUMENT" disabled={props.isSubmitting} onChange={(values) => setForm((current) => ({ ...current, customFieldValues: values }))} />
-          {props.error && <p className="text-sm text-destructive">{getErrorMessage(props.error)}</p>}
+          <RuntimeCustomFieldsSection
+            entityType="ADMISSION_DOCUMENT"
+            disabled={props.isSubmitting}
+            onChange={(values) =>
+              setForm((current) => ({ ...current, customFieldValues: values }))
+            }
+          />
+          {Boolean(props.error) && (
+            <p className="text-sm text-destructive">
+              {getErrorMessage(props.error)}
+            </p>
+          )}
           <DialogFooter>
-            <Button type="submit" disabled={props.isSubmitting || !form.leadId || !form.documentType.trim()}>{props.isSubmitting ? "Đang lưu..." : "Lưu tài liệu"}</Button>
+            <Button
+              type="submit"
+              disabled={
+                props.isSubmitting || !form.leadId || !form.documentType.trim()
+              }
+            >
+              {props.isSubmitting ? "Đang lưu..." : "Lưu tài liệu"}
+            </Button>
           </DialogFooter>
         </form>
       </DialogContent>
@@ -429,26 +645,218 @@ function DocumentStatusDialog(props: {
   onSubmit: (note?: string) => void;
 }) {
   const [note, setNote] = useState("");
-  const document = props.dialog?.type === "status" ? props.dialog.document : null;
+  const document =
+    props.dialog?.type === "status" ? props.dialog.document : null;
   const status = props.dialog?.type === "status" ? props.dialog.status : null;
   return (
-    <Dialog open={props.dialog?.type === "status"} onOpenChange={(open) => { if (!open) props.onClose(); }}>
+    <Dialog
+      open={props.dialog?.type === "status"}
+      onOpenChange={(open) => {
+        if (!open) props.onClose();
+      }}
+    >
       <DialogContent>
         <DialogHeader>
           <DialogTitle>Cập nhật tài liệu hồ sơ</DialogTitle>
-          <DialogDescription>{document && status ? `${document.documentType} sẽ chuyển sang trạng thái "${statusLabels[status]}".` : ""}</DialogDescription>
+          <DialogDescription>
+            {document && status
+              ? `${document.documentType} sẽ chuyển sang trạng thái "${statusLabels[status]}".`
+              : ""}
+          </DialogDescription>
         </DialogHeader>
         <Field>
           <FieldLabel htmlFor="document-status-note">Ghi chú xử lý</FieldLabel>
-          <Textarea id="document-status-note" rows={3} value={note} onChange={(event) => setNote(event.target.value)} placeholder="Nhập lý do từ chối, nội dung thiếu hoặc yêu cầu bổ sung..." />
+          <Textarea
+            id="document-status-note"
+            rows={3}
+            value={note}
+            onChange={(event) => setNote(event.target.value)}
+            placeholder="Nhập lý do từ chối, nội dung thiếu hoặc yêu cầu bổ sung..."
+          />
         </Field>
-        {props.error && <p className="text-sm text-destructive">{getErrorMessage(props.error)}</p>}
+        {Boolean(props.error) && (
+          <p className="text-sm text-destructive">
+            {getErrorMessage(props.error)}
+          </p>
+        )}
         <DialogFooter>
-          <Button type="button" disabled={props.isSubmitting} onClick={() => props.onSubmit(note)}>
+          <Button
+            type="button"
+            disabled={props.isSubmitting}
+            onClick={() => props.onSubmit(note)}
+          >
             {props.isSubmitting ? "Đang cập nhật..." : "Cập nhật"}
           </Button>
         </DialogFooter>
       </DialogContent>
     </Dialog>
+  );
+}
+
+function AdmissionDocumentResults({
+  pagination,
+  documents,
+  listQuery,
+  columns,
+  state,
+  dispatch,
+  canApprove,
+  canUpload,
+  onStatusAction,
+}: {
+  pagination?: Awaited<
+    ReturnType<typeof getAdmissionDocumentList>
+  >["pagination"];
+  documents: Awaited<ReturnType<typeof getAdmissionDocumentList>>["data"];
+  listQuery: UseQueryResult<
+    Awaited<ReturnType<typeof getAdmissionDocumentList>>
+  >;
+  columns: Array<{
+    key: string;
+    label: string;
+    sortable?: AdmissionDocumentSortField;
+  }>;
+  state: State;
+  dispatch: Dispatch<Action>;
+  canApprove: boolean;
+  canUpload: boolean;
+  onStatusAction: (
+    document: AdmissionDocumentItem,
+    status: AdmissionDocumentStatus,
+  ) => void;
+}) {
+  return (
+    <Card className="gap-0 overflow-hidden border-border/70 py-0 shadow-xs">
+      <CardHeader className="gap-1 border-b py-5">
+        <CardTitle>Tài liệu hồ sơ</CardTitle>
+        <CardDescription>
+          {pagination
+            ? `Hiển thị ${documents.length} trong tổng số ${pagination.total} tài liệu`
+            : "Đang lấy dữ liệu tài liệu..."}
+        </CardDescription>
+      </CardHeader>
+      <CardContent className="overflow-x-auto p-0">
+        {listQuery.isError ? (
+          <ErrorState
+            title="Không thể tải danh sách tài liệu"
+            description="Vui lòng thử lại để cập nhật danh sách tài liệu hồ sơ."
+            onReload={() => listQuery.refetch()}
+          />
+        ) : listQuery.isLoading ? (
+          <TableLoadingState label="Đang tải danh sách tài liệu" />
+        ) : documents.length === 0 ? (
+          <EmptyState
+            title="Chưa có tài liệu phù hợp"
+            description="Điều chỉnh bộ lọc hoặc upload tài liệu mới cho hồ sơ tuyển sinh."
+          />
+        ) : (
+          <Table className="min-w-240">
+            <caption className="sr-only">
+              Danh sách tài liệu hồ sơ tuyển sinh
+            </caption>
+            <TableHeader className="bg-muted/55 text-xs uppercase tracking-wide text-muted-foreground">
+              <TableRow className="hover:bg-muted/55">
+                {columns.map((column) => (
+                  <TableHead
+                    key={column.key}
+                    scope="col"
+                    className="px-5 font-medium text-muted-foreground"
+                  >
+                    {column.sortable ? (
+                      <button
+                        type="button"
+                        className="inline-flex min-h-11 items-center gap-2 rounded-md focus-visible:outline-2 focus-visible:outline-ring"
+                        onClick={() => {
+                          if (column.sortable)
+                            dispatch({
+                              type: "toggleSort",
+                              sortBy: column.sortable,
+                            });
+                        }}
+                      >
+                        {column.label}
+                        {state.sortBy === column.sortable ? (
+                          state.sortOrder === "asc" ? (
+                            <ArrowUp aria-hidden="true" />
+                          ) : (
+                            <ArrowDown aria-hidden="true" />
+                          )
+                        ) : (
+                          <ArrowUpDown aria-hidden="true" />
+                        )}
+                      </button>
+                    ) : (
+                      column.label
+                    )}
+                  </TableHead>
+                ))}
+                <TableHead
+                  scope="col"
+                  className="px-5 text-right font-medium text-muted-foreground"
+                >
+                  Thao tác
+                </TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {documents.map((document) => (
+                <TableRow key={document.id}>
+                  <TableCell className="px-5 py-4">
+                    {document.admissionCode ?? "-"}
+                  </TableCell>
+                  <TableCell className="px-5 py-4 font-medium">
+                    {document.candidateName ?? "-"}
+                  </TableCell>
+                  <TableCell className="px-5 py-4">
+                    {document.documentType}
+                  </TableCell>
+                  <TableCell className="px-5 py-4">
+                    <DocumentStatusBadge status={document.status} />
+                  </TableCell>
+                  <TableCell className="px-5 py-4">
+                    {document.fileUrl ? (
+                      <a
+                        className="text-primary underline-offset-4 hover:underline"
+                        href={document.fileUrl}
+                        target="_blank"
+                        rel="noreferrer"
+                      >
+                        {document.fileName ?? "Mở tệp"}
+                      </a>
+                    ) : (
+                      (document.fileName ?? "-")
+                    )}
+                  </TableCell>
+                  <TableCell className="px-5 py-4">
+                    {formatDate(document.uploadedAt)}
+                  </TableCell>
+                  <TableCell className="px-5 py-4">
+                    <DocumentActions
+                      document={document}
+                      canApprove={canApprove}
+                      canUpload={canUpload}
+                      onAction={(status) => {
+                        onStatusAction(document, status);
+                      }}
+                    />
+                  </TableCell>
+                </TableRow>
+              ))}
+            </TableBody>
+          </Table>
+        )}
+      </CardContent>
+      {pagination && pagination.total > 0 && (
+        <TablePagination
+          page={state.page}
+          pagination={pagination}
+          isFetching={listQuery.isFetching}
+          onPrevious={() =>
+            dispatch({ type: "setPage", page: Math.max(1, state.page - 1) })
+          }
+          onNext={() => dispatch({ type: "setPage", page: state.page + 1 })}
+        />
+      )}
+    </Card>
   );
 }

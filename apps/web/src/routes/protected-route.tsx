@@ -2,6 +2,7 @@ import { Navigate, Outlet, useLocation } from "react-router-dom";
 
 import { Spinner } from "@/components/ui/spinner";
 import { useAuth } from "@/modules/auth/auth-context";
+import { SessionRestoreError } from "@/modules/auth/session-restore-error";
 
 type ProtectedRouteProps = {
   anyPermissions?: string[];
@@ -26,8 +27,10 @@ export function ProtectedRoute({
     );
   }
 
+  if (auth.restoreError && !auth.user) return <SessionRestoreError message={auth.restoreError} onRetry={auth.retryRestore} />;
+
   if (!auth.user) {
-    return <Navigate to="/dang-nhap" replace state={{ from: location.pathname }} />;
+    return <Navigate to="/dang-nhap" replace state={{ from: location.pathname + location.search + location.hash }} />;
   }
 
   if (anyPermissions.length > 0 && !anyPermissions.some(auth.can)) {

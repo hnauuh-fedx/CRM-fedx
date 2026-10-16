@@ -174,7 +174,7 @@ export type AutomationOptions = {
   institutionPrograms: Array<{ id: string; name: string; institutionName: string }>;
   triggerTypes: string[];
   assignees: Array<{ id: string; fullName: string; assignedCount: number; departmentIds: string[] }>;
-  assignmentPoolAssignees: Array<{ id: string; fullName: string; assignedCount: number; departmentIds: string[] }>;
+  assignmentPoolAssignees: Array<{ id: string; fullName: string; assignedCount: number; departmentIds: string[]; canReceiveLead: boolean }>;
   departments: Array<{ id: string; name: string }>;
   pipelineStages: Array<{ id: string; name: string; pipelineName: string | null }>;
   targetRoles: Array<{ id: string; code: string; name: string }>;
@@ -218,7 +218,7 @@ export type AutomationDataField = {
   dataType: string;
   groupKey: string;
   groupLabel: string;
-  source: "system" | "custom";
+  source: "system" | "custom" | "event";
   isSensitive: boolean;
   options: AutomationDataFieldOption[];
 };

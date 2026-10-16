@@ -21,4 +21,6 @@ export type AuthSession = {
   accessToken: string;
   expiresIn: number;
   user: AuthUser;
+  sessionId: string;
+  rememberDevice: boolean;
 };

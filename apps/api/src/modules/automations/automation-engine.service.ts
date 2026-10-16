@@ -7,6 +7,7 @@ import { decideNodeExecution } from "./automation-execution-state";
 import type { AutomationContext, AutomationExecutionSource, ExecutableAutomationRule } from "./automation-execution.types";
 import { validateAutomationGraph, withAutomationTriggerType } from "./automation-graph.validator";
 import { ensureAutomationRuleVersionSnapshot } from "./automation-rule-version.service";
+import { automationEventExecutionId } from "./automation-event-id";
 import { closeAutomationReassignmentQueue } from "./automation-reassignment-queue.service";
 import type { AutomationEdge, AutomationGraphData } from "./automation.types";
 
@@ -65,15 +66,22 @@ async function enqueueAutomationJob(data: ExecutionJobData, delay = 0) {
   });
 }
 
-export async function triggerAutomation(triggerType: string, context: Omit<AutomationContext, "ruleId">) {
-  if (isAutomationDisabled) return;
+export async function triggerAutomation(
+  triggerType: string,
+  context: Omit<AutomationContext, "ruleId">,
+  options: { eventId?: string; retryFailedExecutions?: boolean } = {},
+) {
+  if (isAutomationDisabled) return { matched: 0, started: 0, failed: 0, unavailable: true };
   const lead = context.leadId
     ? await prisma.leads.findFirst({
         where: { id: context.leadId, deleted_at: null },
         select: { institution_program_id: true },
       })
     : null;
-  if (context.leadId && !lead) return;
+  if (context.leadId && !lead) return { matched: 0, started: 0, failed: 0, unavailable: false };
+  if (options.eventId && lead && lead.institution_program_id !== context.institutionProgramId) {
+    return { matched: 0, started: 0, failed: 0, unavailable: false };
+  }
   const resolvedContext = {
     ...context,
     institutionProgramId: context.leadId
@@ -99,9 +107,11 @@ export async function triggerAutomation(triggerType: string, context: Omit<Autom
       created_by: true,
     },
   });
+  let started = 0;
+  let failed = 0;
   for (const rule of rules) {
     try {
-      await startAutomationExecution(
+      const result = await startAutomationExecution(
         {
           id: rule.id,
           version: rule.version,
@@ -113,8 +123,14 @@ export async function triggerAutomation(triggerType: string, context: Omit<Autom
         resolvedContext,
         "event",
         resolvedContext.actorId ?? null,
+        undefined,
+        options.eventId ? automationEventExecutionId(options.eventId, rule.id) : undefined,
+        options.retryFailedExecutions ?? false,
       );
+      if (result.ok) started += 1;
+      else failed += 1;
     } catch (error) {
+      failed += 1;
       console.error("Automation rule failed to start", {
         ruleId: rule.id,
         triggerType,
@@ -122,6 +138,7 @@ export async function triggerAutomation(triggerType: string, context: Omit<Autom
       });
     }
   }
+  return { matched: rules.length, started, failed, unavailable: false };
 }
 
 export async function reenqueueAutomationExecutionNodes(
@@ -444,6 +461,7 @@ if (automationWorker) {
       import("./automation-sla.service.js").then(({ dispatchDueSlaAutomations }) => dispatchDueSlaAutomations()),
       import("./automation-scheduler.service.js").then(({ dispatchDueScheduledAutomations }) => dispatchDueScheduledAutomations()),
       import("./automation-scheduler.service.js").then(({ dispatchExpiringAdmissionAutomations }) => dispatchExpiringAdmissionAutomations()),
+      import("./marketing-form-automation-event.service.js").then(({ recoverMarketingFormAutomationEvents }) => recoverMarketingFormAutomationEvents()),
     ]).catch((error) => console.error("Automation schedule scan failed", error));
   };
   scanSchedules();

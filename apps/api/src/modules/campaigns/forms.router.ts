@@ -1,7 +1,14 @@
 import { Router, type NextFunction, type Request, type Response } from "express";
 import { z } from "zod";
+import { resolveMarketingFormRedirect } from "@admission-crm/shared/marketing-form-embed";
+import { getMarketingFormReport, exportMarketingFormReport, marketingFormReportPermissions, marketingFormReportQuerySchema } from "./marketing-form-report.service";
+import { marketingFormPublicationType } from "@admission-crm/shared/marketing-form-submission-policy";
+import { listMarketingFormReferenceCatalog } from "./marketing-form-reference-catalog.service";
+import { listLeadSurveyHistory } from "./marketing-form-lead-history.service";
+import { listMarketingFormReviewCandidates, resolveMarketingFormSubmission } from "./marketing-form-submission-review.service";
 
 import { requireAnyPermission, requireAuthentication } from "../../middlewares/auth.middleware";
+import { env } from "../../config/env";
 import { getInstitutionProgramScope } from "../institutions/institution-program-scope";
 import { getMarketingFormFilterOptions, listMarketingFormSubmissions, listMarketingForms } from "./marketing-reference.service";
 import {
@@ -48,7 +55,7 @@ const fieldSchema = z.object({
   fieldType: z.enum(supportedMarketingFormFieldTypes),
   isRequired: z.boolean().optional(),
   required: z.boolean().optional(),
-  options: z.array(z.string().trim().min(1).max(255)).max(100).default([]),
+  options: z.array(z.union([z.string().trim().min(1).max(255), z.object({ value: z.string().min(1).max(255), label: z.string().trim().min(1).max(255) })])).max(100).default([]),
   validationRules: validationRulesSchema,
   leadField: z.enum(supportedLeadMappingFields).optional().nullable().transform((value) => value ?? undefined),
   crmMappingField: z.enum(supportedLeadMappingFields).optional().nullable().transform((value) => value ?? undefined),
@@ -84,7 +91,7 @@ const formSchema = z.object({
   mappings: z.array(z.object({
     sourceField: z.string().trim().min(1).max(150).regex(/^[A-Za-z0-9_.-]+$/),
     leadField: z.enum(supportedLeadMappingFields).optional(),
-    targetTable: z.string().trim().max(100).default("leads"),
+    targetTable: z.literal("leads").default("leads"),
     targetColumn: z.enum(supportedLeadMappingFields).optional(),
     isRequired: z.boolean(),
     transformRule: validationRulesSchema,
@@ -107,11 +114,19 @@ const formSchema = z.object({
       context.addIssue({ code: "custom", path: ["mappings", index, "sourceField"], message: "Field mapping phải tồn tại trong form." });
     }
   }
-  if (input.status === "published" && (!leadFields.has("full_name") || !leadFields.has("phone"))) {
+  let publicationType = input.formType ?? "lead_form";
+  try { publicationType = marketingFormPublicationType(publicationType, input.duplicateSettings) as typeof publicationType; }
+  catch (error) { context.addIssue({ code: "custom", path: ["duplicateSettings", "submissionMode"], message: error instanceof Error ? error.message : "Chính sách không hợp lệ." }); }
+  if (input.status === "published" && publicationType !== "survey" && (!leadFields.has("full_name") || !leadFields.has("phone"))) {
     context.addIssue({ code: "custom", path: ["fields"], message: "Biểu mẫu cần mapping Họ tên và Số điện thoại trước khi xuất bản." });
+  }
+  const redirectUrl = typeof input.successSettings?.redirectUrl === "string" ? input.successSettings.redirectUrl.trim() : "";
+  if (redirectUrl && !resolveMarketingFormRedirect(input.successSettings, env.WEB_ORIGIN)) {
+    context.addIssue({ code: "custom", path: ["successSettings", "redirectUrl"], message: "URL chuyển hướng hoặc danh sách origin chưa hợp lệ." });
   }
 });
 const submissionQuerySchema = z.object({
+  search: z.string().trim().max(150).optional().transform((value) => value || undefined),
   page: z.coerce.number().int().min(1).default(1),
   limit: z.coerce.number().int().min(1).max(100).default(20),
   status: z.string().trim().max(50).optional().transform((value) => value || undefined),
@@ -121,7 +136,79 @@ const reorderSchema = z.object({ fieldIds: z.array(z.uuid()).min(1).max(100) });
 export const formsRouter = Router();
 export const formFieldsRouter = Router();
 
-formsRouter.use(requireAuthentication);
+function narrowWorkingProgram(request: Request, response: Response, next: NextFunction) {
+  try {
+    const programId = getInstitutionProgramScope(request);
+    if (!programId) {
+      response.status(403).json({ message: "Bạn chưa được cấp chương trình làm việc." });
+      return;
+    }
+    request.authUser = { ...request.authUser!, institutionProgramIds: [programId] };
+    next();
+  } catch (error) { next(error); }
+}
+
+formsRouter.use(requireAuthentication, narrowWorkingProgram);
+
+for (const exportCsv of [false, true]) {
+  formsRouter.get(exportCsv ? "/:id/report/export" : "/:id/report", requireAnyPermission(...marketingFormReportPermissions), async (request, response, next) => {
+    try {
+      const id = idSchema.safeParse(request.params.id);
+      const query = marketingFormReportQuerySchema.safeParse(request.query);
+      if (!id.success || !query.success) { response.status(400).json({ message: "Tham số báo cáo không hợp lệ." }); return; }
+      const result = exportCsv
+        ? await exportMarketingFormReport(request.authUser!, id.data, query.data, request.ip)
+        : await getMarketingFormReport(request.authUser!, id.data, query.data);
+      if (!result.ok) { response.status(result.reason === "permission_denied" ? 403 : result.reason === "invalid_query" ? 400 : 404).json({ message: "Không thể đọc/xuất báo cáo trong phạm vi được cấp." }); return; }
+      response.setHeader("Cache-Control", "no-store");
+      if (exportCsv) {
+        response.type("text/csv; charset=utf-8").attachment(`form-report-${id.data}.csv`).send(result.data);
+      } else response.json(result.data);
+    } catch (error) { next(error); }
+  });
+}
+
+formsRouter.get("/:id/submissions/:submissionId/candidates", canUpdateForms, async (request, response, next) => {
+  try {
+    const params = z.object({ id: z.uuid(), submissionId: z.uuid() }).safeParse(request.params);
+    const query = z.object({ page: z.coerce.number().int().min(1).max(100000).default(1), limit: z.coerce.number().int().min(1).max(100).default(20), search: z.string().trim().max(150).optional() }).safeParse(request.query);
+    if (!params.success || !query.success) { response.status(400).json({ message: "Tham số xử lý trùng không hợp lệ." }); return; }
+    const result = await listMarketingFormReviewCandidates(request.authUser!, getInstitutionProgramScope(request)!, params.data.id, params.data.submissionId, query.data.page, query.data.limit, query.data.search);
+    if (!result.ok) { response.status(result.reason === "permission_denied" ? 403 : result.reason === "already_resolved" ? 409 : 404).json({ message: "Không thể xem Lead phù hợp: thiếu quyền, ngoài phạm vi hoặc phản hồi đã xử lý." }); return; }
+    response.json(result.data);
+  } catch (error) { next(error); }
+});
+formsRouter.post("/:id/submissions/:submissionId/resolve", canUpdateForms, async (request, response, next) => {
+  try {
+    const params = z.object({ id: z.uuid(), submissionId: z.uuid() }).safeParse(request.params);
+    const body = z.discriminatedUnion("action", [z.object({ action: z.literal("link"), leadId: z.uuid(), reason: z.string().trim().min(1).max(500) }).strict(), z.object({ action: z.literal("ignore"), reason: z.string().trim().min(1).max(500) }).strict()]).safeParse(request.body);
+    if (!params.success || !body.success) { response.status(400).json({ message: "Chọn cách xử lý và nhập lý do (tối đa 500 ký tự)." }); return; }
+    const result = await resolveMarketingFormSubmission(request.authUser!, getInstitutionProgramScope(request)!, params.data.id, params.data.submissionId, body.data, request.ip);
+    if (!result.ok) { response.status(result.reason === "permission_denied" ? 403 : result.reason === "already_resolved" ? 409 : 404).json({ message: "Không thể xử lý: thiếu quyền, Lead không còn phù hợp hoặc phản hồi đã được người khác xử lý. Hãy tải lại danh sách." }); return; }
+    response.json(result.data);
+  } catch (error) { next(error); }
+});
+
+formsRouter.get("/lead-history/:leadId", canViewForms, async (request, response, next) => {
+  try {
+    const id = z.uuid().safeParse(request.params.leadId);
+    const query = z.object({ page: z.coerce.number().int().min(1).max(100000).default(1), limit: z.coerce.number().int().min(1).max(100).default(20) }).safeParse(request.query);
+    if (!id.success || !query.success) { response.status(400).json({ message: "Tham số lịch sử khảo sát không hợp lệ." }); return; }
+    const result = await listLeadSurveyHistory(request.authUser!, id.data, getInstitutionProgramScope(request)!, query.data.page, query.data.limit);
+    if (!result.ok) { response.status(404).json({ message: "Không tìm thấy lịch sử khảo sát trong phạm vi được cấp." }); return; }
+    response.json(result.data);
+  } catch (error) { next(error); }
+});
+
+formsRouter.get("/references", canViewForms, async (request, response, next) => {
+  try {
+    const parsed = z.object({ target: z.enum(["major_id", "source_id"]), page: z.coerce.number().int().min(1).max(100000).default(1), limit: z.coerce.number().int().min(1).max(100).default(20), search: z.string().trim().max(100).optional() }).safeParse(request.query);
+    if (!parsed.success) { response.status(400).json({ message: "Tham số danh mục biểu mẫu không hợp lệ." }); return; }
+    const result = await listMarketingFormReferenceCatalog(request.authUser!, getInstitutionProgramScope(request)!, parsed.data);
+    if (!result.ok) { response.status(403).json({ message: "Bạn không có quyền truy cập chương trình." }); return; }
+    response.json(result.data);
+  } catch (error) { next(error); }
+});
 
 formsRouter.get("/", canViewForms, async (request, response, next) => {
   try {
@@ -240,11 +327,7 @@ formsRouter.post("/:id/publish", canUpdateForms, async (request, response, next)
     }
     const result = await publishMarketingForm(request.authUser!, parsedId.data, request.ip);
     if (!result.ok) {
-      response.status(result.reason === "missing_required_mapping" ? 400 : 404).json({
-        message: result.reason === "missing_required_mapping"
-          ? "Biểu mẫu cần mapping Họ tên và Số điện thoại trước khi xuất bản."
-          : "Không tìm thấy biểu mẫu trong phạm vi được quản lý.",
-      });
+      response.status(404).json({ message: "Không tìm thấy biểu mẫu trong phạm vi được quản lý." });
       return;
     }
     response.json(result.data);
@@ -346,7 +429,7 @@ formsRouter.get("/:id/submissions", canViewForms, async (request, response, next
   }
 });
 
-formFieldsRouter.use(requireAuthentication);
+formFieldsRouter.use(requireAuthentication, narrowWorkingProgram);
 formFieldsRouter.put("/:fieldId", canUpdateForms, fieldUpdateHandler);
 formFieldsRouter.delete("/:fieldId", canUpdateForms, fieldDeleteHandler);
 

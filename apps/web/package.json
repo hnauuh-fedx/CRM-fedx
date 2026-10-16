@@ -2,8 +2,27 @@
   "name": "@admission-crm/web",
   "private": true,
   "scripts": {
+    "test:display-layout-surfaces-browser": "node tests/display-layout-surfaces.browser-smoke.mjs",
+    "test:display-layout-browser": "node tests/display-layout.browser-smoke.mjs",
+    "test:report-filter-rows": "tsx --test tests/report-filter-rows.test.ts",
+    "test:react-doctor-browser": "node tests/react-doctor-refactor.browser-smoke.mjs",
     "dev": "vite",
-    "build": "vite build"
+    "build": "vite build",
+    "test:auth-browser": "node tests/auth-session.browser-smoke.mjs",
+    "test:auth-form-browser": "node tests/marketing-form-g4.browser-smoke.mjs --auth-only",
+    "typecheck:auth": "tsc --noEmit -p tsconfig.auth.json",
+    "typecheck": "tsc --noEmit -p tsconfig.json",
+    "test:lead-custom-field-values": "tsx --tsconfig tsconfig.json --test tests/lead-custom-field-values.test.ts",
+    "test:marketing-form-scope": "tsx --test tests/marketing-form-query-scope.test.ts",
+    "test:marketing-form-values": "tsx --test tests/marketing-form-public-values.test.ts tests/marketing-form-reorder.test.ts tests/marketing-form-editor-layout.test.ts",
+    "test:marketing-form-leave": "tsx --test tests/marketing-form-leave-guard.test.ts",
+    "test:marketing-form-embed": "tsx --test tests/marketing-form-embed.test.ts",
+    "test:marketing-form-embed-browser": "node tests/marketing-form-embed.browser-smoke.mjs",
+    "test:marketing-form-report-browser": "node tests/marketing-form-report.browser-smoke.mjs",
+    "test:marketing-form-g4-browser": "node tests/marketing-form-g4.browser-smoke.mjs",
+    "test:survey-visibility-browser": "node tests/marketing-form-g4.browser-smoke.mjs --survey-only",
+    "test:survey-confirmation-browser": "node tests/marketing-form-g4.browser-smoke.mjs --confirmation-only",
+    "test:survey-focus-browser": "node tests/marketing-form-g4.browser-smoke.mjs --focus-only"
   },
   "dependencies": {
     "@admission-crm/shared": "*",

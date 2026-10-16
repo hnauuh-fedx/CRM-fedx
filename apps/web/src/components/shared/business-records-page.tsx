@@ -1,6 +1,7 @@
-import { useMemo, useReducer } from "react";
+import { TablePagination } from "@/components/shared/table-pagination";
 import { useQuery } from "@tanstack/react-query";
-import { ArrowDown, ArrowUp, ArrowUpDown, ChevronLeft, ChevronRight, Search } from "lucide-react";
+import { ArrowDown, ArrowUp, ArrowUpDown, Search } from "lucide-react";
+import { useMemo, useReducer } from "react";
 
 import { EmptyState } from "@/components/shared/data-states";
 import { ErrorState } from "@/components/shared/error-state";
@@ -8,10 +9,23 @@ import { FilterSelect } from "@/components/shared/filter-select";
 import { PageHeader } from "@/components/shared/page-header";
 import { TableLoadingState } from "@/components/shared/table-loading-state";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import {
+  Card,
+  CardContent,
+  CardDescription,
+  CardHeader,
+  CardTitle,
+} from "@/components/ui/card";
 import { Field, FieldGroup, FieldLabel } from "@/components/ui/field";
 import { Input } from "@/components/ui/input";
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from "@/components/ui/table";
 import { useAuth } from "@/modules/auth/auth-context";
 import type {
   BusinessRecord,
@@ -78,7 +92,10 @@ function businessRecordsReducer<TSort extends string>(
     case "setSearch":
       return { ...state, search: action.value };
     case "setFilter":
-      return { ...state, filterValues: { ...state.filterValues, [action.key]: action.value } };
+      return {
+        ...state,
+        filterValues: { ...state.filterValues, [action.key]: action.value },
+      };
     case "applyFilters":
       return {
         ...state,
@@ -87,14 +104,25 @@ function businessRecordsReducer<TSort extends string>(
         appliedFilterValues: state.filterValues,
       };
     case "resetFilters":
-      return { ...state, page: 1, search: "", appliedSearch: "", filterValues: {}, appliedFilterValues: {} };
+      return {
+        ...state,
+        page: 1,
+        search: "",
+        appliedSearch: "",
+        filterValues: {},
+        appliedFilterValues: {},
+      };
     case "toggleSort":
       return {
         ...state,
         page: 1,
         sortBy: action.sortBy,
         sortOrder:
-          state.sortBy === action.sortBy ? (state.sortOrder === "asc" ? "desc" : "asc") : "desc",
+          state.sortBy === action.sortBy
+            ? state.sortOrder === "asc"
+              ? "desc"
+              : "asc"
+            : "desc",
       };
     case "setPage":
       return { ...state, page: action.page };
@@ -157,12 +185,19 @@ export function BusinessRecordsPage<TSort extends string>({
 
   return (
     <div className="mx-auto flex max-w-7xl flex-col gap-6">
-      <PageHeader eyebrow={eyebrow} title={title} scopeLabel="Theo phạm vi truy cập" description={description} />
+      <PageHeader
+        eyebrow={eyebrow}
+        title={title}
+        scopeLabel="Theo phạm vi truy cập"
+        description={description}
+      />
 
       <Card className="gap-4 border-border/70 py-5 shadow-xs">
         <CardHeader className="gap-1 px-5">
           <CardTitle>Bộ lọc dữ liệu</CardTitle>
-          <CardDescription>Tìm kiếm và lọc dữ liệu theo tiêu chí nghiệp vụ.</CardDescription>
+          <CardDescription>
+            Tìm kiếm và lọc dữ liệu theo tiêu chí nghiệp vụ.
+          </CardDescription>
         </CardHeader>
         <CardContent className="px-5">
           <form
@@ -175,13 +210,18 @@ export function BusinessRecordsPage<TSort extends string>({
               <Field className="gap-2">
                 <FieldLabel htmlFor={`${queryKey}-search`}>Tìm kiếm</FieldLabel>
                 <div className="relative">
-                  <Search className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground" aria-hidden="true" />
+                  <Search
+                    className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground"
+                    aria-hidden="true"
+                  />
                   <Input
                     id={`${queryKey}-search`}
                     className="pl-9"
                     placeholder="Nhập từ khóa cần tìm"
                     value={state.search}
-                    onChange={(event) => dispatch({ type: "setSearch", value: event.target.value })}
+                    onChange={(event) =>
+                      dispatch({ type: "setSearch", value: event.target.value })
+                    }
                   />
                 </div>
               </Field>
@@ -192,7 +232,9 @@ export function BusinessRecordsPage<TSort extends string>({
                   label={filter.label}
                   value={state.filterValues[filter.key] ?? ""}
                   options={filter.options}
-                  onChange={(value) => dispatch({ type: "setFilter", key: filter.key, value })}
+                  onChange={(value) =>
+                    dispatch({ type: "setFilter", key: filter.key, value })
+                  }
                 />
               ))}
               <div className="flex items-end gap-2">
@@ -221,7 +263,11 @@ export function BusinessRecordsPage<TSort extends string>({
         </CardHeader>
         <CardContent className="p-0">
           {query.isError ? (
-            <ErrorState title="Không thể tải dữ liệu" description="Vui lòng thử lại để cập nhật danh sách." onReload={() => query.refetch()} />
+            <ErrorState
+              title="Không thể tải dữ liệu"
+              description="Vui lòng thử lại để cập nhật danh sách."
+              onReload={() => query.refetch()}
+            />
           ) : query.isLoading ? (
             <TableLoadingState label="Đang tải dữ liệu" />
           ) : data.length === 0 ? (
@@ -232,18 +278,30 @@ export function BusinessRecordsPage<TSort extends string>({
               <TableHeader className="bg-muted/55 text-xs uppercase tracking-wide text-muted-foreground">
                 <TableRow className="hover:bg-muted/55">
                   {displayColumns.map((column) => (
-                    <TableHead key={column.key} scope="col" className="px-5 font-medium text-muted-foreground">
+                    <TableHead
+                      key={column.key}
+                      scope="col"
+                      className="px-5 font-medium text-muted-foreground"
+                    >
                       {column.sortable ? (
                         <button
                           type="button"
                           className="inline-flex min-h-11 items-center gap-2 rounded-md focus-visible:outline-2 focus-visible:outline-ring"
                           onClick={() => {
-                            dispatch({ type: "toggleSort", sortBy: column.sortable });
+                            if (column.sortable)
+                              dispatch({
+                                type: "toggleSort",
+                                sortBy: column.sortable,
+                              });
                           }}
                         >
                           {column.label}
                           {state.sortBy === column.sortable ? (
-                            state.sortOrder === "asc" ? <ArrowUp aria-hidden="true" /> : <ArrowDown aria-hidden="true" />
+                            state.sortOrder === "asc" ? (
+                              <ArrowUp aria-hidden="true" />
+                            ) : (
+                              <ArrowDown aria-hidden="true" />
+                            )
                           ) : (
                             <ArrowUpDown aria-hidden="true" />
                           )}
@@ -260,7 +318,9 @@ export function BusinessRecordsPage<TSort extends string>({
                   <TableRow key={row.id}>
                     {displayColumns.map((column) => (
                       <TableCell key={column.key} className="px-5 py-4">
-                        {column.format ? column.format(row[column.key], row) : formatCellValue(row[column.key])}
+                        {column.format
+                          ? column.format(row[column.key], row)
+                          : formatCellValue(row[column.key])}
                       </TableCell>
                     ))}
                   </TableRow>
@@ -270,33 +330,15 @@ export function BusinessRecordsPage<TSort extends string>({
           )}
         </CardContent>
         {pagination && pagination.total > 0 && (
-          <div className="flex flex-col items-center justify-between gap-3 border-t px-5 py-4 text-sm sm:flex-row">
-            <p className="text-muted-foreground">
-              Trang {pagination.page} / {pagination.totalPages}
-            </p>
-            <div className="flex gap-2">
-              <Button
-                type="button"
-                variant="outline"
-                size="sm"
-                disabled={state.page <= 1 || query.isFetching}
-                onClick={() => dispatch({ type: "setPage", page: Math.max(1, state.page - 1) })}
-              >
-                <ChevronLeft aria-hidden="true" />
-                Trang trước
-              </Button>
-              <Button
-                type="button"
-                variant="outline"
-                size="sm"
-                disabled={state.page >= pagination.totalPages || query.isFetching}
-                onClick={() => dispatch({ type: "setPage", page: state.page + 1 })}
-              >
-                Trang sau
-                <ChevronRight aria-hidden="true" />
-              </Button>
-            </div>
-          </div>
+          <TablePagination
+            page={state.page}
+            pagination={pagination}
+            isFetching={query.isFetching}
+            onPrevious={() =>
+              dispatch({ type: "setPage", page: Math.max(1, state.page - 1) })
+            }
+            onNext={() => dispatch({ type: "setPage", page: state.page + 1 })}
+          />
         )}
       </Card>
     </div>

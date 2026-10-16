@@ -4,6 +4,7 @@ import { prisma } from "../../database/prisma";
 import type { AuthUser } from "../auth/auth.types";
 import { vietnamProvinceCodes } from "../custom-fields/vietnam-provinces";
 import { getLeadScopeWhere } from "./lead-list.service";
+import { getMarketingFormVisibility } from "../campaigns/marketing-form-scope";
 
 export type SaleCustomFieldEntityType = "SALE_ACTIVITY" | "SALE_REMINDER";
 export type RuntimeCustomFieldEntityType =
@@ -547,35 +548,17 @@ async function runtimeEntityContext(
     const row = await prisma.marketing_forms.findFirst({
       where: {
         id: entityId,
-        ...(!user.permissions.includes("campaign.view_all") &&
-        !user.permissions.includes("marketing_form.manage")
-          ? { created_by: user.id }
-          : {}),
-        ...(institutionProgramId
-          ? {
-              OR: [
-                {
-                  campaigns: {
-                    is: { institution_program_id: institutionProgramId },
-                  },
-                },
-                { campaign_id: null },
-              ],
-            }
-          : {}),
+        AND: getMarketingFormVisibility(user, institutionProgramId),
       },
       select: {
         id: true,
-        campaigns: { select: { institution_program_id: true } },
+        institution_program_id: true,
       },
     });
     return row
       ? {
           id: row.id,
-          programId:
-            row.campaigns?.institution_program_id ??
-            institutionProgramId ??
-            null,
+          programId: row.institution_program_id,
         }
       : null;
   }

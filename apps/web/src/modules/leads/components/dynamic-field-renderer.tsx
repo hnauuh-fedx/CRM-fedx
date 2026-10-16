@@ -10,7 +10,7 @@ import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
 import { vietnamProvinces } from "@/lib/vietnam-provinces";
-import { formatLeadCustomFieldValue } from "../lead-custom-field.helpers";
+import { formatLeadCustomFieldValue, isLeadCustomFieldFileValue as isFileValue, isLeadCustomFieldStringArray } from "../lead-custom-field.helpers";
 import type { LeadCustomField, LeadCustomFieldFileValue, LeadCustomFieldValue } from "../lead.types";
 
 export type LeadCustomFieldsFormValues = {
@@ -41,18 +41,6 @@ function toDateTimeInputValue(value: LeadCustomFieldValue) {
   if (Number.isNaN(parsed.getTime())) return value.slice(0, 16);
   const offset = parsed.getTimezoneOffset() * 60_000;
   return new Date(parsed.getTime() - offset).toISOString().slice(0, 16);
-}
-
-function isFileValue(value: unknown): value is LeadCustomFieldFileValue {
-  return Boolean(
-    value &&
-      typeof value === "object" &&
-      !Array.isArray(value) &&
-      typeof (value as LeadCustomFieldFileValue).name === "string" &&
-      typeof (value as LeadCustomFieldFileValue).size === "number" &&
-      typeof (value as LeadCustomFieldFileValue).type === "string" &&
-      typeof (value as LeadCustomFieldFileValue).lastModified === "number",
-  );
 }
 
 function toFileValues(value: LeadCustomFieldValue): LeadCustomFieldFileValue[] {
@@ -130,7 +118,7 @@ function validateValue(field: LeadCustomField, value: LeadCustomFieldValue) {
 
   const options = new Set((field.options ?? []).filter((option) => option.isActive).map((option) => option.code));
   if (field.dataType === "SELECT" && (typeof value !== "string" || !options.has(value))) return "Giá trị lựa chọn không hợp lệ.";
-  if (field.dataType === "MULTI_SELECT" && (!Array.isArray(value) || value.some((item) => !options.has(item)) || new Set(value).size !== value.length)) return "Giá trị lựa chọn không hợp lệ.";
+  if (field.dataType === "MULTI_SELECT" && (!isLeadCustomFieldStringArray(value) || value.some((item) => !options.has(item)) || new Set(value).size !== value.length)) return "Giá trị lựa chọn không hợp lệ.";
   return true;
 }
 

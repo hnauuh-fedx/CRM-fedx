@@ -1,5 +1,16 @@
 import { prisma } from "../../database/prisma";
+import { validateMarketingFormOther, isMarketingFormOtherAnswerValid } from "@admission-crm/shared/marketing-form-config";
+import { createHash, randomUUID } from "node:crypto";
+import { readMarketingFormSubmissionPolicy, marketingFormUpdateFields, marketingFormPublicationType } from "@admission-crm/shared/marketing-form-submission-policy";
 import { Prisma } from "../../generated/prisma/client";
+import { z } from "zod";
+import { createMarketingFormSnapshot } from "@admission-crm/shared/marketing-form-snapshot";
+import { readMarketingFormLayout, validateMarketingFormLayout } from "@admission-crm/shared/marketing-form-layout";
+import { normalizeMarketingFormOptions, validateMarketingFormRatings, isMarketingFormRatingValueAllowed, validateMarketingFormQuestionDescriptions } from "@admission-crm/shared/marketing-form-config";
+import { validateMarketingFormVisibility, resolveMarketingFormVisibleKeys, stripHiddenMarketingFormAnswers } from "@admission-crm/shared/marketing-form-visibility";
+import { marketingFormTrackingKeys, resolveMarketingFormRedirect, sanitizeMarketingFormTracking } from "@admission-crm/shared/marketing-form-embed";
+import { env } from "../../config/env";
+import { createMarketingFormAutomationEvent, dispatchMarketingFormAutomationEvent } from "../automations/marketing-form-automation-event.service";
 
 type PublicSubmissionInput = {
   publicKey: string;
@@ -8,6 +19,7 @@ type PublicSubmissionInput = {
   ipAddress?: string;
   userAgent?: string;
   isWebhook?: boolean;
+  idempotencyKey?: string;
 };
 
 const leadFields = new Set([
@@ -42,7 +54,7 @@ function isPublishedStatus(status?: string | null) {
 }
 
 function isAllowedSystemField(fieldKey: string) {
-  return ["utm_source", "utm_medium", "utm_campaign", "utm_content", "utm_term", "website", "_hp"].includes(fieldKey);
+  return [...marketingFormTrackingKeys, "website", "_hp"].includes(fieldKey as (typeof marketingFormTrackingKeys)[number] | "website" | "_hp");
 }
 
 function asSettings(value: unknown): Record<string, unknown> {
@@ -67,7 +79,7 @@ function getFieldDependency(validationRules: unknown): FieldDependencyConfig | n
 }
 
 function fieldOptions(value: unknown) {
-  return Array.isArray(value) ? value.filter((option): option is string => typeof option === "string") : [];
+  return normalizeMarketingFormOptions(value).map((option) => option.value);
 }
 
 function getEffectiveFieldOptions(
@@ -81,7 +93,8 @@ function getEffectiveFieldOptions(
   if (!parentExists) return [];
   const parentValue = asText(payload[dependency.parentFieldKey]);
   if (!parentValue) return [];
-  return dependency.optionMap[parentValue] ?? [];
+  const configured = new Set(fieldOptions(field.options));
+  return (dependency.optionMap[parentValue] ?? []).filter((value) => configured.has(value));
 }
 
 function asBooleanSetting(settings: Record<string, unknown>, key: string, fallback = false) {
@@ -97,7 +110,16 @@ function asStringArraySetting(settings: Record<string, unknown>, key: string) {
 }
 
 function validateFieldValue(field: { field_type: string; label: string; validation_rules?: unknown }, value: unknown, options: string[]) {
+  if (value !== null && typeof value === "object" && !Array.isArray(value)) return isMarketingFormOtherAnswerValid(value, field.validation_rules) ? null : `${field.label}: nội dung Khác không hợp lệ (cần văn bản 1–1.000 ký tự).`;
+  if (field.field_type === "rating") return isMarketingFormRatingValueAllowed(value, field.validation_rules) ? null : `${field.label} phải là số nguyên trong thang đánh giá.`;
   const textValue = asText(value);
+  if (["checkbox", "multi_select"].includes(field.field_type)) {
+    if (value === null || value === undefined || value === "") return null;
+    if (!Array.isArray(value) || value.some((item) => typeof item !== "string")) return `${field.label} phải là danh sách lựa chọn.`;
+    if (value.some((item) => !options.includes(item))) return `${field.label} có lựa chọn không hợp lệ.`;
+    return null;
+  }
+  if (Array.isArray(value) || (value !== null && typeof value === "object")) return `${field.label} không đúng kiểu dữ liệu.`;
   if (!textValue) return null;
   const hasDependency = Boolean(getFieldDependency(field.validation_rules));
   if (field.field_type === "email" && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(textValue)) return `${field.label} không đúng định dạng email.`;
@@ -128,7 +150,7 @@ async function findDefaultLeadSource(client: Pick<typeof prisma, "lead_sources">
 
 export async function getPublicMarketingFormConfig(publicKey: string) {
   const form = await prisma.marketing_forms.findFirst({
-    where: { OR: [{ public_key: publicKey }, { slug: publicKey }], status: { in: ["published", "active"] } },
+    where: { OR: [{ public_key: publicKey }, { slug: publicKey }], status: { in: ["published", "active"] }, institution_program_id: { not: null } },
     select: {
       id: true,
       name: true,
@@ -178,7 +200,7 @@ export async function getPublicMarketingFormConfig(publicKey: string) {
       placeholder: field.placeholder,
       fieldType: field.field_type,
       isRequired: field.is_required,
-      options: Array.isArray(field.options) ? field.options.filter((option): option is string => typeof option === "string") : [],
+      options: normalizeMarketingFormOptions(field.options),
       validationRules: field.validation_rules,
       defaultValue: field.default_value,
       sortOrder: field.sort_order,
@@ -190,8 +212,17 @@ export async function submitMarketingForm(input: PublicSubmissionInput) {
   if (!isObjectPayload(input.payload)) {
     return { ok: false as const, status: 400, message: "Dữ liệu gửi lên không hợp lệ." };
   }
+  if (input.idempotencyKey !== undefined && !/^[A-Za-z0-9_-]{16,128}$/.test(input.idempotencyKey)) return { ok: false as const, status: 400, message: "Mã chống gửi lặp không hợp lệ." };
+  const canonical = (value: unknown): unknown => Array.isArray(value) ? value.map(canonical) : isObjectPayload(value) ? Object.fromEntries(Object.keys(value).sort().map((key) => [key, canonical(value[key])])) : value;
+  const requestHash = createHash("sha256").update(JSON.stringify(canonical({ payload: input.payload, isWebhook: Boolean(input.isWebhook) }))).digest("hex");
 
-  return prisma.$transaction(async (tx) => {
+  let automationEventId: string | null = null;
+  const result = await prisma.$transaction(async (tx) => {
+    // Share the configuration lock with the builder so answers and their snapshot
+    // are validated against the same committed form, including nested field queries.
+    const identity = await tx.marketing_forms.findFirst({ where: { OR: [{ public_key: input.publicKey }, { slug: input.publicKey }] }, select: { id: true } });
+    if (!identity) return { ok: false as const, status: 404, message: "Biểu mẫu không khả dụng." };
+    await tx.$queryRaw`SELECT pg_advisory_xact_lock(hashtext(${`marketing-form:${identity.id}`}))::text`;
     const form = await tx.marketing_forms.findFirst({
       where: { OR: [{ public_key: input.publicKey }, { slug: input.publicKey }] },
       select: {
@@ -204,13 +235,17 @@ export async function submitMarketingForm(input: PublicSubmissionInput) {
         webhook_secret: true,
         created_by: true,
         campaign_id: true,
+        institution_program_id: true,
+        source_id: true,
         duplicate_settings: true,
         success_settings: true,
         close_settings: true,
+        display_settings: true,
+        updated_at: true,
         campaigns: { select: { created_by: true, institution_program_id: true } },
         marketing_form_fields: {
           where: { is_active: true },
-          select: { field_key: true, label: true, field_type: true, is_required: true, options: true, validation_rules: true, lead_field: true, crm_mapping_field: true },
+          select: { field_key: true, label: true, field_type: true, is_required: true, options: true, validation_rules: true, lead_field: true, crm_mapping_field: true, default_value: true },
           orderBy: [{ sort_order: "asc" }, { id: "asc" }],
         },
       },
@@ -218,13 +253,28 @@ export async function submitMarketingForm(input: PublicSubmissionInput) {
     if (!form || !isPublishedStatus(form.status)) {
       return { ok: false as const, status: 404, message: "Biểu mẫu không khả dụng." };
     }
+    const programId = form.institution_program_id;
+    if (!programId) return { ok: false as const, status: 403, message: "Biểu mẫu chưa được cấu hình chương trình. Vui lòng liên hệ quản trị." };
+    const layoutIssues = validateMarketingFormLayout(form.display_settings, form.marketing_form_fields.map(field => ({ fieldKey: field.field_key, fieldType: field.field_type, validationRules: field.validation_rules })));
+    if (layoutIssues.length) return { ok: false as const, status: 400, message: "Cấu hình trang/nhóm chưa hợp lệ. Vui lòng liên hệ quản trị." };
+    const snapshot = createMarketingFormSnapshot({
+      layout: readMarketingFormLayout(form.display_settings),
+      formId: form.id, formName: form.name, formType: form.form_type ?? "lead_form",
+      institutionProgramId: programId, configurationUpdatedAt: form.updated_at?.toISOString() ?? null,
+      fields: form.marketing_form_fields.map((field) => ({
+        fieldKey: field.field_key, label: field.label, fieldType: field.field_type, isRequired: field.is_required,
+        options: field.options, validationRules: field.validation_rules, crmMappingField: field.crm_mapping_field, leadField: field.lead_field, defaultValue: field.default_value,
+      })),
+    });
+    snapshot.configurationVersion = createHash("sha256").update(JSON.stringify(snapshot)).digest("hex");
     const closeSettings = asSettings(form.close_settings);
     const isFormActive = closeSettings.isActive !== false;
     const closeAt = asStringSetting(closeSettings, "closeAt") || asStringSetting(closeSettings, "closedAt");
     const hasClosedAtTime = closeAt ? !Number.isNaN(Date.parse(closeAt)) && Date.now() >= Date.parse(closeAt) : false;
     if (!isFormActive || asBooleanSetting(closeSettings, "isClosed") || hasClosedAtTime) {
       const message = asStringSetting(closeSettings, "closedMessage") || "Biểu mẫu đã tạm dừng nhận thông tin.";
-      return { ok: false as const, status: 403, message, redirectUrl: asStringSetting(closeSettings, "redirectUrl") || undefined };
+      const redirect = resolveMarketingFormRedirect(closeSettings, env.WEB_ORIGIN);
+      return { ok: false as const, status: 403, message, redirectUrl: redirect?.url, redirectMode: redirect?.mode };
     }
     if (asText(input.payload.website) || asText(input.payload._hp)) {
       return { ok: false as const, status: 400, message: "Dữ liệu gửi lên không hợp lệ." };
@@ -238,6 +288,39 @@ export async function submitMarketingForm(input: PublicSubmissionInput) {
       }
     }
 
+    // Authenticate the webhook before replaying any receipt. No Lead identity is public.
+    if (input.idempotencyKey) {
+      const previous = await tx.marketing_form_submissions.findUnique({ where: { marketing_form_id_idempotency_key: { marketing_form_id: form.id, idempotency_key: input.idempotencyKey } }, select: { id: true, request_hash: true, status: true, error_message: true, configuration_snapshot: true } });
+      if (previous) {
+        if (previous.request_hash !== requestHash) return { ok: false as const, status: 409, message: "Mã gửi đã được dùng cho nội dung khác. Vui lòng gửi lại với mã mới." };
+        if (previous.status === "failed") return { ok: false as const, status: 400, message: previous.error_message ?? "Dữ liệu không hợp lệ.", submissionId: previous.id };
+        const receipt = asSettings(asSettings(previous.configuration_snapshot).publicReceipt);
+        return { ok: true as const, data: { submissionId: previous.id, status: "processed", message: asStringSetting(receipt, "message") || "Đã nhận thông tin của bạn.", redirectUrl: asStringSetting(receipt, "redirectUrl") || undefined, redirectMode: receipt.redirectMode === "landing_page" ? "landing_page" as const : receipt.redirectMode === "form" ? "form" as const : undefined } };
+      }
+    }
+    let policy;
+    try { policy = readMarketingFormSubmissionPolicy(form.duplicate_settings); }
+    catch { return { ok: false as const, status: 400, message: "Chính sách biểu mẫu chưa hợp lệ. Vui lòng liên hệ quản trị." }; }
+    snapshot.submissionPolicy = policy;
+    const visibilityFields = snapshot.fields.map(field => ({ ...field, crmMappingField: field.mapping }));
+    const descriptionIssues = validateMarketingFormQuestionDescriptions(visibilityFields);
+    if (validateMarketingFormOther(visibilityFields).length) return { ok: false as const, status: 400, message: "Cấu hình lựa chọn Khác chưa hợp lệ. Vui lòng liên hệ quản trị." };
+    if (validateMarketingFormRatings(visibilityFields).length) return { ok: false as const, status: 400, message: "Thang đánh giá chưa hợp lệ. Vui lòng liên hệ quản trị." };
+    if (descriptionIssues.length) return { ok: false as const, status: 400, message: "Mô tả câu hỏi chưa hợp lệ. Vui lòng liên hệ quản trị." };
+    const visibilityIssues = validateMarketingFormVisibility(visibilityFields, marketingFormPublicationType(form.form_type ?? "lead_form", form.duplicate_settings));
+    if (visibilityIssues.length) return { ok: false as const, status: 400, message: "Điều kiện hiện/ẩn câu hỏi chưa hợp lệ. Vui lòng liên hệ quản trị." };
+    const visibleKeys = resolveMarketingFormVisibleKeys(visibilityFields, input.payload);
+    const payload = stripHiddenMarketingFormAnswers(visibilityFields, input.payload);
+    const tracking = sanitizeMarketingFormTracking(payload);
+    for (const key of marketingFormTrackingKeys) {
+      if (key in payload && !(key in tracking)) return { ok: false as const, status: 400, message: `Trường tracking ${key} không hợp lệ.` };
+    }
+    Object.assign(payload, tracking);
+    const receiptRedirect = resolveMarketingFormRedirect(form.success_settings, env.WEB_ORIGIN);
+    snapshot.publicReceipt = { message: asStringSetting(asSettings(form.success_settings), "message") || "Đã nhận thông tin của bạn.", redirectUrl: receiptRedirect?.url, redirectMode: receiptRedirect?.mode };
+    delete snapshot.configurationVersion;
+    snapshot.configurationVersion = createHash("sha256").update(JSON.stringify(snapshot)).digest("hex");
+
     const normalized: Record<string, string> = {};
     const answers: Record<string, unknown> = {};
     const missingFields: string[] = [];
@@ -249,33 +332,57 @@ export async function submitMarketingForm(input: PublicSubmissionInput) {
       }
     }
     for (const field of form.marketing_form_fields) {
-      const value = input.payload[field.field_key];
+      if (!visibleKeys.has(field.field_key)) continue;
+      const value = payload[field.field_key];
       const textValue = asText(value);
-      const effectiveOptions = getEffectiveFieldOptions(field, form.marketing_form_fields, input.payload);
+      const effectiveOptions = getEffectiveFieldOptions(field, form.marketing_form_fields, payload);
       answers[field.field_key] = value ?? null;
-      if (field.is_required && !textValue) {
+      if (field.is_required && !(Array.isArray(value) ? value.length > 0 : Boolean(textValue) || isMarketingFormOtherAnswerValid(value, field.validation_rules))) {
         missingFields.push(field.label);
       }
       const validationError = validateFieldValue(field, value, effectiveOptions);
       if (validationError) validationErrors.push(validationError);
       const leadField = field.crm_mapping_field ?? field.lead_field;
       if (leadField && leadFields.has(leadField) && textValue) {
+        if (normalized[leadField] !== undefined) validationErrors.push(`Trường CRM ${leadField} đang nhận dữ liệu từ nhiều câu hỏi. Vui lòng kiểm tra cấu hình biểu mẫu.`);
         normalized[leadField] = leadField === "phone" ? normalizePhone(textValue) : textValue;
       }
     }
 
-    const utmSource = asText(input.payload.utm_source);
-    const utmMedium = asText(input.payload.utm_medium);
-    const utmCampaign = asText(input.payload.utm_campaign);
+    if (normalized.institution_program_id && normalized.institution_program_id !== programId) {
+      validationErrors.push("Chương trình không khớp với biểu mẫu.");
+    }
+    const referenceFields = ["major_id", "source_id"] as const;
+    for (const reference of referenceFields) {
+      const value = normalized[reference];
+      if (!value) continue;
+      const field = form.marketing_form_fields.find((item) => (item.crm_mapping_field ?? item.lead_field) === reference);
+      const label = field?.label ?? reference;
+      if (!z.uuid().safeParse(value).success) {
+        validationErrors.push(`${label} đang ánh xạ đến dữ liệu CRM nhưng giá trị lựa chọn không hợp lệ. Vui lòng kiểm tra cấu hình biểu mẫu.`);
+        continue;
+      }
+      const exists = reference === "major_id"
+          ? await tx.majors.findFirst({ where: { id: value, ...(programId && z.uuid().safeParse(programId).success ? { OR: [{ institution_program_id: programId }, { institution_program_id: null }] } : {}) }, select: { id: true } })
+          : await tx.lead_sources.findFirst({ where: { id: value, ...(programId && z.uuid().safeParse(programId).success ? { OR: [{ institution_program_id: programId }, { institution_program_id: null }] } : {}) }, select: { id: true } });
+      if (!exists) validationErrors.push(`${label} không tồn tại hoặc không thuộc chương trình của biểu mẫu.`);
+    }
+
+    const utmSource = asText(payload.utm_source);
+    const utmMedium = asText(payload.utm_medium);
+    const utmCampaign = asText(payload.utm_campaign);
     const source = input.isWebhook ? "webhook" : "public_form";
 
     const createSubmission = async (status: string, errorMessage?: string, leadId?: string | null) => tx.marketing_form_submissions.create({
       data: {
         marketing_form_id: form.id,
         lead_id: leadId ?? null,
-        raw_payload: input.payload as Prisma.InputJsonValue,
+        raw_payload: payload as Prisma.InputJsonValue,
         normalized_payload: normalized as Prisma.InputJsonValue,
         answers: answers as Prisma.InputJsonValue,
+        configuration_snapshot: { ...snapshot, processingOutcome: status === "processed" ? (leadId ? "created_lead" : "survey_only") : status } as unknown as Prisma.InputJsonValue,
+        idempotency_key: input.idempotencyKey,
+        request_hash: input.idempotencyKey ? requestHash : null,
         source,
         utm_source: utmSource || null,
         utm_medium: utmMedium || null,
@@ -299,34 +406,93 @@ export async function submitMarketingForm(input: PublicSubmissionInput) {
       return { ok: false as const, status: 400, message: errorMessage, submissionId: submission.id };
     }
 
+    if (normalized.date_of_birth && Number.isNaN(Date.parse(normalized.date_of_birth))) {
+      const submission = await createSubmission("failed", "Ngày sinh không hợp lệ.");
+      return { ok: false as const, status: 400, message: "Ngày sinh không hợp lệ.", submissionId: submission.id };
+    }
+
     const formType = form.form_type ?? "lead_form";
     const fullName = normalized.full_name;
     const phone = normalized.phone;
     const email = normalized.email;
     const duplicateSettings = asSettings(form.duplicate_settings);
     const successSettings = asSettings(form.success_settings);
+    const successRedirect = resolveMarketingFormRedirect(successSettings, env.WEB_ORIGIN);
+    const success = async (submissionId: string) => {
+      const submission = await tx.marketing_form_submissions.findUniqueOrThrow({ where: { id: submissionId }, select: { lead_id: true } });
+      const triggerType = policy?.submissionMode === "survey_only" || (!policy && formType === "survey") ? "survey_completed" : "form_submitted";
+      automationEventId = await createMarketingFormAutomationEvent(tx, {
+        triggerType,
+        submissionId,
+        formId: form.id,
+        institutionProgramId: programId,
+        configurationVersion: snapshot.configurationVersion ?? null,
+        leadId: submission.lead_id,
+        actorId: form.created_by ?? form.campaigns?.created_by ?? null,
+        answers,
+      });
+      return { ok: true as const, data: { submissionId, status: "processed", message: asStringSetting(successSettings, "message") || "Đã nhận thông tin của bạn.", redirectUrl: successRedirect?.url, redirectMode: successRedirect?.mode } };
+    };
+    if (policy?.submissionMode === "survey_only") {
+      const submission = await createSubmission("processed");
+      return success(submission.id);
+    }
     const duplicateFields = asStringArraySetting(duplicateSettings, "fields");
-    const checkDuplicate = !asBooleanSetting(duplicateSettings, "disableDuplicateCheck") && !asBooleanSetting(duplicateSettings, "skipDuplicateCheck");
+    const checkDuplicate = Boolean(policy) || (!asBooleanSetting(duplicateSettings, "disableDuplicateCheck") && !asBooleanSetting(duplicateSettings, "skipDuplicateCheck"));
     const duplicateWhere = checkDuplicate
       ? [
-          ...(phone && (duplicateFields.length === 0 || duplicateFields.includes("phone")) ? [{ phone, deleted_at: null }] : []),
-          ...(email && duplicateFields.includes("email") ? [{ email, deleted_at: null }] : []),
+          ...(phone && (policy || duplicateFields.length === 0 || duplicateFields.includes("phone")) ? [{ phone, deleted_at: null }] : []),
+          ...(email && (policy || duplicateFields.includes("email")) ? [{ email: { equals: email, mode: "insensitive" as const }, deleted_at: null }] : []),
         ]
       : [];
-    if (formType !== "survey" && (!fullName || !phone)) {
+    if ((policy || formType !== "survey") && (!fullName || !phone)) {
       const errorMessage = "Biểu mẫu cần Họ và tên và Số điện thoại để tạo lead.";
       const submission = await createSubmission("failed", errorMessage);
       return { ok: false as const, status: 400, message: errorMessage, submissionId: submission.id };
     }
 
-    const existingLead = duplicateWhere.length > 0
-      ? await tx.leads.findFirst({
-          where: { OR: duplicateWhere },
-          select: { id: true, email: true, major_id: true, note: true },
+    // A programme lock also serializes submissions from different forms in that programme.
+    // Scope is acquired before checking duplicates, not just before inserting the Lead.
+    await tx.$queryRaw`SELECT pg_advisory_xact_lock(hashtext(${`marketing-form-leads:${programId}`}))::text`;
+    const matchingLeads = duplicateWhere.length > 0
+      ? await tx.leads.findMany({
+          where: { institution_program_id: programId, OR: duplicateWhere },
+          select: { id: true, email: true, major_id: true, note: true, gender: true, date_of_birth: true },
+          take: 2,
         })
-      : null;
+      : [];
+    if (matchingLeads.length > 1) {
+      const submission = await createSubmission("needs_review", "Nhiều Lead khớp thông tin liên hệ; cần xử lý nội bộ.");
+      return success(submission.id);
+    }
+    const existingLead = matchingLeads[0];
+
+    if (existingLead && policy) {
+      const data: Prisma.leadsUpdateInput = {};
+      if (policy.submissionMode === "upsert_lead") {
+        for (const field of marketingFormUpdateFields) {
+          const value = normalized[field];
+          if (!value || (existingLead[field] && !(policy.updatePolicy === "overwrite_selected" && policy.overwriteFields.includes(field)))) continue;
+          if (field === "date_of_birth") { if (!Number.isNaN(Date.parse(value))) data.date_of_birth = new Date(value); }
+          else if (field === "major_id") data.majors = { connect: { id: value } };
+          else data[field] = value;
+        }
+      }
+      const changed = Object.keys(data).length > 0;
+      if (changed) await tx.leads.update({ where: { id: existingLead.id }, data: { ...data, updated_at: new Date() } });
+      const submission = await createSubmission(changed ? "updated" : "linked", undefined, existingLead.id);
+      const actorId = form.created_by ?? form.campaigns?.created_by ?? null;
+      await tx.lead_activities.create({ data: { lead_id: existingLead.id, user_id: actorId, type: "marketing_form_submitted", content: `${changed ? "Bổ sung" : "Liên kết"} phản hồi từ biểu mẫu ${form.name}.`, metadata: { marketingFormId: form.id, submissionId: submission.id } } });
+      await tx.audit_logs.create({ data: { user_id: actorId, entity_type: "lead", entity_id: existingLead.id, action: changed ? "update_from_marketing_form" : "link_marketing_form_submission", new_data: { marketingFormId: form.id, submissionId: submission.id, changedFields: Object.keys(data) } } });
+      return success(submission.id);
+    }
 
     if (existingLead) {
+      const recordLink = async (submissionId: string) => {
+        const actorId = form.created_by ?? form.campaigns?.created_by ?? null;
+        await tx.lead_activities.create({ data: { lead_id: existingLead.id, user_id: actorId, type: "marketing_form_submitted", content: `Liên kết phản hồi từ biểu mẫu ${form.name}.`, metadata: { marketingFormId: form.id, submissionId } } });
+        await tx.audit_logs.create({ data: { user_id: actorId, entity_type: "lead", entity_id: existingLead.id, action: "link_marketing_form_submission", new_data: { marketingFormId: form.id, submissionId } } });
+      };
       if (asBooleanSetting(duplicateSettings, "oneResponseOnly")) {
         const previousSubmission = await tx.marketing_form_submissions.findFirst({
           where: { marketing_form_id: form.id, lead_id: existingLead.id },
@@ -336,13 +502,15 @@ export async function submitMarketingForm(input: PublicSubmissionInput) {
         if (previousSubmission) {
           const errorMessage = asStringSetting(duplicateSettings, "oneResponseMessage") || "Thông tin của Anh/Chị đã được gửi đến nhà trường!";
           const submission = await createSubmission("duplicate", errorMessage, existingLead.id);
-          return { ok: false as const, status: 409, message: errorMessage, submissionId: submission.id };
+          await recordLink(submission.id);
+          return success(submission.id);
         }
       }
       const action = asStringSetting(duplicateSettings, "action") || "update";
       if (action === "skip" || action === "do_not_write") {
         const submission = await createSubmission("duplicate", undefined, existingLead.id);
-        return { ok: true as const, data: { submissionId: submission.id, leadId: existingLead.id, status: "duplicate", message: asStringSetting(successSettings, "message") || undefined, redirectUrl: asStringSetting(successSettings, "redirectUrl") || undefined } };
+        await recordLink(submission.id);
+        return success(submission.id);
       }
       const nextEmail = existingLead.email || normalized.email || null;
       const nextMajorId = existingLead.major_id || normalized.major_id || null;
@@ -364,25 +532,30 @@ export async function submitMarketingForm(input: PublicSubmissionInput) {
         },
       });
       const submission = await createSubmission("duplicate", undefined, existingLead.id);
-      return { ok: true as const, data: { submissionId: submission.id, leadId: existingLead.id, status: "duplicate", message: asStringSetting(successSettings, "message") || undefined, redirectUrl: asStringSetting(successSettings, "redirectUrl") || undefined } };
+      await tx.audit_logs.create({ data: { user_id: form.created_by ?? form.campaigns?.created_by ?? null, entity_type: "lead", entity_id: existingLead.id, action: "update_from_marketing_form", new_data: { marketingFormId: form.id, submissionId: submission.id } } });
+      return success(submission.id);
     }
 
-    if (formType === "survey" && (!fullName || !phone)) {
+    if (!policy && formType === "survey" && (!fullName || !phone)) {
       const submission = await createSubmission("processed");
-      return { ok: true as const, data: { submissionId: submission.id, leadId: null, status: "processed", message: asStringSetting(successSettings, "message") || undefined, redirectUrl: asStringSetting(successSettings, "redirectUrl") || undefined } };
+      return success(submission.id);
     }
 
-    const fallbackSource = normalized.source_id ? { id: normalized.source_id } : await findDefaultLeadSource(tx, form.campaigns?.institution_program_id);
+    const configuredSourceId = normalized.source_id || form.source_id;
+    const fallbackSource = configuredSourceId
+      ? await tx.lead_sources.findFirst({ where: { id: configuredSourceId, OR: [{ institution_program_id: programId }, { institution_program_id: null }] }, select: { id: true } })
+      : await findDefaultLeadSource(tx, programId);
     if (!fallbackSource) {
       const errorMessage = "Chưa có nguồn lead để tạo lead từ biểu mẫu.";
       const submission = await createSubmission("failed", errorMessage);
       return { ok: false as const, status: 400, message: errorMessage, submissionId: submission.id };
     }
 
-    const ownerId = form.created_by ?? form.campaigns?.created_by ?? null;
+    const actorId = form.created_by ?? form.campaigns?.created_by ?? null;
+    const ownerId = policy ? null : actorId;
     const lead = await tx.leads.create({
       data: {
-        lead_code: `LD-${Date.now().toString(36).toUpperCase()}`,
+        lead_code: `LD-${randomUUID().replaceAll("-", "").slice(0, 24).toUpperCase()}`,
         full_name: fullName,
         phone,
         email: normalized.email || null,
@@ -390,7 +563,7 @@ export async function submitMarketingForm(input: PublicSubmissionInput) {
         date_of_birth: normalized.date_of_birth ? new Date(normalized.date_of_birth) : null,
         note: normalized.note || `Lead được tạo từ biểu mẫu ${form.name}.`,
         source_id: fallbackSource.id,
-        institution_program_id: normalized.institution_program_id || form.campaigns?.institution_program_id || null,
+        institution_program_id: programId,
         major_id: normalized.major_id || null,
         owner_id: ownerId,
         assigned_to: ownerId,
@@ -410,7 +583,7 @@ export async function submitMarketingForm(input: PublicSubmissionInput) {
     await tx.lead_activities.create({
       data: {
         lead_id: lead.id,
-        user_id: ownerId,
+        user_id: actorId,
         type: "marketing_form_submitted",
         content: `Lead được tạo từ biểu mẫu ${form.name}.`,
         metadata: { marketingFormId: form.id, campaignId: form.campaign_id },
@@ -418,15 +591,21 @@ export async function submitMarketingForm(input: PublicSubmissionInput) {
     });
     await tx.audit_logs.create({
       data: {
-        user_id: ownerId,
+        user_id: actorId,
         entity_type: "lead",
         entity_id: lead.id,
         action: "create_from_marketing_form",
         ip_address: input.ipAddress,
-        new_data: { marketingFormId: form.id, sourceId: fallbackSource.id, fullName, phone },
+        new_data: { marketingFormId: form.id, sourceId: fallbackSource.id },
       },
     });
     const submission = await createSubmission("processed", undefined, lead.id);
-    return { ok: true as const, data: { submissionId: submission.id, leadId: lead.id, status: "processed", message: asStringSetting(successSettings, "message") || undefined, redirectUrl: asStringSetting(successSettings, "redirectUrl") || undefined } };
+    return success(submission.id);
   });
+  if (result.ok && automationEventId) {
+    void dispatchMarketingFormAutomationEvent(automationEventId).catch(() => {
+      console.error("Không thể phát event automation Form/Survey; recovery scan sẽ thử lại.", { automationEventId });
+    });
+  }
+  return result;
 }

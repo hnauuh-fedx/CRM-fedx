@@ -39,6 +39,7 @@ type LeadAssignmentInput = {
   assigneeId?: string;
   departmentId?: string;
   resolveAssigneeId?: (tx: Prisma.TransactionClient) => Promise<string>;
+  skipIfAssigned?: boolean;
 };
 
 export { leadUpdatePermissions } from "./lead-authorization";
@@ -303,6 +304,9 @@ export async function assignVisibleLead(
     );
     if (!lead) {
       return { ok: false as const, reason: "lead_not_found" as const };
+    }
+    if (input.skipIfAssigned && lead.assigned_to) {
+      return { ok: true as const, data: { id: leadId, assigneeId: lead.assigned_to, assignmentId: null, assignedAt: null, preserved: true as const } };
     }
     const assigneeId = input.resolveAssigneeId
       ? await input.resolveAssigneeId(tx)

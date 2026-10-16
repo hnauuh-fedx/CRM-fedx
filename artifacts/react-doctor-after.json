@@ -1,0 +1,284 @@
+{
+  "schemaVersion": 3,
+  "sourceRevision": "be11e1832757cd41e96043487b06e6dc1378dd8d",
+  "mode": "diff",
+  "reactDetected": true,
+  "version": "0.9.18",
+  "ok": true,
+  "directory": "D:\\Project Visual Studio Code\\crm_website\\admission-crm",
+  "diff": {
+    "baseBranch": "pull request target",
+    "currentBranch": null,
+    "changedFileCount": 17,
+    "isCurrentChanges": false
+  },
+  "projects": [
+    {
+      "directory": "D:\\Project Visual Studio Code\\crm_website\\admission-crm\\apps\\web",
+      "packageRoot": "D:\\Project Visual Studio Code\\crm_website\\admission-crm\\apps\\web",
+      "sourceFilterConfigHash": "bccba9af786c396a5fb90c4b05d568dfa2361741e7b91c1c423877cbaa48bf12",
+      "framework": "vite",
+      "project": {
+        "rootDirectory": "D:\\Project Visual Studio Code\\crm_website\\admission-crm\\apps\\web",
+        "projectName": "@admission-crm/web",
+        "reactVersion": "^19.2.6",
+        "reactMajorVersion": 19,
+        "tailwindVersion": "^4.3.0",
+        "zodVersion": "^4.4.3",
+        "zodMajorVersion": 4,
+        "mobxVersion": null,
+        "mobxMajorVersion": null,
+        "hasMobxReact": false,
+        "mobxReactVersion": null,
+        "hasMobxReactLite": false,
+        "mobxReactLiteVersion": null,
+        "hasMobxStateTree": false,
+        "hasMobxReactObserver": false,
+        "zustandVersion": null,
+        "zustandMajorVersion": null,
+        "framework": "vite",
+        "hasTypeScript": true,
+        "hasReactCompiler": false,
+        "hasReactCompilerLintPlugin": false,
+        "hasTanStackQuery": true,
+        "hasI18nLibrary": false,
+        "hasRadixUi": true,
+        "hasBaseUi": false,
+        "hasReactAriaComponents": false,
+        "hasTanstackTable": true,
+        "hasTanstackVirtual": false,
+        "hasTanstackForm": false,
+        "tanstackQueryVersion": "^5.100.14",
+        "styledComponentsVersion": null,
+        "valtioVersion": null,
+        "valtioMajorVersion": null,
+        "hasRemotion": false,
+        "remotionVersion": null,
+        "remotionMajorVersion": null,
+        "hasThree": false,
+        "threeVersion": null,
+        "threeRelease": null,
+        "hasReactThreeFiber": false,
+        "reactThreeFiberVersion": null,
+        "reactThreeFiberMajorVersion": null,
+        "hasSsrDependency": false,
+        "preactVersion": null,
+        "preactMajorVersion": null,
+        "hasReactNativeWorkspace": false,
+        "nextjsVersion": null,
+        "nextjsMajorVersion": null,
+        "reactRouterVersion": "^7.15.1",
+        "hasReactRouterFramework": false,
+        "expoVersion": null,
+        "shopifyFlashListVersion": null,
+        "shopifyFlashListMajorVersion": null,
+        "hasReanimated": false,
+        "reanimatedVersion": null,
+        "hasShadcnUi": true,
+        "isPreES2023Target": true,
+        "isStaticExport": false,
+        "sourceFileCount": 259
+      },
+      "diagnostics": [
+        {
+          "filePath": "src/modules/automations/pages/automation-monitoring-page.tsx",
+          "plugin": "react-doctor",
+          "rule": "duplicate-jsx-subtree",
+          "severity": "warning",
+          "title": "Duplicated JSX structure",
+          "message": "3 copies of this 7-node JSX tree appear across 3 files, repeating about 18 lines. Composition path: AutomationExecutionHistory > Card > CardContent > div > Table > TableHeader.",
+          "help": "Consider extracting a shared component if these trees represent the same UI concept. Keep them separate when the resemblance is incidental or the variants are likely to evolve independently.",
+          "line": 897,
+          "column": 15,
+          "endLine": 905,
+          "endColumn": 29,
+          "category": "Maintainability",
+          "relatedLocations": [
+            {
+              "filePath": "src/modules/management/pages/departments-access-page.tsx",
+              "line": 155,
+              "column": 17,
+              "endLine": 163,
+              "endColumn": 31,
+              "message": "Matching JSX subtree (2 of 3) at DepartmentsAccessPage > div > Card > CardContent > div > Table > TableHeader."
+            },
+            {
+              "filePath": "src/modules/management/pages/permissions-access-page.tsx",
+              "line": 257,
+              "column": 17,
+              "endLine": 265,
+              "endColumn": 31,
+              "message": "Matching JSX subtree (3 of 3) at PermissionsAccessPage > div > Card > CardContent > div > Table > TableHeader."
+            }
+          ],
+          "fingerprint": "identity:29bcd9bf2488004c01f97e5b2ea290e07c6375c426f767257d8d7b2f79f385f1",
+          "id": "apps/web/src/modules/automations/pages/automation-monitoring-page.tsx::897:15::react-doctor/duplicate-jsx-subtree::4c111b3c8ea1fdc45d4fc02334682d51783125ed9a6037ee9e85a5d5593b1e61",
+          "normalizedFilePath": "src/modules/automations/pages/automation-monitoring-page.tsx",
+          "tags": [
+            "project-analysis"
+          ]
+        },
+        {
+          "filePath": "src/modules/automations/pages/automation-monitoring-page.tsx",
+          "plugin": "react-doctor",
+          "rule": "duplicate-jsx-subtree",
+          "severity": "warning",
+          "title": "Duplicated JSX structure",
+          "message": "3 copies of this 6-node JSX tree appear across 3 files, repeating about 9 lines. Composition path: AutomationExecutionDetail > Dialog > DialogContent > div > div > Table > TableHeader.",
+          "help": "Consider extracting a shared component if these trees represent the same UI concept. Keep them separate when the resemblance is incidental or the variants are likely to evolve independently.",
+          "line": 1049,
+          "column": 17,
+          "endLine": 1056,
+          "endColumn": 31,
+          "category": "Maintainability",
+          "relatedLocations": [
+            {
+              "filePath": "src/modules/management/pages/system-settings-page.tsx",
+              "line": 126,
+              "column": 15,
+              "endLine": 126,
+              "endColumn": 183,
+              "message": "Matching JSX subtree (2 of 3) at SystemSettingsPage > div > Fragment > SectionCard > Table > TableHeader."
+            },
+            {
+              "filePath": "src/modules/webhooks/pages/webhooks-page.tsx",
+              "line": 764,
+              "column": 17,
+              "endLine": 771,
+              "endColumn": 31,
+              "message": "Matching JSX subtree (3 of 3) at WebhookDetails > div > Card > CardContent > FieldSet > div > Table > TableHeader."
+            }
+          ],
+          "fingerprint": "identity:c47b6a6ba8b52155ec54e93c832fbef3726f39c120695f016dbb02b132234560",
+          "id": "apps/web/src/modules/automations/pages/automation-monitoring-page.tsx::1049:17::react-doctor/duplicate-jsx-subtree::ee1998d72f6a2d9f63f45d1aebf89f3390961f91fb468d7b4fcce9897c5ed9e1",
+          "normalizedFilePath": "src/modules/automations/pages/automation-monitoring-page.tsx",
+          "tags": [
+            "project-analysis"
+          ]
+        }
+      ],
+      "score": {
+        "score": 90,
+        "label": "Great",
+        "rules": {
+          "react-doctor/duplicate-jsx-subtree": {
+            "priority": 52,
+            "tier": "P2"
+          }
+        }
+      },
+      "skippedChecks": [],
+      "analyzedFiles": [
+        "src/components/shared/business-records-page.tsx",
+        "src/components/shared/server-data-table.tsx",
+        "src/components/shared/table-pagination.tsx",
+        "src/modules/admissions/pages/admission-documents-page.tsx",
+        "src/modules/admissions/pages/admission-fees-page.tsx",
+        "src/modules/admissions/pages/admission-statuses-page.tsx",
+        "src/modules/admissions/pages/admissions-list-page.tsx",
+        "src/modules/automations/pages/automation-monitoring-page.tsx",
+        "src/modules/dashboard/pages/director-dashboard-page.tsx",
+        "src/modules/leads/components/create-lead-dialog.tsx",
+        "src/modules/leads/components/dynamic-field-renderer.tsx",
+        "src/modules/leads/components/lead-list-columns.tsx",
+        "src/modules/leads/lead-custom-field.helpers.ts",
+        "src/modules/leads/pages/leads-list-page.tsx",
+        "src/modules/marketing/marketing-form-fill.tsx",
+        "src/modules/marketing/pages/meta-connection-page.tsx",
+        "src/modules/sale/pages/lead-assignments-page.tsx"
+      ],
+      "analyzedFileCount": 17,
+      "complete": true,
+      "scannedFileCount": 17,
+      "elapsedMilliseconds": 2835.6323
+    }
+  ],
+  "diagnostics": [
+    {
+      "filePath": "src/modules/automations/pages/automation-monitoring-page.tsx",
+      "plugin": "react-doctor",
+      "rule": "duplicate-jsx-subtree",
+      "severity": "warning",
+      "title": "Duplicated JSX structure",
+      "message": "3 copies of this 7-node JSX tree appear across 3 files, repeating about 18 lines. Composition path: AutomationExecutionHistory > Card > CardContent > div > Table > TableHeader.",
+      "help": "Consider extracting a shared component if these trees represent the same UI concept. Keep them separate when the resemblance is incidental or the variants are likely to evolve independently.",
+      "line": 897,
+      "column": 15,
+      "endLine": 905,
+      "endColumn": 29,
+      "category": "Maintainability",
+      "relatedLocations": [
+        {
+          "filePath": "src/modules/management/pages/departments-access-page.tsx",
+          "line": 155,
+          "column": 17,
+          "endLine": 163,
+          "endColumn": 31,
+          "message": "Matching JSX subtree (2 of 3) at DepartmentsAccessPage > div > Card > CardContent > div > Table > TableHeader."
+        },
+        {
+          "filePath": "src/modules/management/pages/permissions-access-page.tsx",
+          "line": 257,
+          "column": 17,
+          "endLine": 265,
+          "endColumn": 31,
+          "message": "Matching JSX subtree (3 of 3) at PermissionsAccessPage > div > Card > CardContent > div > Table > TableHeader."
+        }
+      ],
+      "fingerprint": "identity:29bcd9bf2488004c01f97e5b2ea290e07c6375c426f767257d8d7b2f79f385f1",
+      "id": "apps/web/src/modules/automations/pages/automation-monitoring-page.tsx::897:15::react-doctor/duplicate-jsx-subtree::4c111b3c8ea1fdc45d4fc02334682d51783125ed9a6037ee9e85a5d5593b1e61",
+      "normalizedFilePath": "src/modules/automations/pages/automation-monitoring-page.tsx",
+      "tags": [
+        "project-analysis"
+      ]
+    },
+    {
+      "filePath": "src/modules/automations/pages/automation-monitoring-page.tsx",
+      "plugin": "react-doctor",
+      "rule": "duplicate-jsx-subtree",
+      "severity": "warning",
+      "title": "Duplicated JSX structure",
+      "message": "3 copies of this 6-node JSX tree appear across 3 files, repeating about 9 lines. Composition path: AutomationExecutionDetail > Dialog > DialogContent > div > div > Table > TableHeader.",
+      "help": "Consider extracting a shared component if these trees represent the same UI concept. Keep them separate when the resemblance is incidental or the variants are likely to evolve independently.",
+      "line": 1049,
+      "column": 17,
+      "endLine": 1056,
+      "endColumn": 31,
+      "category": "Maintainability",
+      "relatedLocations": [
+        {
+          "filePath": "src/modules/management/pages/system-settings-page.tsx",
+          "line": 126,
+          "column": 15,
+          "endLine": 126,
+          "endColumn": 183,
+          "message": "Matching JSX subtree (2 of 3) at SystemSettingsPage > div > Fragment > SectionCard > Table > TableHeader."
+        },
+        {
+          "filePath": "src/modules/webhooks/pages/webhooks-page.tsx",
+          "line": 764,
+          "column": 17,
+          "endLine": 771,
+          "endColumn": 31,
+          "message": "Matching JSX subtree (3 of 3) at WebhookDetails > div > Card > CardContent > FieldSet > div > Table > TableHeader."
+        }
+      ],
+      "fingerprint": "identity:c47b6a6ba8b52155ec54e93c832fbef3726f39c120695f016dbb02b132234560",
+      "id": "apps/web/src/modules/automations/pages/automation-monitoring-page.tsx::1049:17::react-doctor/duplicate-jsx-subtree::ee1998d72f6a2d9f63f45d1aebf89f3390961f91fb468d7b4fcce9897c5ed9e1",
+      "normalizedFilePath": "src/modules/automations/pages/automation-monitoring-page.tsx",
+      "tags": [
+        "project-analysis"
+      ]
+    }
+  ],
+  "summary": {
+    "errorCount": 0,
+    "warningCount": 2,
+    "affectedFileCount": 1,
+    "totalDiagnosticCount": 2,
+    "score": 90,
+    "scoreLabel": "Great"
+  },
+  "elapsedMilliseconds": 2928.6232,
+  "error": null
+}

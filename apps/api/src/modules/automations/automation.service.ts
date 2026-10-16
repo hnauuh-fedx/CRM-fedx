@@ -20,6 +20,7 @@ import {
 } from "./automation-bulk.service";
 import { redactAutomationText, redactAutomationValue } from "./automation-observability";
 import { isAutomationEmailProviderAvailable } from "./automation-internal-email.service";
+import { getAutomationMessageProviderCapabilities } from "./automation-message-delivery.service";
 
 export type AutomationRuleListQuery = {
   page: number;
@@ -429,6 +430,15 @@ export async function toggleAutomationRule(user: AuthUser, id: string, isActive:
       existing.graph_data,
       existing.institution_program_id,
     );
+    if (validation.valid) {
+      const capabilities = getAutomationMessageProviderCapabilities();
+      for (const node of withAutomationTriggerType(existing.graph_data, existing.trigger_type).nodes) {
+        if (node.type === "action_message" && node.data.messageChannel && !capabilities[node.data.messageChannel]) {
+          validation.issues.push({ code: "INVALID_NODE_CONFIG", nodeId: node.id, message: `Provider ${node.data.messageChannel.toUpperCase()} chưa được cấu hình HTTPS hợp lệ. Không thể bật rule gửi tin.` });
+          validation.valid = false;
+        }
+      }
+    }
     if (!validation.valid) {
       const unsupportedTrigger = validation.issues.some((issue) => issue.code === "UNSUPPORTED_TRIGGER");
       return {
@@ -512,7 +522,7 @@ async function validateRuleConfiguration(
     const options = await getAutomationOptions(user, institutionProgramId ?? undefined);
     if (options) {
       issues.push(...validateAutomationSemantics(normalizedGraphData, {
-        assigneeIds: new Set(options.assignees.map((assignee) => assignee.id)),
+        assigneeIds: new Set([...options.assignees, ...options.assignmentPoolAssignees.filter((assignee) => assignee.canReceiveLead)].map((assignee) => assignee.id)),
         departmentIds: new Set(options.departments.map((department) => department.id)),
         pipelineStageIds: new Set(options.pipelineStages.map((stage) => stage.id)),
         targetRoleCodes: new Set(options.targetRoles.map((role) => role.code)),
@@ -921,21 +931,7 @@ export async function getAutomationOptions(user: AuthUser, institutionProgramId?
     && user.accessScope === "ALL"
     && user.permissions.includes("lead.view_all");
   const scopedLeadWhere = { deleted_at: null, ...getLeadScopeWhere(user) };
-  const eligibleAssigneeRoles = {
-    some: { roles: {
-      ...(resolvedInstitutionProgramId
-        ? { role_institution_programs: { some: { institution_program_id: resolvedInstitutionProgramId } } }
-        : {}),
-      role_permissions: { some: { permissions: { code: "lead.view_assigned" } } },
-    } },
-    none: { roles: {
-      ...(resolvedInstitutionProgramId
-        ? { role_institution_programs: { some: { institution_program_id: resolvedInstitutionProgramId } } }
-        : {}),
-      role_permissions: { some: { permissions: { code: { in: ["lead.view_department", "lead.view_all"] } } } },
-    } },
-  };
-  const [programs, assignees, assignmentPoolAssignees, departments, pipelineStages, targetRoles, customDataFields, sources, majors, admissionStatuses, admissionClasses, tags, customerLists, webhookEndpoints, assignmentCounts] = await Promise.all([
+  const [programs, assignees, assignmentPoolAssignees, departments, pipelineStages, targetRoles, customDataFields, sources, majors, admissionStatuses, admissionClasses, tags, customerLists, webhookEndpoints, marketingForms, assignmentCounts] = await Promise.all([
     prisma.institution_programs.findMany({
       where: {
         status: "active",
@@ -975,33 +971,25 @@ export async function getAutomationOptions(user: AuthUser, institutionProgramId?
             where: { id: user.id, status: "active", deleted_at: null },
             select: { id: true, full_name: true, user_departments: { select: { department_id: true } } },
           }),
-    canBrowseAllAssignees
+    canAssign && resolvedInstitutionProgramId
       ? prisma.users.findMany({
           where: {
             status: "active",
             deleted_at: null,
-            user_roles: eligibleAssigneeRoles,
+            user_roles: { some: { roles: { role_institution_programs: { some: { institution_program_id: resolvedInstitutionProgramId } } } } },
           },
-          select: { id: true, full_name: true, user_departments: { select: { department_id: true } } },
-          orderBy: { full_name: "asc" },
-          take: 500,
-        })
-      : canAssign && (user.accessScope === "DEPARTMENT" || user.permissions.includes("lead.view_department"))
-        ? prisma.users.findMany({
-            where: {
-              status: "active",
-              deleted_at: null,
-              user_roles: eligibleAssigneeRoles,
-              user_departments: { some: { department_id: { in: user.departmentIds } } },
+          select: {
+            id: true,
+            full_name: true,
+            user_departments: { select: { department_id: true } },
+            user_roles: {
+              where: { roles: { role_institution_programs: { some: { institution_program_id: resolvedInstitutionProgramId } } } },
+              select: { roles: { select: { role_permissions: { select: { permissions: { select: { code: true } } } } } } },
             },
-            select: { id: true, full_name: true, user_departments: { select: { department_id: true } } },
-            orderBy: { full_name: "asc" },
-            take: 500,
-          })
-        : prisma.users.findMany({
-            where: { id: user.id, status: "active", deleted_at: null, user_roles: eligibleAssigneeRoles },
-            select: { id: true, full_name: true, user_departments: { select: { department_id: true } } },
-          }),
+          },
+          orderBy: [{ full_name: "asc" }, { id: "asc" }],
+        })
+      : Promise.resolve([]),
     canAssign
       ? prisma.departments.findMany({
           where: canBrowseAllAssignees ? undefined : { id: { in: user.departmentIds } },
@@ -1053,6 +1041,26 @@ export async function getAutomationOptions(user: AuthUser, institutionProgramId?
     listAccessibleAutomationLeadTags(user, resolvedInstitutionProgramId),
     listAccessibleAutomationCustomerLists(user, resolvedInstitutionProgramId),
     listAutomationWebhookEndpointOptions(user, resolvedInstitutionProgramId),
+    prisma.marketing_forms.findMany({
+      where: {
+        status: { in: ["active", "published"] },
+        ...(resolvedInstitutionProgramId
+          ? { institution_program_id: resolvedInstitutionProgramId }
+          : accessibleProgramIds === null ? {} : { institution_program_id: { in: accessibleProgramIds } }),
+      },
+      select: {
+        id: true,
+        name: true,
+        marketing_form_fields: {
+          where: { is_active: true },
+          select: { field_key: true, label: true, field_type: true },
+          orderBy: [{ sort_order: "asc" }, { id: "asc" }],
+          take: 200,
+        },
+      },
+      orderBy: [{ name: "asc" }, { id: "asc" }],
+      take: 500,
+    }),
     canAssign
       ? prisma.leads.groupBy({
           by: ["assigned_to"],
@@ -1067,9 +1075,21 @@ export async function getAutomationOptions(user: AuthUser, institutionProgramId?
       : Promise.resolve([]),
   ]);
   if (!webhookEndpoints) return null;
+  const answerFields = [...new Map(marketingForms.flatMap((form) => form.marketing_form_fields.map((field) => [field.field_key, {
+    reference: `event:answer:${field.field_key}`,
+    key: field.field_key,
+    label: field.label,
+    description: `Câu trả lời từ Form/Survey; nên kết hợp với điều kiện Biểu mẫu để tránh trùng field key.`,
+    dataType: automationFormFieldDataType(field.field_type),
+    groupKey: "form_answers",
+    groupLabel: "Câu trả lời Form & Survey",
+    source: "event" as const,
+    isSensitive: false,
+  }] as const))).values()];
   return {
     registry: {
       ...AUTOMATION_REGISTRY,
+      fields: [...AUTOMATION_REGISTRY.fields, ...answerFields],
       nodes: AUTOMATION_REGISTRY.nodes.filter((definition) => (definition.requiredCapabilities ?? []).every((capability) => {
         if (capability === "assign") return canAssign;
         if (capability === "createReminder") return user.permissions.includes("reminder.create");
@@ -1097,6 +1117,12 @@ export async function getAutomationOptions(user: AuthUser, institutionProgramId?
       fullName: assignee.full_name,
       assignedCount: assignmentCounts.find((item) => item.assigned_to === assignee.id)?._count._all ?? 0,
       departmentIds: assignee.user_departments.map((membership) => membership.department_id),
+      canReceiveLead: assignee.user_roles.some((membership) => membership.roles?.role_permissions.some((permission) => permission.permissions?.code === "lead.view_assigned"))
+        && !assignee.user_roles.some((membership) => membership.roles?.role_permissions.some((permission) => ["lead.view_department", "lead.view_all"].includes(permission.permissions?.code ?? "")))
+        && (canBrowseAllAssignees
+          || ((user.accessScope === "DEPARTMENT" || user.permissions.includes("lead.view_department"))
+            ? assignee.user_departments.some((membership) => membership.department_id && user.departmentIds.includes(membership.department_id))
+            : assignee.id === user.id)),
     })),
     departments,
     pipelineStages: pipelineStages.map((stage) => ({
@@ -1118,6 +1144,8 @@ export async function getAutomationOptions(user: AuthUser, institutionProgramId?
       admission_statuses: admissionStatuses.map((status) => ({ code: status.id, label: status.name })),
       tags: tags.map((tag) => ({ code: tag.name, label: tag.name })),
       institution_programs: programs.map((program) => ({ code: program.id, label: `${program.institution_name} - ${program.name}` })),
+      marketing_forms: marketingForms.map((form) => ({ code: form.id, label: form.name })),
+      marketing_form_event_types: [{ code: "form_submitted", label: "Biểu mẫu tạo Lead được gửi" }, { code: "survey_completed", label: "Khảo sát được hoàn thành" }],
       payment_statuses: [
         { code: "pending", label: "Chờ thanh toán" },
         { code: "partial", label: "Thanh toán một phần" },
@@ -1139,6 +1167,17 @@ export async function getAutomationOptions(user: AuthUser, institutionProgramId?
       ],
     },
   };
+}
+
+function automationFormFieldDataType(fieldType: string) {
+  if (fieldType === "rating" || fieldType === "number") return "NUMBER";
+  if (fieldType === "date") return "DATE";
+  if (["checkbox", "multi_select"].includes(fieldType)) return "MULTI_SELECT";
+  if (["select", "single_select", "radio", "province"].includes(fieldType)) return "SELECT";
+  if (fieldType === "email") return "EMAIL";
+  if (fieldType === "phone") return "PHONE";
+  if (fieldType === "textarea") return "TEXTAREA";
+  return "TEXT";
 }
 
 function serializeBulkJob(job: {

@@ -1,4 +1,5 @@
 import { UnrecoverableError } from "bullmq";
+import { isAutomationProviderConfigured } from "./automation-provider-readiness";
 
 import { env } from "../../config/env";
 import { prisma } from "../../database/prisma";
@@ -24,6 +25,14 @@ const providerConfig = {
   sms: () => ({ url: env.AUTOMATION_SMS_PROVIDER_URL, token: env.AUTOMATION_SMS_PROVIDER_TOKEN }),
   zns: () => ({ url: env.AUTOMATION_ZNS_PROVIDER_URL, token: env.AUTOMATION_ZNS_PROVIDER_TOKEN }),
 } satisfies Record<AutomationMessageChannel, () => { url?: string; token?: string }>;
+
+export function getAutomationMessageProviderCapabilities() {
+  const configured = (channel: AutomationMessageChannel) => {
+    const config = providerConfig[channel]();
+    return isAutomationProviderConfigured(config.url, config.token, process.env.NODE_ENV === "integration");
+  };
+  return { email: configured("email"), sms: configured("sms"), zns: configured("zns") };
+}
 
 export async function sendAutomationMessage(input: SendAutomationMessageInput) {
   if (!input.actor.permissions.includes("lead.sensitive.view")) {
@@ -86,7 +95,7 @@ export async function sendAutomationMessage(input: SendAutomationMessageInput) {
   }
 
   const config = providerConfig[input.channel]();
-  if (!config.url || !config.token) throw new UnrecoverableError(`Provider ${input.channel.toUpperCase()} chưa được cấu hình.`);
+  if (!isAutomationProviderConfigured(config.url, config.token, process.env.NODE_ENV === "integration")) throw new UnrecoverableError(`Provider ${input.channel.toUpperCase()} chưa được cấu hình HTTPS hợp lệ; mock cục bộ chỉ dùng trong integration test.`);
   const references = getAutomationTemplateReferences(input.subject ?? "", input.content);
   const values = references.length
     ? await getAutomationLeadData(input.actor, input.leadId, input.institutionProgramId, references)
@@ -106,7 +115,7 @@ export async function sendAutomationMessage(input: SendAutomationMessageInput) {
   }
   let response: Response;
   try {
-    response = await fetch(config.url, {
+    response = await fetch(config.url!, {
       method: "POST",
       headers: { "content-type": "application/json", authorization: `Bearer ${config.token}`, "idempotency-key": delivery.id },
       body,

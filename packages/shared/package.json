@@ -3,8 +3,15 @@
   "private": true,
   "type": "module",
   "exports": {
+    "./marketing-form-layout": "./src/marketing-form-layout.ts",
+    "./marketing-form-visibility": "./src/marketing-form-visibility.ts",
+    "./marketing-form-submission-policy": "./src/marketing-form-submission-policy.ts",
+    "./marketing-form-snapshot": "./src/marketing-form-snapshot.ts",
+    "./marketing-form-config": "./src/marketing-form-config.ts",
+    "./marketing-form-embed": "./src/marketing-form-embed.ts",
     "./automation-assignment": "./src/automation-assignment.ts",
     "./automation-reassignment-policy": "./src/automation-reassignment-policy.ts",
-    "./lead-form-field-catalog": "./src/lead-form-field-catalog.ts"
+    "./lead-form-field-catalog": "./src/lead-form-field-catalog.ts",
+    "./display-layout": "./src/display-layout.ts"
   }
 }

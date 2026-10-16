@@ -35,4 +35,4 @@ export const vietnamProvinces = [
   { code: "cao_bang", label: "Cao Bằng" },
 ] as const;
 
-export const vietnamProvinceByCode = new Map(vietnamProvinces.map((province) => [province.code, province.label]));
+export const vietnamProvinceByCode = new Map<string, string>(vietnamProvinces.map((province) => [province.code, province.label]));

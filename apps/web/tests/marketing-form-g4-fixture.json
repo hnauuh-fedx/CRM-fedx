@@ -1,0 +1,14 @@
+{
+  "name": "Nghiệm thu G4", "formType": "survey", "title": "Nghiệm thu G4", "subtitle": "Fixture cô lập", "description": "Không ghi CRM thật", "submitButtonLabel": "Gửi kiểm thử",
+  "platform": "fixture", "formCode": "G4", "status": "published", "webhookEnabled": false,
+  "displaySettings": { "confirmBeforeSubmit": true, "surveyLayout": { "version": 1, "pages": [ { "id": "default", "title": "Trang đầu" }, { "id": "p2", "title": "Đánh giá" }, { "id": "p3", "title": "Hoàn tất" } ], "groups": [ { "id": "g1", "pageId": "p2", "title": "Ý kiến", "description": "Nhóm câu hỏi khảo sát" } ] } },
+  "duplicateSettings": { "submissionMode": "survey_only", "submissionPolicyVersion": 1, "updatePolicy": "fill_empty", "overwriteFields": [] },
+  "successSettings": {}, "mappings": [],
+  "fields": [
+    { "fieldKey": "gate", "label": "Có thêm ý kiến?", "placeholder": null, "fieldType": "radio", "isRequired": true, "isActive": true, "sortOrder": 0, "options": [ { "value": "yes", "label": "Có" }, { "value": "no", "label": "Không" } ], "validationRules": { "questionDescription": "Chọn Có để hiện câu hỏi tiếp theo." } },
+    { "fieldKey": "detail", "label": "Chi tiết ý kiến", "placeholder": null, "fieldType": "text", "isRequired": true, "isActive": true, "sortOrder": 1, "options": [], "validationRules": { "visibility": { "parentFieldKey": "gate", "operator": "equals", "value": "yes" } } },
+    { "fieldKey": "other", "label": "Lựa chọn khảo sát", "placeholder": null, "fieldType": "radio", "isRequired": true, "isActive": true, "sortOrder": 2, "options": [ { "value": "a", "label": "Lựa chọn A" }, { "value": "b", "label": "Lựa chọn B" } ], "validationRules": { "allowOther": true, "formLayout": { "pageId": "p2", "groupId": "g1" }, "visibility": { "parentFieldKey": "gate", "operator": "equals", "value": "yes" } } },
+    { "fieldKey": "rating", "label": "Mức độ hài lòng", "placeholder": null, "fieldType": "rating", "isRequired": true, "isActive": true, "sortOrder": 3, "options": [], "validationRules": { "ratingMax": 5, "formLayout": { "pageId": "p2" }, "questionDescription": "Đánh giá từ 1 đến 5 sao. <b>Chỉ là văn bản</b>" } },
+    { "fieldKey": "final", "label": "Ghi chú cuối", "placeholder": null, "fieldType": "text", "isRequired": true, "isActive": true, "sortOrder": 4, "options": [], "validationRules": { "formLayout": { "pageId": "p3" } } }
+  ]
+}

@@ -17,7 +17,6 @@ fs.mkdirSync(screenshots, { recursive: true });
 
 async function fixture(browser, viewport, opening = {}) {
   const context = await browser.newContext({ viewport, reducedMotion: "reduce" });
-  await context.addInitScript(() => localStorage.setItem("admission-crm.access-token", "browser-test-token"));
   const page = await context.newPage();
   const errors = [];
   page.on("pageerror", (error) => errors.push(error.message));
@@ -45,6 +44,7 @@ async function fixture(browser, viewport, opening = {}) {
     const method = route.request().method();
     let payload = {};
     if (endpoint === "/auth/me") payload = { user: { id: programId, email: "test@example.test", fullName: "Nhân viên kiểm thử", avatarUrl: null, roles: ["TELESALE"], permissions: ["lead.view_assigned", "lead.update_assigned", "custom_field.view", "custom_field.update", "custom_field.manage_options"], departmentIds: [], institutionProgramIds: [programId], accessScope: "ASSIGNED_ONLY" } };
+    else if (endpoint === "/auth/refresh") payload = { accessToken: "browser-test-token", expiresIn: 900, sessionId: "fixture-session", rememberDevice: true, user: { id: programId, email: "test@example.test", fullName: "Nhân viên kiểm thử", avatarUrl: null, roles: ["TELESALE"], permissions: ["lead.view_assigned", "lead.update_assigned", "custom_field.view", "custom_field.update", "custom_field.manage_options"], departmentIds: [], institutionProgramIds: [programId], workingInstitutionProgramId: programId, accessScope: "ASSIGNED_ONLY" } };
     else if (endpoint === "/institution-programs/options") payload = { data: [program] };
     else if (endpoint === "/leads/action-options") payload = { sources: [lead.source], stages, assignees: [], telesales: [], departments: [], institutionPrograms: [program], majors: [], admissionStatuses: [], tags: [], systemFieldRequirements: { fullName: true, phone: true, sourceId: true } };
     else if (endpoint === "/leads/options") payload = { sources: [lead.source], stages: stages.map((item) => ({ ...item, count: 1 })), institutionPrograms: [program], assignees: [], majors: [], totalLeads: 1 };

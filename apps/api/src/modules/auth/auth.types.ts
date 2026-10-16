@@ -13,5 +13,6 @@ export type AuthUser = {
 
 export type AccessTokenPayload = {
   sub: string;
+  sid: string;
   type: "access";
 };

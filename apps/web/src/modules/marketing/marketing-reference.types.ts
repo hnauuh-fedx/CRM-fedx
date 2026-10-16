@@ -88,6 +88,7 @@ export type UtmGeneratedLeadResponse = {
 };
 
 export type MarketingFormItem = {
+  institutionProgramId?: string | null;
   id: string;
   name: string;
   slug: string | null;
@@ -151,7 +152,7 @@ export type MarketingFormField = {
   fieldType: MarketingFormFieldType;
   isRequired: boolean;
   required?: boolean;
-  options: string[];
+  options: import("@admission-crm/shared/marketing-form-config").MarketingFormOptionInput[];
   validationRules?: Record<string, unknown> | null;
   leadField?: MarketingFormLeadField | null;
   crmMappingField?: MarketingFormLeadField | null;
@@ -210,6 +211,8 @@ export type MarketingFormInput = {
 };
 
 export type MarketingFormSubmission = {
+  configurationSnapshot?: import("@admission-crm/shared/marketing-form-snapshot").MarketingFormSnapshot | null;
+  isLegacyConfiguration?: boolean;
   id: string;
   leadId: string | null;
   lead: { id: string; leadCode: string | null; fullName: string; phone: string } | null;
@@ -299,7 +302,7 @@ export type PublicMarketingFormConfig = {
     placeholder: string | null;
     fieldType: MarketingFormFieldType;
     isRequired: boolean;
-    options: string[];
+    options: import("@admission-crm/shared/marketing-form-config").MarketingFormOptionInput[];
     validationRules?: Record<string, unknown> | null;
     defaultValue?: string | null;
     sortOrder: number;

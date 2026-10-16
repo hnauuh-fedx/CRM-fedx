@@ -1,23 +1,74 @@
-import { useState, type ReactNode } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { ArrowDown, ArrowUp, BarChart3, Check, ChevronDown, ChevronLeft, ChevronRight, ChevronUp, Copy, ExternalLink, Info, Minus, RefreshCw, Save, Settings2, Trash2, X } from "lucide-react";
+import {
+  ArrowDown,
+  ArrowUp,
+  BarChart3,
+  Check,
+  ChevronDown,
+  ChevronLeft,
+  ChevronRight,
+  ChevronUp,
+  Copy,
+  ExternalLink,
+  Info,
+  Minus,
+  RefreshCw,
+  Save,
+  Settings2,
+  Trash2,
+  X,
+} from "lucide-react";
+import { useState, type ReactNode } from "react";
 import { Link } from "react-router-dom";
 
 import { PageHeader } from "@/components/shared/page-header";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
-import { Empty, EmptyContent, EmptyDescription, EmptyHeader, EmptyMedia, EmptyTitle } from "@/components/ui/empty";
+import {
+  Card,
+  CardContent,
+  CardDescription,
+  CardHeader,
+  CardTitle,
+} from "@/components/ui/card";
+import {
+  Empty,
+  EmptyContent,
+  EmptyDescription,
+  EmptyHeader,
+  EmptyMedia,
+  EmptyTitle,
+} from "@/components/ui/empty";
 import { Field, FieldLabel } from "@/components/ui/field";
-import { Select, SelectContent, SelectGroup, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import {
+  Select,
+  SelectContent,
+  SelectGroup,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import { Skeleton } from "@/components/ui/skeleton";
-import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipTrigger,
+} from "@/components/ui/tooltip";
 import { useAuth } from "@/modules/auth/auth-context";
 import { useInstitutionProgram } from "@/modules/institutions/institution-program-context";
 import { DashboardKpiEditorDialog } from "@/modules/reports/components/dashboard-kpi-editor-dialog";
 import { ReportResult } from "@/modules/reports/pages/personal-reports-page";
-import type { DashboardKpiWidgetInput, DashboardKpiWidgetResult, PersonalReportDatasetDefinition, PersonalReportResult } from "@/modules/reports/report.types";
-import { getPersonalDashboard, getPersonalReportOptions, updatePersonalDashboardConfig } from "@/services/report.service";
+import type {
+  DashboardKpiWidgetInput,
+  DashboardKpiWidgetResult,
+  PersonalReportDatasetDefinition,
+  PersonalReportResult,
+} from "@/modules/reports/report.types";
+import {
+  getPersonalDashboard,
+  getPersonalReportOptions,
+  updatePersonalDashboardConfig,
+} from "@/services/report.service";
 
 const numberFormatter = new Intl.NumberFormat("vi-VN");
 const gridClasses: Record<number, string> = {
@@ -42,10 +93,14 @@ const defaultHeader = {
   eyebrow: "Báo cáo",
   title: "Dashboard thống kê",
   scopeLabel: "Theo dashboard cá nhân",
-  description: "Theo dõi KPI và các báo cáo bạn đã chọn, trong đúng chương trình và phạm vi dữ liệu được cấp.",
+  description:
+    "Theo dõi KPI và các báo cáo bạn đã chọn, trong đúng chương trình và phạm vi dữ liệu được cấp.",
 };
 
-export function StatisticsDashboardPage({ readOnly = false, header = defaultHeader }: StatisticsDashboardPageProps = {}) {
+export function StatisticsDashboardPage({
+  readOnly = false,
+  header = defaultHeader,
+}: StatisticsDashboardPageProps = {}) {
   const auth = useAuth();
   const queryClient = useQueryClient();
   const { selectedProgramId } = useInstitutionProgram();
@@ -54,7 +109,9 @@ export function StatisticsDashboardPage({ readOnly = false, header = defaultHead
   const [draftKpis, setDraftKpis] = useState<DashboardKpiWidgetInput[]>([]);
   const [draftColumnCount, setDraftColumnCount] = useState(4);
   const [editingKpiId, setEditingKpiId] = useState<string | null>(null);
-  const [copiedKpi, setCopiedKpi] = useState<DashboardKpiWidgetInput | null>(null);
+  const [copiedKpi, setCopiedKpi] = useState<DashboardKpiWidgetInput | null>(
+    null,
+  );
   const dashboardQuery = useQuery({
     queryKey: ["reports", "personal", "dashboard", selectedProgramId],
     queryFn: () => getPersonalDashboard(auth.accessToken!),
@@ -66,25 +123,60 @@ export function StatisticsDashboardPage({ readOnly = false, header = defaultHead
     enabled: Boolean(auth.accessToken && !readOnly),
   });
   const saveMutation = useMutation({
-    mutationFn: () => updatePersonalDashboardConfig(draftReportIds, auth.accessToken!, { columnCount: draftColumnCount, kpiWidgets: draftKpis }),
+    mutationFn: () =>
+      updatePersonalDashboardConfig(draftReportIds, auth.accessToken!, {
+        columnCount: draftColumnCount,
+        kpiWidgets: draftKpis,
+      }),
     onSuccess: async () => {
       setIsManaging(false);
       setEditingKpiId(null);
       setCopiedKpi(null);
-      await queryClient.invalidateQueries({ queryKey: ["reports", "personal", "dashboard"] });
+      await queryClient.invalidateQueries({
+        queryKey: ["reports", "personal", "dashboard"],
+      });
     },
   });
-  const widgetById = new Map((dashboardQuery.data?.widgets ?? []).map((widget) => [widget.reportId, widget]));
-  const resultByKpiId = new Map((dashboardQuery.data?.kpiWidgets ?? []).map((widget) => [widget.id, widget]));
-  const visibleWidgets = isManaging ? draftReportIds.flatMap((reportId) => widgetById.get(reportId) ?? []) : (dashboardQuery.data?.widgets ?? []);
+  const widgetById = new Map(
+    (dashboardQuery.data?.widgets ?? []).map((widget) => [
+      widget.reportId,
+      widget,
+    ]),
+  );
+  const resultByKpiId = new Map(
+    (dashboardQuery.data?.kpiWidgets ?? []).map((widget) => [
+      widget.id,
+      widget,
+    ]),
+  );
+  const visibleWidgets = isManaging
+    ? draftReportIds.flatMap((reportId) => widgetById.get(reportId) ?? [])
+    : (dashboardQuery.data?.widgets ?? []);
   const visibleKpis = isManaging
-    ? draftKpis.map((config) => ({ config, result: resultByKpiId.get(config.id) ?? previewKpi(config, optionsQuery.data?.datasets ?? [], dashboardQuery.data?.pipelineStages ?? []) }))
-    : (dashboardQuery.data?.kpiWidgets ?? []).map((result) => ({ result, config: dashboardQuery.data?.kpiConfig.find((item) => item.id === result.id) }));
-  const editingKpi = draftKpis.find((widget) => widget.id === editingKpiId) ?? null;
+    ? draftKpis.map((config) => ({
+        config,
+        result:
+          resultByKpiId.get(config.id) ??
+          previewKpi(
+            config,
+            optionsQuery.data?.datasets ?? [],
+            dashboardQuery.data?.pipelineStages ?? [],
+          ),
+      }))
+    : (dashboardQuery.data?.kpiWidgets ?? []).map((result) => ({
+        result,
+        config: dashboardQuery.data?.kpiConfig.find(
+          (item) => item.id === result.id,
+        ),
+      }));
+  const editingKpi =
+    draftKpis.find((widget) => widget.id === editingKpiId) ?? null;
 
   function beginManaging() {
     if (!dashboardQuery.data) return;
-    setDraftReportIds(dashboardQuery.data.widgets.map((widget) => widget.reportId));
+    setDraftReportIds(
+      dashboardQuery.data.widgets.map((widget) => widget.reportId),
+    );
     setDraftKpis(dashboardQuery.data.kpiConfig);
     setDraftColumnCount(dashboardQuery.data.columnCount);
     setCopiedKpi(null);
@@ -97,7 +189,12 @@ export function StatisticsDashboardPage({ readOnly = false, header = defaultHead
       if (nextCount <= current.length) return current.slice(0, nextCount);
       const dataset = optionsQuery.data?.datasets[0];
       if (!dataset) return current;
-      return [...current, ...Array.from({ length: nextCount - current.length }, () => newCountKpi(dataset))];
+      return [
+        ...current,
+        ...Array.from({ length: nextCount - current.length }, () =>
+          newCountKpi(dataset),
+        ),
+      ];
     });
   }
 
@@ -126,8 +223,12 @@ export function StatisticsDashboardPage({ readOnly = false, header = defaultHead
   }
 
   function removeKpi(widgetId: string) {
-    setDraftKpis((current) => current.length > 1 ? current.filter((widget) => widget.id !== widgetId) : current);
-    setEditingKpiId((current) => current === widgetId ? null : current);
+    setDraftKpis((current) =>
+      current.length > 1
+        ? current.filter((widget) => widget.id !== widgetId)
+        : current,
+    );
+    setEditingKpiId((current) => (current === widgetId ? null : current));
   }
 
   return (
@@ -137,77 +238,146 @@ export function StatisticsDashboardPage({ readOnly = false, header = defaultHead
         title={header.title}
         scopeLabel={header.scopeLabel}
         description={header.description}
-        actions={isManaging ? <>
-          <Button variant="outline" onClick={() => { setIsManaging(false); setEditingKpiId(null); setCopiedKpi(null); }} disabled={saveMutation.isPending}><X data-icon="inline-start" />Hủy</Button>
-          <Button onClick={() => saveMutation.mutate()} disabled={saveMutation.isPending || draftKpis.length === 0}><Save data-icon="inline-start" />{saveMutation.isPending ? "Đang lưu…" : "Lưu dashboard"}</Button>
-        </> : <>
-          {!readOnly && auth.can("report.personal.update") && <Button variant="outline" onClick={beginManaging} disabled={!dashboardQuery.data}><Settings2 data-icon="inline-start" />Quản lý dashboard</Button>}
-          <Button variant="outline" onClick={() => void dashboardQuery.refetch()} disabled={dashboardQuery.isFetching}><RefreshCw data-icon="inline-start" className={dashboardQuery.isFetching ? "motion-safe:animate-spin" : undefined} />{dashboardQuery.isFetching ? "Đang tải…" : "Tải lại"}</Button>
-        </>}
+        actions=<StatisticsDashboardToolbar
+          isManaging={isManaging}
+          setIsManaging={setIsManaging}
+          setEditingKpiId={setEditingKpiId}
+          setCopiedKpi={setCopiedKpi}
+          saveMutation={saveMutation}
+          draftKpis={draftKpis}
+          readOnly={readOnly}
+          auth={auth}
+          beginManaging={beginManaging}
+          dashboardQuery={dashboardQuery}
+        />
       />
 
-      {saveMutation.isError && <Alert variant="destructive"><AlertTitle>Không thể lưu dashboard</AlertTitle><AlertDescription>Hãy kiểm tra cấu hình KPI, quyền truy cập và các báo cáo đã chọn rồi thử lại.</AlertDescription></Alert>}
+      {saveMutation.isError && (
+        <Alert variant="destructive">
+          <AlertTitle>Không thể lưu dashboard</AlertTitle>
+          <AlertDescription>
+            Hãy kiểm tra cấu hình KPI, quyền truy cập và các báo cáo đã chọn rồi
+            thử lại.
+          </AlertDescription>
+        </Alert>
+      )}
 
-      {dashboardQuery.isLoading ? <DashboardSkeleton /> : dashboardQuery.isError || !dashboardQuery.data ? (
-        <Alert variant="destructive"><AlertTitle>Không thể tải dashboard</AlertTitle><AlertDescription>Vui lòng kiểm tra quyền, chương trình đang chọn hoặc kết nối máy chủ rồi thử lại.</AlertDescription></Alert>
-      ) : <>
-        {isManaging && <DashboardLayoutManager
-          kpiCount={draftKpis.length}
-          maximumKpis={dashboardQuery.data.maximumKpis}
-          columnCount={draftColumnCount}
-          onKpiCountChange={changeKpiCount}
-          onColumnCountChange={setDraftColumnCount}
-        />}
+      <StatisticsDashboardContent
+        dashboardQuery={dashboardQuery}
+        isManaging={isManaging}
+        draftKpis={draftKpis}
+        draftColumnCount={draftColumnCount}
+        changeKpiCount={changeKpiCount}
+        setDraftColumnCount={setDraftColumnCount}
+        visibleKpis={visibleKpis}
+        setEditingKpiId={setEditingKpiId}
+        copyKpi={copyKpi}
+        removeKpi={removeKpi}
+        copiedKpi={copiedKpi}
+        moveKpi={moveKpi}
+        draftReportIds={draftReportIds}
+        widgetById={widgetById}
+        moveReport={moveReport}
+        setDraftReportIds={setDraftReportIds}
+        visibleWidgets={visibleWidgets}
+        readOnly={readOnly}
+      />
 
-        <section className={`grid gap-4 ${gridClasses[isManaging ? draftColumnCount : dashboardQuery.data.columnCount] ?? gridClasses[4]}`} aria-label="KPI tổng quan">
-          {visibleKpis.map(({ config, result }, index) => <KpiCard
-            key={result.id}
-            result={result}
-            isManaging={isManaging}
-            onCustomize={config ? () => setEditingKpiId(config.id) : undefined}
-            onCopy={config ? () => copyKpi(config) : undefined}
-            onRemove={config && draftKpis.length > 1 ? () => removeKpi(config.id) : undefined}
-            isCopied={Boolean(config && copiedKpi?.id === config.id)}
-            onMoveLeft={isManaging && index > 0 ? () => moveKpi(index, -1) : undefined}
-            onMoveRight={isManaging && index < visibleKpis.length - 1 ? () => moveKpi(index, 1) : undefined}
-          />)}
-        </section>
-
-        {isManaging && <DashboardReportManager
-          widgets={draftReportIds.flatMap((id) => widgetById.get(id) ?? [])}
-          onMove={moveReport}
-          onRemove={(reportId) => setDraftReportIds((current) => current.filter((id) => id !== reportId))}
-        />}
-
-        {visibleWidgets.length === 0 ? <Card><CardContent><Empty><EmptyHeader><EmptyMedia variant="icon"><BarChart3 /></EmptyMedia><EmptyTitle>Chưa có báo cáo trên dashboard</EmptyTitle><EmptyDescription>{readOnly ? "Các báo cáo hiển thị được thiết lập tại Báo cáo → Dashboard thống kê." : "Hãy mở danh sách báo cáo đã lưu và chọn “Sử dụng cho dashboard”."}</EmptyDescription></EmptyHeader>{!readOnly && <EmptyContent><Button asChild><Link to="/bao-cao/kpi-ca-nhan">Chọn báo cáo</Link></Button></EmptyContent>}</Empty></CardContent></Card> : (
-          <section className="grid gap-6" aria-label="Báo cáo tùy chỉnh trên dashboard">{visibleWidgets.map((widget) => <DashboardReportWidget key={widget.reportId} result={widget.result} />)}</section>
-        )}
-      </>}
-
-      {editingKpi && optionsQuery.data && dashboardQuery.data && <DashboardKpiEditorDialog
-        key={editingKpi.id}
-        widget={editingKpi}
-        datasets={optionsQuery.data.datasets}
-        pipelineStages={dashboardQuery.data.pipelineStages}
-        accessToken={auth.accessToken!}
-        copiedWidget={copiedKpi?.id === editingKpi.id ? null : copiedKpi}
-        onCancel={() => setEditingKpiId(null)}
-        onSave={(widget) => { setDraftKpis((current) => current.map((item) => item.id === widget.id ? widget : item)); setEditingKpiId(null); }}
-      />}
+      {editingKpi && optionsQuery.data && dashboardQuery.data && (
+        <DashboardKpiEditorDialog
+          key={editingKpi.id}
+          widget={editingKpi}
+          datasets={optionsQuery.data.datasets}
+          pipelineStages={dashboardQuery.data.pipelineStages}
+          accessToken={auth.accessToken!}
+          copiedWidget={copiedKpi?.id === editingKpi.id ? null : copiedKpi}
+          onCancel={() => setEditingKpiId(null)}
+          onSave={(widget) => {
+            setDraftKpis((current) =>
+              current.map((item) => (item.id === widget.id ? widget : item)),
+            );
+            setEditingKpiId(null);
+          }}
+        />
+      )}
     </div>
   );
 }
 
-function DashboardLayoutManager({ kpiCount, maximumKpis, columnCount, onKpiCountChange, onColumnCountChange }: {
-  kpiCount: number; maximumKpis: number; columnCount: number; onKpiCountChange: (value: number) => void; onColumnCountChange: (value: number) => void;
-}) {
-  return <Card><CardHeader><CardTitle>Bố cục ô KPI</CardTitle><CardDescription>Chọn số ô và số cột. Dùng các biểu tượng trên từng ô để tùy chỉnh, sao chép hoặc xóa ô.</CardDescription></CardHeader><CardContent className="grid gap-4 sm:grid-cols-2">
-    <Field><FieldLabel>Số lượng ô KPI</FieldLabel><Select value={String(kpiCount)} onValueChange={(value) => onKpiCountChange(Number(value))}><SelectTrigger className="w-full"><SelectValue /></SelectTrigger><SelectContent><SelectGroup>{Array.from({ length: maximumKpis }, (_, index) => index + 1).map((value) => <SelectItem key={value} value={String(value)}>{value} ô</SelectItem>)}</SelectGroup></SelectContent></Select></Field>
-    <Field><FieldLabel>Số cột hiển thị</FieldLabel><Select value={String(columnCount)} onValueChange={(value) => onColumnCountChange(Number(value))}><SelectTrigger className="w-full"><SelectValue /></SelectTrigger><SelectContent><SelectGroup>{[1, 2, 3, 4, 5].map((value) => <SelectItem key={value} value={String(value)}>{value} cột</SelectItem>)}</SelectGroup></SelectContent></Select></Field>
-  </CardContent></Card>;
+type DashboardLayoutManagerProps = {
+  kpiCount: number;
+  maximumKpis: number;
+  columnCount: number;
+  onKpiCountChange: (value: number) => void;
+  onColumnCountChange: (value: number) => void;
+};
+
+function DashboardLayoutManager({
+  kpiCount,
+  maximumKpis,
+  columnCount,
+  onKpiCountChange,
+  onColumnCountChange,
+}: DashboardLayoutManagerProps) {
+  return (
+    <Card>
+      <CardHeader>
+        <CardTitle>Bố cục ô KPI</CardTitle>
+        <CardDescription>
+          Chọn số ô và số cột. Dùng các biểu tượng trên từng ô để tùy chỉnh, sao
+          chép hoặc xóa ô.
+        </CardDescription>
+      </CardHeader>
+      <CardContent className="grid gap-4 sm:grid-cols-2">
+        <Field>
+          <FieldLabel>Số lượng ô KPI</FieldLabel>
+          <Select
+            value={String(kpiCount)}
+            onValueChange={(value) => onKpiCountChange(Number(value))}
+          >
+            <SelectTrigger className="w-full">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectGroup>
+                {Array.from(
+                  { length: maximumKpis },
+                  (_, index) => index + 1,
+                ).map((value) => (
+                  <SelectItem key={value} value={String(value)}>
+                    {value} ô
+                  </SelectItem>
+                ))}
+              </SelectGroup>
+            </SelectContent>
+          </Select>
+        </Field>
+        <Field>
+          <FieldLabel>Số cột hiển thị</FieldLabel>
+          <Select
+            value={String(columnCount)}
+            onValueChange={(value) => onColumnCountChange(Number(value))}
+          >
+            <SelectTrigger className="w-full">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectGroup>
+                {[1, 2, 3, 4, 5].map((value) => (
+                  <SelectItem key={value} value={String(value)}>
+                    {value} cột
+                  </SelectItem>
+                ))}
+              </SelectGroup>
+            </SelectContent>
+          </Select>
+        </Field>
+      </CardContent>
+    </Card>
+  );
 }
 
-function KpiCard({ result, isManaging, isCopied, onCustomize, onCopy, onRemove, onMoveLeft, onMoveRight }: {
+type KpiCardProps = {
   result: DashboardKpiWidgetResult;
   isManaging: boolean;
   isCopied: boolean;
@@ -216,100 +386,680 @@ function KpiCard({ result, isManaging, isCopied, onCustomize, onCopy, onRemove, 
   onRemove?: () => void;
   onMoveLeft?: () => void;
   onMoveRight?: () => void;
-}) {
-  return <Card className="relative min-h-44"><CardHeader className="h-full gap-3 pr-16">
-    <div className="flex items-start justify-between gap-2">
-      <CardTitle className="line-clamp-2 text-sm font-bold leading-snug text-primary">{result.title}</CardTitle>
-      {isManaging && <div className="flex shrink-0 items-center gap-1">
-        <KpiActionButton label={`Tùy chỉnh ô ${result.title}`} onClick={onCustomize}><Settings2 /></KpiActionButton>
-        <KpiActionButton label={isCopied ? `Đã sao chép tùy chỉnh ô ${result.title}` : `Sao chép tùy chỉnh ô ${result.title}`} onClick={onCopy}>{isCopied ? <Check /> : <Copy />}</KpiActionButton>
-        <KpiActionButton label={onRemove ? `Xóa ô ${result.title}` : "Dashboard cần ít nhất một ô KPI"} onClick={onRemove} disabled={!onRemove} destructive><Trash2 /></KpiActionButton>
-      </div>}
-    </div>
-    <KpiValue result={result} />
-    {result.trend && <div className="mt-auto text-sm text-muted-foreground"><TrendLabel trend={result.trend} /></div>}
-    {isManaging && <div className="flex justify-end gap-2 border-t pt-2"><Button type="button" size="icon" variant="outline" onClick={onMoveLeft} disabled={!onMoveLeft} aria-label={`Di chuyển ${result.title} sang trái`}><ChevronLeft /></Button><Button type="button" size="icon" variant="outline" onClick={onMoveRight} disabled={!onMoveRight} aria-label={`Di chuyển ${result.title} sang phải`}><ChevronRight /></Button></div>}
-  </CardHeader><KpiDescriptionTooltip title={result.title} description={result.description} /></Card>;
+};
+
+function KpiCard({
+  result,
+  isManaging,
+  isCopied,
+  onCustomize,
+  onCopy,
+  onRemove,
+  onMoveLeft,
+  onMoveRight,
+}: KpiCardProps) {
+  return (
+    <Card className="relative min-h-44">
+      <CardHeader className="h-full gap-3 pr-16">
+        <div className="flex items-start justify-between gap-2">
+          <CardTitle className="line-clamp-2 text-sm font-bold leading-snug text-primary">
+            {result.title}
+          </CardTitle>
+          {isManaging && (
+            <div className="flex shrink-0 items-center gap-1">
+              <KpiActionButton
+                label={`Tùy chỉnh ô ${result.title}`}
+                onClick={onCustomize}
+              >
+                <Settings2 />
+              </KpiActionButton>
+              <KpiActionButton
+                label={
+                  isCopied
+                    ? `Đã sao chép tùy chỉnh ô ${result.title}`
+                    : `Sao chép tùy chỉnh ô ${result.title}`
+                }
+                onClick={onCopy}
+              >
+                {isCopied ? <Check /> : <Copy />}
+              </KpiActionButton>
+              <KpiActionButton
+                label={
+                  onRemove
+                    ? `Xóa ô ${result.title}`
+                    : "Dashboard cần ít nhất một ô KPI"
+                }
+                onClick={onRemove}
+                disabled={!onRemove}
+                destructive
+              >
+                <Trash2 />
+              </KpiActionButton>
+            </div>
+          )}
+        </div>
+        <KpiValue result={result} />
+        {result.trend && (
+          <div className="mt-auto text-sm text-muted-foreground">
+            <TrendLabel trend={result.trend} />
+          </div>
+        )}
+        {isManaging && (
+          <div className="flex justify-end gap-2 border-t pt-2">
+            <Button
+              type="button"
+              size="icon"
+              variant="outline"
+              onClick={onMoveLeft}
+              disabled={!onMoveLeft}
+              aria-label={`Di chuyển ${result.title} sang trái`}
+            >
+              <ChevronLeft />
+            </Button>
+            <Button
+              type="button"
+              size="icon"
+              variant="outline"
+              onClick={onMoveRight}
+              disabled={!onMoveRight}
+              aria-label={`Di chuyển ${result.title} sang phải`}
+            >
+              <ChevronRight />
+            </Button>
+          </div>
+        )}
+      </CardHeader>
+      <KpiDescriptionTooltip
+        title={result.title}
+        description={result.description}
+      />
+    </Card>
+  );
 }
 
 function KpiValue({ result }: { result: DashboardKpiWidgetResult }) {
   if (!result.conversion) {
-    return <CardTitle className="text-4xl tabular-nums">{numberFormatter.format(result.value)}{result.format === "PERCENT" ? "%" : ""}</CardTitle>;
+    return (
+      <CardTitle className="text-4xl tabular-nums">
+        {numberFormatter.format(result.value)}
+        {result.format === "PERCENT" ? "%" : ""}
+      </CardTitle>
+    );
   }
   const conversion = result.conversion;
-  return <div className="grid grid-cols-[minmax(0,1fr)_auto] items-center gap-3">
-    <CardTitle className="text-4xl tabular-nums">{numberFormatter.format(conversion.targetTotal)}</CardTitle>
-    <div className="flex min-h-14 items-center justify-center rounded-lg border bg-muted/50 px-4 py-2">
-      <p className="text-2xl font-bold tabular-nums text-primary">{numberFormatter.format(conversion.percentage)}%</p>
+  return (
+    <div className="grid grid-cols-[minmax(0,1fr)_auto] items-center gap-3">
+      <CardTitle className="text-4xl tabular-nums">
+        {numberFormatter.format(conversion.targetTotal)}
+      </CardTitle>
+      <div className="flex min-h-14 items-center justify-center rounded-lg border bg-muted/50 px-4 py-2">
+        <p className="text-2xl font-bold tabular-nums text-primary">
+          {numberFormatter.format(conversion.percentage)}%
+        </p>
+      </div>
     </div>
-  </div>;
+  );
 }
 
-function KpiDescriptionTooltip({ title, description }: { title: string; description: string }) {
-  return <Tooltip><TooltipTrigger asChild><Button type="button" size="icon-sm" variant="ghost" className="absolute top-1/2 right-3 -translate-y-1/2 text-primary" aria-label={`Xem mô tả ô ${title}`}><Info /></Button></TooltipTrigger><TooltipContent className="max-w-72" side="left" sideOffset={4}>{description}</TooltipContent></Tooltip>;
+function KpiDescriptionTooltip({
+  title,
+  description,
+}: {
+  title: string;
+  description: string;
+}) {
+  return (
+    <Tooltip>
+      <TooltipTrigger asChild>
+        <Button
+          type="button"
+          size="icon-sm"
+          variant="ghost"
+          className="absolute top-1/2 right-3 -translate-y-1/2 text-primary"
+          aria-label={`Xem mô tả ô ${title}`}
+        >
+          <Info />
+        </Button>
+      </TooltipTrigger>
+      <TooltipContent className="max-w-72" side="left" sideOffset={4}>
+        {description}
+      </TooltipContent>
+    </Tooltip>
+  );
 }
 
-function KpiActionButton({ label, destructive = false, disabled = false, onClick, children }: {
+function KpiActionButton({
+  label,
+  destructive = false,
+  disabled = false,
+  onClick,
+  children,
+}: {
   label: string;
   destructive?: boolean;
   disabled?: boolean;
   onClick?: () => void;
   children: ReactNode;
 }) {
-  return <Tooltip><TooltipTrigger asChild><Button type="button" size="icon-sm" variant={destructive ? "destructive" : "ghost"} disabled={disabled} aria-label={label} onClick={onClick}>{children}</Button></TooltipTrigger><TooltipContent>{label}</TooltipContent></Tooltip>;
+  return (
+    <Tooltip>
+      <TooltipTrigger asChild>
+        <Button
+          type="button"
+          size="icon-sm"
+          variant={destructive ? "destructive" : "ghost"}
+          disabled={disabled}
+          aria-label={label}
+          onClick={onClick}
+        >
+          {children}
+        </Button>
+      </TooltipTrigger>
+      <TooltipContent>{label}</TooltipContent>
+    </Tooltip>
+  );
 }
 
-function TrendLabel({ trend }: { trend: NonNullable<DashboardKpiWidgetResult["trend"]> }) {
-  if (trend.direction === "FLAT") return <span className="flex items-center gap-1.5"><Minus className="size-4" aria-hidden="true" />Không thay đổi so với {trend.previousLabel}</span>;
+function TrendLabel({
+  trend,
+}: {
+  trend: NonNullable<DashboardKpiWidgetResult["trend"]>;
+}) {
+  if (trend.direction === "FLAT")
+    return (
+      <span className="flex items-center gap-1.5">
+        <Minus className="size-4" aria-hidden="true" />
+        Không thay đổi so với {trend.previousLabel}
+      </span>
+    );
   const isUp = trend.direction === "UP";
   const Icon = isUp ? ArrowUp : ArrowDown;
-  return <span className={`flex items-center gap-1.5 font-medium ${isUp ? "text-emerald-700 dark:text-emerald-400" : "text-destructive"}`}><Icon className="size-4" aria-hidden="true" />{isUp ? "Tăng" : "Giảm"} {numberFormatter.format(trend.percentageChange)}% so với {trend.previousLabel}</span>;
+  return (
+    <span
+      className={`flex items-center gap-1.5 font-medium ${isUp ? "text-emerald-700 dark:text-emerald-400" : "text-destructive"}`}
+    >
+      <Icon className="size-4" aria-hidden="true" />
+      {isUp ? "Tăng" : "Giảm"} {numberFormatter.format(trend.percentageChange)}%
+      so với {trend.previousLabel}
+    </span>
+  );
 }
 
-function DashboardReportManager({ widgets, onMove, onRemove }: {
+type DashboardReportManagerProps = {
   widgets: Array<{ reportId: string; result: PersonalReportResult }>;
   onMove: (index: number, offset: number) => void;
   onRemove: (reportId: string) => void;
-}) {
-  return <Card><CardHeader><CardTitle>Báo cáo đã ghim</CardTitle><CardDescription>Sắp xếp hoặc bỏ báo cáo khỏi dashboard. Báo cáo gốc không bị xóa.</CardDescription></CardHeader><CardContent className="flex flex-col gap-3">
-    {widgets.length === 0 ? <p className="rounded-lg border border-dashed p-4 text-sm text-muted-foreground">Chưa có báo cáo được ghim.</p> : widgets.map((widget, index) => <div key={widget.reportId} className="flex flex-wrap items-center gap-3 rounded-lg border p-3">
-      <span className="min-w-0 flex-1 font-medium">{widget.result.report.name}</span>
-      <Button size="icon" variant="outline" onClick={() => onMove(index, -1)} disabled={index === 0} aria-label={`Đưa ${widget.result.report.name} lên trên`}><ChevronUp /></Button>
-      <Button size="icon" variant="outline" onClick={() => onMove(index, 1)} disabled={index === widgets.length - 1} aria-label={`Đưa ${widget.result.report.name} xuống dưới`}><ChevronDown /></Button>
-      <Button size="sm" variant="outline" asChild><Link to={`/bao-cao/kpi-ca-nhan?reportId=${widget.reportId}`}><ExternalLink data-icon="inline-start" />Mở để chỉnh sửa</Link></Button>
-      <Button size="sm" variant="ghost" onClick={() => onRemove(widget.reportId)}><Trash2 data-icon="inline-start" />Bỏ khỏi dashboard</Button>
-    </div>)}
-  </CardContent></Card>;
+};
+
+function DashboardReportManager({
+  widgets,
+  onMove,
+  onRemove,
+}: DashboardReportManagerProps) {
+  return (
+    <Card>
+      <CardHeader>
+        <CardTitle>Báo cáo đã ghim</CardTitle>
+        <CardDescription>
+          Sắp xếp hoặc bỏ báo cáo khỏi dashboard. Báo cáo gốc không bị xóa.
+        </CardDescription>
+      </CardHeader>
+      <CardContent className="flex flex-col gap-3">
+        {widgets.length === 0 ? (
+          <p className="rounded-lg border border-dashed p-4 text-sm text-muted-foreground">
+            Chưa có báo cáo được ghim.
+          </p>
+        ) : (
+          widgets.map((widget, index) => (
+            <div
+              key={widget.reportId}
+              className="flex flex-wrap items-center gap-3 rounded-lg border p-3"
+            >
+              <span className="min-w-0 flex-1 font-medium">
+                {widget.result.report.name}
+              </span>
+              <Button
+                size="icon"
+                variant="outline"
+                onClick={() => onMove(index, -1)}
+                disabled={index === 0}
+                aria-label={`Đưa ${widget.result.report.name} lên trên`}
+              >
+                <ChevronUp />
+              </Button>
+              <Button
+                size="icon"
+                variant="outline"
+                onClick={() => onMove(index, 1)}
+                disabled={index === widgets.length - 1}
+                aria-label={`Đưa ${widget.result.report.name} xuống dưới`}
+              >
+                <ChevronDown />
+              </Button>
+              <Button size="sm" variant="outline" asChild>
+                <Link to={`/bao-cao/kpi-ca-nhan?reportId=${widget.reportId}`}>
+                  <ExternalLink data-icon="inline-start" />
+                  Mở để chỉnh sửa
+                </Link>
+              </Button>
+              <Button
+                size="sm"
+                variant="ghost"
+                onClick={() => onRemove(widget.reportId)}
+              >
+                <Trash2 data-icon="inline-start" />
+                Bỏ khỏi dashboard
+              </Button>
+            </div>
+          ))
+        )}
+      </CardContent>
+    </Card>
+  );
 }
 
 function DashboardReportWidget({ result }: { result: PersonalReportResult }) {
-  return <Card><CardHeader><CardTitle>{result.report.name}</CardTitle><CardDescription>Báo cáo tùy chỉnh · dữ liệu được tính lại theo phạm vi hiện tại</CardDescription></CardHeader><CardContent><ReportResult isLoading={false} isError={false} result={result} /></CardContent></Card>;
+  return (
+    <Card>
+      <CardHeader>
+        <CardTitle>{result.report.name}</CardTitle>
+        <CardDescription>
+          Báo cáo tùy chỉnh · dữ liệu được tính lại theo phạm vi hiện tại
+        </CardDescription>
+      </CardHeader>
+      <CardContent>
+        <ReportResult isLoading={false} isError={false} result={result} />
+      </CardContent>
+    </Card>
+  );
 }
 
-function newCountKpi(dataset: PersonalReportDatasetDefinition): DashboardKpiWidgetInput {
-  return { id: crypto.randomUUID(), type: "COUNT", datasetKey: dataset.key, conditions: [] };
+function newCountKpi(
+  dataset: PersonalReportDatasetDefinition,
+): DashboardKpiWidgetInput {
+  return {
+    id: crypto.randomUUID(),
+    type: "COUNT",
+    datasetKey: dataset.key,
+    conditions: [],
+  };
 }
 
-function cloneKpiConfiguration(widget: DashboardKpiWidgetInput, id: string): DashboardKpiWidgetInput {
-  return { ...widget, id, conditions: widget.conditions.map((condition) => ({ ...condition })) };
+function cloneKpiConfiguration(
+  widget: DashboardKpiWidgetInput,
+  id: string,
+): DashboardKpiWidgetInput {
+  return {
+    ...widget,
+    id,
+    conditions: widget.conditions.map((condition) => ({ ...condition })),
+  };
 }
 
-function previewKpi(config: DashboardKpiWidgetInput, datasets: PersonalReportDatasetDefinition[], stages: Array<{ id: string; name: string }>): DashboardKpiWidgetResult {
+function previewKpi(
+  config: DashboardKpiWidgetInput,
+  datasets: PersonalReportDatasetDefinition[],
+  stages: Array<{ id: string; name: string }>,
+): DashboardKpiWidgetResult {
   const dataset = datasets.find((item) => item.key === config.datasetKey);
-  const source = stages.find((stage) => stage.id === config.sourceStageId)?.name;
-  const target = stages.find((stage) => stage.id === config.targetStageId)?.name;
-  const period = config.comparisonPeriod === "WEEK" ? "tuần này" : config.comparisonPeriod === "QUARTER" ? "quý này" : "tháng này";
-  const title = config.title || (config.type === "CONVERSION" ? `Tỷ lệ chuyển đổi từ ${source ?? "tiến trình nguồn"} sang ${target ?? "tiến trình đích"}` : config.type === "TREND" ? `${dataset?.label ?? "Dữ liệu"} ${period}` : `Tổng số ${dataset?.label.toLocaleLowerCase("vi") ?? "bản ghi"}`);
-  const conversion = config.type === "CONVERSION" ? {
-    sourceTotal: 0,
-    targetTotal: 0,
-    percentage: 0,
-    sourceStageName: source ?? "tiến trình nguồn",
-    targetStageName: target ?? "tiến trình đích",
-  } : undefined;
-  return { id: config.id, type: config.type, title, description: "Cấu hình mới sẽ được tính sau khi lưu dashboard.", value: 0, format: "NUMBER", trend: null, conversion };
+  const source = stages.find(
+    (stage) => stage.id === config.sourceStageId,
+  )?.name;
+  const target = stages.find(
+    (stage) => stage.id === config.targetStageId,
+  )?.name;
+  const period =
+    config.comparisonPeriod === "WEEK"
+      ? "tuần này"
+      : config.comparisonPeriod === "QUARTER"
+        ? "quý này"
+        : "tháng này";
+  const title =
+    config.title ||
+    (config.type === "CONVERSION"
+      ? `Tỷ lệ chuyển đổi từ ${source ?? "tiến trình nguồn"} sang ${target ?? "tiến trình đích"}`
+      : config.type === "TREND"
+        ? `${dataset?.label ?? "Dữ liệu"} ${period}`
+        : `Tổng số ${dataset?.label.toLocaleLowerCase("vi") ?? "bản ghi"}`);
+  const conversion =
+    config.type === "CONVERSION"
+      ? {
+          sourceTotal: 0,
+          targetTotal: 0,
+          percentage: 0,
+          sourceStageName: source ?? "tiến trình nguồn",
+          targetStageName: target ?? "tiến trình đích",
+        }
+      : undefined;
+  return {
+    id: config.id,
+    type: config.type,
+    title,
+    description: "Cấu hình mới sẽ được tính sau khi lưu dashboard.",
+    value: 0,
+    format: "NUMBER",
+    trend: null,
+    conversion,
+  };
 }
 
 function DashboardSkeleton() {
-  return <><div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4"><Skeleton className="h-44" /><Skeleton className="h-44" /><Skeleton className="h-44" /><Skeleton className="h-44" /></div><Skeleton className="h-80" /></>;
+  return (
+    <>
+      <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
+        <Skeleton className="h-44" />
+        <Skeleton className="h-44" />
+        <Skeleton className="h-44" />
+        <Skeleton className="h-44" />
+      </div>
+      <Skeleton className="h-80" />
+    </>
+  );
+}
+
+type DashboardKpiGridProps = {
+  isManaging: boolean;
+  draftColumnCount: number;
+  dashboardQuery: import("@tanstack/react-query").UseQueryResult<
+    NoInfer<import("@/modules/reports/report.types").PersonalDashboardResponse>,
+    Error
+  >;
+  visibleKpis: {
+    result: DashboardKpiWidgetResult;
+    config: DashboardKpiWidgetInput | undefined;
+  }[];
+  setEditingKpiId: import("react").Dispatch<
+    import("react").SetStateAction<string | null>
+  >;
+  copyKpi: (widget: DashboardKpiWidgetInput) => void;
+  draftKpis: DashboardKpiWidgetInput[];
+  removeKpi: (widgetId: string) => void;
+  copiedKpi: DashboardKpiWidgetInput | null;
+  moveKpi: (index: number, offset: number) => void;
+};
+
+function DashboardKpiGrid({
+  isManaging,
+  draftColumnCount,
+  dashboardQuery,
+  visibleKpis,
+  setEditingKpiId,
+  copyKpi,
+  draftKpis,
+  removeKpi,
+  copiedKpi,
+  moveKpi,
+}: DashboardKpiGridProps) {
+  if (!dashboardQuery.data) return null;
+  return (
+    <section
+      className={`grid gap-4 ${gridClasses[isManaging ? draftColumnCount : dashboardQuery.data.columnCount] ?? gridClasses[4]}`}
+      aria-label="KPI tổng quan"
+    >
+      {visibleKpis.map(({ config, result }, index) => (
+        <KpiCard
+          key={result.id}
+          result={result}
+          isManaging={isManaging}
+          onCustomize={config ? () => setEditingKpiId(config.id) : undefined}
+          onCopy={config ? () => copyKpi(config) : undefined}
+          onRemove={
+            config && draftKpis.length > 1
+              ? () => removeKpi(config.id)
+              : undefined
+          }
+          isCopied={Boolean(config && copiedKpi?.id === config.id)}
+          onMoveLeft={
+            isManaging && index > 0 ? () => moveKpi(index, -1) : undefined
+          }
+          onMoveRight={
+            isManaging && index < visibleKpis.length - 1
+              ? () => moveKpi(index, 1)
+              : undefined
+          }
+        />
+      ))}
+    </section>
+  );
+}
+
+type StatisticsDashboardToolbarProps = {
+  isManaging: boolean;
+  setIsManaging: import("react").Dispatch<
+    import("react").SetStateAction<boolean>
+  >;
+  setEditingKpiId: import("react").Dispatch<
+    import("react").SetStateAction<string | null>
+  >;
+  setCopiedKpi: import("react").Dispatch<
+    import("react").SetStateAction<DashboardKpiWidgetInput | null>
+  >;
+  saveMutation: import("@tanstack/react-query").UseMutationResult<
+    import("@/modules/reports/report.types").PersonalDashboardConfig,
+    Error,
+    void,
+    unknown
+  >;
+  draftKpis: DashboardKpiWidgetInput[];
+  readOnly: boolean;
+  auth: {
+    accessToken: string | null;
+    user: import("../../../types/auth").AuthUser | null;
+    isRestoring: boolean;
+    restoreError: string | null;
+    retryRestore: () => void;
+    signIn: (input: import("../../../types/auth").LoginInput) => Promise<void>;
+    signOut: () => Promise<void>;
+    can: (permission: string) => boolean;
+  };
+  beginManaging: () => void;
+  dashboardQuery: import("@tanstack/react-query").UseQueryResult<
+    NoInfer<import("@/modules/reports/report.types").PersonalDashboardResponse>,
+    Error
+  >;
+};
+
+function StatisticsDashboardToolbar({
+  isManaging,
+  setIsManaging,
+  setEditingKpiId,
+  setCopiedKpi,
+  saveMutation,
+  draftKpis,
+  readOnly,
+  auth,
+  beginManaging,
+  dashboardQuery,
+}: StatisticsDashboardToolbarProps) {
+  return isManaging ? (
+    <>
+      <Button
+        variant="outline"
+        onClick={() => {
+          setIsManaging(false);
+          setEditingKpiId(null);
+          setCopiedKpi(null);
+        }}
+        disabled={saveMutation.isPending}
+      >
+        <X data-icon="inline-start" />
+        Hủy
+      </Button>
+      <Button
+        onClick={() => saveMutation.mutate()}
+        disabled={saveMutation.isPending || draftKpis.length === 0}
+      >
+        <Save data-icon="inline-start" />
+        {saveMutation.isPending ? "Đang lưu…" : "Lưu dashboard"}
+      </Button>
+    </>
+  ) : (
+    <>
+      {!readOnly && auth.can("report.personal.update") && (
+        <Button
+          variant="outline"
+          onClick={beginManaging}
+          disabled={!dashboardQuery.data}
+        >
+          <Settings2 data-icon="inline-start" />
+          Quản lý dashboard
+        </Button>
+      )}
+      <Button
+        variant="outline"
+        onClick={() => void dashboardQuery.refetch()}
+        disabled={dashboardQuery.isFetching}
+      >
+        <RefreshCw
+          data-icon="inline-start"
+          className={
+            dashboardQuery.isFetching ? "motion-safe:animate-spin" : undefined
+          }
+        />
+        {dashboardQuery.isFetching ? "Đang tải…" : "Tải lại"}
+      </Button>
+    </>
+  );
+}
+
+type StatisticsDashboardContentProps = {
+  dashboardQuery: import("@tanstack/react-query").UseQueryResult<
+    NoInfer<import("@/modules/reports/report.types").PersonalDashboardResponse>,
+    Error
+  >;
+  isManaging: boolean;
+  draftKpis: DashboardKpiWidgetInput[];
+  draftColumnCount: number;
+  changeKpiCount: (nextCount: number) => void;
+  setDraftColumnCount: import("react").Dispatch<
+    import("react").SetStateAction<number>
+  >;
+  visibleKpis: {
+    result: DashboardKpiWidgetResult;
+    config: DashboardKpiWidgetInput | undefined;
+  }[];
+  setEditingKpiId: import("react").Dispatch<
+    import("react").SetStateAction<string | null>
+  >;
+  copyKpi: (widget: DashboardKpiWidgetInput) => void;
+  removeKpi: (widgetId: string) => void;
+  copiedKpi: DashboardKpiWidgetInput | null;
+  moveKpi: (index: number, offset: number) => void;
+  draftReportIds: string[];
+  widgetById: Map<string, { reportId: string; result: PersonalReportResult }>;
+  moveReport: (index: number, offset: number) => void;
+  setDraftReportIds: import("react").Dispatch<
+    import("react").SetStateAction<string[]>
+  >;
+  visibleWidgets: { reportId: string; result: PersonalReportResult }[];
+  readOnly: boolean;
+};
+
+function StatisticsDashboardContent({
+  dashboardQuery,
+  isManaging,
+  draftKpis,
+  draftColumnCount,
+  changeKpiCount,
+  setDraftColumnCount,
+  visibleKpis,
+  setEditingKpiId,
+  copyKpi,
+  removeKpi,
+  copiedKpi,
+  moveKpi,
+  draftReportIds,
+  widgetById,
+  moveReport,
+  setDraftReportIds,
+  visibleWidgets,
+  readOnly,
+}: StatisticsDashboardContentProps) {
+  return dashboardQuery.isLoading ? (
+    <DashboardSkeleton />
+  ) : dashboardQuery.isError || !dashboardQuery.data ? (
+    <Alert variant="destructive">
+      <AlertTitle>Không thể tải dashboard</AlertTitle>
+      <AlertDescription>
+        Vui lòng kiểm tra quyền, chương trình đang chọn hoặc kết nối máy chủ rồi
+        thử lại.
+      </AlertDescription>
+    </Alert>
+  ) : (
+    <>
+      {isManaging && (
+        <DashboardLayoutManager
+          kpiCount={draftKpis.length}
+          maximumKpis={dashboardQuery.data.maximumKpis}
+          columnCount={draftColumnCount}
+          onKpiCountChange={changeKpiCount}
+          onColumnCountChange={setDraftColumnCount}
+        />
+      )}
+
+      <DashboardKpiGrid
+        isManaging={isManaging}
+        draftColumnCount={draftColumnCount}
+        dashboardQuery={dashboardQuery}
+        visibleKpis={visibleKpis}
+        setEditingKpiId={setEditingKpiId}
+        copyKpi={copyKpi}
+        draftKpis={draftKpis}
+        removeKpi={removeKpi}
+        copiedKpi={copiedKpi}
+        moveKpi={moveKpi}
+      />
+
+      {isManaging && (
+        <DashboardReportManager
+          widgets={draftReportIds.flatMap((id) => widgetById.get(id) ?? [])}
+          onMove={moveReport}
+          onRemove={(reportId) =>
+            setDraftReportIds((current) =>
+              current.filter((id) => id !== reportId),
+            )
+          }
+        />
+      )}
+
+      {visibleWidgets.length === 0 ? (
+        <Card>
+          <CardContent>
+            <Empty>
+              <EmptyHeader>
+                <EmptyMedia variant="icon">
+                  <BarChart3 />
+                </EmptyMedia>
+                <EmptyTitle>Chưa có báo cáo trên dashboard</EmptyTitle>
+                <EmptyDescription>
+                  {readOnly
+                    ? "Các báo cáo hiển thị được thiết lập tại Báo cáo → Dashboard thống kê."
+                    : "Hãy mở danh sách báo cáo đã lưu và chọn “Sử dụng cho dashboard”."}
+                </EmptyDescription>
+              </EmptyHeader>
+              {!readOnly && (
+                <EmptyContent>
+                  <Button asChild>
+                    <Link to="/bao-cao/kpi-ca-nhan">Chọn báo cáo</Link>
+                  </Button>
+                </EmptyContent>
+              )}
+            </Empty>
+          </CardContent>
+        </Card>
+      ) : (
+        <section
+          className="grid gap-6"
+          aria-label="Báo cáo tùy chỉnh trên dashboard"
+        >
+          {visibleWidgets.map((widget) => (
+            <DashboardReportWidget
+              key={widget.reportId}
+              result={widget.result}
+            />
+          ))}
+        </section>
+      )}
+    </>
+  );
 }

@@ -2,6 +2,7 @@ import type { NextFunction, Request, Response } from "express";
 import { z } from "zod";
 
 import { getAuthUser, verifyAccessToken } from "../modules/auth/auth.service";
+import { isAuthSessionActive } from "../modules/auth/auth-session.service";
 import type { AuthUser } from "../modules/auth/auth.types";
 
 declare global {
@@ -23,7 +24,7 @@ export async function requireAuthentication(
     : null;
   const payload = token ? verifyAccessToken(token) : null;
 
-  if (!payload) {
+  if (!payload || !await isAuthSessionActive(payload.sid, payload.sub)) {
     response.status(401).json({ message: "Phiên đăng nhập không hợp lệ hoặc đã hết hạn." });
     return;
   }

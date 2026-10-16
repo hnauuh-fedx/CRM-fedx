@@ -229,6 +229,11 @@ function validateFieldReference(
   catalog: AutomationSemanticCatalog,
   issues: AutomationGraphValidationIssue[],
 ) {
+  if (reference.startsWith("event:")) {
+    const supported = AUTOMATION_REGISTRY.fields.some((field) => field.reference === reference) || /^event:answer:[A-Za-z0-9_-]{1,150}$/.test(reference);
+    if (!supported) issues.push({ code: "INVALID_REFERENCE", nodeId, message: `Trường sự kiện ${reference} tại node ${nodeId} không tồn tại.` });
+    return;
+  }
   if (reference.startsWith("system:")) {
     const field = getAutomationSystemField(reference);
     if (!field) {
@@ -258,6 +263,8 @@ function validateFieldReference(
 }
 
 function getFieldDataType(reference: string, catalog: AutomationSemanticCatalog) {
+  if (reference.startsWith("event:answer:")) return undefined;
+  if (reference.startsWith("event:")) return AUTOMATION_REGISTRY.fields.find((field) => field.reference === reference)?.dataType;
   const normalizedReference = normalizeAutomationFieldReference(reference);
   return catalog.customFieldDataTypes.get(normalizedReference) ?? getAutomationSystemField(normalizedReference)?.dataType;
 }

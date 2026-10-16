@@ -1,4 +1,4 @@
-import { AUTOMATION_SYSTEM_FIELDS } from "./automation-field-registry";
+import { AUTOMATION_EVENT_FIELDS, AUTOMATION_SYSTEM_FIELDS } from "./automation-field-registry";
 import type { AutomationNode, AutomationNodeData, AutomationNodeType } from "./automation.types";
 
 export type AutomationConfigControl =
@@ -177,6 +177,8 @@ export const AUTOMATION_TRIGGER_TYPES = [
   "admission_profile_expiring",
   "admission_approved",
   "student_enrolled",
+  "form_submitted",
+  "survey_completed",
 ] as const;
 
 const automationTriggerLabels: Record<(typeof AUTOMATION_TRIGGER_TYPES)[number], string> = {
@@ -191,13 +193,15 @@ const automationTriggerLabels: Record<(typeof AUTOMATION_TRIGGER_TYPES)[number],
   admission_profile_expiring: "Hồ sơ sắp hết hạn",
   admission_approved: "Hồ sơ được duyệt",
   student_enrolled: "Thí sinh đã nhập học",
+  form_submitted: "Biểu mẫu tạo Lead được gửi",
+  survey_completed: "Khảo sát được hoàn thành",
 };
 
 export const AUTOMATION_REGISTRY = {
   version: 2,
   triggers: AUTOMATION_TRIGGER_TYPES.map((code) => ({ code, label: automationTriggerLabels[code] })),
   nodes,
-  fields: AUTOMATION_SYSTEM_FIELDS,
+  fields: [...AUTOMATION_SYSTEM_FIELDS, ...AUTOMATION_EVENT_FIELDS],
   operators: [
     { code: "equals", label: "Bằng", requiresValue: true, dataTypes: ["TEXT", "TEXTAREA", "EMAIL", "PHONE", "NUMBER", "DATE", "BOOLEAN", "SELECT", "MULTI_SELECT"] },
     { code: "not_equals", label: "Khác", requiresValue: true, dataTypes: ["TEXT", "TEXTAREA", "EMAIL", "PHONE", "NUMBER", "DATE", "BOOLEAN", "SELECT", "MULTI_SELECT"] },

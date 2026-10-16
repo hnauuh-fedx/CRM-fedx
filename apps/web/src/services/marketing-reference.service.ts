@@ -7,6 +7,7 @@ import type {
   MarketingFormFilters,
   MarketingFormListResponse,
   MarketingFormInput,
+  MarketingFormItem,
   MarketingFormSortField,
   MarketingFormSubmissionListResponse,
   PublicMarketingFormConfig,
@@ -20,6 +21,7 @@ import type {
 } from "@/modules/marketing/marketing-reference.types";
 import { apiRequest } from "./api";
 import { saveRuntimeCustomFields } from "./custom-field.service";
+import { marketingFormRequestOptions } from "@/modules/marketing/marketing-form-query-scope";
 
 type LeadSourceParams = {
   page: number;
@@ -120,7 +122,7 @@ export function getUtmGeneratedLeads(params: UtmGeneratedLeadParams, accessToken
   return apiRequest<UtmGeneratedLeadResponse>(`/utm-trackings/leads?${query.toString()}`, {}, accessToken);
 }
 
-export function getMarketingForms(params: MarketingFormParams, accessToken: string) {
+export function getMarketingForms(params: MarketingFormParams, accessToken: string, institutionProgramId?: string, signal?: AbortSignal) {
   const query = new URLSearchParams({
     page: String(params.page),
     limit: String(params.limit),
@@ -131,63 +133,70 @@ export function getMarketingForms(params: MarketingFormParams, accessToken: stri
     platform: params.platform,
     campaignId: params.campaignId,
   });
-  return apiRequest<MarketingFormListResponse>(`/forms?${query.toString()}`, {}, accessToken);
+  return apiRequest<MarketingFormListResponse>(`/forms?${query.toString()}`, marketingFormRequestOptions(institutionProgramId, signal), accessToken);
 }
 
-export function getMarketingFormFilterOptions(accessToken: string) {
-  return apiRequest<MarketingFormFilterOptions>("/forms/options", {}, accessToken);
+export function getMarketingFormFilterOptions(accessToken: string, institutionProgramId?: string, signal?: AbortSignal) {
+  return apiRequest<MarketingFormFilterOptions>("/forms/options", marketingFormRequestOptions(institutionProgramId, signal), accessToken);
 }
 
-export async function createMarketingForm(input: MarketingFormInput, accessToken: string) {
+export async function createMarketingForm(input: MarketingFormInput, accessToken: string, institutionProgramId?: string) {
   const { customFieldValues, ...payload } = input;
-  const result = await apiRequest<{ id: string; slug?: string; public_key?: string; webhookSecret?: string }>("/forms", { method: "POST", body: JSON.stringify(payload) }, accessToken);
-  if (customFieldValues && Object.keys(customFieldValues).length > 0) await saveRuntimeCustomFields("MARKETING_FORM", result.id, customFieldValues, accessToken);
+  const result = await apiRequest<{ id: string; slug?: string; public_key?: string; webhookSecret?: string }>("/forms", { ...marketingFormRequestOptions(institutionProgramId), method: "POST", body: JSON.stringify(payload) }, accessToken);
+  if (customFieldValues && Object.keys(customFieldValues).length > 0) await saveRuntimeCustomFields("MARKETING_FORM", result.id, customFieldValues, accessToken, institutionProgramId);
   return result;
 }
 
-export function getMarketingForm(formId: string, accessToken: string) {
-  return apiRequest<MarketingFormItem>(`/forms/${formId}`, {}, accessToken);
+export function getMarketingForm(formId: string, accessToken: string, institutionProgramId?: string, signal?: AbortSignal) {
+  return apiRequest<MarketingFormItem>(`/forms/${formId}`, marketingFormRequestOptions(institutionProgramId, signal), accessToken);
 }
 
-export async function updateMarketingForm(formId: string, input: MarketingFormInput, accessToken: string) {
+export async function updateMarketingForm(formId: string, input: MarketingFormInput, accessToken: string, institutionProgramId?: string) {
   const { customFieldValues, ...payload } = input;
-  const result = await apiRequest<{ id: string; slug?: string }>(`/forms/${formId}`, { method: "PUT", body: JSON.stringify(payload) }, accessToken);
-  if (customFieldValues) await saveRuntimeCustomFields("MARKETING_FORM", formId, customFieldValues, accessToken);
+  const result = await apiRequest<{ id: string; slug?: string }>(`/forms/${formId}`, { ...marketingFormRequestOptions(institutionProgramId), method: "PUT", body: JSON.stringify(payload) }, accessToken);
+  if (customFieldValues) await saveRuntimeCustomFields("MARKETING_FORM", formId, customFieldValues, accessToken, institutionProgramId);
   return result;
 }
 
-export function publishMarketingForm(formId: string, accessToken: string) {
-  return apiRequest<{ id: string; status: string; publicPath: string | null }>(`/forms/${formId}/publish`, { method: "POST" }, accessToken);
+export function publishMarketingForm(formId: string, accessToken: string, institutionProgramId?: string) {
+  return apiRequest<{ id: string; status: string; publicPath: string | null }>(`/forms/${formId}/publish`, { ...marketingFormRequestOptions(institutionProgramId), method: "POST" }, accessToken);
 }
 
-export function duplicateMarketingForm(formId: string, accessToken: string) {
-  return apiRequest<{ id: string; slug: string | null }>(`/forms/${formId}/duplicate`, { method: "POST" }, accessToken);
+export function duplicateMarketingForm(formId: string, accessToken: string, institutionProgramId?: string) {
+  return apiRequest<{ id: string; slug: string | null }>(`/forms/${formId}/duplicate`, { ...marketingFormRequestOptions(institutionProgramId), method: "POST" }, accessToken);
 }
 
-export function rotateMarketingFormWebhookSecret(formId: string, accessToken: string) {
-  return apiRequest<{ id: string; webhookSecret: string }>(`/marketing-forms/${formId}/rotate-secret`, { method: "POST" }, accessToken);
+export function rotateMarketingFormWebhookSecret(formId: string, accessToken: string, institutionProgramId?: string) {
+  return apiRequest<{ id: string; webhookSecret: string }>(`/marketing-forms/${formId}/rotate-secret`, { ...marketingFormRequestOptions(institutionProgramId), method: "POST" }, accessToken);
 }
 
-export function getMarketingFormSubmissions(formId: string, accessToken: string, params: { page: number; limit: number; status?: string }) {
+export function getMarketingFormSubmissions(formId: string, accessToken: string, params: { page: number; limit: number; status?: string; search?: string }, institutionProgramId?: string, signal?: AbortSignal) {
   const query = new URLSearchParams({
     page: String(params.page),
     limit: String(params.limit),
     status: params.status ?? "",
+    search: params.search ?? "",
   });
-  return apiRequest<MarketingFormSubmissionListResponse>(`/forms/${formId}/submissions?${query.toString()}`, {}, accessToken);
+  return apiRequest<MarketingFormSubmissionListResponse>(`/forms/${formId}/submissions?${query.toString()}`, marketingFormRequestOptions(institutionProgramId, signal), accessToken);
 }
 
-export function deleteMarketingForm(formId: string, accessToken: string) {
-  return apiRequest<{ id: string }>(`/forms/${formId}`, { method: "DELETE" }, accessToken);
+export function deleteMarketingForm(formId: string, accessToken: string, institutionProgramId?: string) {
+  return apiRequest<{ id: string }>(`/forms/${formId}`, { ...marketingFormRequestOptions(institutionProgramId), method: "DELETE" }, accessToken);
 }
 
 export function getPublicMarketingForm(publicKey: string) {
   return apiRequest<PublicMarketingFormConfig>(`/public/forms/${publicKey}`);
 }
 
-export function submitPublicMarketingForm(publicKey: string, payload: Record<string, unknown>) {
-  return apiRequest<{ submissionId: string; leadId: string | null; status: string; message?: string; redirectUrl?: string }>(`/public/forms/${publicKey}/submit`, {
-    method: "POST",
+export function getMarketingFormReferences(target: "major_id" | "source_id", params: { page: number; search: string }, accessToken: string, programId: string, signal?: AbortSignal) {
+  const query = new URLSearchParams({ target, page: String(params.page), limit: "20", search: params.search });
+  return apiRequest<{ data: Array<{ value: string; label: string }>; pagination: { page: number; totalPages: number } }>(`/forms/references?${query}`, marketingFormRequestOptions(programId, signal), accessToken);
+}
+
+export function submitPublicMarketingForm(publicKey: string, payload: Record<string, unknown>, idempotencyKey?: string) {
+  return apiRequest<{ submissionId: string; status: string; message?: string; redirectUrl?: string; redirectMode?: "form" | "landing_page" }>(`/public/forms/${publicKey}/submit`, {
+      method: "POST",
+      headers: idempotencyKey ? { "Idempotency-Key": idempotencyKey } : undefined,
     body: JSON.stringify(payload),
   });
 }

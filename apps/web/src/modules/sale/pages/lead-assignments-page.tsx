@@ -1,38 +1,65 @@
-import { useMemo, useState } from "react";
+import { ServerDataTable } from "@/components/shared/server-data-table";
+import { TablePagination } from "@/components/shared/table-pagination";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import {
-  flexRender,
   getCoreRowModel,
-  type ColumnDef,
-  type Header,
-  type SortingState,
-  type Table as DataTable,
   useReactTable,
+  type ColumnDef,
+  type Table as DataTable,
+  type SortingState,
 } from "@tanstack/react-table";
-import { ArrowDown, ArrowUp, ArrowUpDown, ChevronLeft, ChevronRight, Eye, Search } from "lucide-react";
+import { Eye, Search } from "lucide-react";
+import { useCallback, useMemo, useState } from "react";
 import { Link } from "react-router-dom";
 
-import { EmptyState } from "@/components/shared/data-states";
 import { AutoFilterActions } from "@/components/shared/auto-filter-actions";
+import { EmptyState } from "@/components/shared/data-states";
 import { ErrorState } from "@/components/shared/error-state";
 import { FilterSelect } from "@/components/shared/filter-select";
 import { PageHeader } from "@/components/shared/page-header";
 import { TableLoadingState } from "@/components/shared/table-loading-state";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import {
+  Card,
+  CardContent,
+  CardDescription,
+  CardHeader,
+  CardTitle,
+} from "@/components/ui/card";
 import { Field, FieldGroup, FieldLabel } from "@/components/ui/field";
 import { Input } from "@/components/ui/input";
-import { Select, SelectContent, SelectGroup, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
+import {
+  Select,
+  SelectContent,
+  SelectGroup,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import { useAuth } from "@/modules/auth/auth-context";
 import { ApiError } from "@/services/api";
 import { assignLead as assignLeadToTelesale } from "@/services/lead.service";
-import { getLeadAssignments, getSaleFilterOptions } from "@/services/sale.service";
-import type { AssignmentFilters, AssignmentItem, AssignmentListResponse, AssignmentStatus, SaleFilterOptions } from "../sale.types";
+import {
+  getLeadAssignments,
+  getSaleFilterOptions,
+} from "@/services/sale.service";
+import type {
+  AssignmentFilters,
+  AssignmentItem,
+  AssignmentListResponse,
+  AssignmentStatus,
+  SaleFilterOptions,
+} from "../sale.types";
 
 const pageSize = 20;
-const emptyFilters: AssignmentFilters = { search: "", assigneeId: "", sourceId: "" };
+const emptyAssignments: AssignmentItem[] = [];
+const emptyTelesales: SaleFilterOptions["telesales"] = [];
+const emptyFilters: AssignmentFilters = {
+  search: "",
+  assigneeId: "",
+  sourceId: "",
+};
 const dateFormatter = new Intl.DateTimeFormat("vi-VN");
 
 function formatDate(value: string | null) {
@@ -46,11 +73,25 @@ export function LeadAssignmentsPage() {
   const [draftFilters, setDraftFilters] = useState(emptyFilters);
   const [filters, setFilters] = useState(emptyFilters);
   const [status, setStatus] = useState<AssignmentStatus>("unassigned");
-  const [sorting, setSorting] = useState<SortingState>([{ id: "assignedAt", desc: true }]);
+  const [sorting, setSorting] = useState<SortingState>([
+    { id: "assignedAt", desc: true },
+  ]);
   const sortOrder = (sorting[0]?.desc ?? true) ? "desc" : "asc";
   const listQuery = useQuery({
-    queryKey: ["sale", "assignments", status, page, pageSize, sortOrder, filters],
-    queryFn: () => getLeadAssignments({ page, limit: pageSize, sortOrder, status, ...filters }, auth.accessToken!),
+    queryKey: [
+      "sale",
+      "assignments",
+      status,
+      page,
+      pageSize,
+      sortOrder,
+      filters,
+    ],
+    queryFn: () =>
+      getLeadAssignments(
+        { page, limit: pageSize, sortOrder, status, ...filters },
+        auth.accessToken!,
+      ),
     placeholderData: (previousData) => previousData,
   });
   const optionsQuery = useQuery({
@@ -58,8 +99,13 @@ export function LeadAssignmentsPage() {
     queryFn: () => getSaleFilterOptions(auth.accessToken!),
   });
   const assignmentMutation = useMutation({
-    mutationFn: ({ leadId, assigneeId }: { leadId: string; assigneeId: string }) =>
-      assignLeadToTelesale(leadId, { assigneeId }, auth.accessToken!),
+    mutationFn: ({
+      leadId,
+      assigneeId,
+    }: {
+      leadId: string;
+      assigneeId: string;
+    }) => assignLeadToTelesale(leadId, { assigneeId }, auth.accessToken!),
     onSuccess: async () => {
       await Promise.all([
         queryClient.invalidateQueries({ queryKey: ["sale", "assignments"] }),
@@ -68,22 +114,33 @@ export function LeadAssignmentsPage() {
       ]);
     },
   });
-  const data = listQuery.data?.data ?? [];
+  const data = listQuery.data?.data ?? emptyAssignments;
+  const onAssign = useCallback(
+    (leadId: string, assigneeId: string) => {
+      assignmentMutation.mutate({ leadId, assigneeId });
+    },
+    [assignmentMutation.mutate],
+  );
+  const columns = useColumns({
+    status,
+    telesales: optionsQuery.data?.telesales ?? emptyTelesales,
+    assigningLeadId: assignmentMutation.isPending
+      ? assignmentMutation.variables?.leadId
+      : undefined,
+    onAssign,
+  });
   const table = useReactTable({
     data,
-    columns: useColumns({
-      status,
-      telesales: optionsQuery.data?.telesales ?? [],
-      assigningLeadId: assignmentMutation.isPending ? assignmentMutation.variables?.leadId : undefined,
-      onAssign: (leadId, assigneeId) => assignmentMutation.mutate({ leadId, assigneeId }),
-    }),
+    columns,
     state: { sorting },
     manualSorting: true,
     enableMultiSort: false,
     onSortingChange: (updater) => {
       setSorting((current) => {
         const next = typeof updater === "function" ? updater(current) : updater;
-        return next.length ? [{ id: "assignedAt", desc: next[0].desc }] : [{ id: "assignedAt", desc: true }];
+        return next.length
+          ? [{ id: "assignedAt", desc: next[0].desc }]
+          : [{ id: "assignedAt", desc: true }];
       });
       setPage(1);
     },
@@ -101,13 +158,24 @@ export function LeadAssignmentsPage() {
       <Filters
         filters={draftFilters}
         options={optionsQuery.data}
-        onChange={(field, value) => setDraftFilters((current) => ({ ...current, [field]: value }))}
-        onApply={() => { setFilters(draftFilters); setPage(1); }}
-        onReset={() => { setDraftFilters(emptyFilters); setFilters(emptyFilters); setPage(1); }}
+        onChange={(field, value) =>
+          setDraftFilters((current) => ({ ...current, [field]: value }))
+        }
+        onApply={() => {
+          setFilters(draftFilters);
+          setPage(1);
+        }}
+        onReset={() => {
+          setDraftFilters(emptyFilters);
+          setFilters(emptyFilters);
+          setPage(1);
+        }}
       />
       {assignmentMutation.isError && (
         <p role="alert" className="text-sm text-destructive">
-          {assignmentMutation.error instanceof ApiError ? assignmentMutation.error.message : "Không thể phân công Sale phụ trách. Vui lòng thử lại."}
+          {assignmentMutation.error instanceof ApiError
+            ? assignmentMutation.error.message
+            : "Không thể phân công Sale phụ trách. Vui lòng thử lại."}
         </p>
       )}
       <Results
@@ -119,7 +187,10 @@ export function LeadAssignmentsPage() {
         isLoading={listQuery.isLoading}
         isError={listQuery.isError}
         isFetching={listQuery.isFetching}
-        onStatusChange={(nextStatus) => { setStatus(nextStatus); setPage(1); }}
+        onStatusChange={(nextStatus) => {
+          setStatus(nextStatus);
+          setPage(1);
+        }}
         onReload={() => listQuery.refetch()}
         onPrevious={() => setPage((current) => Math.max(1, current - 1))}
         onNext={() => setPage((current) => current + 1)}
@@ -128,7 +199,12 @@ export function LeadAssignmentsPage() {
   );
 }
 
-function useColumns({ status, telesales, assigningLeadId, onAssign }: {
+function useColumns({
+  status,
+  telesales,
+  assigningLeadId,
+  onAssign,
+}: {
   status: AssignmentStatus;
   telesales: SaleFilterOptions["telesales"];
   assigningLeadId?: string;
@@ -140,25 +216,56 @@ function useColumns({ status, telesales, assigningLeadId, onAssign }: {
         id: "lead",
         header: "Lead",
         enableSorting: false,
-        cell: ({ row }) => row.original.lead ? <LeadCell item={row.original} /> : "-",
+        cell: ({ row }) =>
+          row.original.lead ? <LeadCell item={row.original} /> : "-",
       },
       {
         id: "assignee",
         header: "Nhân viên",
         enableSorting: false,
-        cell: ({ row }) => status === "unassigned"
-          ? <InlineAssigneeSelect item={row.original} telesales={telesales} isPending={assigningLeadId === row.original.lead?.id} onAssign={onAssign} />
-          : row.original.assignee?.fullName ?? "-",
+        cell: ({ row }) =>
+          status === "unassigned" ? (
+            <InlineAssigneeSelect
+              item={row.original}
+              telesales={telesales}
+              isPending={assigningLeadId === row.original.lead?.id}
+              onAssign={onAssign}
+            />
+          ) : (
+            (row.original.assignee?.fullName ?? "-")
+          ),
       },
-      { id: "source", header: "Nguồn HV", enableSorting: false, cell: ({ row }) => row.original.source?.name ?? "-" },
-      { id: "assignedBy", header: "Người phân công", enableSorting: false, cell: ({ row }) => row.original.assignedBy?.fullName ?? "Hệ thống" },
+      {
+        id: "source",
+        header: "Nguồn HV",
+        enableSorting: false,
+        cell: ({ row }) => row.original.source?.name ?? "-",
+      },
+      {
+        id: "assignedBy",
+        header: "Người phân công",
+        enableSorting: false,
+        cell: ({ row }) => row.original.assignedBy?.fullName ?? "Hệ thống",
+      },
       {
         id: "owner",
         header: "Vai trò",
         enableSorting: false,
-        cell: ({ row }) => <Badge variant="secondary">{status === "unassigned" ? "Chưa phân công" : row.original.isMainOwner ? "Phụ trách chính" : "Phối hợp"}</Badge>,
+        cell: ({ row }) => (
+          <Badge variant="secondary">
+            {status === "unassigned"
+              ? "Chưa phân công"
+              : row.original.isMainOwner
+                ? "Phụ trách chính"
+                : "Phối hợp"}
+          </Badge>
+        ),
       },
-      { accessorKey: "assignedAt", header: "Ngày phân công", cell: ({ row }) => formatDate(row.original.assignedAt) },
+      {
+        accessorKey: "assignedAt",
+        header: "Ngày phân công",
+        cell: ({ row }) => formatDate(row.original.assignedAt),
+      },
     ],
     [assigningLeadId, onAssign, status, telesales],
   );
@@ -172,47 +279,79 @@ function LeadCell({ item }: { item: AssignmentItem }) {
   return (
     <div className="flex min-w-56 items-center gap-2">
       <Button asChild variant="ghost" size="icon" className="size-9 shrink-0">
-        <Link to={`/sale/leads/${item.lead.id}`} aria-label={`Xem chi tiết ${item.lead.fullName}`}>
+        <Link
+          to={`/sale/leads/${item.lead.id}`}
+          aria-label={`Xem chi tiết ${item.lead.fullName}`}
+        >
           <Eye aria-hidden="true" />
         </Link>
       </Button>
       <div className="min-w-0">
         <p className="truncate font-medium">{item.lead.fullName}</p>
-        <p className="truncate text-xs text-muted-foreground">{item.lead.leadCode ?? "Chưa có mã"}</p>
+        <p className="truncate text-xs text-muted-foreground">
+          {item.lead.leadCode ?? "Chưa có mã"}
+        </p>
       </div>
     </div>
   );
 }
 
-function InlineAssigneeSelect({ item, telesales, isPending, onAssign }: {
+function InlineAssigneeSelect({
+  item,
+  telesales,
+  isPending,
+  onAssign,
+}: {
   item: AssignmentItem;
   telesales: SaleFilterOptions["telesales"];
   isPending: boolean;
   onAssign: (leadId: string, assigneeId: string) => void;
 }) {
-  if (!item.lead) return "-";
+  const lead = item.lead;
+  if (!lead) return "-";
   return (
     <Select
       value="__placeholder__"
       disabled={isPending || telesales.length === 0}
       onValueChange={(assigneeId) => {
-        if (assigneeId !== "__placeholder__") onAssign(item.lead.id, assigneeId);
+        if (assigneeId !== "__placeholder__") onAssign(lead.id, assigneeId);
       }}
     >
-      <SelectTrigger className="min-h-11 min-w-48" aria-label={`Chọn Sale phụ trách cho ${item.lead.fullName}`}>
-        {isPending ? <span>Đang phân công…</span> : telesales.length === 0 ? <span>Không có Telesale</span> : <SelectValue />}
+      <SelectTrigger
+        className="min-h-11 min-w-48"
+        aria-label={`Chọn Sale phụ trách cho ${lead.fullName}`}
+      >
+        {isPending ? (
+          <span>Đang phân công…</span>
+        ) : telesales.length === 0 ? (
+          <span>Không có Telesale</span>
+        ) : (
+          <SelectValue />
+        )}
       </SelectTrigger>
       <SelectContent>
         <SelectGroup>
-          <SelectItem value="__placeholder__" disabled>Chọn Sale phụ trách</SelectItem>
-          {telesales.map((telesale) => <SelectItem key={telesale.id} value={telesale.id}>{telesale.fullName}</SelectItem>)}
+          <SelectItem value="__placeholder__" disabled>
+            Chọn Sale phụ trách
+          </SelectItem>
+          {telesales.map((telesale) => (
+            <SelectItem key={telesale.id} value={telesale.id}>
+              {telesale.fullName}
+            </SelectItem>
+          ))}
         </SelectGroup>
       </SelectContent>
     </Select>
   );
 }
 
-function Filters({ filters, options, onChange, onApply, onReset }: {
+function Filters({
+  filters,
+  options,
+  onChange,
+  onApply,
+  onReset,
+}: {
   filters: AssignmentFilters;
   options?: SaleFilterOptions;
   onChange: (field: keyof AssignmentFilters, value: string) => void;
@@ -223,21 +362,59 @@ function Filters({ filters, options, onChange, onApply, onReset }: {
     <Card className="gap-4 border-border/70 py-5 shadow-xs">
       <CardHeader className="gap-1 px-5">
         <CardTitle>Bộ lọc phân công</CardTitle>
-        <CardDescription>Tìm theo lead hoặc nhân viên phụ trách.</CardDescription>
+        <CardDescription>
+          Tìm theo lead hoặc nhân viên phụ trách.
+        </CardDescription>
       </CardHeader>
       <CardContent className="px-5">
-        <form onSubmit={(event) => { event.preventDefault(); onApply(); }}>
+        <form
+          onSubmit={(event) => {
+            event.preventDefault();
+            onApply();
+          }}
+        >
           <FieldGroup className="grid gap-4 lg:grid-cols-[minmax(240px,2fr)_repeat(2,minmax(180px,1fr))_auto]">
             <Field className="gap-2">
               <FieldLabel htmlFor="assignment-search">Tìm kiếm</FieldLabel>
               <div className="relative">
-                <Search className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground" aria-hidden="true" />
-                <Input id="assignment-search" className="pl-9" placeholder="Nhập mã lead, họ tên hoặc nhân viên" value={filters.search} onChange={(event) => onChange("search", event.target.value)} />
+                <Search
+                  className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground"
+                  aria-hidden="true"
+                />
+                <Input
+                  id="assignment-search"
+                  className="pl-9"
+                  placeholder="Nhập mã lead, họ tên hoặc nhân viên"
+                  value={filters.search}
+                  onChange={(event) => onChange("search", event.target.value)}
+                />
               </div>
             </Field>
-            <FilterSelect id="assignment-assignee" label="Nhân viên" value={filters.assigneeId} onChange={(value) => onChange("assigneeId", value)} options={(options?.assignees ?? []).map((item) => ({ value: item.id, label: item.fullName }))} />
-            <FilterSelect id="assignment-source" label="Nguồn HV" value={filters.sourceId} onChange={(value) => onChange("sourceId", value)} options={(options?.sources ?? []).map((item) => ({ value: item.id, label: item.name }))} />
-            <AutoFilterActions snapshot={filters} onApply={onApply} onReset={onReset} />
+            <FilterSelect
+              id="assignment-assignee"
+              label="Nhân viên"
+              value={filters.assigneeId}
+              onChange={(value) => onChange("assigneeId", value)}
+              options={(options?.assignees ?? []).map((item) => ({
+                value: item.id,
+                label: item.fullName,
+              }))}
+            />
+            <FilterSelect
+              id="assignment-source"
+              label="Nguồn HV"
+              value={filters.sourceId}
+              onChange={(value) => onChange("sourceId", value)}
+              options={(options?.sources ?? []).map((item) => ({
+                value: item.id,
+                label: item.name,
+              }))}
+            />
+            <AutoFilterActions
+              snapshot={filters}
+              onApply={onApply}
+              onReset={onReset}
+            />
           </FieldGroup>
         </form>
       </CardContent>
@@ -259,38 +436,117 @@ function Results(props: {
   onPrevious: () => void;
   onNext: () => void;
 }) {
-  const { status, table, data, pagination, page, isLoading, isError, isFetching, onStatusChange, onReload, onPrevious, onNext } = props;
+  const {
+    status,
+    data,
+    pagination,
+    page,
+    isFetching,
+    onStatusChange,
+    onPrevious,
+    onNext,
+  } = props;
   const isUnassigned = status === "unassigned";
   return (
     <Card className="gap-0 overflow-hidden border-border/70 py-0 shadow-xs">
       <CardHeader className="gap-1 border-b py-5">
-        <div role="tablist" aria-label="Trạng thái phân công lead" className="flex flex-wrap gap-2">
-          <Button type="button" role="tab" aria-selected={isUnassigned} aria-controls="assignment-results-panel" variant={isUnassigned ? "default" : "ghost"} className="min-h-11" onClick={() => onStatusChange("unassigned")}>Chưa phân công</Button>
-          <Button type="button" role="tab" aria-selected={!isUnassigned} aria-controls="assignment-results-panel" variant={!isUnassigned ? "default" : "ghost"} className="min-h-11" onClick={() => onStatusChange("assigned")}>Đã phân công</Button>
+        <div
+          role="tablist"
+          aria-label="Trạng thái phân công lead"
+          className="flex flex-wrap gap-2"
+        >
+          <Button
+            type="button"
+            role="tab"
+            aria-selected={isUnassigned}
+            aria-controls="assignment-results-panel"
+            variant={isUnassigned ? "default" : "ghost"}
+            className="min-h-11"
+            onClick={() => onStatusChange("unassigned")}
+          >
+            Chưa phân công
+          </Button>
+          <Button
+            type="button"
+            role="tab"
+            aria-selected={!isUnassigned}
+            aria-controls="assignment-results-panel"
+            variant={!isUnassigned ? "default" : "ghost"}
+            className="min-h-11"
+            onClick={() => onStatusChange("assigned")}
+          >
+            Đã phân công
+          </Button>
         </div>
-        <CardDescription>{pagination ? `Hiển thị ${data.length} trong tổng số ${pagination.total} lead ${isUnassigned ? "chưa được phân công" : "đã được phân công"}` : "Đang lấy dữ liệu phân công…"}</CardDescription>
+        <CardDescription>
+          {pagination
+            ? `Hiển thị ${data.length} trong tổng số ${pagination.total} lead ${isUnassigned ? "chưa được phân công" : "đã được phân công"}`
+            : "Đang lấy dữ liệu phân công…"}
+        </CardDescription>
       </CardHeader>
-      <CardContent id="assignment-results-panel" role="tabpanel" className="p-0">
-        {isError ? <ErrorState title="Không thể tải phân công lead" description="Vui lòng thử lại để cập nhật dữ liệu phân công." onReload={onReload} /> : isLoading ? (
-          <TableLoadingState label="Đang tải phân công lead" />
-        ) : data.length === 0 ? (
-          <EmptyState title={isUnassigned ? "Không có lead chưa phân công" : "Không có lead đã phân công phù hợp"} description={isUnassigned ? "Tất cả lead hiện tại đều đã có Sale phụ trách." : "Điều chỉnh bộ lọc để tìm lead đã phân công cần theo dõi."} />
-        ) : <SortableTable table={table} status={status} />}
+      <CardContent
+        id="assignment-results-panel"
+        role="tabpanel"
+        className="p-0"
+      >
+        <AssignmentResultContent {...props} />
       </CardContent>
-      {pagination && pagination.total > 0 && <Pager page={page} pagination={pagination} isFetching={isFetching} onPrevious={onPrevious} onNext={onNext} />}
+      {pagination && pagination.total > 0 && (
+        <TablePagination
+          page={page}
+          pagination={pagination}
+          isFetching={isFetching}
+          onPrevious={onPrevious}
+          onNext={onNext}
+        />
+      )}
     </Card>
   );
 }
 
-function SortableTable({ table, status }: { table: DataTable<AssignmentItem>; status: AssignmentStatus }) {
-  return <Table className="min-w-260"><caption className="sr-only">Danh sách lead {status === "unassigned" ? "chưa phân công" : "đã phân công"}</caption><TableHeader className="bg-muted/55 text-xs uppercase tracking-wide text-muted-foreground">{table.getHeaderGroups().map((group) => <TableRow key={group.id} className="hover:bg-muted/55">{group.headers.map((header) => <SortHeader key={header.id} header={header} />)}</TableRow>)}</TableHeader><TableBody>{table.getRowModel().rows.map((row) => <TableRow key={row.id}>{row.getVisibleCells().map((cell) => <TableCell key={cell.id} className="px-5 py-4">{flexRender(cell.column.columnDef.cell, cell.getContext())}</TableCell>)}</TableRow>)}</TableBody></Table>;
+function AssignmentResultContent({
+  status,
+  table,
+  data,
+  isLoading,
+  isError,
+  onReload,
+}: Pick<
+  Parameters<typeof Results>[0],
+  "status" | "table" | "data" | "isLoading" | "isError" | "onReload"
+>) {
+  if (isError)
+    return (
+      <ErrorState
+        title="Không thể tải phân công lead"
+        description="Vui lòng thử lại để cập nhật dữ liệu phân công."
+        onReload={onReload}
+      />
+    );
+  if (isLoading) return <TableLoadingState label="Đang tải phân công lead" />;
+  if (data.length === 0) {
+    const copy = assignmentEmptyCopy[status];
+    return <EmptyState title={copy.title} description={copy.description} />;
+  }
+  return (
+    <ServerDataTable
+      table={table}
+      caption={`Danh sách lead ${status === "unassigned" ? "chưa phân công" : "đã phân công"}`}
+      className="min-w-260"
+    />
+  );
 }
 
-function SortHeader({ header }: { header: Header<AssignmentItem, unknown> }) {
-  const direction = header.column.getIsSorted();
-  return <TableHead scope="col" className="px-5 font-medium text-muted-foreground" aria-sort={direction === "asc" ? "ascending" : direction === "desc" ? "descending" : undefined}>{header.column.getCanSort() ? <button type="button" className="inline-flex min-h-11 items-center gap-2 rounded-md focus-visible:outline-2 focus-visible:outline-ring" onClick={header.column.getToggleSortingHandler()}>{flexRender(header.column.columnDef.header, header.getContext())}{direction === "asc" ? <ArrowUp aria-hidden="true" /> : direction === "desc" ? <ArrowDown aria-hidden="true" /> : <ArrowUpDown aria-hidden="true" />}</button> : flexRender(header.column.columnDef.header, header.getContext())}</TableHead>;
-}
-
-function Pager({ page, pagination, isFetching, onPrevious, onNext }: { page: number; pagination: AssignmentListResponse["pagination"]; isFetching: boolean; onPrevious: () => void; onNext: () => void }) {
-  return <div className="flex flex-col items-center justify-between gap-3 border-t px-5 py-4 text-sm sm:flex-row"><p className="text-muted-foreground">Trang {pagination.page} / {pagination.totalPages}</p><div className="flex gap-2"><Button type="button" variant="outline" size="sm" disabled={page <= 1 || isFetching} onClick={onPrevious}><ChevronLeft aria-hidden="true" />Trang trước</Button><Button type="button" variant="outline" size="sm" disabled={page >= pagination.totalPages || isFetching} onClick={onNext}>Trang sau<ChevronRight aria-hidden="true" /></Button></div></div>;
-}
+const assignmentEmptyCopy: Record<
+  AssignmentStatus,
+  { title: string; description: string }
+> = {
+  unassigned: {
+    title: "Không có lead chưa phân công",
+    description: "Tất cả lead hiện tại đều đã có Sale phụ trách.",
+  },
+  assigned: {
+    title: "Không có lead đã phân công phù hợp",
+    description: "Điều chỉnh bộ lọc để tìm lead đã phân công cần theo dõi.",
+  },
+};
