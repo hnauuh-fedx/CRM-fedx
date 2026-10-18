@@ -54,6 +54,9 @@ const lead = (n) => ({
   createdAt: "2026-10-01T00:00:00Z",
   dateOfBirth: null,
   pipelineStage: null,
+  lifecycleStatus: { value: "ACTIVE", label: "?ang x? l?", changedAt: null },
+  secondaryPhones: [],
+  secondaryAssignee: null,
   tags: "",
   source,
   assignee: null,
@@ -93,6 +96,8 @@ const options = {
   classes: [],
   tags: [],
   totalLeads: 21,
+  failedLeads: 0,
+  customFields: [],
   systemFieldRequirements: { fullName: true, phone: true, sourceId: true },
 };
 const pagination = (url) => ({
@@ -183,6 +188,7 @@ try {
           return json(response, { id: "lead-1" });
         return json(response, { message: "Lỗi lưu fixture" }, 503);
       }
+      if (path === "/api/display-layouts/effective") return json(response, { name: "M?c ??nh", baseTemplateId: null, visibleFields: ["fullName", "phone", "source", "assignee", "createdAt"], pinnedFields: [], columnWidths: {} });
       if (path === "/api/institution-programs/options")
         return json(response, { data: [{ ...program, code: "P1" }] });
       if (path === "/api/admissions/fees/options")

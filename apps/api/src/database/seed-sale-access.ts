@@ -119,11 +119,16 @@ async function seedSaleAccess() {
         data: [{ user_id: demoTelesale.id, role_id: telesaleRole.id }],
         skipDuplicates: true,
       });
+      const programs = await transaction.role_institution_programs.findMany({ where: { role_id: telesaleRole.id }, select: { institution_program_id: true } });
+      const programRoles = await transaction.user_program_roles.createMany({
+        data: programs.map((program) => ({ user_id: demoTelesale.id, role_id: telesaleRole.id, institution_program_id: program.institution_program_id })),
+        skipDuplicates: true,
+      });
       const departments = await transaction.user_departments.createMany({
         data: [{ user_id: demoTelesale.id, department_id: department.id }],
         skipDuplicates: true,
       });
-      roleAssignments = roles.count;
+      roleAssignments = roles.count + programRoles.count;
       departmentAssignments = departments.count;
     }
 

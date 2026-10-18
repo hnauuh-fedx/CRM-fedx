@@ -59,7 +59,7 @@ export async function getUtmAnalytics(user: CampaignViewer, query: UtmAnalyticsQ
       LEFT JOIN campaigns campaign ON campaign.id = tracking.campaign_id
       LEFT JOIN leads application_lead ON application_lead.id = tracking.lead_id AND application_lead.deleted_at IS NULL
       LEFT JOIN pipeline_stages application_stage ON application_stage.id = application_lead.pipeline_stage_id AND application_stage.name ILIKE ${APPLICATION_PIPELINE_STAGE_LIKE}
-      LEFT JOIN students student ON student.lead_id = tracking.lead_id
+      LEFT JOIN students student ON student.lead_id = tracking.lead_id AND student.status IS DISTINCT FROM 'candidate'
       WHERE ${where}
     `),
     getGroupedRows(query, where),
@@ -181,7 +181,7 @@ function getGroupedRows(query: UtmAnalyticsQuery, where: Prisma.Sql) {
       LEFT JOIN campaigns campaign ON campaign.id = tracking.campaign_id
       LEFT JOIN leads application_lead ON application_lead.id = tracking.lead_id AND application_lead.deleted_at IS NULL
       LEFT JOIN pipeline_stages application_stage ON application_stage.id = application_lead.pipeline_stage_id AND application_stage.name ILIKE ${APPLICATION_PIPELINE_STAGE_LIKE}
-      LEFT JOIN students student ON student.lead_id = tracking.lead_id
+      LEFT JOIN students student ON student.lead_id = tracking.lead_id AND student.status IS DISTINCT FROM 'candidate'
       WHERE ${where}
       GROUP BY campaign.id, campaign.name, CASE WHEN campaign.id IS NULL THEN tracking.utm_campaign ELSE NULL END
       ORDER BY COUNT(DISTINCT tracking.lead_id) DESC, "campaignName" ASC
@@ -206,7 +206,7 @@ function getGroupedRows(query: UtmAnalyticsQuery, where: Prisma.Sql) {
       LEFT JOIN campaigns campaign ON campaign.id = tracking.campaign_id
       LEFT JOIN leads application_lead ON application_lead.id = tracking.lead_id AND application_lead.deleted_at IS NULL
       LEFT JOIN pipeline_stages application_stage ON application_stage.id = application_lead.pipeline_stage_id AND application_stage.name ILIKE ${APPLICATION_PIPELINE_STAGE_LIKE}
-      LEFT JOIN students student ON student.lead_id = tracking.lead_id
+      LEFT JOIN students student ON student.lead_id = tracking.lead_id AND student.status IS DISTINCT FROM 'candidate'
       WHERE ${where}
       GROUP BY tracking.utm_source, tracking.utm_medium, tracking.utm_campaign
       ORDER BY COUNT(DISTINCT tracking.lead_id) DESC, tracking.utm_source ASC, tracking.utm_medium ASC, tracking.utm_campaign ASC
@@ -230,7 +230,7 @@ function getGroupedRows(query: UtmAnalyticsQuery, where: Prisma.Sql) {
     LEFT JOIN campaigns campaign ON campaign.id = tracking.campaign_id
     LEFT JOIN leads application_lead ON application_lead.id = tracking.lead_id AND application_lead.deleted_at IS NULL
     LEFT JOIN pipeline_stages application_stage ON application_stage.id = application_lead.pipeline_stage_id AND application_stage.name ILIKE ${APPLICATION_PIPELINE_STAGE_LIKE}
-    LEFT JOIN students student ON student.lead_id = tracking.lead_id
+    LEFT JOIN students student ON student.lead_id = tracking.lead_id AND student.status IS DISTINCT FROM 'candidate'
     WHERE ${where}
     GROUP BY tracking.utm_source
     ORDER BY COUNT(DISTINCT tracking.lead_id) DESC, tracking.utm_source ASC

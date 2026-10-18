@@ -34,18 +34,14 @@ export async function listEligibleAutomationAssigneeIds(
           ? [{ user_departments: { some: { department_id: { in: input.allowedDepartmentIds } } } }]
           : []),
       ],
-      user_roles: {
-        some: { roles: {
-          ...(input.institutionProgramId
-            ? { role_institution_programs: { some: { institution_program_id: input.institutionProgramId } } }
-            : {}),
+      user_program_roles: {
+        some: { ...(input.institutionProgramId ? { institution_program_id: input.institutionProgramId } : {}),
+          roles: {
           role_permissions: { some: { permissions: { code: "lead.view_assigned" } } },
         } },
         none: {
+          ...(input.institutionProgramId ? { institution_program_id: input.institutionProgramId } : {}),
           roles: {
-            ...(input.institutionProgramId
-              ? { role_institution_programs: { some: { institution_program_id: input.institutionProgramId } } }
-              : {}),
             role_permissions: {
               some: { permissions: { code: { in: ["lead.view_department", "lead.view_all"] } } },
             },

@@ -59,7 +59,7 @@ const personalReportInputSchema = z.object({
   singleDisplay: z.enum(["TABLE", "LINE"]).optional(),
   conditions: z.array(z.object({
     fieldKey: z.string().min(1).max(80),
-    operator: z.enum(["EQUALS", "NOT_EQUALS", "GREATER_THAN_OR_EQUAL", "DATE_PRESET", "DATE_BETWEEN"]),
+    operator: z.enum(["EQUALS", "NOT_EQUALS", "GREATER_THAN_OR_EQUAL", "LESS_THAN_OR_EQUAL", "IS_NOT_EMPTY", "IS_EMPTY", "DATE_PRESET", "DATE_BETWEEN"]),
     value: z.string().max(255).optional(),
     fromDate: z.iso.date().optional(),
     toDate: z.iso.date().optional(),
@@ -71,7 +71,7 @@ const idSchema = z.uuid();
 const paginationSchema = z.object({ page: z.coerce.number().int().positive().default(1), limit: z.coerce.number().int().min(1).max(50).default(20) });
 const dashboardFilterConditionSchema = z.object({
   fieldKey: z.string().min(1).max(80),
-  operator: z.enum(["EQUALS", "NOT_EQUALS", "GREATER_THAN_OR_EQUAL", "DATE_PRESET", "DATE_BETWEEN"]),
+  operator: z.enum(["EQUALS", "NOT_EQUALS", "GREATER_THAN_OR_EQUAL", "LESS_THAN_OR_EQUAL", "IS_NOT_EMPTY", "IS_EMPTY", "DATE_PRESET", "DATE_BETWEEN"]),
   value: z.string().max(255).optional(),
   fromDate: z.iso.date().optional(),
   toDate: z.iso.date().optional(),
@@ -120,7 +120,9 @@ reportsRouter.get("/personal/filter-values", requireAuthentication, requireAnyPe
 reportsRouter.get("/personal", requireAuthentication, requireAnyPermission("report.personal.view"), async (request, response) => {
   const parsed = paginationSchema.safeParse(request.query);
   if (!parsed.success) return response.status(400).json({ message: "Phân trang báo cáo không hợp lệ." });
-  return response.json(await listPersonalReports(request.authUser!, parsed.data.page, parsed.data.limit));
+  const programId = getInstitutionProgramScope(request);
+  if (!programId) return response.status(403).json({ message: "Bạn chưa được cấp phạm vi chương trình tuyển sinh." });
+  return response.json(await listPersonalReports(request.authUser!, parsed.data.page, parsed.data.limit, programId));
 });
 
 reportsRouter.get("/personal/dashboard/config", requireAuthentication, requireAnyPermission("report.personal.view"), async (request, response) => {
@@ -179,20 +181,20 @@ reportsRouter.patch("/personal/:id/sharing", requireAuthentication, requireAnyPe
   const id = idSchema.safeParse(request.params.id);
   const body = z.object({ isShared: z.boolean() }).safeParse(request.body);
   if (!id.success || !body.success) return response.status(400).json({ message: "Thiết lập chia sẻ không hợp lệ." });
-  const report = await setPersonalReportSharing(request.authUser!, id.data, body.data.isShared, request.ip);
+  const report = await setPersonalReportSharing(request.authUser!, id.data, body.data.isShared, request.ip, getInstitutionProgramScope(request));
   return report ? response.json(report) : response.status(404).json({ message: "Không tìm thấy báo cáo thuộc quyền sở hữu của bạn." });
 });
 
 reportsRouter.delete("/personal/:id", requireAuthentication, requireAnyPermission("report.personal.update"), async (request, response) => {
   const id = idSchema.safeParse(request.params.id);
   if (!id.success) return response.status(400).json({ message: "Mã báo cáo không hợp lệ." });
-  return (await archivePersonalReport(request.authUser!, id.data, request.ip)) ? response.status(204).send() : response.status(404).json({ message: "Không tìm thấy báo cáo thuộc quyền sở hữu của bạn." });
+  return (await archivePersonalReport(request.authUser!, id.data, request.ip, getInstitutionProgramScope(request))) ? response.status(204).send() : response.status(404).json({ message: "Không tìm thấy báo cáo thuộc quyền sở hữu của bạn." });
 });
 
 reportsRouter.get("/personal/:id/result", requireAuthentication, requireAnyPermission("report.personal.view"), async (request, response) => {
   const id = idSchema.safeParse(request.params.id);
   if (!id.success) return response.status(400).json({ message: "Mã báo cáo không hợp lệ." });
-  const result = await executePersonalReport(request.authUser!, id.data);
+  const result = await executePersonalReport(request.authUser!, id.data, getInstitutionProgramScope(request));
   return result ? response.json(result) : response.status(404).json({ message: "Không tìm thấy báo cáo trong phạm vi của bạn." });
 });
 
@@ -200,7 +202,7 @@ reportsRouter.get("/personal/:id/export", requireAuthentication, requireAnyPermi
   const id = idSchema.safeParse(request.params.id);
   const format = z.enum(["csv", "xlsx"]).safeParse(request.query.format);
   if (!id.success || !format.success) return response.status(400).json({ message: "Yêu cầu xuất báo cáo không hợp lệ." });
-  const result = await executePersonalReport(request.authUser!, id.data);
+  const result = await executePersonalReport(request.authUser!, id.data, getInstitutionProgramScope(request));
   if (!result) return response.status(404).json({ message: "Không tìm thấy báo cáo trong phạm vi của bạn." });
   const rows = result.pivot
     ? [

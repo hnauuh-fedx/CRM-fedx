@@ -1,5 +1,7 @@
 import { createContext, type PropsWithChildren, useCallback, useContext, useEffect, useMemo, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
+
+import { storeSelectedInstitutionProgramId } from "@/modules/institutions/institution-program-storage";
 import { ApiError, unauthorizedApiEvent } from "@/services/api";
 import { getCurrentUser } from "@/services/auth.service";
 import type { AuthSession, AuthUser, LoginInput } from "@/types/auth";
@@ -70,6 +72,9 @@ export function AuthProvider({ children }: PropsWithChildren) {
   const signIn = useCallback(async (input: LoginInput) => {
     const previous = currentSession();
     const next = await signInSession(input);
+    if (next.user.workingInstitutionProgramId) {
+      storeSelectedInstitutionProgramId(next.user.workingInstitutionProgramId);
+    }
     if (!previous || previous.user.id !== next.user.id) {
       await queryClient.cancelQueries();
       queryClient.clear();

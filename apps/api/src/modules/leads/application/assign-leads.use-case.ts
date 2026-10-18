@@ -65,6 +65,11 @@ export async function assignLeads(
       where: { id: { in: uniqueLeadIds } },
       data: { assigned_to: assignee.id, updated_at: new Date() },
     });
+    // The new main assignee cannot also remain the secondary assignee.
+    await tx.leads.updateMany({
+      where: { id: { in: uniqueLeadIds }, secondary_assigned_to: assignee.id },
+      data: { secondary_assigned_to: null },
+    });
     await tx.lead_activities.createMany({
       data: leads.map((lead) => ({
         lead_id: lead.id,

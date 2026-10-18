@@ -117,7 +117,11 @@ async function seedDirectorAccess() {
       skipDuplicates: true,
     });
 
-    if (grants.count > 0 || assignments.count > 0 || programAssignments.count > 0) {
+    const userProgramAssignments = await transaction.user_program_roles.createMany({
+      data: programs.map((program) => ({ user_id: user.id, role_id: role.id, institution_program_id: program.id })),
+      skipDuplicates: true,
+    });
+    if (grants.count > 0 || assignments.count > 0 || programAssignments.count > 0 || userProgramAssignments.count > 0) {
       await transaction.audit_logs.create({
         data: {
           entity_type: "role",

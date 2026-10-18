@@ -218,12 +218,10 @@ export async function getSaleFilterOptions(user: AuthUser, institutionProgramId?
       where: {
         deleted_at: null,
         status: "active",
-        user_roles: {
+        user_program_roles: {
           some: {
+            ...(institutionProgramId ? { institution_program_id: institutionProgramId } : {}),
             roles: {
-              ...(institutionProgramId
-                ? { role_institution_programs: { some: { institution_program_id: institutionProgramId } } }
-                : {}),
               role_permissions: {
                 some: { permissions: { code: "lead.view_assigned" } },
                 none: { permissions: { code: { in: ["lead.view_department", "lead.view_all"] } } },

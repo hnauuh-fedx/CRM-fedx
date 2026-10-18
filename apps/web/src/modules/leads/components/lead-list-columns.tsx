@@ -1,3 +1,8 @@
+import { LeadPhoneCell } from "./lead-phone";
+import { LeadAssigneeCell } from "./lead-assignee";
+import { getLatestLeadNoteText } from "../lead-note.helpers";
+import { getReadableTextColor, normalizeHexColor } from "../lead-stage-color.helpers";
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { leadDisplayFields } from "@admission-crm/shared/display-layout";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -21,6 +26,7 @@ const leadInformationFields = leadDisplayFields.slice(9).map(field => ({
   format: dateFields.has(field.key) ? formatDate : undefined,
 }));
 function getLeadWorkflowLabel(lead: LeadListItem) {
+  if (lead.lifecycleStatus.value === "FAIL") return lead.lifecycleStatus.label;
   return lead.pipelineStage?.name ?? "Chưa chọn tiến trình";
 }
 function TableValue({ value }: { value: unknown }) {
@@ -105,15 +111,13 @@ export function useLeadListColumns(detailBasePath: string) {
         accessorKey: "phone",
         header: "Số điện thoại",
         enableSorting: false,
-        cell: ({ row }) => <TableValue value={row.original.phone} />,
+        cell: ({ row }) => <LeadPhoneCell lead={row.original} />,
       },
       {
         id: "pipelineStage",
         header: "Quy trình Telesale",
         cell: ({ row }) => (
-          <Badge variant="secondary">
-            {getLeadWorkflowLabel(row.original)}
-          </Badge>
+          <LeadWorkflowCell lead={row.original} />
         ),
       },
       {
@@ -133,7 +137,7 @@ export function useLeadListColumns(detailBasePath: string) {
         header: "Nhân viên sale",
         enableSorting: false,
         cell: ({ row }) => (
-          <TableValue value={row.original.assignee?.fullName} />
+          <LeadAssigneeCell lead={row.original} />
         ),
       },
       {
@@ -163,7 +167,7 @@ export function useLeadListColumns(detailBasePath: string) {
         cell: ({ row }: { row: { original: LeadListItem } }) => (
           <TableValue
             value={
-              format
+              key === "note" ? getLatestLeadNoteText(row.original.latestNote ?? row.original.note) : format
                 ? format((row.original[key] as string | null) ?? null)
                 : row.original[key]
             }
@@ -172,5 +176,38 @@ export function useLeadListColumns(detailBasePath: string) {
       })),
     ],
     [detailBasePath],
+  );
+}
+
+function LeadWorkflowCell({ lead }: { lead: LeadListItem }) {
+  const note = getLatestLeadNoteText(lead.latestNote ?? lead.note);
+  const stageColor = lead.pipelineStage?.color ? normalizeHexColor(lead.pipelineStage.color, "") : "";
+  const isFailed = lead.lifecycleStatus.value === "FAIL";
+  return (
+    <div className="flex min-w-48 max-w-72 flex-col items-start gap-1.5">
+      <Badge
+        variant={isFailed ? "destructive" : "secondary"}
+        style={!isFailed && stageColor ? { backgroundColor: stageColor, borderColor: stageColor, color: getReadableTextColor(stageColor) } : undefined}
+      >
+        {getLeadWorkflowLabel(lead)}
+      </Badge>
+      {note && (
+        <TooltipProvider delayDuration={150}>
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <p
+                className="line-clamp-1 max-w-full cursor-default whitespace-pre-line break-words text-sm text-muted-foreground"
+                tabIndex={0}
+              >
+                {note}
+              </p>
+            </TooltipTrigger>
+            <TooltipContent side="bottom" align="start" className="max-w-80 whitespace-pre-line text-pretty">
+              {note}
+            </TooltipContent>
+          </Tooltip>
+        </TooltipProvider>
+      )}
+    </div>
   );
 }

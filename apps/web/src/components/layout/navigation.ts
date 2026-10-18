@@ -94,6 +94,12 @@ const navigationSections: NavigationSection[] = [
         ],
       },
       {
+        label: "Học viên",
+        href: "/sale/students",
+        icon: GraduationCap,
+        permissions: ["student.view", "student.view_all"],
+      },
+      {
         type: "group",
         label: "CRM Sale",
         icon: BriefcaseBusiness,

@@ -7,7 +7,7 @@ export type PersonalReportSingleDisplay = "TABLE" | "LINE";
 export type PersonalReportTimePreset = "LAST_7_DAYS" | "THIS_WEEK" | "LAST_WEEK" | "THIS_MONTH" | "LAST_MONTH" | "THIS_QUARTER" | "LAST_QUARTER" | "CUSTOM";
 export type PersonalReportDateGranularity = "DAY" | "WEEK" | "MONTH" | "QUARTER";
 export type PersonalReportDatasetKey = "LEADS" | "QUALIFIED_LEADS" | "STUDENTS";
-export type PersonalReportFilterOperator = "EQUALS" | "NOT_EQUALS" | "GREATER_THAN_OR_EQUAL" | "DATE_PRESET" | "DATE_BETWEEN";
+export type PersonalReportFilterOperator = "EQUALS" | "NOT_EQUALS" | "GREATER_THAN_OR_EQUAL" | "LESS_THAN_OR_EQUAL" | "IS_NOT_EMPTY" | "IS_EMPTY" | "DATE_PRESET" | "DATE_BETWEEN";
 export type PersonalReportFilterCondition = { fieldKey: string; operator: PersonalReportFilterOperator; value?: string; fromDate?: string; toDate?: string };
 
 type MetricDefinition = { key: string; label: string; format: "NUMBER" | "PERCENT" | "CURRENCY" };

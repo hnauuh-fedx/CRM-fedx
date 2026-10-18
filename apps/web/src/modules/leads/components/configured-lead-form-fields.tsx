@@ -1,3 +1,5 @@
+import { PhoneFields } from "./phone-fields";
+import { LeadAssigneeSelects } from "./lead-assignee";
 import type { UseFormReturn } from "react-hook-form";
 import {
   getDisplayFields,
@@ -123,6 +125,13 @@ function ConfiguredLeadField({
   onStageChange,
 }: Props & { field: LeadSystemField }) {
   const key = field.key as keyof LeadFormInput;
+  if (key === "phone") return <PhoneFields form={form} label={field.label} disabled={disabled} />;
+  if (key === "assigneeId") return <LeadAssigneeSelects disabled={disabled} idPrefix="configured-lead-assignee"
+    primaryId={form.watch("assigneeId")} secondaryId={form.watch("secondaryAssigneeId") ?? ""}
+    options={options.telesales} onChange={({primaryId, secondaryId}) => {
+      form.setValue("assigneeId", primaryId, { shouldDirty: true });
+      form.setValue("secondaryAssigneeId", secondaryId, { shouldDirty: true });
+    }} />;
   const id = `configured-lead-${key}`;
   const error = form.formState.errors[key];
   const required =

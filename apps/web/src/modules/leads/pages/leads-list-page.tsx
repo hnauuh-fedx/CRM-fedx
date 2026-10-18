@@ -1,8 +1,11 @@
+import { useEffect, useState, type Dispatch, type SetStateAction, type KeyboardEvent } from "react";
+import { CreateLeadDialog } from "../components/create-lead-dialog";
+import { useLeadListColumns } from "../components/lead-list-columns";
+import { useLeadDisplayLayout, getLeadListLayoutScreen } from "../use-lead-display-layout";
+import { LeadDisplayLayoutStatus, EditLeadDisplayLayoutButton } from "../components/lead-display-layout-status";
 import { LeadDetailLayout } from "../components/lead-detail-layout";
 import { leadColumnStyle, leadColumnClass } from "../components/lead-column-presentation";
 import { defaultDisplayColumnWidth, minDisplayColumnWidth, maxDisplayColumnWidth } from "@admission-crm/shared/display-layout";
-import { StaticTableHeader } from "@/components/shared/static-table-header";
-import { TablePagination } from "@/components/shared/table-pagination";
 import type { UseQueryResult } from "@tanstack/react-query";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import {
@@ -13,64 +16,20 @@ import {
   type RowSelectionState,
   type SortingState,
 } from "@tanstack/react-table";
-import {
-  ArrowDown,
-  ArrowUp,
-  ArrowUpDown,
-  ChevronDown,
-  ExternalLink,
-  FileSpreadsheet,
-  ListPlus,
-  Search,
-  Upload,
-} from "lucide-react";
-import type { Dispatch, SetStateAction } from "react";
-import { useEffect, useState, type KeyboardEvent } from "react";
-import { Link } from "react-router-dom";
-import { CreateLeadDialog } from "../components/create-lead-dialog";
-import { useLeadListColumns } from "../components/lead-list-columns";
-import { useLeadDisplayLayout, getLeadListLayoutScreen } from "../use-lead-display-layout";
-import { LeadDisplayLayoutStatus, EditLeadDisplayLayoutButton } from "../components/lead-display-layout-status";
+import { ArrowDown, ArrowUp, ArrowUpDown, ChevronDown, ExternalLink, FileSpreadsheet, ListPlus, Upload } from "lucide-react";
+import { Link, useSearchParams } from "react-router-dom";
 
+import { DataPagination } from "@/components/shared/data-pagination";
 import { EmptyState } from "@/components/shared/data-states";
 import { ErrorState } from "@/components/shared/error-state";
-import { FilterSelect } from "@/components/shared/filter-select";
 import { PageHeader } from "@/components/shared/page-header";
 import { TableLoadingState } from "@/components/shared/table-loading-state";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import {
-  Card,
-  CardAction,
-  CardContent,
-  CardDescription,
-  CardHeader,
-  CardTitle,
-} from "@/components/ui/card";
-import { DateRangeFilter } from "@/components/ui/date-range-filter";
-import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-  DialogTrigger,
-} from "@/components/ui/dialog";
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuGroup,
-  DropdownMenuItem,
-  DropdownMenuTrigger,
-} from "@/components/ui/dropdown-menu";
-import {
-  Field,
-  FieldDescription,
-  FieldError,
-  FieldGroup,
-  FieldLabel,
-} from "@/components/ui/field";
+import { Card, CardAction, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
+import { DropdownMenu, DropdownMenuContent, DropdownMenuGroup, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
+import { Field, FieldDescription, FieldError, FieldGroup, FieldLabel } from "@/components/ui/field";
 import { Input } from "@/components/ui/input";
 import {
   Select,
@@ -81,39 +40,18 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Spinner } from "@/components/ui/spinner";
-import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from "@/components/ui/table";
-import { cn } from "@/lib/utils";
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { useAuth } from "@/modules/auth/auth-context";
-import {
-  resolveDetailReportDateRange,
-  type DetailReportTimeFilterValue,
-} from "@/modules/reports/components/detail-report-time-filter-model";
 import { ApiError } from "@/services/api";
-import {
-  addLeadsToCustomerList,
-  createCustomerList,
-  getCustomerListLeads,
-  getCustomerLists,
-} from "@/services/customer-list.service";
-import {
-  assignLeads,
-  deleteLeads,
-  getLead,
-  getLeadActionOptions,
-  getLeadFilterOptions,
-  getLeads,
-  importLeads,
-} from "@/services/lead.service";
-import { InlineLeadSummaryCard } from "../components/inline-lead-summary-card";
-import { LeadCustomFieldsCard } from "../components/lead-custom-fields-card";
+import { addLeadsToCustomerList, createCustomerList, getCustomerListLeads, getCustomerLists } from "@/services/customer-list.service";
+import { assignLeads, deleteLeads, getLead, getLeadActionOptions, getLeadFilterOptions, getLeads, importLeads } from "@/services/lead.service";
 import { LeadProgressSelector } from "../components/lead-form";
+import { LeadImportErrorsTable } from "../components/lead-import-errors-table";
+import { LeadCustomFieldsCard } from "../components/lead-custom-fields-card";
+import { InlineLeadSummaryCard } from "../components/inline-lead-summary-card";
+import { LeadFilterPanel } from "../components/lead-filter-panel";
+import type { FilterConditionState } from "../filter-fields";
+import { decodeConditions, applyConditionsToParams } from "../filter-serialization";
 import { LeadOpenInitialization } from "../components/lead-open-initialization";
 import { useLeadWorkflowTransition } from "../components/transition-note-dialog";
 import type {
@@ -132,20 +70,16 @@ import {
   SourceOccurrencesCard,
 } from "./lead-detail-page";
 
-const pageSize = 20;
-const emptyLeads: LeadListItem[] = [];
-const sortableColumns = new Set<LeadSortField>([
-  "createdAt",
-  "fullName",
-  "leadCode",
-  "pipelineStage",
-]);
+const compactNumberFormatter = new Intl.NumberFormat("vi-VN", { notation: "compact", maximumFractionDigits: 1 });
+const sortableColumns = new Set<LeadSortField>(["createdAt", "fullName", "leadCode", "pipelineStage"]);
 const dateFormatter = new Intl.DateTimeFormat("vi-VN", {
   day: "2-digit",
   month: "2-digit",
   year: "numeric",
 });
+const emptyLeads: LeadListItem[] = [];
 const emptyFilters: LeadListFilters = {
+  status: "",
   search: "",
   pipelineStageId: "",
   sourceId: "",
@@ -195,12 +129,12 @@ function LeadImportDialog({
           Import Excel
         </Button>
       </DialogTrigger>
-      <DialogContent className="max-h-[calc(100dvh-2rem)] overflow-y-auto sm:max-w-3xl">
+      <DialogContent className="max-h-[calc(100dvh-2rem)] overflow-y-auto sm:max-w-[min(72rem,calc(100vw-2rem))]">
         <DialogHeader>
           <DialogTitle>Import lead từ Excel</DialogTitle>
           <DialogDescription>
-            Chỉ cần các cột bắt buộc; không cần tạo đủ tất cả trường của form
-            lead.
+            Chỉ cần các cột bắt buộc; không cần tạo đủ tất cả trường của form lead.
+            Có thể dùng trực tiếp file export BizflyCRM với hai dòng tiêu đề.
           </DialogDescription>
         </DialogHeader>
         <form
@@ -241,6 +175,15 @@ function LeadImportDialog({
               Các cột như email, pipelineStageId, note, gender và dateOfBirth là
               tùy chọn, có thể bỏ hoàn toàn.
             </p>
+            <div>
+              <p className="font-medium">File BizflyCRM</p>
+              <p className="mt-1 text-muted-foreground">
+                Chọn chương trình làm việc trước khi import. Hệ thống giữ họ tên, số điện thoại,
+                nguồn HV, ngành đăng ký, quy trình Telesale cấp 1, nhân viên, ghi chú, email và ngày tạo gốc.
+                Ngành chưa có sẽ được tạo trong chương trình đang chọn. L3 được chuyển sang L4;
+                L0, L1, L2 và L5 giữ tiến trình tương ứng. Nhân viên phải thuộc chương trình này.
+              </p>
+            </div>
           </div>
           <div className="grid gap-2">
             <FieldLabel htmlFor="lead-import-file">File Excel</FieldLabel>
@@ -259,8 +202,8 @@ function LeadImportDialog({
               }}
             />
             <p id="lead-import-help" className="text-sm text-muted-foreground">
-              Hỗ trợ tối đa 1.000 dòng và dung lượng 5MB. Các dòng lỗi sẽ được
-              bỏ qua và hiển thị lý do.
+              Hỗ trợ tối đa 5.000 dòng cho file Bizfly, 1.000 dòng cho mẫu thông thường và dung lượng 5MB.
+              Các dòng lỗi sẽ được bỏ qua và hiển thị lý do.
             </p>
             {fileError && (
               <p role="alert" className="text-sm text-destructive">
@@ -298,44 +241,13 @@ function validateLeadImportFile(file: File | null) {
 
 function LeadImportResultPanel({ result }: { result: LeadImportResult }) {
   return (
-    <div className="grid gap-4 rounded-md border bg-muted/20 p-4" role="status">
-      <div className="grid gap-3 sm:grid-cols-3">
+    <div className="grid min-w-0 gap-4 rounded-md border bg-muted/20 p-4">
+      <div className="grid gap-3 sm:grid-cols-3" role="status">
         <ImportMetric label="Tổng dòng" value={result.totalRows} />
         <ImportMetric label="Đã import" value={result.importedRows} />
         <ImportMetric label="Lỗi" value={result.failedRows} />
       </div>
-      {result.errors.length > 0 && (
-        <div className="overflow-hidden rounded-md border bg-background">
-          <Table>
-            <StaticTableHeader
-              columns={[
-                { label: "Dòng", className: "w-20 px-4" },
-                { label: "Ứng viên" },
-                { label: "SĐT" },
-                { label: "Lý do", className: "px-4" },
-              ]}
-              className="bg-muted/55 text-xs uppercase text-muted-foreground"
-            />
-            <TableBody>
-              {result.errors.slice(0, 20).map((item) => (
-                <TableRow key={`${item.row}-${item.phone ?? item.message}`}>
-                  <TableCell className="px-4 tabular-nums">
-                    {item.row}
-                  </TableCell>
-                  <TableCell>{item.fullName ?? "-"}</TableCell>
-                  <TableCell>{item.phone ?? "-"}</TableCell>
-                  <TableCell className="px-4">{item.message}</TableCell>
-                </TableRow>
-              ))}
-            </TableBody>
-          </Table>
-          {result.errors.length > 20 && (
-            <p className="border-t px-4 py-3 text-sm text-muted-foreground">
-              Chỉ hiển thị 20 lỗi đầu tiên. Vui lòng sửa file rồi import lại.
-            </p>
-          )}
-        </div>
-      )}
+      {result.errors.length > 0 && <LeadImportErrorsTable errors={result.errors} />}
     </div>
   );
 }
@@ -350,6 +262,7 @@ function ImportMetric({ label, value }: { label: string; value: number }) {
 }
 
 type LeadsListPageProps = {
+  audience?: "candidates" | "students" | "all";
   eyebrow?: string;
   title?: string;
   description?: string;
@@ -360,6 +273,7 @@ type LeadsListPageProps = {
 };
 
 export function LeadsListPage({
+  audience = "candidates",
   eyebrow = "CRM Sale",
   title = "Danh sách lead",
   description = "Dữ liệu hiển thị trong phạm vi được phân quyền và phân công cho tài khoản của bạn.",
@@ -370,24 +284,34 @@ export function LeadsListPage({
 }: LeadsListPageProps = {}) {
   const auth = useAuth();
   const queryClient = useQueryClient();
-  const { canCreate, canUpdate, canDelete, isSaleList, canAssignSale } =
-    getLeadListCapabilities(
-      auth.can,
-      showLeadCreationActions,
-      enableCustomerListAssignment,
-    );
-  const [{ page, editingLeadId, isEditDialogOpen }, setViewState] = useState<{
+  const canCreate = showLeadCreationActions && auth.can("lead.create");
+  const canUpdate = ["lead.update_all", "lead.update_department", "lead.update_assigned"].some(auth.can);
+  const canDelete = auth.can("lead.delete");
+  const isSaleList = !enableCustomerListAssignment;
+  const canAssignSale = isSaleList && (auth.can("lead.assign") || auth.can("lead.reassign"));
+  const [{ page, pageSize, editingLeadId, isEditDialogOpen }, setViewState] = useState<{
     page: number;
+    pageSize: number;
     editingLeadId: string | null;
     isEditDialogOpen: boolean;
   }>({
     page: 1,
+    pageSize: 20,
     editingLeadId: null,
     isEditDialogOpen: false,
   });
   const [draftFilters, setDraftFilters] =
     useState<LeadListFilters>(emptyFilters);
   const [filters, setFilters] = useState<LeadListFilters>(emptyFilters);
+  const [searchParams, setSearchParams] = useSearchParams();
+  // Bộ lọc nâng cao được giữ trên URL để tải lại trang không mất điều kiện.
+  const [filterConditions, setFilterConditions] = useState<FilterConditionState[]>(() => decodeConditions(searchParams));
+  const canViewSensitiveLeadData = ["lead.sensitive.view", "lead.update_all", "lead.update_department", "lead.update_assigned"].some(auth.can);
+  function applyFilterConditions(conditions: FilterConditionState[]) {
+    setFilterConditions(conditions);
+    setSearchParams((current) => applyConditionsToParams(new URLSearchParams(current), conditions), { replace: true });
+    setViewState((current) => ({ ...current, page: 1 }));
+  }
   useEffect(() => {
     if (draftFilters.search === filters.search) return;
     const timeout = window.setTimeout(() => {
@@ -403,14 +327,24 @@ export function LeadsListPage({
   const [assignmentOpen, setAssignmentOpen] = useState(false);
   const [saleAssignmentOpen, setSaleAssignmentOpen] = useState(false);
   const [bulkDeleteOpen, setBulkDeleteOpen] = useState(false);
-  const { sortBy, sortOrder } = getLeadListSort(sorting);
-  const leadsQuery = useLeadDirectory(
-    { page, sortBy, sortOrder, filters, customerListId },
-    auth.accessToken,
-  );
+  const primarySort = sorting[0] ?? { id: "createdAt", desc: true };
+  const sortBy = sortableColumns.has(primarySort.id as LeadSortField)
+    ? (primarySort.id as LeadSortField)
+    : "createdAt";
+  const sortOrder = primarySort.desc ? "desc" : "asc";
+  const leadsQuery = useQuery({
+    queryKey: customerListId
+      ? ["customer-lists", "leads", customerListId, page, pageSize, sortBy, sortOrder, filters, filterConditions]
+      : ["leads", "list", audience, page, pageSize, sortBy, sortOrder, filters, filterConditions],
+    queryFn: () =>
+      customerListId
+        ? getCustomerListLeads(customerListId, { page, limit: pageSize, sortBy, sortOrder, ...filters, filterConditions }, auth.accessToken!)
+        : getLeads({ audience, page, limit: pageSize, sortBy, sortOrder, ...filters, filterConditions }, auth.accessToken!),
+    placeholderData: (previousData) => previousData,
+  });
   const optionsQuery = useQuery({
-    queryKey: ["leads", "options"],
-    queryFn: () => getLeadFilterOptions(auth.accessToken!),
+    queryKey: ["leads", "options", audience],
+    queryFn: () => getLeadFilterOptions(auth.accessToken!, audience),
   });
   const customerListCapabilityQuery = useQuery({
     queryKey: ["customer-lists", "capabilities"],
@@ -437,7 +371,6 @@ export function LeadsListPage({
   const layoutScreen = getLeadListLayoutScreen(detailBasePath);
   const columns = useLeadListColumns(detailBasePath);
   const { query: displayLayout, isLoading: isLayoutLoading, columnVisibility, columnOrder, columnPinning, columnSizing, layoutContainerRef } = useLeadDisplayLayout(true, columns, layoutScreen);
-  const ListFilters = isSaleList ? SaleLeadFiltersCard : LeadFiltersCard;
 
   const table = useReactTable({
     data,
@@ -490,25 +423,51 @@ export function LeadsListPage({
             Chọn một bước để lọc danh sách lead đang ở tiến trình đó.
           </CardDescription>
         </CardHeader>
-        <CardContent className="px-5">
+        <CardContent className="flex flex-col gap-3 px-5">
           <LeadProgressSelector
             value={filters.pipelineStageId}
             stages={optionsQuery.data?.stages ?? []}
             allOptionLabel="Tất cả"
             allOptionCount={optionsQuery.data?.totalLeads ?? 0}
+            allOptionSelected={!filters.pipelineStageId && filters.status !== "FAIL"}
             singleRowDesktop
             onChange={(pipelineStageId) => {
-              setDraftFilters((current) => ({ ...current, pipelineStageId }));
-              setFilters((current) => ({ ...current, pipelineStageId }));
+              setDraftFilters((current) => ({ ...current, pipelineStageId, status: "" }));
+              setFilters((current) => ({ ...current, pipelineStageId, status: "" }));
               setViewState((current) => ({ ...current, page: 1 }));
             }}
           />
+          {!customerListId && (
+            <Field className="gap-2 sm:max-w-48">
+              <FieldLabel htmlFor="lead-fail-filter">Trạng thái</FieldLabel>
+              <Button
+                id="lead-fail-filter"
+                type="button"
+                variant={filters.status === "FAIL" ? "destructive" : "outline"}
+                aria-pressed={filters.status === "FAIL"}
+                aria-label="Lọc lead ở trạng thái Fail"
+                className="min-h-14 w-full justify-between"
+                onClick={() => {
+                  setDraftFilters((current) => ({ ...current, pipelineStageId: "", status: "FAIL" }));
+                  setFilters((current) => ({ ...current, pipelineStageId: "", status: "FAIL" }));
+                  setViewState((current) => ({ ...current, page: 1 }));
+                }}
+              >
+                Fail
+                <Badge variant="secondary" className="tabular-nums">
+                  {compactNumberFormatter.format(optionsQuery.data?.failedLeads ?? 0)}
+                </Badge>
+              </Button>
+            </Field>
+          )}
         </CardContent>
       </Card>
 
-      <ListFilters
+      <LeadFilterPanel
         filters={draftFilters}
         options={optionsQuery.data}
+        filterConditions={filterConditions}
+        canViewSensitiveLeadData={canViewSensitiveLeadData}
         onChange={(field, value) => {
           setDraftFilters((current) => ({ ...current, [field]: value }));
           if (field !== "search") {
@@ -519,8 +478,9 @@ export function LeadsListPage({
         onReset={() => {
           setDraftFilters(emptyFilters);
           setFilters(emptyFilters);
-          setViewState((current) => ({ ...current, page: 1 }));
+          applyFilterConditions([]);
         }}
+        onApplyConditions={applyFilterConditions}
       />
       <LeadDisplayLayoutStatus enabled query={displayLayout} screen={layoutScreen} />
       <LeadResultsCard
@@ -531,21 +491,19 @@ export function LeadsListPage({
         data={data}
         pagination={pagination}
         page={page}
+        pageSize={pageSize}
         queryState={{
           isLoading: leadsQuery.isLoading,
           isError: leadsQuery.isError,
           isFetching: leadsQuery.isFetching,
+          // Lỗi điều kiện lọc (400/403) có thông báo cụ thể từ API, nên hiển thị thay cho lỗi chung.
+          errorMessage: leadsQuery.error instanceof ApiError && [400, 403].includes(leadsQuery.error.status)
+            ? leadsQuery.error.message
+            : undefined,
         }}
         onReload={() => leadsQuery.refetch()}
-        onPrevious={() =>
-          setViewState((current) => ({
-            ...current,
-            page: Math.max(1, current.page - 1),
-          }))
-        }
-        onNext={() =>
-          setViewState((current) => ({ ...current, page: current.page + 1 }))
-        }
+        onPageChange={(nextPage) => setViewState((current) => ({ ...current, page: nextPage }))}
+        onPageSizeChange={(nextPageSize) => setViewState((current) => ({ ...current, page: 1, pageSize: nextPageSize }))}
         onEditLead={(leadId) => {
           setViewState((current) => ({
             ...current,
@@ -639,8 +597,9 @@ function EditLeadDialog({
   onAfterClose,
 }: EditLeadDialogProps) {
   const auth = useAuth();
-  const canNote = canUpdate || auth.can("lead_note.create");
-  const canFile = canUpdate || auth.can("file.upload");
+  const canWriteStudent = lead?.recordType !== "student" || ["student.update", "student.update_all"].some(auth.can);
+  const canNote = canWriteStudent && (canUpdate || auth.can("lead_note.create"));
+  const canFile = canWriteStudent && (canUpdate || auth.can("file.upload"));
   const transition = useLeadWorkflowTransition(lead);
   return (
     <Dialog open={isOpen} onOpenChange={onOpenChange}>
@@ -664,7 +623,7 @@ function EditLeadDialog({
             fallbackStages={fallbackStages}
             stagesLoading={stagesLoading}
             stagesLoadError={stagesLoadError}
-            canUpdate={canUpdate}
+            canUpdate={canUpdate && canWriteStudent}
             isOpen={isOpen}
             transition={transition}
             canNote={canNote}
@@ -1076,441 +1035,6 @@ function AssignToCustomerListDialog({
   );
 }
 
-type LeadFiltersCardProps = {
-  filters: LeadListFilters;
-  options?: LeadFilterOptions;
-  onChange: (field: keyof LeadListFilters, value: string) => void;
-  onReset: () => void;
-};
-
-type SaleLeadFilterField =
-  | "NONE"
-  | "MAJOR"
-  | "SOURCE"
-  | "ASSIGNEE"
-  | "CREATED_DATE";
-type RelativeDateFilter = Extract<
-  DetailReportTimeFilterValue,
-  { condition: "RELATIVE" }
->;
-
-const defaultLeadDateFilter: RelativeDateFilter = {
-  condition: "RELATIVE",
-  preset: "THIS_MONTH",
-};
-const leadDatePresetOptions: Array<{
-  value: RelativeDateFilter["preset"];
-  label: string;
-}> = [
-  { value: "LAST_7_DAYS", label: "7 ngày gần nhất" },
-  { value: "THIS_WEEK", label: "Tuần này" },
-  { value: "LAST_WEEK", label: "Tuần trước" },
-  { value: "THIS_MONTH", label: "Tháng này" },
-  { value: "LAST_MONTH", label: "Tháng trước" },
-  { value: "THIS_QUARTER", label: "Quý này" },
-  { value: "LAST_QUARTER", label: "Quý trước" },
-];
-
-function SaleLeadFiltersCard({
-  filters,
-  options,
-  onChange,
-  onReset,
-}: LeadFiltersCardProps) {
-  const [selectedField, setSelectedField] =
-    useState<SaleLeadFilterField>("NONE");
-  const [dateFilter, setDateFilter] = useState<DetailReportTimeFilterValue>(
-    defaultLeadDateFilter,
-  );
-  const hasActiveFilters = Object.values(filters).some(Boolean);
-
-  function clearDynamicFilters() {
-    onChange("majorId", "");
-    onChange("sourceId", "");
-    onChange("assigneeId", "");
-    onChange("fromDate", "");
-    onChange("toDate", "");
-  }
-
-  function changeField(field: SaleLeadFilterField) {
-    clearDynamicFilters();
-    setSelectedField(field);
-    if (field === "CREATED_DATE") applyDateFilter(defaultLeadDateFilter);
-  }
-
-  function applyDateFilter(next: DetailReportTimeFilterValue) {
-    setDateFilter(next);
-    if (next.condition === "CUSTOM" && (!next.fromDate || !next.toDate)) {
-      onChange("fromDate", "");
-      onChange("toDate", "");
-      return;
-    }
-    const range = resolveDetailReportDateRange(next);
-    onChange("fromDate", range.fromDate);
-    onChange("toDate", range.toDate);
-  }
-
-  function resetFilters() {
-    setSelectedField("NONE");
-    setDateFilter(defaultLeadDateFilter);
-    onReset();
-  }
-
-  return (
-    <Card
-      className={cn(
-        "gap-4 border-border/70 py-5 shadow-xs",
-        hasActiveFilters && "border-primary/30 bg-primary/5",
-      )}
-    >
-      <CardHeader className="gap-1 px-5">
-        <CardTitle className="flex flex-wrap items-center gap-2">
-          Bộ lọc{" "}
-          {hasActiveFilters && <Badge variant="secondary">Đang lọc</Badge>}
-        </CardTitle>
-        <CardDescription>
-          Tìm theo mã lead, họ tên, số điện thoại hoặc email; bộ lọc được áp
-          dụng trong phạm vi bạn được xem.
-        </CardDescription>
-      </CardHeader>
-      <CardContent className="px-5">
-        <FieldGroup className="grid gap-4 lg:grid-cols-[minmax(260px,1.6fr)_minmax(180px,1fr)_minmax(160px,0.8fr)_minmax(220px,1.2fr)_auto]">
-          <LeadSearchField
-            value={filters.search}
-            onChange={(value) => onChange("search", value)}
-          />
-          <Field className="gap-2">
-            <FieldLabel>Trường thông tin</FieldLabel>
-            <Select
-              value={selectedField}
-              onValueChange={(value) =>
-                changeField(value as SaleLeadFilterField)
-              }
-            >
-              <SelectTrigger className="w-full">
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectGroup>
-                  <SelectItem value="NONE">Chưa chọn</SelectItem>
-                  <SelectItem value="MAJOR">Ngành đăng ký</SelectItem>
-                  <SelectItem value="SOURCE">Nguồn</SelectItem>
-                  <SelectItem value="ASSIGNEE">Nhân viên</SelectItem>
-                  <SelectItem value="CREATED_DATE">Ngày tạo</SelectItem>
-                </SelectGroup>
-              </SelectContent>
-            </Select>
-          </Field>
-          <SaleLeadFilterCondition
-            value={dateFilter}
-            field={selectedField}
-            onChange={applyDateFilter}
-          />
-          <SaleLeadFilterValue
-            field={selectedField}
-            filters={filters}
-            options={options}
-            dateFilter={dateFilter}
-            onChange={onChange}
-            onDateChange={applyDateFilter}
-          />
-          <div className="flex items-end">
-            <Button
-              type="button"
-              variant="outline"
-              onClick={resetFilters}
-              disabled={!hasActiveFilters}
-            >
-              Xóa lọc
-            </Button>
-          </div>
-        </FieldGroup>
-      </CardContent>
-    </Card>
-  );
-}
-
-function LeadSearchField({
-  value,
-  onChange,
-}: {
-  value: string;
-  onChange: (value: string) => void;
-}) {
-  return (
-    <Field className="gap-2">
-      <FieldLabel htmlFor="lead-search">Tìm kiếm</FieldLabel>
-      <div className="relative">
-        <Search
-          className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground"
-          aria-hidden="true"
-        />
-        <Input
-          id="lead-search"
-          className={cn("pl-9", value && "border-primary/40 bg-primary/5")}
-          value={value}
-          placeholder="Họ tên, SĐT, email hoặc mã lead"
-          onChange={(event) => onChange(event.target.value)}
-        />
-      </div>
-    </Field>
-  );
-}
-
-function SaleLeadFilterCondition({
-  field,
-  value,
-  onChange,
-}: {
-  field: SaleLeadFilterField;
-  value: DetailReportTimeFilterValue;
-  onChange: (value: DetailReportTimeFilterValue) => void;
-}) {
-  return (
-    <Field className="gap-2">
-      <FieldLabel>Điều kiện</FieldLabel>
-      {field === "CREATED_DATE" ? (
-        <Select
-          value={value.condition}
-          onValueChange={(condition) =>
-            onChange(
-              condition === "RELATIVE"
-                ? defaultLeadDateFilter
-                : { condition: "CUSTOM", fromDate: "", toDate: "" },
-            )
-          }
-        >
-          <SelectTrigger className="w-full">
-            <SelectValue />
-          </SelectTrigger>
-          <SelectContent>
-            <SelectGroup>
-              <SelectItem value="RELATIVE">Khoảng tương đối</SelectItem>
-              <SelectItem value="CUSTOM">Khoảng tùy chọn</SelectItem>
-            </SelectGroup>
-          </SelectContent>
-        </Select>
-      ) : (
-        <Select value="EQUALS" disabled>
-          <SelectTrigger className="w-full">
-            <SelectValue
-              placeholder={field === "NONE" ? "Chọn trường trước" : "Bằng"}
-            />
-          </SelectTrigger>
-          <SelectContent>
-            <SelectItem value="EQUALS">Bằng</SelectItem>
-          </SelectContent>
-        </Select>
-      )}
-    </Field>
-  );
-}
-
-type SaleLeadFilterValueProps = {
-  field: SaleLeadFilterField;
-  filters: LeadListFilters;
-  options?: LeadFilterOptions;
-  dateFilter: DetailReportTimeFilterValue;
-  onChange: (field: keyof LeadListFilters, value: string) => void;
-  onDateChange: (value: DetailReportTimeFilterValue) => void;
-};
-
-function SaleLeadFilterValue({
-  field,
-  filters,
-  options,
-  dateFilter,
-  onChange,
-  onDateChange,
-}: SaleLeadFilterValueProps) {
-  if (field === "CREATED_DATE" && dateFilter.condition === "CUSTOM") {
-    return (
-      <Field className="gap-2">
-        <FieldLabel>Khoảng ngày</FieldLabel>
-        <DateRangeFilter
-          className="w-full"
-          fromDate={dateFilter.fromDate}
-          toDate={dateFilter.toDate}
-          onChange={(fromDate, toDate) =>
-            onDateChange({ condition: "CUSTOM", fromDate, toDate })
-          }
-        />
-      </Field>
-    );
-  }
-  if (field === "CREATED_DATE" && dateFilter.condition === "RELATIVE") {
-    return (
-      <Field className="gap-2">
-        <FieldLabel>Giá trị</FieldLabel>
-        <Select
-          value={dateFilter.preset}
-          onValueChange={(preset) =>
-            onDateChange({
-              condition: "RELATIVE",
-              preset: preset as RelativeDateFilter["preset"],
-            })
-          }
-        >
-          <SelectTrigger className="w-full">
-            <SelectValue />
-          </SelectTrigger>
-          <SelectContent>
-            <SelectGroup>
-              {leadDatePresetOptions.map((option) => (
-                <SelectItem key={option.value} value={option.value}>
-                  {option.label}
-                </SelectItem>
-              ))}
-            </SelectGroup>
-          </SelectContent>
-        </Select>
-      </Field>
-    );
-  }
-  const configuration = saleLeadCategoryConfiguration(field, filters, options);
-  return (
-    <Field className="gap-2">
-      <FieldLabel>Giá trị</FieldLabel>
-      <Select
-        value={configuration.value || undefined}
-        disabled={field === "NONE" || configuration.options.length === 0}
-        onValueChange={(value) => onChange(configuration.filterKey, value)}
-      >
-        <SelectTrigger className="w-full">
-          <SelectValue
-            placeholder={
-              field === "NONE" ? "Chọn trường trước" : "Chọn giá trị"
-            }
-          />
-        </SelectTrigger>
-        <SelectContent>
-          <SelectGroup>
-            {configuration.options.length === 0 ? (
-              <SelectItem value="NO_OPTIONS" disabled>
-                Không có dữ liệu
-              </SelectItem>
-            ) : (
-              configuration.options.map((option) => (
-                <SelectItem key={option.value} value={option.value}>
-                  {option.label}
-                </SelectItem>
-              ))
-            )}
-          </SelectGroup>
-        </SelectContent>
-      </Select>
-    </Field>
-  );
-}
-
-function saleLeadCategoryConfiguration(
-  field: SaleLeadFilterField,
-  filters: LeadListFilters,
-  options?: LeadFilterOptions,
-) {
-  if (field === "MAJOR")
-    return {
-      filterKey: "majorId" as const,
-      value: filters.majorId,
-      options: (options?.majors ?? []).map((item) => ({
-        value: item.id,
-        label: item.name,
-      })),
-    };
-  if (field === "SOURCE")
-    return {
-      filterKey: "sourceId" as const,
-      value: filters.sourceId,
-      options: (options?.sources ?? []).map((item) => ({
-        value: item.id,
-        label: item.name,
-      })),
-    };
-  if (field === "ASSIGNEE")
-    return {
-      filterKey: "assigneeId" as const,
-      value: filters.assigneeId,
-      options: (options?.assignees ?? []).map((item) => ({
-        value: item.id,
-        label: item.fullName,
-      })),
-    };
-  return { filterKey: "majorId" as const, value: "", options: [] };
-}
-
-function LeadFiltersCard({
-  filters,
-  options,
-  onChange,
-  onReset,
-}: LeadFiltersCardProps) {
-  const hasActiveFilters = Object.values(filters).some(Boolean);
-  return (
-    <Card
-      className={cn(
-        "gap-4 border-border/70 py-5 shadow-xs",
-        hasActiveFilters && "border-primary/30 bg-primary/5",
-      )}
-    >
-      <CardHeader className="gap-1 px-5">
-        <CardTitle className="flex flex-wrap items-center gap-2">
-          Bộ lọc{" "}
-          {hasActiveFilters && <Badge variant="secondary">Đang lọc</Badge>}
-        </CardTitle>
-        <CardDescription>
-          Tìm theo mã hoặc họ tên; lọc danh sách trong phạm vi được xem.
-        </CardDescription>
-      </CardHeader>
-      <CardContent className="px-5">
-        <FieldGroup className="grid gap-4 lg:grid-cols-[minmax(220px,2fr)_repeat(3,minmax(150px,1fr))_auto]">
-          <LeadSearchField
-            value={filters.search}
-            onChange={(value) => onChange("search", value)}
-          />
-          <FilterSelect
-            id="lead-pipeline-stage"
-            label="Quy trình"
-            value={filters.pipelineStageId}
-            active={Boolean(filters.pipelineStageId)}
-            onChange={(value) => onChange("pipelineStageId", value)}
-            options={(options?.stages ?? []).map((stage) => ({
-              value: stage.id,
-              label: stage.name,
-            }))}
-          />
-          <FilterSelect
-            id="lead-source"
-            label="Nguồn học viên"
-            value={filters.sourceId}
-            active={Boolean(filters.sourceId)}
-            onChange={(value) => onChange("sourceId", value)}
-            options={(options?.sources ?? []).map((source) => ({
-              value: source.id,
-              label: source.name,
-            }))}
-          />
-          <FilterSelect
-            id="lead-assignee"
-            label="Nhân viên"
-            value={filters.assigneeId}
-            active={Boolean(filters.assigneeId)}
-            onChange={(value) => onChange("assigneeId", value)}
-            options={(options?.assignees ?? []).map((assignee) => ({
-              value: assignee.id,
-              label: assignee.fullName,
-            }))}
-          />
-          <div className="flex items-end gap-2">
-            <Button type="button" variant="outline" onClick={onReset}>
-              Xóa lọc
-            </Button>
-          </div>
-        </FieldGroup>
-      </CardContent>
-    </Card>
-  );
-}
-
 type LeadResultsCardProps = {
   isLayoutLoading: boolean;
   layoutContainerRef: (node: HTMLDivElement | null) => void;
@@ -1519,14 +1043,16 @@ type LeadResultsCardProps = {
   data: LeadListItem[];
   pagination?: LeadListResponse["pagination"];
   page: number;
+  pageSize: number;
   queryState: {
     isLoading: boolean;
     isError: boolean;
     isFetching: boolean;
+    errorMessage?: string;
   };
   onReload: () => void;
-  onPrevious: () => void;
-  onNext: () => void;
+  onPageChange: (page: number) => void;
+  onPageSizeChange: (pageSize: number) => void;
   onEditLead: (leadId: string) => void;
   canAssignToCustomerList: boolean;
   selectedCount: number;
@@ -1621,10 +1147,11 @@ function LeadResultsCard({
   data,
   pagination,
   page,
+  pageSize,
   queryState,
   onReload,
-  onPrevious,
-  onNext,
+  onPageChange,
+  onPageSizeChange,
   onEditLead,
   canAssignToCustomerList,
   selectedCount,
@@ -1636,7 +1163,7 @@ function LeadResultsCard({
   onDelete,
   onClearSelection,
 }: LeadResultsCardProps) {
-  const { isLoading: isDataLoading, isError, isFetching } = queryState;
+  const { isLoading: isDataLoading, isError, isFetching, errorMessage } = queryState;
   const isLoading = isDataLoading || isLayoutLoading;
   return (
     <Card ref={layoutContainerRef} className="gap-0 overflow-hidden border-border/70 py-0 shadow-xs">
@@ -1665,7 +1192,7 @@ function LeadResultsCard({
         {isError ? (
           <ErrorState
             title="Không thể tải danh sách lead"
-            description="Vui lòng kiểm tra kết nối hoặc thử tải lại dữ liệu."
+            description={errorMessage ?? "Vui lòng kiểm tra kết nối hoặc thử tải lại dữ liệu."}
             onReload={onReload}
           />
         ) : isLoading ? (
@@ -1680,14 +1207,18 @@ function LeadResultsCard({
         )}
       </CardContent>
       {pagination && pagination.total > 0 && (
-        <TablePagination
-          page={page}
-          pagination={pagination}
+        <DataPagination
+          pagination={{
+            page: pagination.page,
+            totalPages: pagination.totalPages,
+            total: pagination.total,
+            limit: pagination.limit,
+          }}
+          pageSize={pageSize}
+          pageSizeOptions={[10, 20, 30, 50, 100]}
           isFetching={isFetching}
-          className="flex flex-col items-center justify-between gap-3 border-t px-5 py-4 text-sm sm:flex-row"
-          labels={{ previous: "Trang trước", next: "Trang sau" }}
-          onPrevious={onPrevious}
-          onNext={onNext}
+          onPageChange={onPageChange}
+          onPageSizeChange={onPageSizeChange}
         />
       )}
     </Card>
@@ -1759,58 +1290,54 @@ function LeadTable({
                       )}
                       {sortDirection === "asc" ? (
                         <ArrowUp aria-hidden="true" />
-                      ) : sortDirection === "desc" ? (
-                        <ArrowDown aria-hidden="true" />
-                      ) : (
-                        <ArrowUpDown aria-hidden="true" />
-                      )}
-                    </button>
-                  ) : (
-                    flexRender(
-                      header.column.columnDef.header,
-                      header.getContext(),
-                    )
-                  )}
-                </TableHead>
-              );
-            })}
-          </TableRow>
-        ))}
-      </TableHeader>
-      <TableBody>
-        {table.getRowModel().rows.map((row) => (
-          <TableRow
-            key={row.id}
-            data-state={row.getIsSelected() ? "selected" : undefined}
-            className="group cursor-pointer focus-visible:bg-muted/50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring"
-            tabIndex={0}
-            aria-label={`Mở chi tiết ${row.original.fullName}`}
-            onClick={() => onEditLead(row.original.id)}
-            onKeyDown={(event) => openLeadWithKeyboard(event, row.original.id)}
-          >
-            {row.getVisibleCells().map((cell) => {
-              const isSelectColumn = cell.column.id === "select";
-              const isViewColumn = cell.column.id === "view";
-              return (
-                <TableCell
-                  key={cell.id}
-                  style={enableDisplayLayout ? leadColumnStyle(cell.column, false) : undefined}
-                  className={
-                    enableDisplayLayout ? leadColumnClass(cell.column.getIsPinned() === "left", false) : isSelectColumn
-                      ? "sticky left-0 z-10 w-12 min-w-12 max-w-12 bg-background px-4 py-4 text-center group-hover:bg-muted group-data-[state=selected]:bg-muted"
-                      : isViewColumn
-                        ? "sticky left-12 z-10 w-14 min-w-14 max-w-14 border-r bg-background px-2 py-4 text-center group-hover:bg-muted group-data-[state=selected]:bg-muted"
-                        : "px-5 py-4"
-                  }
-                >
-                  {flexRender(cell.column.columnDef.cell, cell.getContext())}
-                </TableCell>
-              );
-            })}
-          </TableRow>
-        ))}
-      </TableBody>
-    </Table>
+                        ) : sortDirection === "desc" ? (
+                          <ArrowDown aria-hidden="true" />
+                        ) : (
+                          <ArrowUpDown aria-hidden="true" />
+                        )}
+                      </button>
+                    ) : (
+                      flexRender(header.column.columnDef.header, header.getContext())
+                    )}
+                  </TableHead>
+                );
+              })}
+            </TableRow>
+          ))}
+        </TableHeader>
+        <TableBody>
+          {table.getRowModel().rows.map((row) => (
+            <TableRow
+              key={row.id}
+              data-state={row.getIsSelected() ? "selected" : undefined}
+              className="group cursor-pointer focus-visible:bg-muted/50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring"
+              tabIndex={0}
+              aria-label={`Mở chi tiết ${row.original.fullName}`}
+              onClick={() => onEditLead(row.original.id)}
+              onKeyDown={(event) => openLeadWithKeyboard(event, row.original.id)}
+            >
+              {row.getVisibleCells().map((cell) => {
+                const isSelectColumn = cell.column.id === "select";
+                const isViewColumn = cell.column.id === "view";
+                return (
+                  <TableCell
+                    key={cell.id}
+                    className={
+                      isSelectColumn
+                        ? "sticky left-0 z-10 w-12 min-w-12 max-w-12 bg-background px-2.5 py-2 text-center group-hover:bg-muted group-data-[state=selected]:bg-muted"
+                        : isViewColumn
+                          ? "sticky left-12 z-10 w-14 min-w-14 max-w-14 border-r bg-background px-2 py-2 text-center group-hover:bg-muted group-data-[state=selected]:bg-muted"
+                          : "px-2.5 py-2"
+                    }
+                  >
+                    {flexRender(cell.column.columnDef.cell, cell.getContext())}
+                  </TableCell>
+                );
+              })}
+            </TableRow>
+          ))}
+        </TableBody>
+      </Table>
   );
 }
 
@@ -1907,34 +1434,6 @@ function EditLeadContent({
   );
 }
 
-function getLeadListCapabilities(
-  can: (permission: string) => boolean,
-  showCreation: boolean,
-  customerListAssignment: boolean,
-) {
-  const isSaleList = !customerListAssignment;
-  return {
-    isSaleList,
-    canCreate: showCreation && can("lead.create"),
-    canUpdate: [
-      "lead.update_all",
-      "lead.update_department",
-      "lead.update_assigned",
-    ].some(can),
-    canDelete: can("lead.delete"),
-    canAssignSale: isSaleList && (can("lead.assign") || can("lead.reassign")),
-  };
-}
-
-function getLeadListSort(sorting: SortingState) {
-  const primarySort = sorting[0] ?? { id: "createdAt", desc: true };
-  const sortBy = sortableColumns.has(primarySort.id as LeadSortField)
-    ? (primarySort.id as LeadSortField)
-    : "createdAt";
-  const sortOrder = primarySort.desc ? "desc" : "asc";
-  return { sortBy, sortOrder: sortOrder as "asc" | "desc" };
-}
-
 type LeadEditDialogControllerProps = {
   editingLeadId: string | null;
   isEditDialogOpen: boolean;
@@ -1944,6 +1443,7 @@ type LeadEditDialogControllerProps = {
   setViewState: Dispatch<
     SetStateAction<{
       page: number;
+      pageSize: number;
       editingLeadId: string | null;
       isEditDialogOpen: boolean;
     }>
@@ -2006,48 +1506,4 @@ function updateLeadSorting(
 ): SortingState {
   const next = typeof updater === "function" ? updater(current) : updater;
   return next.length > 0 ? next.slice(0, 1) : [{ id: "createdAt", desc: true }];
-}
-
-function useLeadDirectory(
-  {
-    page,
-    sortBy,
-    sortOrder,
-    filters,
-    customerListId,
-  }: {
-    page: number;
-    sortBy: LeadSortField;
-    sortOrder: "asc" | "desc";
-    filters: LeadListFilters;
-    customerListId?: string;
-  },
-  accessToken: string | null,
-) {
-  return useQuery({
-    queryKey: customerListId
-      ? [
-          "customer-lists",
-          "leads",
-          customerListId,
-          page,
-          pageSize,
-          sortBy,
-          sortOrder,
-          filters,
-        ]
-      : ["leads", "list", page, pageSize, sortBy, sortOrder, filters],
-    queryFn: () =>
-      customerListId
-        ? getCustomerListLeads(
-            customerListId,
-            { page, limit: pageSize, sortBy, sortOrder, ...filters },
-            accessToken!,
-          )
-        : getLeads(
-            { page, limit: pageSize, sortBy, sortOrder, ...filters },
-            accessToken!,
-          ),
-    placeholderData: (previousData) => previousData,
-  });
 }

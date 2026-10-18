@@ -24,6 +24,9 @@ import {
   findActiveAssignableSale,
   findVisibleLeadForMutation,
   getSelectedStage,
+  leadPhoneDuplicateWhere,
+  normalizeLeadAssignees,
+  recordSecondaryAssignment,
   recordStageChange,
   selectAssigneeDepartment,
   toLeadData,
@@ -260,7 +263,7 @@ export async function updateLead(
     }
     const duplicate = await tx.leads.findFirst({
       where: {
-        phone: input.phone.trim(),
+        ...leadPhoneDuplicateWhere(input),
         deleted_at: null,
         id: { not: leadId },
         ...(input.institutionProgramId
@@ -274,9 +277,10 @@ export async function updateLead(
     }
     const source = await tx.lead_sources.findUnique({
       where: { id: input.sourceId },
-      select: { id: true },
+      select: { id: true, institution_program_id: true },
     });
-    if (!source) {
+    const sourceProgramId = input.institutionProgramId ?? institutionProgramId;
+    if (!source || !sourceProgramId || source.institution_program_id !== sourceProgramId) {
       return { ok: false as const, reason: "source_not_found" as const };
     }
     if (!(await hasValidAdmissionReferences(tx, input))) {
@@ -303,23 +307,39 @@ export async function updateLead(
       ? await resolveTransitionNote(tx, selectedStage.id, selectedStage.name, input.noteTemplateId, input.noteContent)
       : { ok: true as const, content: undefined };
     if (!transitionNote.ok) return transitionNote;
-    const assignmentChanged =
-      input.assigneeId !== undefined &&
-      input.assigneeId !== existing.assigned_to;
-    if (assignmentChanged && !canAssignLead(actor)) {
+    // Omitted assignee fields keep their current values before the main/secondary rules apply.
+    const assignees = normalizeLeadAssignees(
+      input.assigneeId !== undefined ? input.assigneeId : existing.assigned_to,
+      input.secondaryAssigneeId !== undefined ? input.secondaryAssigneeId : existing.secondary_assigned_to,
+    );
+    const assignmentChanged = assignees.primary !== existing.assigned_to;
+    const secondaryChanged = assignees.secondary !== existing.secondary_assigned_to;
+    if ((assignmentChanged || secondaryChanged) && !canAssignLead(actor)) {
       return { ok: false as const, reason: "assignment_forbidden" as const };
     }
     const nextAssignee =
-      assignmentChanged && input.assigneeId
-        ? await findActiveAssignableSale(tx, input.assigneeId, undefined, input.institutionProgramId)
+      assignmentChanged && assignees.primary
+        ? await findActiveAssignableSale(tx, assignees.primary, undefined, input.institutionProgramId)
         : null;
     if (
       assignmentChanged &&
-      input.assigneeId &&
+      assignees.primary &&
       (!nextAssignee ||
         !isAssigneeInScope(actor, nextAssignee.user_departments))
     ) {
       return { ok: false as const, reason: "assignee_not_telesale" as const };
+    }
+    const nextSecondaryAssignee =
+      secondaryChanged && assignees.secondary
+        ? await findActiveAssignableSale(tx, assignees.secondary, undefined, input.institutionProgramId)
+        : null;
+    if (
+      secondaryChanged &&
+      assignees.secondary &&
+      (!nextSecondaryAssignee ||
+        !isAssigneeInScope(actor, nextSecondaryAssignee.user_departments))
+    ) {
+      return { ok: false as const, reason: "secondary_assignee_invalid" as const };
     }
 
     await tx.leads.update({
@@ -328,6 +348,7 @@ export async function updateLead(
         ...toLeadData(input),
         ...(hasStageSelection ? { pipeline_stage_id: nextStageId } : {}),
         ...(assignmentChanged ? { assigned_to: nextAssignee?.id ?? null } : {}),
+        ...(secondaryChanged ? { secondary_assigned_to: nextSecondaryAssignee?.id ?? null } : {}),
         updated_at: new Date(),
       },
     });
@@ -435,6 +456,17 @@ export async function updateLead(
           new_data: { assigneeId: nextAssignee?.id ?? null },
         },
       });
+    }
+
+    if (secondaryChanged) {
+      await recordSecondaryAssignment(
+        tx,
+        actor,
+        { id: leadId, fullName: input.fullName },
+        existing.secondary_assigned_to,
+        nextSecondaryAssignee,
+        { ipAddress },
+      );
     }
 
     return {

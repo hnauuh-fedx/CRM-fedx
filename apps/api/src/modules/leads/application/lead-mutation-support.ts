@@ -33,6 +33,7 @@ export async function findVisibleLeadForMutation(
       status: true,
       pipeline_stage_id: true,
       assigned_to: true,
+      secondary_assigned_to: true,
     },
   });
 }
@@ -41,10 +42,24 @@ export function emptyToNull(value?: string) {
   return value?.trim() || null;
 }
 
+/** Secondary numbers stored separately from the primary phone, without blanks or repeats. */
+export function toSecondaryPhones(input: Pick<LeadInput, "phone" | "secondaryPhones">) {
+  const primary = input.phone.trim();
+  const phones = (input.secondaryPhones ?? []).map((phone) => phone.trim()).filter((phone) => phone && phone !== primary);
+  return [...new Set(phones)];
+}
+
+/** Matches active leads whose primary or secondary numbers overlap any submitted number. */
+export function leadPhoneDuplicateWhere(input: Pick<LeadInput, "phone" | "secondaryPhones">): Prisma.leadsWhereInput {
+  const phones = [input.phone.trim(), ...toSecondaryPhones(input)];
+  return { OR: [{ phone: { in: phones } }, { secondary_phones: { hasSome: phones } }] };
+}
+
 export function toLeadData(input: LeadInput) {
   return {
     full_name: input.fullName.trim(),
     phone: input.phone.trim(),
+    ...(input.secondaryPhones !== undefined ? { secondary_phones: toSecondaryPhones(input) } : {}),
     source_id: input.sourceId || null,
     ...(input.originId !== undefined ? { origin_id: input.originId } : {}),
     institution_program_id: input.institutionProgramId ?? null,
@@ -71,7 +86,7 @@ export async function getSelectedStage(
 }
 
 export const assignableSaleWhere = {
-  user_roles: {
+  user_program_roles: {
     some: {
       roles: {
         role_permissions: {
@@ -100,11 +115,11 @@ export async function findActiveAssignableSale(
       deleted_at: null,
       ...(institutionProgramId
         ? {
-            user_roles: {
+            user_program_roles: {
               some: {
+                institution_program_id: institutionProgramId,
                 roles: {
-                  ...assignableSaleWhere.user_roles.some.roles,
-                  role_institution_programs: { some: { institution_program_id: institutionProgramId } },
+                  ...assignableSaleWhere.user_program_roles.some.roles,
                 },
               },
             },
@@ -123,6 +138,62 @@ export async function findActiveAssignableSale(
       },
     },
   });
+}
+
+/**
+ * A lead has one main and at most one secondary assignee. Without a main assignee the
+ * secondary one is promoted, and the same person cannot hold both roles.
+ */
+export function normalizeLeadAssignees(primaryId?: string | null, secondaryId?: string | null) {
+  let primary = primaryId || null;
+  let secondary = secondaryId || null;
+  if (!primary && secondary) {
+    primary = secondary;
+    secondary = null;
+  }
+  if (secondary === primary) secondary = null;
+  return { primary, secondary };
+}
+
+export async function recordSecondaryAssignment(
+  tx: Prisma.TransactionClient,
+  actor: AuthUser,
+  lead: { id: string; fullName: string },
+  previousAssigneeId: string | null,
+  assignee: { id: string; full_name: string } | null,
+  options: { ipAddress?: string; notify?: boolean } = {},
+) {
+  await tx.lead_activities.create({
+    data: {
+      lead_id: lead.id,
+      user_id: actor.id,
+      type: assignee ? "lead_secondary_assigned" : "lead_secondary_unassigned",
+      content: assignee
+        ? `Phân công ${assignee.full_name} làm nhân viên phụ.`
+        : "Gỡ nhân viên phụ khỏi lead.",
+    },
+  });
+  await tx.audit_logs.create({
+    data: {
+      user_id: actor.id,
+      entity_type: "lead",
+      entity_id: lead.id,
+      action: assignee ? "assign_secondary" : "unassign_secondary",
+      ip_address: options.ipAddress,
+      old_data: { secondaryAssigneeId: previousAssigneeId },
+      new_data: { secondaryAssigneeId: assignee?.id ?? null },
+    },
+  });
+  if (assignee && options.notify !== false) {
+    await tx.notifications.create({
+      data: {
+        user_id: assignee.id,
+        title: "Bạn được phân công làm nhân viên phụ",
+        content: `Lead ${lead.fullName.trim()} đã được phân công cho bạn với vai trò nhân viên phụ.`,
+        type: "lead_assignment",
+      },
+    });
+  }
 }
 
 export function selectAssigneeDepartment(

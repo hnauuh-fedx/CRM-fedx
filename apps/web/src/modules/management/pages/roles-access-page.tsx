@@ -504,18 +504,10 @@ function RoleForm({
         </Field>
       </FieldGroup>
 
-      <FieldSet
-        className="rounded-md border p-4"
-        aria-describedby={
-          programValidationError
-            ? "role-program-error"
-            : "role-program-description"
-        }
-      >
-        <FieldLegend variant="label">CHƯƠNG TRÌNH *</FieldLegend>
+      <FieldSet className="rounded-md border p-4" aria-describedby={programValidationError ? "role-program-error" : "role-program-description"}>
+        <FieldLegend variant="label">Chương trình sử dụng vai trò *</FieldLegend>
         <FieldDescription id="role-program-description">
-          Vai trò chỉ được làm việc với dữ liệu thuộc các chương trình được
-          chọn.
+          Vai trò xuất hiện trong danh sách lựa chọn của các chương trình này. Cấp quyền truy cập chương trình tại trang Người dùng.
         </FieldDescription>
         {options?.programs.length ? (
           <FieldGroup

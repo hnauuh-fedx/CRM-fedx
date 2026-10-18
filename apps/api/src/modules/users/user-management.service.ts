@@ -1,70 +1,38 @@
+import { defaultRoleAccessScope, resolveEffectiveAccessScope } from "@admission-crm/shared/access-scope";
 import { hash } from "bcryptjs";
-
 import { prisma } from "../../database/prisma";
 import { Prisma } from "../../generated/prisma/client";
+import { getAuthUser } from "../auth/auth.service";
 import type { AuthUser } from "../auth/auth.types";
 import { revokeUserSessions } from "../auth/auth-session.service";
 
 export type AccessScope = AuthUser["accessScope"];
-
 export type UserListQuery = {
-  page: number;
-  limit: number;
-  search?: string;
-  status?: string;
-  roleId?: string;
-  departmentId?: string;
-  sortBy: "createdAt" | "fullName" | "email" | "lastLoginAt";
-  sortOrder: "asc" | "desc";
+  page: number; limit: number; search?: string; status?: string; roleId?: string; departmentId?: string;
+  sortBy: "createdAt" | "fullName" | "email" | "lastLoginAt"; sortOrder: "asc" | "desc";
 };
-
 export type UserManagementInput = {
-  fullName: string;
-  email: string;
-  phone?: string;
-  status: "active" | "inactive" | "suspended";
-  password?: string;
-  roleIds: string[];
-  departmentIds: string[];
-  accessScope: AccessScope;
+  fullName: string; email: string; phone?: string; status: "active" | "inactive" | "suspended"; password?: string;
+  programAssignments: Array<{ institutionProgramId: string; roleId: string }>;
+  departmentIds: string[]; accessScope: AccessScope;
 };
-
-const userSortFields = {
-  createdAt: "created_at",
-  fullName: "full_name",
-  email: "email",
-  lastLoginAt: "last_login_at",
-} as const;
-
 const supportedScopes: AccessScope[] = ["ALL", "DEPARTMENT", "ASSIGNED_ONLY", "OWNED_ONLY", "READ_ONLY"];
-
-type ManagedUserRow = {
-  id: string;
-  full_name: string;
-  email: string;
-  phone: string | null;
-  avatar_url: string | null;
-  status: string | null;
-  last_login_at: Date | null;
-  created_at: Date | null;
-  user_roles: Array<{ roles: { id: string; code: string; name: string } | null }>;
-  user_departments: Array<{ departments: { id: string; code: string | null; name: string } | null }>;
-};
-
-function unique(values: string[]) {
-  return [...new Set(values.filter(Boolean))];
-}
-
+const userSortFields = { createdAt: "created_at", fullName: "full_name", email: "email", lastLoginAt: "last_login_at" } as const;
 async function getAccessScopeMap(userIds: string[], institutionProgramId: string) {
   if (userIds.length === 0) return new Map<string, AccessScope>();
   try {
-    const rows = await prisma.$queryRaw<Array<{ user_id: string; scope: AccessScope }>>(Prisma.sql`
-      SELECT user_id, scope
-      FROM user_program_access_scopes
-      WHERE user_id IN (${Prisma.join(userIds)})
-        AND institution_program_id = ${institutionProgramId}::uuid
+    const rows = await prisma.$queryRaw<Array<{ user_id: string; scope: AccessScope | null }>>(Prisma.sql`
+      SELECT u.id AS user_id,
+        COALESCE(program_scope.scope, CASE WHEN NOT EXISTS (
+          SELECT 1 FROM user_program_access_scopes any_scope WHERE any_scope.user_id = u.id
+        ) THEN legacy_scope.scope END) AS scope
+      FROM users u
+      LEFT JOIN user_program_access_scopes program_scope
+        ON program_scope.user_id = u.id AND program_scope.institution_program_id = ${institutionProgramId}::uuid
+      LEFT JOIN user_access_scopes legacy_scope ON legacy_scope.user_id = u.id
+      WHERE u.id IN (${Prisma.join(userIds)})
     `);
-    return new Map(rows.map((row) => [row.user_id, row.scope]));
+    return new Map(rows.flatMap((row) => row.scope ? [[row.user_id, row.scope] as const] : []));
   } catch (error) {
     if (isMissingUserAccessScopesTable(error)) {
       return new Map();
@@ -87,103 +55,6 @@ function isMissingUserAccessScopesTable(error: unknown) {
   );
 }
 
-function serializeManagedUser(user: ManagedUserRow, accessScope: AccessScope | undefined) {
-  return {
-    id: user.id,
-    fullName: user.full_name,
-    email: user.email,
-    phone: user.phone,
-    status: user.status ?? "active",
-    avatarUrl: user.avatar_url,
-    lastLoginAt: user.last_login_at?.toISOString() ?? null,
-    createdAt: user.created_at?.toISOString() ?? null,
-    accessScope: accessScope ?? "DEPARTMENT",
-    roles: user.user_roles.flatMap((assignment) => assignment.roles ? [assignment.roles] : []),
-    departments: user.user_departments.flatMap((membership) => membership.departments ? [membership.departments] : []),
-  };
-}
-
-export async function listManagedUsers(query: UserListQuery, institutionProgramId: string) {
-  const where = {
-    deleted_at: null,
-    user_roles: {
-      some: {
-        roles: {
-          role_institution_programs: { some: { institution_program_id: institutionProgramId } },
-          ...(query.roleId ? { id: query.roleId } : {}),
-        },
-      },
-    },
-    ...(query.status ? { status: query.status } : {}),
-    ...(query.departmentId ? { user_departments: { some: { department_id: query.departmentId } } } : {}),
-    ...(query.search
-      ? {
-          OR: [
-            { full_name: { contains: query.search, mode: "insensitive" as const } },
-            { email: { contains: query.search, mode: "insensitive" as const } },
-            { phone: { contains: query.search, mode: "insensitive" as const } },
-          ],
-        }
-      : {}),
-  };
-  const [items, total] = await prisma.$transaction([
-    prisma.users.findMany({
-      where,
-      select: {
-        id: true,
-        full_name: true,
-        email: true,
-        phone: true,
-        avatar_url: true,
-        status: true,
-        last_login_at: true,
-        created_at: true,
-        user_roles: {
-          where: { roles: { role_institution_programs: { some: { institution_program_id: institutionProgramId } } } },
-          select: { roles: { select: { id: true, code: true, name: true } } },
-        },
-        user_departments: { select: { departments: { select: { id: true, code: true, name: true } } } },
-      },
-      orderBy: [{ [userSortFields[query.sortBy]]: query.sortOrder }, { id: "asc" }],
-      skip: (query.page - 1) * query.limit,
-      take: query.limit,
-    }),
-    prisma.users.count({ where }),
-  ]);
-  const scopeMap = await getAccessScopeMap(items.map((item) => item.id), institutionProgramId);
-
-  return {
-    data: items.map((item) => serializeManagedUser(item, scopeMap.get(item.id))),
-    pagination: {
-      page: query.page,
-      limit: query.limit,
-      total,
-      totalPages: Math.max(1, Math.ceil(total / query.limit)),
-    },
-    sort: { sortBy: query.sortBy, sortOrder: query.sortOrder },
-    filters: {
-      search: query.search ?? "",
-      status: query.status ?? "",
-      roleId: query.roleId ?? "",
-      departmentId: query.departmentId ?? "",
-    },
-  };
-}
-
-export async function getUserManagementOptions(institutionProgramId: string) {
-  const [roles, departments] = await prisma.$transaction([
-    prisma.roles.findMany({
-      where: { role_institution_programs: { some: { institution_program_id: institutionProgramId } } },
-      select: { id: true, code: true, name: true, description: true },
-      orderBy: [{ code: "asc" }],
-    }),
-    prisma.departments.findMany({
-      select: { id: true, code: true, name: true },
-      orderBy: [{ name: "asc" }],
-    }),
-  ]);
-  return { roles, departments, scopes: await getActiveAccessScopes() };
-}
 
 async function getActiveAccessScopes() {
   try {
@@ -223,173 +94,153 @@ function isMissingAccessScopesTable(error: unknown) {
   );
 }
 
-async function validateReferences(input: UserManagementInput, institutionProgramId: string) {
-  const roleIds = unique(input.roleIds);
-  const departmentIds = unique(input.departmentIds);
+
+export async function getManageableProgramIds(actor: AuthUser) {
+  const principals = await Promise.all(actor.institutionProgramIds.map((id) => getAuthUser(actor.id, id)));
+  return actor.institutionProgramIds.filter((_, index) => principals[index]?.permissions.includes("user.manage"));
+}
+
+export async function listManagedUsers(query: UserListQuery, institutionProgramId: string, actor: AuthUser) {
+  const manageableProgramIds = await getManageableProgramIds(actor);
+  const where: Prisma.usersWhereInput = {
+    deleted_at: null,
+    user_program_roles: { some: { institution_program_id: institutionProgramId, ...(query.roleId ? { role_id: query.roleId } : {}) } },
+    ...(query.status ? { status: query.status } : {}),
+    ...(query.departmentId ? { user_departments: { some: { department_id: query.departmentId } } } : {}),
+    ...(query.search ? { OR: [
+      { full_name: { contains: query.search, mode: "insensitive" } },
+      { email: { contains: query.search, mode: "insensitive" } },
+      { phone: { contains: query.search, mode: "insensitive" } },
+    ] } : {}),
+  };
+  const [items, total] = await prisma.$transaction([
+    prisma.users.findMany({ where, select: {
+      id: true, full_name: true, email: true, phone: true, avatar_url: true, status: true, last_login_at: true, created_at: true,
+      user_program_roles: { where: { institution_program_id: { in: manageableProgramIds } }, select: {
+        institution_program_id: true, role_id: true,
+        roles: { select: { id: true, code: true, name: true, role_access_scopes: { select: { scope_code: true } } } },
+        institution_programs: { select: { name: true, institution_name: true } },
+      } },
+      user_departments: { select: { departments: { select: { id: true, code: true, name: true } } } },
+    }, orderBy: [{ [userSortFields[query.sortBy]]: query.sortOrder }, { id: "asc" }], skip: (query.page - 1) * query.limit, take: query.limit }),
+    prisma.users.count({ where }),
+  ]);
+  const scopes = await getAccessScopeMap(items.map((item) => item.id), institutionProgramId);
+  return {
+    data: items.map((user) => ({
+      id: user.id, fullName: user.full_name, email: user.email, phone: user.phone, avatarUrl: user.avatar_url,
+      status: user.status ?? "active", lastLoginAt: user.last_login_at?.toISOString() ?? null, createdAt: user.created_at?.toISOString() ?? null,
+      accessScope: resolveEffectiveAccessScope(
+        (user.user_program_roles.find((grant) => grant.institution_program_id === institutionProgramId)?.roles.role_access_scopes?.scope_code as AccessScope | undefined)
+          ?? defaultRoleAccessScope(user.user_program_roles.filter((grant) => grant.institution_program_id === institutionProgramId).map((grant) => grant.roles.code)),
+        scopes.get(user.id),
+      ),
+      roles: user.user_program_roles.filter((grant) => grant.institution_program_id === institutionProgramId).map((grant) => ({ id: grant.roles.id, code: grant.roles.code, name: grant.roles.name })),
+      programAssignments: user.user_program_roles.map((grant) => ({
+        institutionProgramId: grant.institution_program_id, roleId: grant.role_id,
+        programName: grant.institution_programs.name, institutionName: grant.institution_programs.institution_name, roleName: grant.roles.name,
+      })),
+      departments: user.user_departments.flatMap((membership) => membership.departments ? [membership.departments] : []),
+    })),
+    pagination: { page: query.page, limit: query.limit, total, totalPages: Math.max(1, Math.ceil(total / query.limit)) },
+    sort: { sortBy: query.sortBy, sortOrder: query.sortOrder },
+    filters: { search: query.search ?? "", status: query.status ?? "", roleId: query.roleId ?? "", departmentId: query.departmentId ?? "" },
+  };
+}
+
+export async function getUserManagementOptions(institutionProgramId: string, actor: AuthUser) {
+  const manageableProgramIds = await getManageableProgramIds(actor);
+  const [programs, departments, roles] = await prisma.$transaction([
+    prisma.institution_programs.findMany({ where: { id: { in: manageableProgramIds }, status: "active" },
+      select: { id: true, code: true, name: true, institution_name: true,
+        role_institution_programs: { select: { roles: { select: { id: true, code: true, name: true, description: true, role_access_scopes: { select: { scope_code: true } } } } } } },
+      orderBy: [{ institution_name: "asc" }, { name: "asc" }] }),
+    prisma.departments.findMany({ select: { id: true, code: true, name: true }, orderBy: { name: "asc" } }),
+    prisma.roles.findMany({ where: { role_institution_programs: { some: { institution_program_id: institutionProgramId } } },
+      select: { id: true, code: true, name: true, description: true }, orderBy: { code: "asc" } }),
+  ]);
+  return { roles, departments, scopes: await getActiveAccessScopes(), programs: programs.map((program) => ({
+    id: program.id, code: program.code, name: program.name, institutionName: program.institution_name,
+    roles: program.role_institution_programs.map((grant) => ({
+      id: grant.roles.id, code: grant.roles.code, name: grant.roles.name, description: grant.roles.description,
+      scopeCode: (grant.roles.role_access_scopes?.scope_code as AccessScope | undefined) ?? defaultRoleAccessScope([grant.roles.code]),
+    })).sort((a, b) => a.name.localeCompare(b.name)),
+  })) };
+}
+
+async function validateReferences(actor: AuthUser, input: UserManagementInput) {
+  const programIds = input.programAssignments.map((grant) => grant.institutionProgramId);
+  if (!programIds.length || new Set(programIds).size !== programIds.length) return { ok: false as const, reason: "invalid_program_assignments" as const };
+  const manageableProgramIds = await getManageableProgramIds(actor);
+  if (programIds.some((id) => !manageableProgramIds.includes(id))) return { ok: false as const, reason: "program_forbidden" as const };
+  const departmentIds = [...new Set(input.departmentIds)];
   const [roleCount, departmentCount] = await prisma.$transaction([
-    prisma.roles.count({
-      where: {
-        id: { in: roleIds },
-        role_institution_programs: { some: { institution_program_id: institutionProgramId } },
-      },
-    }),
+    prisma.role_institution_programs.count({ where: { OR: input.programAssignments.map((grant) => ({
+      institution_program_id: grant.institutionProgramId, role_id: grant.roleId, institution_programs: { status: "active" },
+    })) } }),
     prisma.departments.count({ where: { id: { in: departmentIds } } }),
   ]);
-  if (roleCount !== roleIds.length) return { ok: false as const, reason: "role_not_found" as const };
+  if (roleCount !== programIds.length) return { ok: false as const, reason: "role_not_found" as const };
   if (departmentCount !== departmentIds.length) return { ok: false as const, reason: "department_not_found" as const };
-  return { ok: true as const, roleIds, departmentIds };
+  return { ok: true as const, manageableProgramIds, departmentIds };
 }
 
 export async function createManagedUser(actor: AuthUser, input: UserManagementInput, institutionProgramId: string, ipAddress?: string) {
-  const references = await validateReferences(input, institutionProgramId);
-  if (!references.ok) return references;
-  const email = input.email.trim().toLowerCase();
-  if (await prisma.users.findFirst({ where: { email, deleted_at: null }, select: { id: true } })) {
-    return { ok: false as const, reason: "email_exists" as const };
-  }
-  if (!input.password || input.password.length < 8) {
-    return { ok: false as const, reason: "password_required" as const };
-  }
-
-  return prisma.$transaction(async (tx) => {
-    const user = await tx.users.create({
-      data: {
-        full_name: input.fullName.trim(),
-        email,
-        phone: input.phone?.trim() || null,
-        status: input.status,
-        password_hash: await hash(input.password!, 12),
-      },
-      select: { id: true },
-    });
-    if (references.roleIds.length > 0) {
-      await tx.user_roles.createMany({ data: references.roleIds.map((roleId) => ({ user_id: user.id, role_id: roleId })) });
-    }
-    if (references.departmentIds.length > 0) {
-      await tx.user_departments.createMany({ data: references.departmentIds.map((departmentId) => ({ user_id: user.id, department_id: departmentId })) });
-    }
-    await tx.$executeRaw(Prisma.sql`
-      INSERT INTO user_program_access_scopes (user_id, institution_program_id, scope)
-      VALUES (${user.id}::uuid, ${institutionProgramId}::uuid, ${input.accessScope})
-    `);
-    await tx.audit_logs.create({
-      data: {
-        user_id: actor.id,
-        entity_type: "user",
-        entity_id: user.id,
-        action: "create",
-        ip_address: ipAddress,
-        new_data: {
-          fullName: input.fullName.trim(),
-          email,
-          phone: input.phone?.trim() || null,
-          status: input.status,
-          roleIds: references.roleIds,
-          departmentIds: references.departmentIds,
-          accessScope: input.accessScope,
-          institutionProgramId,
-        },
-      },
-    });
-    return { ok: true as const, data: { id: user.id } };
-  });
+  return saveManagedUser(actor, input, institutionProgramId, ipAddress);
 }
-
 export async function updateManagedUser(actor: AuthUser, userId: string, input: UserManagementInput, institutionProgramId: string, ipAddress?: string) {
-  const references = await validateReferences(input, institutionProgramId);
+  return saveManagedUser(actor, input, institutionProgramId, ipAddress, userId);
+}
+async function saveManagedUser(actor: AuthUser, input: UserManagementInput, institutionProgramId: string, ipAddress?: string, userId?: string) {
+  const references = await validateReferences(actor, input);
   if (!references.ok) return references;
   const email = input.email.trim().toLowerCase();
-  const existing = await prisma.users.findFirst({
-    where: {
-      id: userId,
-      deleted_at: null,
-      user_roles: { some: { roles: { role_institution_programs: { some: { institution_program_id: institutionProgramId } } } } },
-    },
-    select: {
-      id: true,
-      full_name: true,
-      email: true,
-      phone: true,
-      status: true,
-      user_roles: {
-        select: {
-          role_id: true,
-          roles: { select: { role_institution_programs: { select: { institution_program_id: true } } } },
-        },
-      },
-      user_departments: { select: { department_id: true } },
-    },
-  });
-  if (!existing) return { ok: false as const, reason: "user_not_found" as const };
-  if (await prisma.users.findFirst({ where: { email, deleted_at: null, id: { not: userId } }, select: { id: true } })) {
-    return { ok: false as const, reason: "email_exists" as const };
-  }
-
-  const oldScope = (await getAccessScopeMap([userId], institutionProgramId)).get(userId) ?? "DEPARTMENT";
-  const programRoleIds = existing.user_roles.flatMap((assignment) =>
-    assignment.roles?.role_institution_programs.some((grant) => grant.institution_program_id === institutionProgramId)
-      ? assignment.role_id ? [assignment.role_id] : []
-      : [],
-  );
+  if (!userId && (!input.password || input.password.length < 8)) return { ok: false as const, reason: "password_required" as const };
   return prisma.$transaction(async (tx) => {
-    await tx.users.update({
-      where: { id: userId },
-      data: {
-        full_name: input.fullName.trim(),
-        email,
-        phone: input.phone?.trim() || null,
-        status: input.status,
-        updated_at: new Date(),
-        ...(input.password ? { password_hash: await hash(input.password, 12) } : {}),
-      },
-    });
-    if (input.password || input.status !== "active") {
-      await revokeUserSessions(tx, userId, input.password ? "password_changed" : "account_disabled", actor.id, ipAddress);
+    const existing = userId ? await tx.users.findFirst({ where: {
+      id: userId, deleted_at: null, user_program_roles: { some: { institution_program_id: institutionProgramId } },
+    }, select: { id: true, full_name: true, email: true, phone: true, status: true,
+      user_program_roles: { where: { institution_program_id: { in: references.manageableProgramIds } }, select: { institution_program_id: true, role_id: true } },
+      user_departments: { select: { department_id: true } },
+    } }) : null;
+    if (userId && !existing) return { ok: false as const, reason: "user_not_found" as const };
+    if (await tx.users.findFirst({ where: { email, deleted_at: null, ...(userId ? { id: { not: userId } } : {}) }, select: { id: true } })) return { ok: false as const, reason: "email_exists" as const };
+    const data = { full_name: input.fullName.trim(), email, phone: input.phone?.trim() || null, status: input.status, updated_at: new Date(),
+      ...(input.password ? { password_hash: await hash(input.password, 12) } : {}) };
+    const user = userId ? await tx.users.update({ where: { id: userId }, data, select: { id: true } })
+      : await tx.users.create({ data: { ...data, password_hash: data.password_hash! }, select: { id: true } });
+    if (userId && (input.password || input.status !== "active")) {
+      await revokeUserSessions(tx, user.id, input.password ? "password_changed" : "account_disabled", actor.id, ipAddress);
     }
-    await tx.user_roles.deleteMany({ where: { user_id: userId, role_id: { in: programRoleIds } } });
-    await tx.user_departments.deleteMany({ where: { user_id: userId } });
-    if (references.roleIds.length > 0) {
-      await tx.user_roles.createMany({ data: references.roleIds.map((roleId) => ({ user_id: userId, role_id: roleId })) });
-    }
-    if (references.departmentIds.length > 0) {
-      await tx.user_departments.createMany({ data: references.departmentIds.map((departmentId) => ({ user_id: userId, department_id: departmentId })) });
-    }
+    // Only replace assignments in programs the actor can manage; preserve hidden grants.
+    await tx.user_program_roles.deleteMany({ where: { user_id: user.id, institution_program_id: { in: references.manageableProgramIds } } });
+    await tx.user_program_roles.createMany({ data: input.programAssignments.map((grant) => ({
+      user_id: user.id, institution_program_id: grant.institutionProgramId, role_id: grant.roleId,
+    })) });
+    await tx.user_departments.deleteMany({ where: { user_id: user.id } });
+    if (references.departmentIds.length) await tx.user_departments.createMany({ data: references.departmentIds.map((id) => ({ user_id: user.id, department_id: id })) });
+    const selectedIds = input.programAssignments.map((grant) => grant.institutionProgramId);
     await tx.$executeRaw(Prisma.sql`
-      INSERT INTO user_program_access_scopes (user_id, institution_program_id, scope)
-      VALUES (${userId}::uuid, ${institutionProgramId}::uuid, ${input.accessScope})
-      ON CONFLICT (user_id, institution_program_id)
-      DO UPDATE SET scope = EXCLUDED.scope, updated_at = now()
+      DELETE FROM user_program_access_scopes WHERE user_id = ${user.id}::uuid
+        AND institution_program_id IN (${Prisma.join(references.manageableProgramIds)})
+        AND institution_program_id NOT IN (${Prisma.join(selectedIds)})
     `);
-    await tx.audit_logs.create({
-      data: {
-        user_id: actor.id,
-        entity_type: "user",
-        entity_id: userId,
-        action: "update",
-        ip_address: ipAddress,
-        old_data: {
-          fullName: existing.full_name,
-          email: existing.email,
-          phone: existing.phone,
-          status: existing.status,
-          roleIds: programRoleIds,
-          departmentIds: existing.user_departments.flatMap((department) => department.department_id ? [department.department_id] : []),
-          accessScope: oldScope,
-          institutionProgramId,
-        },
-        new_data: {
-          fullName: input.fullName.trim(),
-          email,
-          phone: input.phone?.trim() || null,
-          status: input.status,
-          roleIds: references.roleIds,
-          departmentIds: references.departmentIds,
-          accessScope: input.accessScope,
-          institutionProgramId,
-          passwordChanged: Boolean(input.password),
-        },
-      },
-    });
-    return { ok: true as const, data: { id: userId } };
+    const currentAssignment = input.programAssignments.find((grant) => grant.institutionProgramId === institutionProgramId);
+    const currentRole = currentAssignment ? await tx.roles.findUniqueOrThrow({ where: { id: currentAssignment.roleId }, select: { code: true, role_access_scopes: { select: { scope_code: true } } } }) : null;
+    const effectiveScope = currentRole ? resolveEffectiveAccessScope(
+      (currentRole.role_access_scopes?.scope_code as AccessScope | undefined) ?? defaultRoleAccessScope([currentRole.code]), input.accessScope,
+    ) : null;
+    if (effectiveScope) await tx.$executeRaw(Prisma.sql`
+      INSERT INTO user_program_access_scopes (user_id, institution_program_id, scope)
+      VALUES (${user.id}::uuid, ${institutionProgramId}::uuid, ${effectiveScope})
+      ON CONFLICT (user_id, institution_program_id) DO UPDATE SET scope = EXCLUDED.scope, updated_at = now()
+    `);
+    await tx.audit_logs.create({ data: { user_id: actor.id, entity_type: "user", entity_id: user.id, action: userId ? "update" : "create", ip_address: ipAddress,
+      old_data: existing ? { fullName: existing.full_name, email: existing.email, phone: existing.phone, status: existing.status,
+        programAssignments: existing.user_program_roles, departmentIds: existing.user_departments.map((item) => item.department_id) } : Prisma.JsonNull,
+      new_data: { fullName: data.full_name, email, phone: data.phone, status: input.status, programAssignments: input.programAssignments,
+        departmentIds: references.departmentIds, accessScope: effectiveScope, requestedAccessScope: input.accessScope, institutionProgramId, passwordChanged: Boolean(input.password) },
+    } });
+    return { ok: true as const, data: { id: user.id } };
   });
 }

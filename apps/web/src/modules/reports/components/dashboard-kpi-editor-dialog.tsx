@@ -161,7 +161,10 @@ function isValidDraft(
 function validConditions(widget: DashboardKpiWidgetInput, pipelineStages: DashboardPipelineStage[]) {
   return widget.conditions.every((condition) => {
     if (condition.operator === "EQUALS" || condition.operator === "NOT_EQUALS") return Boolean(condition.value);
-    if (condition.operator === "GREATER_THAN_OR_EQUAL") {
+    if (["IS_NOT_EMPTY", "IS_EMPTY"].includes(condition.operator)) {
+      return ["LEADS", "QUALIFIED_LEADS"].includes(widget.datasetKey) && ["ASSIGNEE", "SOURCE"].includes(condition.fieldKey);
+    }
+    if (["GREATER_THAN_OR_EQUAL", "LESS_THAN_OR_EQUAL"].includes(condition.operator)) {
       return (widget.datasetKey === "LEADS" || widget.datasetKey === "QUALIFIED_LEADS")
         && condition.fieldKey === "PIPELINE_STAGE"
         && pipelineStages.some((stage) => stage.id === condition.value);

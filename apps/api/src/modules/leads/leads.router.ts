@@ -1,6 +1,10 @@
+import { prisma } from "../../database/prisma";
+import { changeStudentMembership } from "../students/student-conversion.service";
+import { enrolledStudentWhere } from "../students/student-membership";
 import { Router, type RequestHandler } from "express";
 import multer from "multer";
 import { z } from "zod";
+import { LEAD_PHONE_MAX_LENGTH } from "@admission-crm/shared/lead-phone";
 
 import {
   requireAnyPermission,
@@ -12,6 +16,7 @@ import {
   leadListPermissions,
   listLeads,
 } from "./lead-list.service";
+import { filterConditionsParamSchema, LeadFilterError } from "./lead-filter.service";
 import {
   addLeadNote,
   assignLead,
@@ -36,16 +41,19 @@ import { transitionNoteTargetSchema } from "./transition-note.schema";
 import { initializeLeadOnOpen } from "./application/open-lead.use-case";
 
 const leadListQuerySchema = z.object({
+  audience: z.enum(["candidates", "students", "all"]).default("candidates"),
   page: z.coerce.number().int().min(1).default(1),
   limit: z.coerce.number().int().min(1).max(100).default(20),
   search: z.string().trim().max(100).optional().transform((value) => value || undefined),
   pipelineStageId: z.uuid().optional().or(z.literal("")).transform((value) => value || undefined),
+  status: z.enum(["ACTIVE", "FAIL"]).optional().or(z.literal("")).transform((value) => value || undefined),
   sourceId: z.uuid().optional().or(z.literal("")).transform((value) => value || undefined),
   majorId: z.uuid().optional().or(z.literal("")).transform((value) => value || undefined),
   institutionProgramId: z.uuid().optional().or(z.literal("")).transform((value) => value || undefined),
   assigneeId: z.uuid().optional().or(z.literal("")).transform((value) => value || undefined),
   fromDate: z.iso.date().optional().or(z.literal("")).transform((value) => value || undefined),
   toDate: z.iso.date().optional().or(z.literal("")).transform((value) => value || undefined),
+  filters: filterConditionsParamSchema,
   sortBy: z.enum(["createdAt", "fullName", "leadCode", "pipelineStage"]).default("createdAt"),
   sortOrder: z.enum(["asc", "desc"]).default("desc"),
 }).refine((input) => !input.fromDate || !input.toDate || input.fromDate <= input.toDate, {
@@ -66,14 +74,21 @@ const optionalNumber = (max: number) =>
     .or(z.literal("")).transform((value) => value || undefined);
 const optionalDecimal = z.string().trim().regex(/^\d+(\.\d{1,2})?$/, "Điểm hoặc số tiền không hợp lệ.")
   .optional().or(z.literal("")).transform((value) => value || undefined);
-const requiredPhone = z.string().trim().regex(/^\d{10}$/, "Số điện thoại phải gồm đúng 10 chữ số.");
+// Imported numbers may be non-standard; they are kept and highlighted in the UI instead of rejected.
+const requiredPhone = z.string().trim().min(1, "Vui lòng nhập số điện thoại.")
+  .max(LEAD_PHONE_MAX_LENGTH, `Số điện thoại tối đa ${LEAD_PHONE_MAX_LENGTH} ký tự.`);
+const secondaryPhones = z.array(z.string().trim().max(LEAD_PHONE_MAX_LENGTH, `Số điện thoại tối đa ${LEAD_PHONE_MAX_LENGTH} ký tự.`))
+  .max(5, "Mỗi lead có tối đa 5 số điện thoại phụ.").optional();
 const optionalPhone = z.string().trim().regex(/^\d{10}$/, "Số điện thoại phải gồm đúng 10 chữ số.")
   .optional().or(z.literal("")).transform((value) => value || undefined);
 const leadBodySchema = z.object({
   fullName: z.string().trim().min(2).max(255),
   phone: requiredPhone,
+  secondaryPhones,
   sourceId: z.uuid(),
   assigneeId: z.union([z.uuid(), z.literal(""), z.null()]).optional()
+    .transform((value) => value === "" ? null : value),
+  secondaryAssigneeId: z.union([z.uuid(), z.literal(""), z.null()]).optional()
     .transform((value) => value === "" ? null : value),
   pipelineStageId: z.uuid().optional().or(z.literal("")),
   noteTemplateId: z.uuid().optional(),
@@ -191,6 +206,47 @@ const bulkDeleteBodySchema = z.object({
 const customFieldValuesSchema = z.object({ values: z.array(z.object({ fieldId: z.uuid(), value: z.unknown().nullable() })).min(1).max(100) });
 
 export const leadsRouter = Router();
+leadsRouter.use(["/bulk-assign", "/bulk-delete"], requireAuthentication, async (request, response, next) => {
+  try {
+    const ids = z.array(z.uuid()).min(1).max(100).safeParse(request.body?.leadIds);
+    if (!ids.success) { next(); return; }
+    const hasStudent = await prisma.students.findFirst({ where: { lead_id: { in: ids.data }, ...enrolledStudentWhere }, select: { id: true } });
+    if (hasStudent && (!request.authUser!.permissions.some((p) => ["student.view", "student.view_all"].includes(p)) ||
+        !request.authUser!.permissions.some((p) => ["student.update", "student.update_all"].includes(p)))) {
+      response.status(403).json({ message: "Bạn chưa được cấp quyền chỉnh sửa học viên." }); return;
+    }
+    next();
+  } catch (error) { next(error); }
+});
+leadsRouter.use("/:leadId", requireAuthentication, async (request, response, next) => {
+  try {
+    const id = z.uuid().safeParse(request.params.leadId);
+    if (!id.success) { next(); return; }
+    const student = await prisma.students.findFirst({ where: { lead_id: id.data, ...enrolledStudentWhere }, select: { id: true } });
+    if (student) {
+      const permissions = request.authUser!.permissions;
+      const canView = permissions.some((p) => ["student.view", "student.view_all"].includes(p));
+      const canWrite = request.method === "GET" || request.path === "/membership" || permissions.some((p) => ["student.update", "student.update_all"].includes(p));
+      if (!canView || !canWrite) { response.status(403).json({ message: "Bạn chưa được cấp quyền xem hoặc chỉnh sửa học viên." }); return; }
+    }
+    next();
+  } catch (error) { next(error); }
+});
+
+leadsRouter.post("/:leadId/membership", requireAuthentication, requireAnyPermission(...leadListPermissions), async (request, response, next) => {
+  try {
+    const id = z.uuid().safeParse(request.params.leadId);
+    const body = z.object({ target: z.enum(["student", "candidate"]) }).strict().safeParse(request.body);
+    if (!id.success || !body.success) { response.status(400).json({ message: "Yêu cầu chuyển đổi không hợp lệ." }); return; }
+    const result = await changeStudentMembership(request.authUser!, id.data, body.data.target, getInstitutionProgramScope(request), request.ip);
+    if (!result.ok) {
+      const status = result.reason === "forbidden" ? 403 : result.reason === "not_found" ? 404 : 409;
+      response.status(status).json({ message: status === 403 ? "Bạn chưa được cấp quyền chuyển đổi." : status === 404 ? "Không tìm thấy hồ sơ trong phạm vi của bạn." : "Hồ sơ đã ở danh sách đích." }); return;
+    }
+    response.json(result.data);
+  } catch (error) { next(error); }
+});
+
 const upload = multer({
   storage: multer.memoryStorage(),
   limits: { fileSize: 5 * 1024 * 1024, files: 1 },
@@ -221,12 +277,20 @@ leadsRouter.get(
         return;
       }
 
+      if (parsed.data.audience === "students" && !request.authUser!.permissions.some((p) => ["student.view", "student.view_all"].includes(p))) {
+        response.status(403).json({ message: "Bạn chưa được cấp quyền xem học viên." }); return;
+      }
       const result = await listLeads(request.authUser!, {
         ...parsed.data,
         institutionProgramId: getInstitutionProgramScope(request) ?? parsed.data.institutionProgramId,
+        filterConditions: parsed.data.filters,
       });
       response.json(result);
     } catch (error) {
+      if (error instanceof LeadFilterError) {
+        response.status(error.status).json({ message: error.message });
+        return;
+      }
       next(error);
     }
   },
@@ -238,7 +302,12 @@ leadsRouter.get(
   requireAnyPermission(...leadListPermissions),
   async (request, response, next) => {
     try {
-      response.json(await getLeadFilterOptions(request.authUser!, getInstitutionProgramScope(request)));
+      const audience = z.enum(["candidates", "students", "all"]).default("candidates").safeParse(request.query.audience);
+      if (!audience.success) { response.status(400).json({ message: "Nhóm hồ sơ không hợp lệ." }); return; }
+      if (audience.data === "students" && !request.authUser!.permissions.some((p) => ["student.view", "student.view_all"].includes(p))) {
+        response.status(403).json({ message: "Bạn chưa được cấp quyền xem học viên." }); return;
+      }
+      response.json(await getLeadFilterOptions(request.authUser!, getInstitutionProgramScope(request), audience.data));
     } catch (error) {
       next(error);
     }
@@ -409,6 +478,8 @@ leadsRouter.post(
               ? "Tiến trình đã chọn không tồn tại."
             : result.reason === "assignee_not_telesale"
               ? "Sale phụ trách phải là người dùng Telesale đang hoạt động."
+            : result.reason === "secondary_assignee_invalid"
+              ? "Nhân viên phụ phải là người dùng Telesale đang hoạt động trong phạm vi được phép."
             : "Ngành đăng ký hoặc trạng thái hồ sơ không tồn tại.",
         });
         return;
@@ -468,7 +539,7 @@ leadsRouter.post(
         await importLeadsFromWorkbook(
           request.authUser!,
           request.file.buffer,
-          getInstitutionProgramScope(request),
+          request.header("x-institution-program-id") ? getInstitutionProgramScope(request) : undefined,
           request.ip,
         ),
       );
@@ -527,6 +598,8 @@ leadsRouter.patch(
               ? "Tiến trình đã chọn không tồn tại."
             : result.reason === "assignee_not_telesale"
               ? "Sale phụ trách phải là người dùng Telesale đang hoạt động."
+            : result.reason === "secondary_assignee_invalid"
+              ? "Nhân viên phụ phải là người dùng Telesale đang hoạt động trong phạm vi được phép."
             : "Ngành đăng ký hoặc trạng thái hồ sơ không tồn tại.",
         });
         return;

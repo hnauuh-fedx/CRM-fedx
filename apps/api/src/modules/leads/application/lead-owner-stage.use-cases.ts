@@ -321,22 +321,18 @@ export async function assignVisibleLead(
         id: assigneeId,
         status: "active",
         deleted_at: null,
-        user_roles: {
+        user_program_roles: {
           some: {
-            roles: {
-              ...(institutionProgramId
-                ? { role_institution_programs: { some: { institution_program_id: institutionProgramId } } }
-                : {}),
+            ...(institutionProgramId ? { institution_program_id: institutionProgramId } : {}),
+          roles: {
               role_permissions: {
                 some: { permissions: { code: "lead.view_assigned" } },
               },
             },
           },
           none: {
-            roles: {
-              ...(institutionProgramId
-                ? { role_institution_programs: { some: { institution_program_id: institutionProgramId } } }
-                : {}),
+            ...(institutionProgramId ? { institution_program_id: institutionProgramId } : {}),
+          roles: {
               role_permissions: {
                 some: { permissions: { code: { in: ["lead.view_department", "lead.view_all"] } } },
               },
@@ -406,6 +402,11 @@ export async function assignVisibleLead(
     await tx.leads.update({
       where: { id: leadId },
       data: { assigned_to: assignee.id, updated_at: new Date() },
+    });
+    // The new main assignee cannot also remain the secondary assignee.
+    await tx.leads.updateMany({
+      where: { id: leadId, secondary_assigned_to: assignee.id },
+      data: { secondary_assigned_to: null },
     });
     await tx.lead_activities.create({
       data: {

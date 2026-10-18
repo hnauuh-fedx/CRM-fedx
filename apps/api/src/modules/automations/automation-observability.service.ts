@@ -728,7 +728,7 @@ export async function listAutomationOwnerCandidates(user: AuthUser, ruleId: stri
           { email: { contains: search, mode: "insensitive" } },
         ],
       } : {}),
-      user_roles: {
+      user_program_roles: {
         some: {
           roles: {
             role_permissions: {

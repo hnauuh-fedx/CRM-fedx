@@ -112,6 +112,7 @@ function getAutomationLeadTagScopeSql(user: AuthUser, institutionProgramId?: str
   return Prisma.sql`
     AND (
       l.assigned_to = ${user.id}::uuid
+      OR l.secondary_assigned_to = ${user.id}::uuid
       OR EXISTS (
         SELECT 1
         FROM lead_assignments user_assignment
@@ -946,7 +947,7 @@ export async function getAutomationOptions(user: AuthUser, institutionProgramId?
             status: "active",
             deleted_at: null,
             ...(resolvedInstitutionProgramId
-              ? { user_roles: { some: { roles: { role_institution_programs: { some: { institution_program_id: resolvedInstitutionProgramId } } } } } }
+              ? { user_program_roles: { some: { institution_program_id: resolvedInstitutionProgramId } } }
               : {}),
           },
           select: { id: true, full_name: true, user_departments: { select: { department_id: true } } },
@@ -959,7 +960,7 @@ export async function getAutomationOptions(user: AuthUser, institutionProgramId?
               status: "active",
               deleted_at: null,
               ...(resolvedInstitutionProgramId
-                ? { user_roles: { some: { roles: { role_institution_programs: { some: { institution_program_id: resolvedInstitutionProgramId } } } } } }
+                ? { user_program_roles: { some: { institution_program_id: resolvedInstitutionProgramId } } }
                 : {}),
               user_departments: { some: { department_id: { in: user.departmentIds } } },
             },
@@ -976,14 +977,14 @@ export async function getAutomationOptions(user: AuthUser, institutionProgramId?
           where: {
             status: "active",
             deleted_at: null,
-            user_roles: { some: { roles: { role_institution_programs: { some: { institution_program_id: resolvedInstitutionProgramId } } } } },
+            user_program_roles: { some: { institution_program_id: resolvedInstitutionProgramId } },
           },
           select: {
             id: true,
             full_name: true,
             user_departments: { select: { department_id: true } },
-            user_roles: {
-              where: { roles: { role_institution_programs: { some: { institution_program_id: resolvedInstitutionProgramId } } } },
+            user_program_roles: {
+              where: { institution_program_id: resolvedInstitutionProgramId },
               select: { roles: { select: { role_permissions: { select: { permissions: { select: { code: true } } } } } } },
             },
           },
@@ -1015,7 +1016,7 @@ export async function getAutomationOptions(user: AuthUser, institutionProgramId?
     prisma.lead_sources.findMany({
       where: {
         ...(resolvedInstitutionProgramId
-          ? { OR: [{ institution_program_id: resolvedInstitutionProgramId }, { institution_program_id: null }] }
+          ? { institution_program_id: resolvedInstitutionProgramId }
           : accessibleProgramIds === null
             ? {}
             : { leads: { some: scopedLeadWhere } }),
@@ -1117,8 +1118,8 @@ export async function getAutomationOptions(user: AuthUser, institutionProgramId?
       fullName: assignee.full_name,
       assignedCount: assignmentCounts.find((item) => item.assigned_to === assignee.id)?._count._all ?? 0,
       departmentIds: assignee.user_departments.map((membership) => membership.department_id),
-      canReceiveLead: assignee.user_roles.some((membership) => membership.roles?.role_permissions.some((permission) => permission.permissions?.code === "lead.view_assigned"))
-        && !assignee.user_roles.some((membership) => membership.roles?.role_permissions.some((permission) => ["lead.view_department", "lead.view_all"].includes(permission.permissions?.code ?? "")))
+      canReceiveLead: assignee.user_program_roles.some((membership) => membership.roles?.role_permissions.some((permission) => permission.permissions?.code === "lead.view_assigned"))
+        && !assignee.user_program_roles.some((membership) => membership.roles?.role_permissions.some((permission) => ["lead.view_department", "lead.view_all"].includes(permission.permissions?.code ?? "")))
         && (canBrowseAllAssignees
           || ((user.accessScope === "DEPARTMENT" || user.permissions.includes("lead.view_department"))
             ? assignee.user_departments.some((membership) => membership.department_id && user.departmentIds.includes(membership.department_id))

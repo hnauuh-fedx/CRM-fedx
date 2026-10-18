@@ -52,7 +52,7 @@ export async function getPersonalDashboardConfig(user: AuthUser, institutionProg
       where: {
         user_id: user.id,
         institution_program_id: institutionProgramId,
-        personal_reports: { archived_at: null, module: { in: allowedModules }, OR: [{ owner_id: user.id }, { is_shared: true }] },
+        personal_reports: { institution_program_id: institutionProgramId, archived_at: null, module: { in: allowedModules }, OR: [{ owner_id: user.id }, { is_shared: true }] },
       },
       select: { personal_report_id: true },
       orderBy: [{ display_order: "asc" }, { id: "asc" }],
@@ -134,7 +134,7 @@ export async function getPersonalDashboard(user: AuthUser, institutionProgramId:
   if (!config) return null;
   const [widgets, kpiWidgets] = await Promise.all([
     Promise.all(config.reportIds.map(async (reportId) => {
-      const result = await executePersonalReport(user, reportId);
+      const result = await executePersonalReport(user, reportId, institutionProgramId);
       return result ? { reportId, result } : null;
     })).then((items) => items.filter((item): item is NonNullable<typeof item> => item !== null)),
     Promise.all(config.kpiWidgets.map((widget) => executeKpiWidget(user, institutionProgramId, widget, config.pipelineStages))),
@@ -151,7 +151,7 @@ async function validateDashboardCustomization(user: AuthUser, customization: Per
   return customization.kpiWidgets.every((widget) => {
     const dataset = personalReportDatasetDefinitions[widget.datasetKey];
     if (!dataset || !canUseReportModule(user, dataset.module) || !validateConditions(dataset, widget.conditions)) return false;
-    if (widget.conditions.some((condition) => condition.operator === "GREATER_THAN_OR_EQUAL" && !stageById.has(condition.value ?? ""))) return false;
+    if (widget.conditions.some((condition) => ["GREATER_THAN_OR_EQUAL", "LESS_THAN_OR_EQUAL"].includes(condition.operator) && !stageById.has(condition.value ?? ""))) return false;
     if (widget.title && widget.title.trim().length > 120) return false;
     if (widget.type === "COUNT") return true;
     if (widget.type === "TREND") {
@@ -264,9 +264,13 @@ function describeFilters(widget: DashboardKpiWidgetInput, fallback: string, stag
     if (!field) return null;
     if (condition.operator === "DATE_PRESET") return `${field.label}: ${datePresetLabel(condition.value)}`;
     if (condition.operator === "DATE_BETWEEN") return `${field.label}: từ ${formatDate(condition.fromDate)} đến ${formatDate(condition.toDate)}`;
-    if (condition.operator === "GREATER_THAN_OR_EQUAL") {
+    if (condition.operator === "IS_NOT_EMPTY") return `${field.label}: có dữ liệu`;
+    if (condition.operator === "IS_EMPTY") return `${field.label}: không có dữ liệu`;
+    if (["GREATER_THAN_OR_EQUAL", "LESS_THAN_OR_EQUAL"].includes(condition.operator)) {
       const stage = stages.find((item) => item.id === condition.value);
-      return `${field.label} từ “${stage?.name ?? "giai đoạn đã chọn"}” trở đi`;
+      return condition.operator === "LESS_THAN_OR_EQUAL"
+        ? `${field.label} đến “${stage?.name ?? "giai đoạn đã chọn"}” trở về trước`
+        : `${field.label} từ “${stage?.name ?? "giai đoạn đã chọn"}” trở đi`;
     }
     return `${field.label} ${condition.operator === "NOT_EQUALS" ? "không bằng" : "bằng"} “${condition.value ?? ""}”`;
   }).filter(Boolean);

@@ -97,10 +97,12 @@ const defaultHeader = {
     "Theo dõi KPI và các báo cáo bạn đã chọn, trong đúng chương trình và phạm vi dữ liệu được cấp.",
 };
 
-export function StatisticsDashboardPage({
-  readOnly = false,
-  header = defaultHeader,
-}: StatisticsDashboardPageProps = {}) {
+export function StatisticsDashboardPage(props: StatisticsDashboardPageProps = {}) {
+  const { selectedProgramId } = useInstitutionProgram();
+  return <StatisticsDashboardWorkspace key={selectedProgramId ?? "no-program"} {...props} />;
+}
+
+function StatisticsDashboardWorkspace({ readOnly = false, header = defaultHeader }: StatisticsDashboardPageProps) {
   const auth = useAuth();
   const queryClient = useQueryClient();
   const { selectedProgramId } = useInstitutionProgram();
@@ -118,7 +120,7 @@ export function StatisticsDashboardPage({
     enabled: Boolean(auth.accessToken && selectedProgramId),
   });
   const optionsQuery = useQuery({
-    queryKey: ["reports", "personal", "options"],
+    queryKey: ["reports", "personal", "options", selectedProgramId],
     queryFn: () => getPersonalReportOptions(auth.accessToken!),
     enabled: Boolean(auth.accessToken && !readOnly),
   });

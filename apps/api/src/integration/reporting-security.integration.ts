@@ -25,11 +25,13 @@ async function main() {
   assert.deepEqual(resolveReportingScopeKeys({ ...baseUser, accessScope: "OWNED_ONLY" }), [`OWNED:${baseUser.id}`]);
   assert.deepEqual(resolveReportingScopeKeys({ ...baseUser, accessScope: "DEPARTMENT" }), [`DEPARTMENT:${baseUser.departmentIds[0]}`]);
   assert.deepEqual(resolveReportingScopeKeys({ ...baseUser, accessScope: "ALL", permissions: [...baseUser.permissions, "report.view_all"] }), ["ALL"]);
-  assert.equal(validatePersonalReportInput(baseUser, { name: "KPI cá nhân", module: "SALE", metricKeys: ["totalLeads"], chartType: "KPI" }).ok, true);
+  assert.equal(validatePersonalReportInput(baseUser, { name: "KPI cá nhân", module: "SALE", metricKeys: ["totalLeads"], chartType: "KPI", institutionProgramId: baseUser.institutionProgramIds[0] }).ok, true);
   assert.equal(validatePersonalReportInput(baseUser, { name: "KPI không hợp lệ", module: "SALE", metricKeys: ["phone"], chartType: "TABLE" }).ok, false);
   assert.equal(validatePersonalReportInput(baseUser, { name: "KPI trái module", module: "MARKETING", metricKeys: ["leadCount"], chartType: "TABLE" }).ok, false);
+  assert.equal(validatePersonalReportInput(baseUser, { name: "Báo cáo thiếu chương trình", module: "SALE", metricKeys: ["totalLeads"], chartType: "KPI" }).ok, false);
   const validPivot = {
     name: "Khách hàng theo nguồn và ngày tạo",
+    institutionProgramId: baseUser.institutionProgramIds[0],
     mode: "PIVOT" as const,
     module: "SALE" as const,
     metricKeys: ["totalLeads"],

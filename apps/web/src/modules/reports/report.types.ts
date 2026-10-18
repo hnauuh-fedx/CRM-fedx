@@ -25,7 +25,7 @@ export type PersonalReportDateGranularity = "DAY" | "WEEK" | "MONTH" | "QUARTER"
 export type PersonalReportDatasetKey = "LEADS" | "QUALIFIED_LEADS" | "STUDENTS";
 export type PersonalReportFilterCondition = {
   fieldKey: string;
-  operator: "EQUALS" | "NOT_EQUALS" | "GREATER_THAN_OR_EQUAL" | "DATE_PRESET" | "DATE_BETWEEN";
+  operator: "EQUALS" | "NOT_EQUALS" | "GREATER_THAN_OR_EQUAL" | "LESS_THAN_OR_EQUAL" | "IS_NOT_EMPTY" | "IS_EMPTY" | "DATE_PRESET" | "DATE_BETWEEN";
   value?: string;
   fromDate?: string;
   toDate?: string;

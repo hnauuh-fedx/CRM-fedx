@@ -62,7 +62,7 @@ const serviceUpdateBodySchema = z.object({
 }) satisfies z.ZodType<StudentServiceUpdateInput>;
 
 const studentUpdateSchema = z.object({
-  status: z.string().trim().min(1).max(50),
+  status: z.string().trim().min(1).max(50).refine((value) => value !== "candidate", "Vui lòng dùng thao tác chuyển trở lại ứng viên."),
   classId: z.uuid().optional().or(z.literal("")).transform((value) => value || undefined),
 });
 

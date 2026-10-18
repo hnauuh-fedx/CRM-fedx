@@ -1,6 +1,6 @@
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { Pencil } from "lucide-react";
-import { useEffect, useMemo, useState, type KeyboardEvent } from "react";
+import { useEffect, useMemo, useState, type KeyboardEvent, type ReactNode } from "react";
 
 import { Button } from "@/components/ui/button";
 import {
@@ -25,11 +25,9 @@ import { useAuth } from "@/modules/auth/auth-context";
 import { ApiError } from "@/services/api";
 import { updateLead } from "@/services/lead.service";
 import { toLeadFormOptions, toLeadFormValues } from "../lead-form.helpers";
-import type {
-  LeadActionOptions,
-  LeadDetail,
-  LeadFormInput,
-} from "../lead.types";
+import { LeadAssigneeLines, LeadAssigneeSelects } from "./lead-assignee";
+import { CopyPhoneButton, LeadPhoneLines, nonStandardPhoneClass } from "./lead-phone";
+import type { LeadActionOptions, LeadDetail, LeadFormInput } from "../lead.types";
 
 type EditableField =
   | "fullName"
@@ -57,10 +55,8 @@ function formatDate(value: string | null) {
 
 function validateDraft(values: LeadFormInput): FieldErrors {
   const errors: FieldErrors = {};
-  if (values.fullName.trim().length < 2)
-    errors.fullName = "Vui lòng nhập họ và tên ứng viên.";
-  if (!/^\d{10}$/.test(values.phone.trim()))
-    errors.phone = "Số điện thoại phải gồm đúng 10 chữ số.";
+  if (values.fullName.trim().length < 2) errors.fullName = "Vui lòng nhập họ và tên ứng viên.";
+  if (!values.phone.trim()) errors.phone = "Vui lòng nhập số điện thoại.";
   if (!values.sourceId) errors.sourceId = "Vui lòng chọn nguồn học viên.";
   if (values.email && !/^\S+@\S+\.\S+$/.test(values.email.trim()))
     errors.email = "Email không hợp lệ.";
@@ -72,11 +68,13 @@ function ReadonlyValue({
   value,
   editable = false,
   onEdit,
+  children,
 }: {
   label: string;
   value: string;
   editable?: boolean;
   onEdit?: () => void;
+  children?: ReactNode;
 }) {
   const handleKeyDown = (event: KeyboardEvent<HTMLDivElement>) => {
     if (editable && (event.key === "Enter" || event.key === " ")) {
@@ -108,7 +106,7 @@ function ReadonlyValue({
       }
     >
       <dt className="text-sm text-muted-foreground">{label}</dt>
-      <dd className="mt-1 text-sm font-medium">{value}</dd>
+      <dd className="mt-1 text-sm font-medium">{children ?? value}</dd>
     </div>
   );
 }
@@ -230,18 +228,10 @@ export function InlineLeadSummaryCard({
       setErrors((current) => ({ ...current, [field]: undefined }));
   };
 
-  const editableValue = (
-    field: EditableField,
-    label: string,
-    value: string,
-  ) => (
-    <ReadonlyValue
-      label={label}
-      value={value}
-      editable={canUpdate}
-      onEdit={() => startEditingField(field)}
-    />
+  const editableValue = (field: EditableField, label: string, value: string, children?: ReactNode) => (
+    <ReadonlyValue label={label} value={value} editable={canUpdate} onEdit={() => startEditingField(field)}>{children}</ReadonlyValue>
   );
+  const secondaryPhones = draft.secondaryPhones ?? [];
 
   return (
     <Card className="border-border/70 shadow-xs">
@@ -293,36 +283,96 @@ export function InlineLeadSummaryCard({
           </p>
         )}
         <dl className="grid gap-4 sm:grid-cols-2 xl:grid-cols-1 2xl:grid-cols-2">
-          <LeadContactFields
-            isEditing={isEditing}
-            errors={errors}
-            draft={draft}
-            update={update}
-            lastOpenedField={lastOpenedField}
-            editableValue={editableValue}
-            lead={lead}
-          />
-          <LeadOwnershipFields
-            lead={lead}
-            isEditing={isEditing}
-            errors={errors}
-            draft={draft}
-            update={update}
-            lastOpenedField={lastOpenedField}
-            editOptions={editOptions}
-            editableValue={editableValue}
-            canAssign={canAssign}
-            canUpdate={canUpdate}
-            startEditingField={startEditingField}
-          />
-          <ReadonlyValue
-            label="Chương trình"
-            value={
-              lead.institutionProgram
-                ? `${lead.institutionProgram.name} · ${lead.institutionProgram.institutionName}`
-                : "Chưa chọn"
-            }
-          />
+          {isEditing("fullName") ? (
+            <InlineField id="inline-lead-full-name" label="Họ và tên" error={errors.fullName}>
+              <Input id="inline-lead-full-name" value={draft.fullName} onChange={(event) => update("fullName", event.target.value)} autoComplete="name" aria-invalid={Boolean(errors.fullName)} autoFocus={lastOpenedField === "fullName"} />
+            </InlineField>
+          ) : editableValue("fullName", "Họ và tên", lead.fullName)}
+
+          {isEditing("phone") ? (
+            <InlineField id="inline-lead-phone" label="Số điện thoại" error={errors.phone}>
+              <div className="flex flex-col gap-2">
+                <div className="flex items-center gap-1">
+                  <Input id="inline-lead-phone" type="tel" inputMode="numeric" value={draft.phone} onChange={(event) => update("phone", event.target.value)} autoComplete="tel" aria-invalid={Boolean(errors.phone)} autoFocus={lastOpenedField === "phone"} className={nonStandardPhoneClass(draft.phone)} />
+                  {draft.phone.trim() && <CopyPhoneButton phone={draft.phone.trim()} />}
+                </div>
+                {secondaryPhones.map((phone, index) => (
+                  <div key={index} className="flex items-center gap-1">
+                    <Input
+                      type="tel"
+                      inputMode="numeric"
+                      value={phone}
+                      onChange={(event) => update("secondaryPhones", secondaryPhones.map((item, itemIndex) => itemIndex === index ? event.target.value : item))}
+                      aria-label={`Số điện thoại ${index + 2}`}
+                      className={nonStandardPhoneClass(phone)}
+                    />
+                    {phone.trim() && <CopyPhoneButton phone={phone.trim()} />}
+                  </div>
+                ))}
+              </div>
+            </InlineField>
+          ) : editableValue("phone", "Số điện thoại", [lead.phone, ...(lead.secondaryPhones ?? [])].filter(Boolean).join(", ") || "Chưa cập nhật", <LeadPhoneLines lead={lead} />)}
+
+          {isEditing("email") ? (
+            <InlineField id="inline-lead-email" label="Email" error={errors.email}>
+              <Input id="inline-lead-email" type="email" value={draft.email} onChange={(event) => update("email", event.target.value)} autoComplete="email" aria-invalid={Boolean(errors.email)} autoFocus={lastOpenedField === "email"} />
+            </InlineField>
+          ) : editableValue("email", "Email", lead.email ?? "Chưa cập nhật")}
+
+          {isEditing("dateOfBirth") ? (
+            <InlineField id="inline-lead-date-of-birth" label="Ngày sinh">
+              <Input id="inline-lead-date-of-birth" type="date" value={draft.dateOfBirth} onChange={(event) => update("dateOfBirth", event.target.value)} autoFocus={lastOpenedField === "dateOfBirth"} />
+            </InlineField>
+          ) : editableValue("dateOfBirth", "Ngày sinh", formatDate(lead.dateOfBirth))}
+
+          {isEditing("currentAddress") ? (
+            <InlineField id="inline-lead-current-address" label="Địa chỉ">
+              <Input id="inline-lead-current-address" value={draft.currentAddress} onChange={(event) => update("currentAddress", event.target.value)} autoComplete="street-address" autoFocus={lastOpenedField === "currentAddress"} />
+            </InlineField>
+          ) : editableValue("currentAddress", "Địa chỉ", lead.currentAddress ?? lead.specificAddress ?? "Chưa cập nhật")}
+
+          <ReadonlyValue label="Nhóm nguồn" value={lead.origin?.name ?? "Chưa cập nhật"} />
+
+          {isEditing("sourceId") ? (
+            <InlineField id="inline-lead-source" label="Nguồn học viên" error={errors.sourceId}>
+              <Select value={draft.sourceId} onValueChange={(value) => update("sourceId", value)}>
+                <SelectTrigger id="inline-lead-source" className="w-full" aria-invalid={Boolean(errors.sourceId)} autoFocus={lastOpenedField === "sourceId"}><SelectValue placeholder="Chọn nguồn học viên" /></SelectTrigger>
+                <SelectContent><SelectGroup>{editOptions.sources.map((source) => <SelectItem key={source.id} value={source.id}>{source.name}</SelectItem>)}</SelectGroup></SelectContent>
+              </Select>
+            </InlineField>
+          ) : editableValue("sourceId", "Nguồn học viên", lead.source?.name ?? "Chưa chọn")}
+
+          <ReadonlyValue label="Tiến trình" value={lead.pipelineStage?.name ?? "Chưa cập nhật"} />
+
+          {canAssign && isEditing("assigneeId") ? (
+            <div className="flex flex-col gap-3">
+              <LeadAssigneeSelects
+                idPrefix="inline-lead-assignee"
+                primaryId={draft.assigneeId}
+                secondaryId={draft.secondaryAssigneeId ?? ""}
+                options={editOptions.telesales}
+                autoFocus={lastOpenedField === "assigneeId"}
+                onChange={({ primaryId, secondaryId }) => setDraft((current) => ({ ...current, assigneeId: primaryId, secondaryAssigneeId: secondaryId }))}
+              />
+            </div>
+          ) : (
+            <ReadonlyValue
+              label="Nhân viên phụ trách"
+              value={[lead.assignee?.fullName, lead.secondaryAssignee?.fullName].filter(Boolean).join(", ") || "Chưa phân công"}
+              editable={canUpdate && canAssign}
+              onEdit={() => startEditingField("assigneeId")}
+            >
+              <LeadAssigneeLines lead={lead} />
+            </ReadonlyValue>
+          )}
+
+          {isEditing("temperature") ? (
+            <InlineField id="inline-lead-temperature" label="Mức độ quan tâm">
+              <Input id="inline-lead-temperature" value={draft.temperature} onChange={(event) => update("temperature", event.target.value)} autoFocus={lastOpenedField === "temperature"} />
+            </InlineField>
+          ) : editableValue("temperature", "Mức độ quan tâm", lead.temperature ?? "-")}
+
+          <ReadonlyValue label="Chương trình" value={lead.institutionProgram ? `${lead.institutionProgram.name} · ${lead.institutionProgram.institutionName}` : "Chưa chọn"} />
 
           {isEditing("majorId") ? (
             <InlineField id="inline-lead-major" label="Ngành đăng ký">
@@ -379,279 +429,5 @@ export function InlineLeadSummaryCard({
         </dl>
       </CardContent>
     </Card>
-  );
-}
-
-type LeadContactFieldsProps = {
-  isEditing: (field: EditableField) => boolean;
-  errors: Partial<Record<EditableField, string>>;
-  draft: LeadFormInput;
-  update: <K extends keyof LeadFormInput>(
-    field: K,
-    value: LeadFormInput[K],
-  ) => void;
-  lastOpenedField: EditableField | null;
-  editableValue: (
-    field: EditableField,
-    label: string,
-    value: string,
-  ) => import("react/jsx-runtime").JSX.Element;
-  lead: LeadDetail;
-};
-
-function LeadContactFields({
-  isEditing,
-  errors,
-  draft,
-  update,
-  lastOpenedField,
-  editableValue,
-  lead,
-}: LeadContactFieldsProps) {
-  return (
-    <>
-      {isEditing("fullName") ? (
-        <InlineField
-          id="inline-lead-full-name"
-          label="Họ và tên"
-          error={errors.fullName}
-        >
-          <Input
-            id="inline-lead-full-name"
-            value={draft.fullName}
-            onChange={(event) => update("fullName", event.target.value)}
-            autoComplete="name"
-            aria-invalid={Boolean(errors.fullName)}
-            autoFocus={lastOpenedField === "fullName"}
-          />
-        </InlineField>
-      ) : (
-        editableValue("fullName", "Họ và tên", lead.fullName)
-      )}
-
-      {isEditing("phone") ? (
-        <InlineField
-          id="inline-lead-phone"
-          label="Số điện thoại"
-          error={errors.phone}
-        >
-          <Input
-            id="inline-lead-phone"
-            type="tel"
-            inputMode="numeric"
-            value={draft.phone}
-            onChange={(event) => update("phone", event.target.value)}
-            autoComplete="tel"
-            aria-invalid={Boolean(errors.phone)}
-            autoFocus={lastOpenedField === "phone"}
-          />
-        </InlineField>
-      ) : (
-        editableValue("phone", "Số điện thoại", lead.phone ?? "Chưa cập nhật")
-      )}
-
-      {isEditing("email") ? (
-        <InlineField id="inline-lead-email" label="Email" error={errors.email}>
-          <Input
-            id="inline-lead-email"
-            type="email"
-            value={draft.email}
-            onChange={(event) => update("email", event.target.value)}
-            autoComplete="email"
-            aria-invalid={Boolean(errors.email)}
-            autoFocus={lastOpenedField === "email"}
-          />
-        </InlineField>
-      ) : (
-        editableValue("email", "Email", lead.email ?? "Chưa cập nhật")
-      )}
-
-      {isEditing("dateOfBirth") ? (
-        <InlineField id="inline-lead-date-of-birth" label="Ngày sinh">
-          <Input
-            id="inline-lead-date-of-birth"
-            type="date"
-            value={draft.dateOfBirth}
-            onChange={(event) => update("dateOfBirth", event.target.value)}
-            autoFocus={lastOpenedField === "dateOfBirth"}
-          />
-        </InlineField>
-      ) : (
-        editableValue("dateOfBirth", "Ngày sinh", formatDate(lead.dateOfBirth))
-      )}
-
-      {isEditing("currentAddress") ? (
-        <InlineField id="inline-lead-current-address" label="Địa chỉ">
-          <Input
-            id="inline-lead-current-address"
-            value={draft.currentAddress}
-            onChange={(event) => update("currentAddress", event.target.value)}
-            autoComplete="street-address"
-            autoFocus={lastOpenedField === "currentAddress"}
-          />
-        </InlineField>
-      ) : (
-        editableValue(
-          "currentAddress",
-          "Địa chỉ",
-          lead.currentAddress ?? lead.specificAddress ?? "Chưa cập nhật",
-        )
-      )}
-    </>
-  );
-}
-
-type LeadOwnershipFieldsProps = {
-  lead: LeadDetail;
-  isEditing: (field: EditableField) => boolean;
-  errors: Partial<Record<EditableField, string>>;
-  draft: LeadFormInput;
-  update: <K extends keyof LeadFormInput>(
-    field: K,
-    value: LeadFormInput[K],
-  ) => void;
-  lastOpenedField: EditableField | null;
-  editOptions: {
-    sources: { id: string; name: string }[];
-    stages: {
-      id: string;
-      name: string;
-      color: string | null;
-      pipelineId: string | null;
-      pipelineName: string | null;
-    }[];
-    telesales: { id: string; fullName: string }[];
-    institutionPrograms: {
-      id: string;
-      name: string;
-      code: string;
-      institutionName: string;
-    }[];
-    majors: { id: string; name: string; code: string | null }[];
-    admissionStatuses: { id: string; name: string }[];
-    tags: string[];
-    systemFieldRequirements: Record<string, boolean>;
-  };
-  editableValue: (
-    field: EditableField,
-    label: string,
-    value: string,
-  ) => import("react/jsx-runtime").JSX.Element;
-  canAssign: boolean;
-  canUpdate: boolean;
-  startEditingField: (field: EditableField) => void;
-};
-
-function LeadOwnershipFields({
-  lead,
-  isEditing,
-  errors,
-  draft,
-  update,
-  lastOpenedField,
-  editOptions,
-  editableValue,
-  canAssign,
-  canUpdate,
-  startEditingField,
-}: LeadOwnershipFieldsProps) {
-  return (
-    <>
-      <ReadonlyValue
-        label="Nhóm nguồn"
-        value={lead.origin?.name ?? "Chưa cập nhật"}
-      />
-
-      {isEditing("sourceId") ? (
-        <InlineField
-          id="inline-lead-source"
-          label="Nguồn học viên"
-          error={errors.sourceId}
-        >
-          <Select
-            value={draft.sourceId}
-            onValueChange={(value) => update("sourceId", value)}
-          >
-            <SelectTrigger
-              id="inline-lead-source"
-              className="w-full"
-              aria-invalid={Boolean(errors.sourceId)}
-              autoFocus={lastOpenedField === "sourceId"}
-            >
-              <SelectValue placeholder="Chọn nguồn học viên" />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectGroup>
-                {editOptions.sources.map((source) => (
-                  <SelectItem key={source.id} value={source.id}>
-                    {source.name}
-                  </SelectItem>
-                ))}
-              </SelectGroup>
-            </SelectContent>
-          </Select>
-        </InlineField>
-      ) : (
-        editableValue(
-          "sourceId",
-          "Nguồn học viên",
-          lead.source?.name ?? "Chưa chọn",
-        )
-      )}
-
-      <ReadonlyValue
-        label="Tiến trình"
-        value={lead.pipelineStage?.name ?? "Chưa cập nhật"}
-      />
-
-      {canAssign && isEditing("assigneeId") ? (
-        <InlineField id="inline-lead-assignee" label="Nhân viên phụ trách">
-          <Select
-            value={draft.assigneeId || "__empty__"}
-            onValueChange={(value) =>
-              update("assigneeId", value === "__empty__" ? "" : value)
-            }
-          >
-            <SelectTrigger
-              id="inline-lead-assignee"
-              className="w-full"
-              autoFocus={lastOpenedField === "assigneeId"}
-            >
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectGroup>
-                <SelectItem value="__empty__">Chưa phân công</SelectItem>
-                {editOptions.telesales.map((user) => (
-                  <SelectItem key={user.id} value={user.id}>
-                    {user.fullName}
-                  </SelectItem>
-                ))}
-              </SelectGroup>
-            </SelectContent>
-          </Select>
-        </InlineField>
-      ) : (
-        <ReadonlyValue
-          label="Nhân viên phụ trách"
-          value={lead.assignee?.fullName ?? "Chưa phân công"}
-          editable={canUpdate && canAssign}
-          onEdit={() => startEditingField("assigneeId")}
-        />
-      )}
-
-      {isEditing("temperature") ? (
-        <InlineField id="inline-lead-temperature" label="Mức độ quan tâm">
-          <Input
-            id="inline-lead-temperature"
-            value={draft.temperature}
-            onChange={(event) => update("temperature", event.target.value)}
-            autoFocus={lastOpenedField === "temperature"}
-          />
-        </InlineField>
-      ) : (
-        editableValue("temperature", "Mức độ quan tâm", lead.temperature ?? "-")
-      )}
-    </>
   );
 }

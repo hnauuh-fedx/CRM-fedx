@@ -383,6 +383,20 @@ async function seedBusinessData(principals: Awaited<ReturnType<typeof seedAccess
     ),
     skipDuplicates: true,
   });
+  const demoAssignments = [
+    { user_id: director.id, code: "DIRECTOR" },
+    { user_id: manager.id, code: "SALE_MANAGER" },
+    { user_id: telesale.id, code: "TELESALE" },
+    { user_id: telesaleTwo.id, code: "TELESALE" },
+    { user_id: marketing.id, code: "MARKETING_MANAGER" },
+    { user_id: principals.studentService.id, code: "STUDENT_SERVICE" },
+  ];
+  const roleCatalog = await prisma.roles.findMany({ where: { code: { in: demoAssignments.map((item) => item.code) } }, select: { id: true, code: true } });
+  await prisma.user_program_roles.createMany({
+    data: demoAssignments.flatMap((assignment) => institutionPrograms.map((program) => ({
+      user_id: assignment.user_id, role_id: roleCatalog.find((role) => role.code === assignment.code)!.id, institution_program_id: program.id,
+    }))), skipDuplicates: true,
+  });
   const pipeline = await prisma.pipelines.upsert({
     where: { id: ids.pipeline },
     update: { name: "Tiến trình tuyển sinh 2026", module: "sale" },

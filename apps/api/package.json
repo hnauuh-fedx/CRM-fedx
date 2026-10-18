@@ -54,7 +54,18 @@
     "test:meta-webhook": "tsx --test src/modules/integrations/meta/*.test.ts",
     "test:security:reporting": "tsx src/integration/reporting-security.integration.ts",
     "test:integration:reporting-pivot": "tsx src/integration/personal-report-pivot.integration.ts",
-    "test:integration:personal-dashboard": "tsx src/integration/personal-dashboard.integration.ts"
+    "test:integration:personal-dashboard": "tsx src/integration/personal-dashboard.integration.ts",
+    "test:integration:student-conversion": "tsx src/integration/student-conversion.integration.ts",
+    "test:lead-import:bizfly": "tsx --test src/modules/leads/bizfly-lead-import.test.ts",
+    "test:integration:lead-import:bizfly": "tsx src/integration/bizfly-lead-import.integration.ts",
+    "test:integration:lead-source-scope": "tsx src/integration/lead-source-program-scope.integration.ts",
+    "test:integration:user-program-migration": "tsx src/integration/user-program-role-migration.integration.ts",
+    "test:scope": "tsx --test src/modules/auth/access-scope.test.ts src/modules/leads/lead-scope.test.ts",
+    "test:lead-filter": "tsx --test src/modules/leads/lead-filter.service.test.ts src/modules/leads/lead-list-status.test.ts",
+    "test:integration:effective-scope": "tsx src/integration/effective-access-scope.integration.ts",
+    "test:integration:user-program-access": "tsx src/integration/user-program-roles.integration.ts",
+    "db:migrate:user-program-access": "tsx src/maintenance/migrate-user-program-roles.ts",
+    "test:integration:report-program-scope": "tsx src/integration/personal-report-program-scope.integration.ts"
   },
   "dependencies": {
     "@admission-crm/shared": "*",

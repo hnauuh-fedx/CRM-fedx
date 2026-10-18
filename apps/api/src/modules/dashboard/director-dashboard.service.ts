@@ -1,3 +1,4 @@
+import { enrolledStudentWhere } from "../students/student-membership";
 import { prisma } from "../../database/prisma";
 import { Prisma } from "../../generated/prisma/client";
 import { applicationStageLeadWhere } from "../leads/pipeline-stage-semantics";
@@ -30,7 +31,7 @@ export async function getDirectorDashboard(
     leads: { is: { ...activeLeadWhere, ...applicationStageLeadWhere() } },
   };
   const applicationLeadWhere = { ...activeLeadWhere, ...applicationStageLeadWhere() };
-  const studentWhere = institutionProgramId ? { institution_program_id: institutionProgramId } : {};
+  const studentWhere = { ...enrolledStudentWhere, ...(institutionProgramId ? { institution_program_id: institutionProgramId } : {}) };
   const [
     totalLeads,
     totalApplications,

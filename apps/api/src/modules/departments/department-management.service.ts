@@ -44,7 +44,7 @@ async function validateUsers(managerId: string | undefined, memberIds: string[],
       id: { in: ids },
       deleted_at: null,
       status: "active",
-      user_roles: { some: { roles: { role_institution_programs: { some: { institution_program_id: institutionProgramId } } } } },
+      user_program_roles: { some: { institution_program_id: institutionProgramId } },
     },
     select: { id: true },
   });
@@ -57,7 +57,7 @@ function serializeDepartment(department: {
   name: string;
   code: string | null;
   created_at: Date | null;
-  users: { id: string; full_name: string; email: string; user_roles: Array<{ id: string }> } | null;
+  users: { id: string; full_name: string; email: string; user_program_roles: Array<{ user_id: string }> } | null;
   user_departments: Array<{ users: { id: string; full_name: string; email: string } | null }>;
   _count: { user_departments: number; lead_assignments: number };
 }) {
@@ -65,7 +65,7 @@ function serializeDepartment(department: {
     id: department.id,
     name: department.name,
     code: department.code,
-    manager: department.users && department.users.user_roles.length > 0 ? serializeUser(department.users) : null,
+    manager: department.users && department.users.user_program_roles.length > 0 ? serializeUser(department.users) : null,
     members: department.user_departments.flatMap((membership) =>
       membership.users ? [serializeUser(membership.users)] : [],
     ),
@@ -100,21 +100,21 @@ export async function listManagedDepartments(query: DepartmentListQuery, institu
             id: true,
             full_name: true,
             email: true,
-            user_roles: {
-              where: { roles: { role_institution_programs: { some: { institution_program_id: institutionProgramId } } } },
-              select: { id: true },
+            user_program_roles: {
+              where: { institution_program_id: institutionProgramId },
+              select: { user_id: true },
             },
           },
         },
         user_departments: {
-          where: { users: { user_roles: { some: { roles: { role_institution_programs: { some: { institution_program_id: institutionProgramId } } } } } } },
+          where: { users: { user_program_roles: { some: { institution_program_id: institutionProgramId } } } },
           select: { users: { select: { id: true, full_name: true, email: true } } },
           orderBy: { users: { full_name: "asc" } },
         },
         _count: {
           select: {
             user_departments: {
-              where: { users: { user_roles: { some: { roles: { role_institution_programs: { some: { institution_program_id: institutionProgramId } } } } } } },
+              where: { users: { user_program_roles: { some: { institution_program_id: institutionProgramId } } } },
             },
             lead_assignments: true,
           },
@@ -145,7 +145,7 @@ export async function getDepartmentManagementOptions(institutionProgramId: strin
     where: {
       deleted_at: null,
       status: "active",
-      user_roles: { some: { roles: { role_institution_programs: { some: { institution_program_id: institutionProgramId } } } } },
+      user_program_roles: { some: { institution_program_id: institutionProgramId } },
     },
     select: { id: true, full_name: true, email: true },
     orderBy: [{ full_name: "asc" }, { email: "asc" }],
@@ -205,7 +205,7 @@ export async function updateManagedDepartment(actor: AuthUser, id: string, input
           user_id: true,
           users: {
             select: {
-              user_roles: { select: { roles: { select: { role_institution_programs: { select: { institution_program_id: true } } } } } },
+              user_program_roles: { select: { institution_program_id: true } },
             },
           },
         },
@@ -222,8 +222,8 @@ export async function updateManagedDepartment(actor: AuthUser, id: string, input
   const references = await validateUsers(input.managerId, unique(input.memberIds), institutionProgramId);
   if (!references.ok) return references;
   const programMemberIds = existing.user_departments.flatMap((membership) =>
-    membership.users?.user_roles.some((assignment) =>
-      assignment.roles?.role_institution_programs.some((grant) => grant.institution_program_id === institutionProgramId),
+    membership.users?.user_program_roles.some((assignment) =>
+      assignment.institution_program_id === institutionProgramId,
     ) && membership.user_id
       ? [membership.user_id]
       : [],

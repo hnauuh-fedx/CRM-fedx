@@ -1,11 +1,15 @@
+import { isEnrolledStudent, studentMembershipWhere } from "../students/student-membership";
 import type { Prisma } from "../../generated/prisma/client";
 import type { AuthUser } from "../auth/auth.types";
 import { prisma } from "../../database/prisma";
 import {
   ACTIVE_LEAD_STATUS,
+  FAILED_LEAD_STATUS_PREFIX,
   getFailedLeadStageId,
   toLeadLifecycleStatus,
 } from "./domain/lead-lifecycle-status";
+import { buildLeadFilterWhere, type FilterCondition } from "./lead-filter.service";
+import { getLeadCustomFieldDefinitions } from "./lead-custom-fields.service";
 
 export const leadListPermissions = [
   "lead.view_all",
@@ -21,16 +25,19 @@ const sensitiveLeadPermissions = new Set([
 ]);
 
 export type LeadListQuery = {
+  audience?: "candidates" | "students" | "all";
   page: number;
   limit: number;
   search?: string;
   pipelineStageId?: string;
+  status?: "ACTIVE" | "FAIL";
   sourceId?: string;
   majorId?: string;
   institutionProgramId?: string;
   assigneeId?: string;
   fromDate?: string;
   toDate?: string;
+  filterConditions?: FilterCondition[];
   sortBy: "createdAt" | "fullName" | "leadCode" | "pipelineStage";
   sortOrder: "asc" | "desc";
 };
@@ -50,6 +57,18 @@ export function getLeadScopeWhere(
   institutionProgramId?: string,
 ) {
   const permissions = new Set(user.permissions);
+  const assignedScope = {
+    OR: [
+      { assigned_to: user.id },
+      { secondary_assigned_to: user.id },
+      { lead_assignments: { some: { assigned_to: user.id, is_main_owner: true } } },
+    ],
+  };
+  // Scope can restrict an explicit permission, but cannot grant a broader one.
+  if (!permissions.has("lead.view_all") && !permissions.has("lead.view_department")) {
+    return permissions.has("lead.view_assigned") ? assignedScope : { id: "00000000-0000-4000-8000-000000000000" };
+  }
+
 
   if (user.accessScope === "ALL" && permissions.has("lead.view_all")) {
     return {};
@@ -59,7 +78,7 @@ export function getLeadScopeWhere(
     return { owner_id: user.id };
   }
 
-  if (user.accessScope === "DEPARTMENT" || permissions.has("lead.view_department")) {
+  if (["ALL", "DEPARTMENT"].includes(user.accessScope)) {
     if (user.departmentIds.length === 0) return { id: "00000000-0000-4000-8000-000000000000" };
     const departmentScope = {
       lead_assignments: {
@@ -88,23 +107,7 @@ export function getLeadScopeWhere(
     };
   }
 
-  if (!permissions.has("lead.view_assigned") && permissions.has("lead.view_all")) {
-    return {};
-  }
-
-  return {
-    OR: [
-      { assigned_to: user.id },
-      {
-        lead_assignments: {
-          some: {
-            assigned_to: user.id,
-            is_main_owner: true,
-          },
-        },
-      },
-    ],
-  };
+  return assignedScope;
 }
 
 export async function listLeads(
@@ -113,9 +116,12 @@ export async function listLeads(
   additionalWhere?: Prisma.leadsWhereInput,
 ) {
   const canViewSensitive = canViewSensitiveLeadData(user);
+  const conditionWhere = await buildLeadFilterWhere(user, query.filterConditions ?? [], canViewSensitive);
+
   const where = {
     AND: [
       { deleted_at: null },
+      studentMembershipWhere(query.audience),
       getLeadScopeWhere(user, query.institutionProgramId),
       ...(query.search
         ? [
@@ -126,6 +132,7 @@ export async function listLeads(
                 ...(canViewSensitive
                   ? [
                       { phone: { contains: query.search, mode: "insensitive" as const } },
+                      { secondary_phones: { has: query.search.trim() } },
                       { email: { contains: query.search, mode: "insensitive" as const } },
                     ]
                   : []),
@@ -134,6 +141,11 @@ export async function listLeads(
           ]
         : []),
       ...(query.pipelineStageId ? [{ pipeline_stage_id: query.pipelineStageId }] : []),
+      ...(query.status === "FAIL"
+        ? [{ status: { startsWith: FAILED_LEAD_STATUS_PREFIX } }]
+        : query.status === "ACTIVE" || query.pipelineStageId
+          ? [{ status: ACTIVE_LEAD_STATUS }]
+          : []),
       ...(query.sourceId ? [{ source_id: query.sourceId }] : []),
       ...(query.majorId
         ? [{
@@ -144,9 +156,12 @@ export async function listLeads(
           }]
         : []),
       ...(query.institutionProgramId ? [{ institution_program_id: query.institutionProgramId }] : []),
-      ...(query.assigneeId ? [{ assigned_to: query.assigneeId }] : []),
+      ...(query.assigneeId
+        ? [{ OR: [{ assigned_to: query.assigneeId }, { secondary_assigned_to: query.assigneeId }] }]
+        : []),
       ...(query.fromDate ? [{ created_at: { gte: new Date(`${query.fromDate}T00:00:00.000Z`) } }] : []),
       ...(query.toDate ? [{ created_at: { lte: new Date(`${query.toDate}T23:59:59.999Z`) } }] : []),
+      ...(conditionWhere ? [conditionWhere] : []),
       ...(additionalWhere ? [additionalWhere] : []),
     ],
   };
@@ -159,15 +174,23 @@ export async function listLeads(
     prisma.leads.findMany({
       where,
       select: {
+        students: { select: { status: true } },
         id: true,
         lead_code: true,
         full_name: true,
+        status: true,
         phone: true,
+        secondary_phones: true,
         email: true,
         gender: true,
         date_of_birth: true,
         cccd: true,
         note: true,
+        lead_notes: {
+          select: { content: true },
+          orderBy: [{ created_at: "desc" }, { id: "desc" }],
+          take: 1,
+        },
         temperature: true,
         created_at: true,
         majors: { select: { id: true, name: true } },
@@ -189,6 +212,12 @@ export async function listLeads(
           },
         },
         users_leads_assigned_toTousers: {
+          select: {
+            id: true,
+            full_name: true,
+          },
+        },
+        users_leads_secondary_assigned_toTousers: {
           select: {
             id: true,
             full_name: true,
@@ -273,6 +302,17 @@ export async function listLeads(
     tags.push(relation.tags.name);
     tagsByLeadId.set(relation.entity_id, tags);
   }
+  const failedStageIds = [...new Set(items.flatMap((lead) => {
+    const stageId = getFailedLeadStageId(lead.status);
+    return stageId ? [stageId] : [];
+  }))];
+  const failedStages = failedStageIds.length === 0
+    ? []
+    : await prisma.pipeline_stages.findMany({
+        where: { id: { in: failedStageIds } },
+        select: { id: true, name: true },
+      });
+  const failedStageNames = new Map(failedStages.map((stage) => [stage.id, stage.name]));
 
   return {
     data: items.map((lead) => {
@@ -286,10 +326,13 @@ export async function listLeads(
       const admission = lead.admission_profiles;
 
       return {
-        id: lead.id,
+        recordType: isEnrolledStudent(lead.students) ? "student" : "candidate",
+      id: lead.id,
         leadCode: lead.lead_code,
         fullName: lead.full_name,
+        lifecycleStatus: toLeadLifecycleStatus(lead.status, failedStageNames.get(getFailedLeadStageId(lead.status) ?? "")),
         phone: canViewSensitive ? lead.phone : null,
+        secondaryPhones: canViewSensitive ? lead.secondary_phones : [],
         email: canViewSensitive ? lead.email : null,
         gender: lead.gender,
         dateOfBirth: lead.date_of_birth?.toISOString().slice(0, 10) ?? null,
@@ -356,6 +399,7 @@ export async function listLeads(
         gclid: lead.utm_trackings[0]?.gclid ?? null,
         tags: (tagsByLeadId.get(lead.id) ?? []).join(", "),
         note: lead.note,
+        latestNote: lead.lead_notes[0]?.content ?? lead.note,
         temperature: lead.temperature,
         source: lead.lead_sources
           ? { id: lead.lead_sources.id, name: lead.lead_sources.name }
@@ -376,6 +420,12 @@ export async function listLeads(
               fullName: lead.users_leads_assigned_toTousers.full_name,
             }
           : null,
+        secondaryAssignee: lead.users_leads_secondary_assigned_toTousers
+          ? {
+              id: lead.users_leads_secondary_assigned_toTousers.id,
+              fullName: lead.users_leads_secondary_assigned_toTousers.full_name,
+            }
+          : null,
         createdAt: lead.created_at?.toISOString() ?? null,
       };
     }),
@@ -392,6 +442,7 @@ export async function listLeads(
     filters: {
       search: query.search ?? "",
       pipelineStageId: query.pipelineStageId ?? "",
+      status: query.status ?? "",
       sourceId: query.sourceId ?? "",
       majorId: query.majorId ?? "",
       institutionProgramId: query.institutionProgramId ?? "",
@@ -402,14 +453,15 @@ export async function listLeads(
   };
 }
 
-export async function getLeadFilterOptions(user: AuthUser, institutionProgramId?: string) {
+export async function getLeadFilterOptions(user: AuthUser, institutionProgramId?: string, audience?: LeadListQuery["audience"]) {
   const scopeWhere = {
     deleted_at: null,
     ...getLeadScopeWhere(user, institutionProgramId),
+    AND: [studentMembershipWhere(audience)],
     ...(institutionProgramId ? { institution_program_id: institutionProgramId } : {}),
   };
 
-  const [sources, institutionPrograms, assignees, stages, majors, stageCounts, totalLeads] = await prisma.$transaction([
+  const [sources, institutionPrograms, assignees, stages, majors, stageCounts, totalLeads, failedLeads] = await prisma.$transaction([
     prisma.lead_sources.findMany({
       where: { leads: { some: scopeWhere } },
       select: { id: true, name: true },
@@ -455,10 +507,13 @@ export async function getLeadFilterOptions(user: AuthUser, institutionProgramId?
       _count: { _all: true },
     }),
     prisma.leads.count({ where: scopeWhere }),
+    prisma.leads.count({ where: { AND: [scopeWhere, { status: { startsWith: FAILED_LEAD_STATUS_PREFIX } }] } }),
   ]);
   const stageCountById = new Map(
     stageCounts.flatMap((item) => (item.pipeline_stage_id ? [[item.pipeline_stage_id, item._count._all] as const] : [])),
   );
+
+  const customFieldDefinitions = await getLeadCustomFieldDefinitions(user, institutionProgramId ?? null, false);
 
   return {
     sources,
@@ -481,6 +536,8 @@ export async function getLeadFilterOptions(user: AuthUser, institutionProgramId?
     })),
     majors,
     totalLeads,
+    failedLeads,
+    customFields: customFieldDefinitions.fields,
   };
 }
 
@@ -495,6 +552,8 @@ const auditFieldLabels: Record<string, string> = {
 
 function describeLeadChange(action: string, newData: unknown) {
   if (action === "create") return "Tạo Lead mới";
+  if (action === "convert_to_student") return "Chuyển sang học viên";
+  if (action === "revert_to_candidate") return "Chuyển trở lại ứng viên";
   if (action === "source_received") return "Ghi nhận một lần phát sinh nguồn mới";
   if (action === "assign") return "Phân công nhân viên phụ trách";
   if (action === "reassign") return "Thay đổi nhân viên phụ trách";
@@ -522,10 +581,12 @@ export async function getLeadDetail(user: AuthUser, leadId: string, institutionP
       ...(institutionProgramId ? { institution_program_id: institutionProgramId } : {}),
     },
     select: {
+      students: { select: { status: true } },
       id: true,
       lead_code: true,
       full_name: true,
       phone: true,
+      secondary_phones: true,
       email: true,
       gender: true,
       date_of_birth: true,
@@ -554,6 +615,7 @@ export async function getLeadDetail(user: AuthUser, leadId: string, institutionP
       },
       pipeline_stages: { select: { id: true, name: true, color: true } },
       users_leads_assigned_toTousers: { select: { id: true, full_name: true } },
+      users_leads_secondary_assigned_toTousers: { select: { id: true, full_name: true } },
       users_leads_owner_idTousers: { select: { id: true, full_name: true } },
       student_profiles: {
         select: {
@@ -668,7 +730,7 @@ export async function getLeadDetail(user: AuthUser, leadId: string, institutionP
     },
   });
 
-  if (!lead) {
+  if (!lead || (isEnrolledStudent(lead.students) && !user.permissions.some((p) => ["student.view", "student.view_all"].includes(p)))) {
     return null;
   }
   const failedStageId = getFailedLeadStageId(lead.status);
@@ -727,10 +789,12 @@ export async function getLeadDetail(user: AuthUser, leadId: string, institutionP
   const admission = lead.admission_profiles;
 
   return {
-    id: lead.id,
+    recordType: isEnrolledStudent(lead.students) ? "student" : "candidate",
+      id: lead.id,
     leadCode: lead.lead_code,
     fullName: lead.full_name,
     phone: canViewSensitive ? lead.phone : null,
+    secondaryPhones: canViewSensitive ? lead.secondary_phones : [],
     email: canViewSensitive ? lead.email : null,
     gender: lead.gender,
     dateOfBirth: lead.date_of_birth?.toISOString().slice(0, 10) ?? null,
@@ -772,6 +836,12 @@ export async function getLeadDetail(user: AuthUser, leadId: string, institutionP
       ? {
           id: lead.users_leads_assigned_toTousers.id,
           fullName: lead.users_leads_assigned_toTousers.full_name,
+        }
+      : null,
+    secondaryAssignee: lead.users_leads_secondary_assigned_toTousers
+      ? {
+          id: lead.users_leads_secondary_assigned_toTousers.id,
+          fullName: lead.users_leads_secondary_assigned_toTousers.full_name,
         }
       : null,
     owner: lead.users_leads_owner_idTousers

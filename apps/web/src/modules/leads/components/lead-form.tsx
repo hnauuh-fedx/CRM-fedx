@@ -1,3 +1,4 @@
+import { getReadableTextColor, normalizeHexColor } from "../lead-stage-color.helpers";
 import { LeadFormSurface } from "./lead-form-surface";
 import { useLeadSurfaceLayout } from "./use-lead-surface-layout";
 import { useQuery } from "@tanstack/react-query";
@@ -52,6 +53,8 @@ import type {
   LeadFormInput,
 } from "../lead.types";
 import { DynamicFieldRenderer } from "./dynamic-field-renderer";
+import { LeadAssigneeSelects } from "./lead-assignee";
+import { PhoneFields } from "./phone-fields";
 import { useTransitionNotePrompt } from "./transition-note-dialog";
 
 const genderOptions = [
@@ -402,7 +405,7 @@ function useLeadFormSubmission(
     const parsed = leadFormSchema.safeParse(values);
     if (!parsed.success) {
       parsed.error.issues.forEach((issue) => {
-        const field = issue.path[0] as keyof LeadFormInput;
+        const field = issue.path.join(".") as keyof LeadFormInput;
         form.setError(field, { message: issue.message });
       });
     }
@@ -514,32 +517,6 @@ function FormSection({
   );
 }
 
-function normalizeHexColor(value: string | null | undefined, fallback: string) {
-  if (!value) {
-    return fallback;
-  }
-  const trimmed = value.trim();
-  if (/^#[0-9a-fA-F]{6}$/.test(trimmed)) {
-    return trimmed;
-  }
-  if (/^#[0-9a-fA-F]{3}$/.test(trimmed)) {
-    return `#${trimmed
-      .slice(1)
-      .split("")
-      .map((item) => item + item)
-      .join("")}`;
-  }
-  return fallback;
-}
-
-function getReadableTextColor(hexColor: string) {
-  const red = Number.parseInt(hexColor.slice(1, 3), 16);
-  const green = Number.parseInt(hexColor.slice(3, 5), 16);
-  const blue = Number.parseInt(hexColor.slice(5, 7), 16);
-  const luminance = (0.299 * red + 0.587 * green + 0.114 * blue) / 255;
-  return luminance > 0.58 ? "#0f172a" : "#ffffff";
-}
-
 function formatProgressCount(count?: number) {
   return compactNumberFormatter.format(count ?? 0);
 }
@@ -556,6 +533,7 @@ type LeadProgressSelectorProps = {
   clearLabel?: string;
   allOptionLabel?: string;
   allOptionCount?: number;
+  allOptionSelected?: boolean;
   singleRowDesktop?: boolean;
 };
 
@@ -566,6 +544,7 @@ export function LeadProgressSelector({
   clearLabel,
   allOptionLabel,
   allOptionCount,
+  allOptionSelected = !value,
   singleRowDesktop = false,
 }: LeadProgressSelectorProps) {
   if (stages.length === 0) {
@@ -589,21 +568,19 @@ export function LeadProgressSelector({
         {allOptionLabel && (
           <button
             type="button"
-            aria-pressed={!value}
+            aria-pressed={allOptionSelected}
             onClick={() => onChange("")}
             className={`relative flex min-h-14 items-center justify-between gap-2 rounded-md border px-3 py-2 text-left text-xs font-semibold leading-tight transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring ${
               singleRowDesktop ? "min-w-0" : "min-w-36 flex-1"
             } ${
-              !value
+              allOptionSelected
                 ? "border-primary bg-primary text-primary-foreground"
                 : "border-border bg-muted/40 text-muted-foreground hover:border-primary/40 hover:bg-primary/5 hover:text-foreground"
             }`}
           >
             <span className="min-w-0 wrap-break-word">{allOptionLabel}</span>
             {allOptionCount !== undefined && (
-              <span
-                className={`shrink-0 rounded-full px-2 py-0.5 text-[0.7rem] tabular-nums ${!value ? "bg-primary-foreground/20 text-primary-foreground" : "bg-background text-foreground"}`}
-              >
+              <span className={`shrink-0 rounded-full px-2 py-0.5 text-[0.7rem] tabular-nums ${allOptionSelected ? "bg-primary-foreground/20 text-primary-foreground" : "bg-background text-foreground"}`}>
                 {formatProgressCount(allOptionCount)}
               </span>
             )}
@@ -674,6 +651,8 @@ export function LeadProgressSelector({
     </div>
   );
 }
+
+/** Primary phone plus any secondary numbers (e.g. from Bizfly), one row each with a copy action. */
 
 type TextFieldProps = {
   name: keyof LeadFormInput;
@@ -755,17 +734,7 @@ function LeadBasicInformationSection({
           errors={form.formState.errors}
           autoComplete="name"
         />
-        <TextField
-          name="phone"
-          id="lead-phone"
-          label={`Số điện thoại${isRequired("phone") ? " *" : ""}`}
-          register={form.register}
-          errors={form.formState.errors}
-          type="tel"
-          inputMode="numeric"
-          autoComplete="tel"
-          placeholder="Nhập đúng 10 chữ số"
-        />
+        <PhoneFields form={form} label={`S? ?i?n tho?i${isRequired("phone") ? " *" : ""}`} />
         <Field data-invalid={Boolean(form.formState.errors.sourceId)}>
           <FieldLabel htmlFor="lead-form-source">
             Nguồn học viên{isRequired("sourceId") ? " *" : ""}
@@ -1140,29 +1109,12 @@ function LeadCareSection({
     >
       <FieldGroup className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
         {canManageAssignment && (
-          <Field>
-            <FieldLabel htmlFor="lead-assignee">Sale phụ trách</FieldLabel>
-            <Select
-              value={form.watch("assigneeId") || "__empty__"}
-              onValueChange={(value) =>
-                form.setValue("assigneeId", value === "__empty__" ? "" : value)
-              }
-            >
-              <SelectTrigger id="lead-assignee" className="w-full">
-                <SelectValue placeholder="Chọn Sale phụ trách" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectGroup>
-                  <SelectItem value="__empty__">Chưa phân công</SelectItem>
-                  {options.telesales.map((telesale) => (
-                    <SelectItem key={telesale.id} value={telesale.id}>
-                      {telesale.fullName}
-                    </SelectItem>
-                  ))}
-                </SelectGroup>
-              </SelectContent>
-            </Select>
-          </Field>
+          <LeadAssigneeSelects idPrefix="lead-assignee" primaryId={form.watch("assigneeId")}
+            secondaryId={form.watch("secondaryAssigneeId") ?? ""} options={options.telesales}
+            onChange={({ primaryId, secondaryId }) => {
+              form.setValue("assigneeId", primaryId, { shouldDirty: true });
+              form.setValue("secondaryAssigneeId", secondaryId, { shouldDirty: true });
+            }} />
         )}
         <Field>
           <FieldLabel htmlFor="lead-pipeline-stage">

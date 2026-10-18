@@ -12,6 +12,12 @@
     "./automation-assignment": "./src/automation-assignment.ts",
     "./automation-reassignment-policy": "./src/automation-reassignment-policy.ts",
     "./lead-form-field-catalog": "./src/lead-form-field-catalog.ts",
-    "./display-layout": "./src/display-layout.ts"
+    "./display-layout": "./src/display-layout.ts",
+    "./access-scope": "./src/access-scope.ts",
+    "./lead-phone": "./src/lead-phone.ts",
+    "./lead-source": "./src/lead-source.ts"
+  },
+  "dependencies": {
+    "zod": "4.4.3"
   }
 }

@@ -4,6 +4,7 @@ import type { AuthUser } from "../auth/auth.types";
 import { createLead } from "./application/create-lead.use-case";
 import type { LeadInput } from "./domain/lead-input";
 import { prisma } from "../../database/prisma";
+import { readBizflyRows, importBizflyRows } from "./bizfly-lead-import.service";
 
 type ImportRow = Record<string, unknown>;
 
@@ -134,6 +135,8 @@ export async function importLeadsFromWorkbook(
   scopedInstitutionProgramId?: string,
   ipAddress?: string,
 ): Promise<LeadImportResult> {
+  const bizflyRows = readBizflyRows(file);
+  if (bizflyRows) return importBizflyRows(user, bizflyRows, scopedInstitutionProgramId, ipAddress);
   const { headers, rows } = readRows(file);
   validateRequiredHeaders(headers, Boolean(scopedInstitutionProgramId));
   const referenceMaps = await getReferenceMaps(scopedInstitutionProgramId);
@@ -211,7 +214,7 @@ function validateRequiredHeaders(headers: string[], hasScopedInstitutionProgram:
 async function getReferenceMaps(scopedInstitutionProgramId?: string): Promise<ReferenceMaps> {
   const [sources, stages, programs, majors, admissionStatuses] = await prisma.$transaction([
     prisma.lead_sources.findMany({
-      where: scopedInstitutionProgramId ? { OR: [{ institution_program_id: scopedInstitutionProgramId }, { institution_program_id: null }] } : undefined,
+      where: scopedInstitutionProgramId ? { institution_program_id: scopedInstitutionProgramId } : { institution_program_id: { not: null } },
       select: { id: true, name: true },
     }),
     prisma.pipeline_stages.findMany({ select: { id: true, name: true } }),

@@ -1,3 +1,4 @@
+import { useInstitutionProgram } from "@/modules/institutions/institution-program-context";
 import { useQuery } from "@tanstack/react-query";
 import { Plus, Trash2 } from "lucide-react";
 import { useState } from "react";
@@ -206,6 +207,7 @@ function CategoryConditionFields({
   accessToken,
   onChange,
 }: CategoryConditionFieldsProps) {
+  const { selectedProgramId } = useInstitutionProgram();
   const isPipelineStage =
     (dataset.key === "LEADS" || dataset.key === "QUALIFIED_LEADS") &&
     condition.fieldKey === "PIPELINE_STAGE";
@@ -219,6 +221,7 @@ function CategoryConditionFields({
       "reports",
       "personal",
       "filter-values",
+      selectedProgramId,
       dataset.key,
       condition.fieldKey,
     ],

@@ -1,8 +1,8 @@
-import { TablePagination } from "@/components/shared/table-pagination";
 import { useQuery } from "@tanstack/react-query";
 import { ArrowDown, ArrowUp, ArrowUpDown, Search } from "lucide-react";
 import { useMemo, useReducer } from "react";
 
+import { DataPagination } from "@/components/shared/data-pagination";
 import { EmptyState } from "@/components/shared/data-states";
 import { ErrorState } from "@/components/shared/error-state";
 import { FilterSelect } from "@/components/shared/filter-select";
@@ -63,11 +63,13 @@ type BusinessRecordsPageProps<TSort extends string> = {
   ) => Promise<BusinessRecordListResponse<TSort>>;
 };
 
-const pageSize = 20;
+const defaultPageSize = 20;
+const pageSizeOptions = [10, 20, 30, 50, 100];
 const emptyFilters: FilterConfig[] = [];
 
 type BusinessRecordsState<TSort extends string> = {
   page: number;
+  pageSize: number;
   search: string;
   appliedSearch: string;
   filterValues: Record<string, string>;
@@ -82,7 +84,8 @@ type BusinessRecordsAction<TSort extends string> =
   | { type: "applyFilters" }
   | { type: "resetFilters" }
   | { type: "toggleSort"; sortBy: TSort }
-  | { type: "setPage"; page: number };
+  | { type: "setPage"; page: number }
+  | { type: "setPageSize"; pageSize: number };
 
 function businessRecordsReducer<TSort extends string>(
   state: BusinessRecordsState<TSort>,
@@ -107,6 +110,7 @@ function businessRecordsReducer<TSort extends string>(
       return {
         ...state,
         page: 1,
+        pageSize: defaultPageSize,
         search: "",
         appliedSearch: "",
         filterValues: {},
@@ -126,6 +130,8 @@ function businessRecordsReducer<TSort extends string>(
       };
     case "setPage":
       return { ...state, page: action.page };
+    case "setPageSize":
+      return { ...state, page: 1, pageSize: action.pageSize };
     default:
       return state;
   }
@@ -147,6 +153,7 @@ export function BusinessRecordsPage<TSort extends string>({
   const auth = useAuth();
   const [state, dispatch] = useReducer(businessRecordsReducer<TSort>, {
     page: 1,
+    pageSize: defaultPageSize,
     search: "",
     appliedSearch: "",
     filterValues: {},
@@ -158,7 +165,7 @@ export function BusinessRecordsPage<TSort extends string>({
     queryKey: [
       queryKey,
       state.page,
-      pageSize,
+      state.pageSize,
       state.sortBy,
       state.sortOrder,
       state.appliedSearch,
@@ -168,7 +175,7 @@ export function BusinessRecordsPage<TSort extends string>({
       fetchRecords(
         {
           page: state.page,
-          limit: pageSize,
+          limit: state.pageSize,
           search: state.appliedSearch,
           sortBy: state.sortBy,
           sortOrder: state.sortOrder,
@@ -288,11 +295,10 @@ export function BusinessRecordsPage<TSort extends string>({
                           type="button"
                           className="inline-flex min-h-11 items-center gap-2 rounded-md focus-visible:outline-2 focus-visible:outline-ring"
                           onClick={() => {
-                            if (column.sortable)
-                              dispatch({
-                                type: "toggleSort",
-                                sortBy: column.sortable,
-                              });
+                            const sortableKey = column.sortable;
+                            if (sortableKey) {
+                              dispatch({ type: "toggleSort", sortBy: sortableKey });
+                            }
                           }}
                         >
                           {column.label}
@@ -317,10 +323,8 @@ export function BusinessRecordsPage<TSort extends string>({
                 {data.map((row) => (
                   <TableRow key={row.id}>
                     {displayColumns.map((column) => (
-                      <TableCell key={column.key} className="px-5 py-4">
-                        {column.format
-                          ? column.format(row[column.key], row)
-                          : formatCellValue(row[column.key])}
+                      <TableCell key={column.key} className="px-2.5 py-2">
+                        {column.format ? column.format(row[column.key], row) : formatCellValue(row[column.key])}
                       </TableCell>
                     ))}
                   </TableRow>
@@ -330,14 +334,18 @@ export function BusinessRecordsPage<TSort extends string>({
           )}
         </CardContent>
         {pagination && pagination.total > 0 && (
-          <TablePagination
-            page={state.page}
-            pagination={pagination}
+          <DataPagination
+            pagination={{
+              page: pagination.page,
+              totalPages: pagination.totalPages,
+              total: pagination.total,
+              limit: pagination.limit,
+            }}
+            pageSize={state.pageSize}
+            pageSizeOptions={pageSizeOptions}
             isFetching={query.isFetching}
-            onPrevious={() =>
-              dispatch({ type: "setPage", page: Math.max(1, state.page - 1) })
-            }
-            onNext={() => dispatch({ type: "setPage", page: state.page + 1 })}
+            onPageChange={(nextPage) => dispatch({ type: "setPage", page: nextPage })}
+            onPageSizeChange={(nextPageSize) => dispatch({ type: "setPageSize", pageSize: nextPageSize })}
           />
         )}
       </Card>

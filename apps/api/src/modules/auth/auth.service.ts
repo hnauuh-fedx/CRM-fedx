@@ -1,3 +1,4 @@
+import { defaultRoleAccessScope, resolveEffectiveAccessScope } from "@admission-crm/shared/access-scope";
 import { compare } from "bcryptjs";
 import jwt from "jsonwebtoken";
 import { z } from "zod";
@@ -16,8 +17,10 @@ const principalInclude = {
       department_id: true,
     },
   },
-  user_roles: {
+  user_program_roles: {
     select: {
+      institution_program_id: true,
+      institution_programs: { select: { status: true } },
       roles: {
         select: {
           code: true,
@@ -31,14 +34,6 @@ const principalInclude = {
               },
             },
           },
-          role_institution_programs: {
-            select: {
-              institution_program_id: true,
-              institution_programs: {
-                select: { status: true },
-              },
-            },
-          },
           role_access_scopes: {
             select: { scope_code: true },
           },
@@ -48,14 +43,6 @@ const principalInclude = {
     },
   },
 } as const;
-
-function inferAccessScope(roles: string[]): AccessScope {
-  if (roles.includes("DIRECTOR")) return "ALL";
-  if (roles.includes("TELESALE")) return "ASSIGNED_ONLY";
-  if (roles.includes("MARKETING_STAFF")) return "OWNED_ONLY";
-  if (roles.includes("VIEWER")) return "READ_ONLY";
-  return "DEPARTMENT";
-}
 
 async function getStoredAccessScope(userId: string, institutionProgramId?: string): Promise<AccessScope | null> {
   try {
@@ -115,34 +102,24 @@ async function serializeUser(user: {
   full_name: string;
   avatar_url: string | null;
   user_departments: Array<{ department_id: string | null }>;
-  user_roles: Array<{
+  user_program_roles: Array<{
+    institution_program_id: string;
+    institution_programs: { status: string | null };
     roles: {
       id: string;
       code: string;
       role_permissions: Array<{ permissions: { code: string; is_active: boolean | null } | null }>;
-      role_institution_programs: Array<{
-        institution_program_id: string;
-        institution_programs: { status: string | null };
-      }>;
       role_access_scopes: { scope_code: string } | null;
     } | null;
   }>;
 }, requestedProgramId?: string): Promise<AuthUser> {
-  const institutionProgramIds = [
-    ...new Set(
-      user.user_roles.flatMap((assignment) =>
-        assignment.roles?.role_institution_programs.flatMap((grant) =>
-          grant.institution_programs.status === "active" ? [grant.institution_program_id] : [],
-        ) ?? [],
-      ),
-    ),
-  ].sort();
-  const selectedProgramId = requestedProgramId && institutionProgramIds.includes(requestedProgramId) ? requestedProgramId : institutionProgramIds[0];
-  const applicableAssignments = selectedProgramId
-    ? user.user_roles.filter((assignment) => assignment.roles?.role_institution_programs.some(
-        (grant) => grant.institution_program_id === selectedProgramId && grant.institution_programs.status === "active",
-      ))
-    : [];
+  const institutionProgramIds = user.user_program_roles
+    .filter((assignment) => assignment.institution_programs.status === "active")
+    .map((assignment) => assignment.institution_program_id).sort();
+  const selectedProgramId = requestedProgramId ?? institutionProgramIds[0];
+  const applicableAssignments = user.user_program_roles.filter((assignment) =>
+    assignment.institution_program_id === selectedProgramId && assignment.institution_programs.status === "active",
+  );
   const roles = applicableAssignments.flatMap((assignment) =>
     assignment.roles ? [assignment.roles.code] : [],
   );
@@ -175,7 +152,10 @@ async function serializeUser(user: {
     ],
     institutionProgramIds,
     workingInstitutionProgramId: selectedProgramId ?? null,
-    accessScope: (await getStoredAccessScope(user.id, selectedProgramId)) ?? roleScope ?? (await getRoleAccessScope(roleIds)) ?? inferAccessScope(uniqueRoles),
+    accessScope: resolveEffectiveAccessScope(
+      roleScope ?? (await getRoleAccessScope(roleIds)) ?? defaultRoleAccessScope(uniqueRoles),
+      await getStoredAccessScope(user.id, selectedProgramId),
+    ),
   };
 }
 
@@ -254,7 +234,10 @@ export async function loginWithPassword(email: string, password: string, ipAddre
     return null;
   }
 
-  const authUser = await serializeUser(user, institutionProgramId);
+  let authUser = await serializeUser(user, institutionProgramId);
+  if (institutionProgramId && !authUser.institutionProgramIds.includes(institutionProgramId)) {
+    authUser = await serializeUser(user);
+  }
   const session = await createAuthSession(user.id, user.password_hash, rememberDevice, ipAddress);
   return session ? { ...session, user: authUser } : null;
 }

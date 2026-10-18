@@ -1,3 +1,5 @@
+import { LeadPhoneLines } from "./lead-phone";
+import { LeadAssigneeLines } from "./lead-assignee";
 import { useMemo, useState, type ReactNode } from "react";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import {
@@ -134,7 +136,7 @@ function LeadDetailFields({
         <div key={key} className="min-w-0" data-layout-field={key}>
           <dt className="text-sm text-muted-foreground">{labels.get(key)}</dt>
           <dd className="mt-1 whitespace-pre-wrap break-words text-sm font-medium">
-            {value(key)}
+            {key === "phone" ? <LeadPhoneLines lead={lead} /> : key === "assigneeId" ? <LeadAssigneeLines lead={lead} /> : value(key)}
           </dd>
         </div>
       ))}

@@ -1,12 +1,13 @@
-const pageSize = 20;
-import { StaticTableHeader } from "@/components/shared/static-table-header";
 import { TablePagination } from "@/components/shared/table-pagination";
+import { isAccessScopeWithinRole, resolveEffectiveAccessScope } from "@admission-crm/shared/access-scope";
+import { useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Pencil, Plus, Search, UsersRound } from "lucide-react";
-import { useState } from "react";
 import { z } from "zod";
-import { AutoFilterActions } from "@/components/shared/auto-filter-actions";
+import { useInstitutionProgram } from "@/modules/institutions/institution-program-context";
+
 import { EmptyState } from "@/components/shared/data-states";
+import { AutoFilterActions } from "@/components/shared/auto-filter-actions";
 import { ErrorState } from "@/components/shared/error-state";
 import { PageHeader } from "@/components/shared/page-header";
 import { TableLoadingState } from "@/components/shared/table-loading-state";
@@ -20,29 +21,11 @@ import {
   CardTitle,
 } from "@/components/ui/card";
 import { Checkbox } from "@/components/ui/checkbox";
-import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-} from "@/components/ui/dialog";
-import {
-  Field,
-  FieldError,
-  FieldGroup,
-  FieldLabel,
-} from "@/components/ui/field";
+import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { Field, FieldDescription, FieldError, FieldGroup, FieldLabel, FieldSet, FieldLegend } from "@/components/ui/field";
 import { Input } from "@/components/ui/input";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
-import { Table, TableBody, TableCell, TableRow } from "@/components/ui/table";
+import { Select, SelectContent, SelectGroup, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { useAuth } from "@/modules/auth/auth-context";
 import { ApiError } from "@/services/api";
 import {
@@ -56,6 +39,7 @@ import type {
   ManagedUser,
   UserManagementInput,
 } from "../user-management.types";
+const pageSize = 20;
 const emptyFilters = { search: "", status: "", roleId: "", departmentId: "" };
 const emptyForm: UserManagementInput = {
   fullName: "",
@@ -63,7 +47,7 @@ const emptyForm: UserManagementInput = {
   phone: "",
   status: "active",
   password: "",
-  roleIds: [],
+  programAssignments: [],
   departmentIds: [],
   accessScope: "DEPARTMENT",
 };
@@ -74,7 +58,10 @@ const formSchema = z.object({
   phone: z.string().trim().max(30, "Số điện thoại quá dài."),
   status: z.enum(["active", "inactive", "suspended"]),
   password: z.string().max(100),
-  roleIds: z.array(z.uuid()).min(1, "Vui lòng chọn ít nhất một vai trò."),
+  programAssignments: z.array(z.object({
+    institutionProgramId: z.uuid(),
+    roleId: z.uuid("Vui lòng chọn một vai trò cho mỗi chương trình đã tích."),
+  })).min(1, "Vui lòng chọn ít nhất một chương trình."),
   departmentIds: z.array(z.uuid()),
   accessScope: z.enum([
     "ALL",
@@ -106,6 +93,7 @@ type DialogState =
 
 export function UsersAccessPage() {
   const auth = useAuth();
+  const { selectedProgramId, selectProgram } = useInstitutionProgram();
   const queryClient = useQueryClient();
   const [page, setPage] = useState(1);
   const [filters, setFilters] = useState(emptyFilters);
@@ -114,22 +102,12 @@ export function UsersAccessPage() {
   const editingUser = dialog?.type === "edit" ? dialog.user : null;
 
   const listQuery = useQuery({
-    queryKey: ["users", "management", page, appliedFilters],
-    queryFn: () =>
-      getManagedUsers(
-        {
-          page,
-          limit: pageSize,
-          sortBy: "createdAt",
-          sortOrder: "desc",
-          ...appliedFilters,
-        },
-        auth.accessToken!,
-      ),
+    queryKey: ["users", "management", selectedProgramId, page, appliedFilters],
+    queryFn: () => getManagedUsers({ page, limit: pageSize, sortBy: "createdAt", sortOrder: "desc", ...appliedFilters }, auth.accessToken!),
     placeholderData: (previousData) => previousData,
   });
   const optionsQuery = useQuery({
-    queryKey: ["users", "management", "options"],
+    queryKey: ["users", "management", "options", selectedProgramId],
     queryFn: () => getUserManagementOptions(auth.accessToken!),
   });
   const createMutation = useMutation({
@@ -141,9 +119,14 @@ export function UsersAccessPage() {
     },
   });
   const updateMutation = useMutation({
-    mutationFn: (input: UserManagementInput) =>
-      updateManagedUser(editingUser!.id, input, auth.accessToken!),
-    onSuccess: () => {
+    mutationFn: (input: UserManagementInput) => updateManagedUser(editingUser!.id, input, auth.accessToken!),
+    onSuccess: (_response, input) => {
+      if (editingUser?.id === auth.user?.id) {
+        if (!input.programAssignments.some((grant) => grant.institutionProgramId === selectedProgramId)) {
+          selectProgram(input.programAssignments[0]!.institutionProgramId);
+        }
+        void queryClient.invalidateQueries({ queryKey: ["institution-programs", "options"] });
+      }
       setDialog(null);
       void queryClient.invalidateQueries({ queryKey: ["users", "management"] });
       void queryClient.invalidateQueries({ queryKey: ["auth"] });
@@ -207,21 +190,18 @@ export function UsersAccessPage() {
           ) : (
             <div className="overflow-x-auto">
               <Table>
-                <caption className="sr-only">
-                  Danh sách người dùng hệ thống
-                </caption>
-                <StaticTableHeader
-                  columns={[
-                    { label: "Người dùng", className: "min-w-56 px-5" },
-                    { label: "Vai trò" },
-                    { label: "Phòng ban" },
-                    { label: "Scope" },
-                    { label: "Trạng thái" },
-                    { label: "Đăng nhập gần nhất" },
-                    { label: "Thao tác", className: "text-right" },
-                  ]}
-                  className="bg-muted/55"
-                />
+                <caption className="sr-only">Danh sách người dùng hệ thống</caption>
+                <TableHeader className="bg-muted/55">
+                  <TableRow>
+                    <TableHead className="min-w-56 px-5">Người dùng</TableHead>
+                    <TableHead>Chương trình / vai trò</TableHead>
+                    <TableHead>Phòng ban</TableHead>
+                    <TableHead>Scope</TableHead>
+                    <TableHead>Trạng thái</TableHead>
+                    <TableHead>Đăng nhập gần nhất</TableHead>
+                    <TableHead className="text-right">Thao tác</TableHead>
+                  </TableRow>
+                </TableHeader>
                 <TableBody>
                   {data.map((user) => (
                     <TableRow key={user.id}>
@@ -246,6 +226,8 @@ export function UsersAccessPage() {
                           emptyText="Chưa gán phòng ban"
                         />
                       </TableCell>
+                      <TableCell><BadgeList values={user.programAssignments.map((grant) => `${grant.institutionName} - ${grant.programName}: ${grant.roleName}`)} emptyText="Chưa gán vai trò" /></TableCell>
+                      <TableCell><BadgeList values={user.departments.map((department) => department.name)} emptyText="Chưa gán phòng ban" /></TableCell>
                       <TableCell>{scopeLabels[user.accessScope]}</TableCell>
                       <TableCell>
                         <Badge
@@ -332,9 +314,7 @@ export function UsersAccessPage() {
         <DialogContent className="max-h-[90dvh] overflow-y-auto sm:max-w-3xl">
           <DialogHeader>
             <DialogTitle>Chỉnh sửa người dùng</DialogTitle>
-            <DialogDescription>
-              Cập nhật thông tin tài khoản, role, phòng ban và scope.
-            </DialogDescription>
+            <DialogDescription>Chọn chương trình truy cập và một vai trò trong mỗi chương trình.</DialogDescription>
           </DialogHeader>
           {editingUser && (
             <UserForm
@@ -346,10 +326,8 @@ export function UsersAccessPage() {
                 phone: editingUser.phone ?? "",
                 status: editingUser.status,
                 password: "",
-                roleIds: editingUser.roles.map((role) => role.id),
-                departmentIds: editingUser.departments.map(
-                  (department) => department.id,
-                ),
+                programAssignments: editingUser.programAssignments.map(({ institutionProgramId, roleId }) => ({ institutionProgramId, roleId })),
+                departmentIds: editingUser.departments.map((department) => department.id),
                 accessScope: editingUser.accessScope,
               }}
               options={optionsQuery.data}
@@ -437,34 +415,24 @@ function UserForm({
   error,
   onSubmit,
 }: UserFormProps) {
+  const { selectedProgramId } = useInstitutionProgram();
   const [values, setValues] = useState(defaultValues);
   const [errors, setErrors] = useState<Record<string, string>>({});
 
-  const roleOptions = options?.roles ?? [];
   const departmentOptions = options?.departments ?? [];
-  const scopeOptions = options?.scopes ?? [
-    "ALL",
-    "DEPARTMENT",
-    "ASSIGNED_ONLY",
-    "OWNED_ONLY",
-    "READ_ONLY",
-  ];
-  const selectedRoles = new Set(values.roleIds);
-  const selectedRoleNames = roleOptions.reduce<string[]>((names, role) => {
-    if (selectedRoles.has(role.id)) names.push(role.name);
-    return names;
-  }, []);
-
-  function toggle(listName: "roleIds" | "departmentIds", id: string) {
-    setValues((current) => {
-      const currentList = current[listName];
-      return {
-        ...current,
-        [listName]: currentList.includes(id)
-          ? currentList.filter((item) => item !== id)
-          : [...currentList, id],
-      };
-    });
+  const currentAssignment = values.programAssignments.find((grant) => grant.institutionProgramId === selectedProgramId);
+  const currentRoleScope = options?.programs.find((program) => program.id === selectedProgramId)?.roles.find((role) => role.id === currentAssignment?.roleId)?.scopeCode;
+  const effectiveScope = currentRoleScope ? resolveEffectiveAccessScope(currentRoleScope, values.accessScope) : values.accessScope;
+  const scopeOptions = (options?.scopes ?? []).filter((scope) => !currentRoleScope || isAccessScopeWithinRole(scope, currentRoleScope));
+  function toggleDepartment(id: string) {
+    setValues((current) => ({ ...current, departmentIds: current.departmentIds.includes(id)
+      ? current.departmentIds.filter((item) => item !== id) : [...current.departmentIds, id] }));
+  }
+  function toggleProgram(institutionProgramId: string) {
+    setErrors((current) => ({ ...current, programAssignments: "" }));
+    setValues((current) => ({ ...current, programAssignments: current.programAssignments.some((grant) => grant.institutionProgramId === institutionProgramId)
+      ? current.programAssignments.filter((grant) => grant.institutionProgramId !== institutionProgramId)
+      : [...current.programAssignments, { institutionProgramId, roleId: "" }] }));
   }
 
   return (
@@ -484,10 +452,13 @@ function UserForm({
           );
           return;
         }
-        if (mode === "create" && parsed.data.password.length < 8) {
-          setErrors({
-            password: "Vui lòng nhập mật khẩu ban đầu tối thiểu 8 ký tự.",
-          });
+        if ((mode === "create" || parsed.data.password.length > 0) && parsed.data.password.length < 8) {
+          setErrors({ password: "Vui lòng nhập mật khẩu ban đầu tối thiểu 8 ký tự." });
+          return;
+        }
+        if (parsed.data.programAssignments.some((grant) => !options?.programs.some((program) =>
+          program.id === grant.institutionProgramId && program.roles.some((role) => role.id === grant.roleId)))) {
+          setErrors({ programAssignments: "Vai trò đã chọn không thuộc chương trình. Vui lòng chọn lại." });
           return;
         }
         setErrors({});
@@ -552,16 +523,9 @@ function UserForm({
           placeholder={mode === "edit" ? "Để trống nếu không đổi" : undefined}
         />
         <Field data-invalid={Boolean(errors.accessScope)}>
-          <FieldLabel htmlFor="user-scope">Scope truy cập *</FieldLabel>
-          <Select
-            value={values.accessScope}
-            onValueChange={(accessScope: AccessScope) =>
-              setValues((current) => ({ ...current, accessScope }))
-            }
-          >
-            <SelectTrigger id="user-scope" className="w-full">
-              <SelectValue />
-            </SelectTrigger>
+          <FieldLabel htmlFor="user-scope">Phạm vi dữ liệu trong chương trình đang làm việc *</FieldLabel>
+          <Select value={effectiveScope} onValueChange={(accessScope: AccessScope) => setValues((current) => ({ ...current, accessScope }))}>
+            <SelectTrigger id="user-scope" className="w-full"><SelectValue /></SelectTrigger>
             <SelectContent>
               {scopeOptions.map((scope) => (
                 <SelectItem key={scope} value={scope}>
@@ -570,26 +534,52 @@ function UserForm({
               ))}
             </SelectContent>
           </Select>
+          <p className="text-sm text-muted-foreground">Phạm vi riêng chỉ giới hạn thêm dữ liệu, không mở rộng quyền của vai trò trong chương trình.</p>
           <FieldError>{errors.accessScope}</FieldError>
         </Field>
       </FieldGroup>
 
-      <SelectionGroup
-        title="Vai trò *"
-        description={
-          selectedRoleNames.length > 0
-            ? `Đã chọn: ${selectedRoleNames.join(", ")}`
-            : "Chọn role để cấp permission cho tài khoản."
-        }
-        error={errors.roleIds}
-        items={roleOptions.map((role) => ({
-          id: role.id,
-          label: role.name,
-          description: role.code,
-        }))}
-        selectedIds={values.roleIds}
-        onToggle={(id) => toggle("roleIds", id)}
-      />
+      <FieldSet className="rounded-md border p-4" aria-describedby="user-program-description">
+        <FieldLegend variant="label">Chương trình được truy cập *</FieldLegend>
+        <FieldDescription id="user-program-description">Tích chọn chương trình, sau đó chọn đúng một vai trò thuộc chương trình đó. Bỏ tích để gỡ quyền truy cập khi lưu.</FieldDescription>
+        {!options && <p role="status" className="text-sm text-muted-foreground">Chưa tải được chương trình và vai trò. Vui lòng thử lại.</p>}
+        {options && options.programs.length === 0 && <p className="text-sm text-muted-foreground">Bạn chưa có chương trình được phép quản lý người dùng.</p>}
+        {errors.programAssignments && <FieldError role="alert">{errors.programAssignments}</FieldError>}
+        <FieldGroup className="grid gap-3 sm:grid-cols-2">
+          {options?.programs.map((program) => {
+            const assignment = values.programAssignments.find((grant) => grant.institutionProgramId === program.id);
+            const invalid = Boolean(assignment && (!assignment.roleId || !program.roles.some((role) => role.id === assignment.roleId)) && errors.programAssignments);
+            return (
+              <FieldSet key={program.id} className="min-w-0 gap-3 rounded-md border p-3">
+                <Field orientation="horizontal">
+                  <Checkbox id={`user-program-${program.id}`} checked={Boolean(assignment)} disabled={isPending || program.roles.length === 0} onCheckedChange={() => toggleProgram(program.id)} />
+                  <FieldLabel htmlFor={`user-program-${program.id}`} className="min-h-11 cursor-pointer flex-col items-start justify-center gap-1">
+                    <span>{program.institutionName} - {program.name}</span>
+                    <span className="text-xs font-normal text-muted-foreground">{program.code}</span>
+                  </FieldLabel>
+                </Field>
+                {program.roles.length === 0 && <FieldDescription>Chương trình chưa có vai trò. Hãy tạo vai trò trước khi cấp quyền.</FieldDescription>}
+                {assignment && (
+                  <Field data-invalid={invalid}>
+                    <FieldLabel htmlFor={`user-program-role-${program.id}`}>Vai trò trong chương trình *</FieldLabel>
+                    <Select value={assignment.roleId} disabled={isPending} onValueChange={(roleId) => {
+                      setValues((current) => ({ ...current, programAssignments: current.programAssignments.map((grant) => grant.institutionProgramId === program.id ? { ...grant, roleId } : grant),
+                        ...(program.id === selectedProgramId ? { accessScope: program.roles.find((role) => role.id === roleId)?.scopeCode ?? current.accessScope } : {}),
+                      }));
+                    }}>
+                      <SelectTrigger id={`user-program-role-${program.id}`} className="min-h-11 w-full" aria-invalid={invalid} aria-describedby={invalid ? `user-program-role-error-${program.id}` : undefined}><SelectValue placeholder="Chọn một vai trò" /></SelectTrigger>
+                      <SelectContent><SelectGroup>
+                        {program.roles.map((role) => <SelectItem key={role.id} value={role.id}>{role.name}</SelectItem>)}
+                      </SelectGroup></SelectContent>
+                    </Select>
+                    {invalid && <FieldError id={`user-program-role-error-${program.id}`}>Vui lòng chọn một vai trò thuộc chương trình này.</FieldError>}
+                  </Field>
+                )}
+              </FieldSet>
+            );
+          })}
+        </FieldGroup>
+      </FieldSet>
       <SelectionGroup
         title="Phòng ban / phạm vi dữ liệu"
         description="Dùng cho scope phòng ban và các luồng phân công lead."
@@ -599,17 +589,11 @@ function UserForm({
           description: department.code ?? "",
         }))}
         selectedIds={values.departmentIds}
-        onToggle={(id) => toggle("departmentIds", id)}
+        onToggle={(id) => toggleDepartment(id)}
       />
 
       <DialogFooter showCloseButton>
-        <Button type="submit" disabled={isPending}>
-          {isPending
-            ? "Đang lưu..."
-            : mode === "create"
-              ? "Thêm người dùng"
-              : "Lưu thay đổi"}
-        </Button>
+        <Button type="submit" disabled={isPending || !options}>{isPending ? "Đang lưu..." : mode === "create" ? "Thêm người dùng" : "Lưu thay đổi"}</Button>
       </DialogFooter>
     </form>
   );

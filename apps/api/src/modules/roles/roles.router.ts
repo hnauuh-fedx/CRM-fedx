@@ -40,7 +40,7 @@ function resultMessage(reason: string) {
   if (reason === "program_not_found") return "Có chương trình đã chọn không tồn tại hoặc không còn hoạt động.";
   if (reason === "scope_not_supported") return "Scope truy cập không được hỗ trợ.";
   if (reason === "scope_inactive") return "Scope truy cập đang tắt, không thể gán cho vai trò.";
-  if (reason === "role_in_use") return "Không thể xóa vai trò đang được gán cho người dùng.";
+  if (reason === "role_in_use") return "Không thể xóa vai trò hoặc gỡ chương trình khi vai trò còn được gán cho người dùng trong chương trình đó.";
   return "Không tìm thấy vai trò hoặc scope cần cập nhật.";
 }
 

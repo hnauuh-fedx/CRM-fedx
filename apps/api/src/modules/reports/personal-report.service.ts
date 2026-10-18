@@ -161,19 +161,26 @@ export function validatePersonalReportInput(user: AuthUser, input: PersonalRepor
     return { ok: false as const, reason: "invalid_metrics" as const };
   }
   if (input.breakdownKey && !allowedBreakdowns.has(input.breakdownKey)) return { ok: false as const, reason: "invalid_breakdown" as const };
-  if (input.institutionProgramId && !user.institutionProgramIds.includes(input.institutionProgramId)) {
+  if (!input.institutionProgramId || !user.institutionProgramIds.includes(input.institutionProgramId)) {
     return { ok: false as const, reason: "program_forbidden" as const };
   }
   return { ok: true as const };
 }
 
-export async function listPersonalReports(user: AuthUser, page: number, limit: number) {
+function resolveReportProgram(user: AuthUser, requestedProgramId?: string) {
+  const id = requestedProgramId ?? user.workingInstitutionProgramId ?? user.institutionProgramIds[0];
+  return id && user.institutionProgramIds.includes(id) ? id : undefined;
+}
+
+export async function listPersonalReports(user: AuthUser, page: number, limit: number, requestedProgramId?: string) {
+  const programId = resolveReportProgram(user, requestedProgramId);
+  if (!programId) return { items: [], page, limit, total: 0, totalPages: 0 };
   const moduleKeys = (Object.keys(personalReportDefinitions) as PersonalReportModule[]).filter((module) => canUseReportModule(user, module));
   const where = {
     archived_at: null,
     module: { in: moduleKeys },
     OR: [{ owner_id: user.id }, { is_shared: true }],
-    AND: [{ OR: [{ institution_program_id: null }, { institution_program_id: { in: user.institutionProgramIds } }] }],
+    institution_program_id: programId,
   };
   const [items, total] = await prisma.$transaction([
     prisma.personal_reports.findMany({ where, select: reportSelect, orderBy: [{ updated_at: "desc" }, { id: "desc" }], skip: (page - 1) * limit, take: limit }),
@@ -204,12 +211,14 @@ export async function createPersonalReport(user: AuthUser, input: PersonalReport
 }
 
 export async function updatePersonalReport(user: AuthUser, id: string, input: PersonalReportInput, ipAddress?: string) {
-  const existing = await prisma.personal_reports.findFirst({ where: { id, owner_id: user.id, archived_at: null }, select: reportSelect });
+  const programId = resolveReportProgram(user, input.institutionProgramId);
+  if (!programId) return null;
+  const existing = await prisma.personal_reports.findFirst({ where: { id, owner_id: user.id, institution_program_id: programId, archived_at: null }, select: reportSelect });
   if (!existing) return null;
   const report = await prisma.$transaction(async (transaction) => {
     const updated = await transaction.personal_reports.update({
       where: { id },
-      data: { institution_program_id: input.institutionProgramId, name: input.name, module: input.module, metric_keys: input.metricKeys, breakdown_key: input.breakdownKey, chart_type: input.chartType, filters: storedFiltersFromInput(input), updated_at: new Date() },
+      data: { name: input.name, module: input.module, metric_keys: input.metricKeys, breakdown_key: input.breakdownKey, chart_type: input.chartType, filters: storedFiltersFromInput(input), updated_at: new Date() },
       select: reportSelect,
     });
     await transaction.audit_logs.create({ data: { user_id: user.id, entity_type: "personal_report", entity_id: id, action: "update", ip_address: ipAddress, old_data: { name: existing.name, module: existing.module }, new_data: auditConfiguration(input) } });
@@ -218,8 +227,10 @@ export async function updatePersonalReport(user: AuthUser, id: string, input: Pe
   return serializeReport(report);
 }
 
-export async function setPersonalReportSharing(user: AuthUser, id: string, isShared: boolean, ipAddress?: string) {
-  const existing = await prisma.personal_reports.findFirst({ where: { id, owner_id: user.id, archived_at: null }, select: reportSelect });
+export async function setPersonalReportSharing(user: AuthUser, id: string, isShared: boolean, ipAddress?: string, requestedProgramId?: string) {
+  const programId = resolveReportProgram(user, requestedProgramId);
+  if (!programId) return null;
+  const existing = await prisma.personal_reports.findFirst({ where: { id, owner_id: user.id, institution_program_id: programId, archived_at: null }, select: reportSelect });
   if (!existing) return null;
   const updated = await prisma.$transaction(async (transaction) => {
     const report = await transaction.personal_reports.update({ where: { id }, data: { is_shared: isShared, updated_at: new Date() }, select: reportSelect });
@@ -229,8 +240,10 @@ export async function setPersonalReportSharing(user: AuthUser, id: string, isSha
   return serializeReport(updated);
 }
 
-export async function archivePersonalReport(user: AuthUser, id: string, ipAddress?: string) {
-  const existing = await prisma.personal_reports.findFirst({ where: { id, owner_id: user.id, archived_at: null }, select: { id: true, name: true } });
+export async function archivePersonalReport(user: AuthUser, id: string, ipAddress?: string, requestedProgramId?: string) {
+  const programId = resolveReportProgram(user, requestedProgramId);
+  if (!programId) return false;
+  const existing = await prisma.personal_reports.findFirst({ where: { id, owner_id: user.id, institution_program_id: programId, archived_at: null }, select: { id: true, name: true } });
   if (!existing) return false;
   await prisma.$transaction([
     prisma.personal_reports.update({ where: { id }, data: { archived_at: new Date(), is_shared: false, updated_at: new Date() } }),
@@ -239,9 +252,11 @@ export async function archivePersonalReport(user: AuthUser, id: string, ipAddres
   return true;
 }
 
-async function findVisibleReport(user: AuthUser, id: string) {
+async function findVisibleReport(user: AuthUser, id: string, requestedProgramId?: string) {
+  const programId = resolveReportProgram(user, requestedProgramId);
+  if (!programId) return null;
   const report = await prisma.personal_reports.findFirst({
-    where: { id, archived_at: null, OR: [{ owner_id: user.id }, { is_shared: true }] },
+    where: { id, institution_program_id: programId, archived_at: null, OR: [{ owner_id: user.id }, { is_shared: true }] },
     select: reportSelect,
   });
   if (!report || !canUseReportModule(user, report.module as PersonalReportModule)) return null;
@@ -249,8 +264,8 @@ async function findVisibleReport(user: AuthUser, id: string) {
   return report;
 }
 
-export async function executePersonalReport(user: AuthUser, id: string) {
-  const stored = await findVisibleReport(user, id);
+export async function executePersonalReport(user: AuthUser, id: string, requestedProgramId?: string) {
+  const stored = await findVisibleReport(user, id, requestedProgramId);
   if (!stored) return null;
   const module = stored.module as PersonalReportModule;
   const definition = personalReportDefinitions[module];
@@ -259,7 +274,7 @@ export async function executePersonalReport(user: AuthUser, id: string) {
   const filters = asFilters(stored.filters);
   if (filters.mode === "SINGLE") return executeDatasetSingleReport(user, stored, filters);
   if (filters.mode === "PIVOT") return executeDatasetPivotReport(user, stored, filters);
-  const institutionProgramId = stored.institution_program_id ?? user.institutionProgramIds[0];
+  const institutionProgramId = stored.institution_program_id;
   if (!institutionProgramId) return null;
   const query = { ...filters, institutionProgramId };
   const raw = module === "MARKETING" ? await getMarketingDetailReport(user, query)
@@ -320,7 +335,7 @@ function isStoredFilterCondition(value: unknown): value is PersonalReportFilterC
   if (!value || typeof value !== "object" || Array.isArray(value)) return false;
   const item = value as Record<string, unknown>;
   return typeof item.fieldKey === "string"
-    && ["EQUALS", "NOT_EQUALS", "GREATER_THAN_OR_EQUAL", "DATE_PRESET", "DATE_BETWEEN"].includes(String(item.operator))
+    && ["EQUALS", "NOT_EQUALS", "GREATER_THAN_OR_EQUAL", "LESS_THAN_OR_EQUAL", "IS_NOT_EMPTY", "IS_EMPTY", "DATE_PRESET", "DATE_BETWEEN"].includes(String(item.operator))
     && (item.value === undefined || typeof item.value === "string")
     && (item.fromDate === undefined || typeof item.fromDate === "string")
     && (item.toDate === undefined || typeof item.toDate === "string");
@@ -332,10 +347,15 @@ export function validateConditions(dataset: DatasetDefinition, conditions: Perso
     const field = dataset.filterFields.find((item) => item.key === condition.fieldKey);
     if (!field) return false;
     if (field.type === "CATEGORY") {
-      if (condition.operator === "GREATER_THAN_OR_EQUAL") {
+      if (["GREATER_THAN_OR_EQUAL", "LESS_THAN_OR_EQUAL"].includes(condition.operator)) {
         return (dataset.key === "LEADS" || dataset.key === "QUALIFIED_LEADS")
           && condition.fieldKey === "PIPELINE_STAGE"
           && uuidPattern.test(condition.value ?? "");
+      }
+      if (["IS_NOT_EMPTY", "IS_EMPTY"].includes(condition.operator)) {
+        return (dataset.key === "LEADS" || dataset.key === "QUALIFIED_LEADS")
+          && ["ASSIGNEE", "SOURCE"].includes(condition.fieldKey)
+          && condition.value === undefined && condition.fromDate === undefined && condition.toDate === undefined;
       }
       return ["EQUALS", "NOT_EQUALS"].includes(condition.operator) && Boolean(condition.value?.trim());
     }
@@ -346,7 +366,7 @@ export function validateConditions(dataset: DatasetDefinition, conditions: Perso
 }
 
 export function datasetFrom(datasetKey: PersonalReportDatasetKey) {
-  if (datasetKey === "STUDENTS") return Prisma.sql`reporting.student_scope_fact fact`;
+  if (datasetKey === "STUDENTS") return Prisma.sql`(SELECT * FROM reporting.student_scope_fact WHERE student_status IS DISTINCT FROM 'candidate') fact`;
   return Prisma.sql`reporting.sale_pipeline_scope_fact fact`;
 }
 
@@ -387,7 +407,7 @@ function outputOrderExpression(datasetKey: PersonalReportDatasetKey, fieldKey: s
 }
 
 export function conditionSql(datasetKey: PersonalReportDatasetKey, condition: PersonalReportFilterCondition) {
-  if ((datasetKey === "LEADS" || datasetKey === "QUALIFIED_LEADS") && condition.fieldKey === "PIPELINE_STAGE" && condition.operator === "GREATER_THAN_OR_EQUAL") {
+  if ((datasetKey === "LEADS" || datasetKey === "QUALIFIED_LEADS") && condition.fieldKey === "PIPELINE_STAGE" && ["GREATER_THAN_OR_EQUAL", "LESS_THAN_OR_EQUAL"].includes(condition.operator)) {
     return Prisma.sql`EXISTS (
       SELECT 1
       FROM leads compared_lead
@@ -395,8 +415,15 @@ export function conditionSql(datasetKey: PersonalReportDatasetKey, condition: Pe
       JOIN pipeline_stages selected_stage ON selected_stage.id = CAST(${condition.value} AS uuid)
       WHERE compared_lead.id = fact.lead_id
         AND current_stage.pipeline_id = selected_stage.pipeline_id
-        AND current_stage.position >= selected_stage.position
+        AND ${condition.operator === "LESS_THAN_OR_EQUAL"
+          ? Prisma.sql`current_stage.position <= selected_stage.position`
+          : Prisma.sql`current_stage.position >= selected_stage.position`}
     )`;
+  }
+  if (["IS_NOT_EMPTY", "IS_EMPTY"].includes(condition.operator)) {
+    const column = condition.fieldKey === "ASSIGNEE" ? Prisma.sql`presence_lead.assigned_to` : Prisma.sql`presence_lead.source_id`;
+    const presence = condition.operator === "IS_EMPTY" ? Prisma.sql`${column} IS NULL` : Prisma.sql`${column} IS NOT NULL`;
+    return Prisma.sql`EXISTS (SELECT 1 FROM leads presence_lead WHERE presence_lead.id = fact.lead_id AND ${presence})`;
   }
   const expression = rawFieldExpression(datasetKey, condition.fieldKey);
   if (condition.operator === "EQUALS") return Prisma.sql`${expression} = ${condition.value}`;
@@ -484,7 +511,7 @@ async function executeDatasetSingleReport(user: AuthUser, stored: NonNullable<Aw
   const dimension = dataset.singleDimensions.find((item) => item.key === filters.singleDimensionKey);
   if (!dimension || !validateConditions(dataset, filters.conditions ?? []) || !filters.singleDisplay) return null;
   const scopeKeys = resolveReportingScopeKeys(user);
-  const institutionProgramId = stored.institution_program_id ?? user.institutionProgramIds[0];
+  const institutionProgramId = stored.institution_program_id;
   if (!institutionProgramId || scopeKeys.length === 0) return null;
   const granularity = filters.dateGranularity ?? "DAY";
   const expression = outputExpression(datasetKey, dimension.key, granularity);
@@ -517,7 +544,7 @@ async function executeDatasetPivotReport(user: AuthUser, stored: NonNullable<Awa
   const columnField = dataset.fields.find((item) => item.key === filters.columnDimensionKey);
   if (!rowField || !columnField || !validateConditions(dataset, filters.conditions ?? [])) return null;
   const scopeKeys = resolveReportingScopeKeys(user);
-  const institutionProgramId = stored.institution_program_id ?? user.institutionProgramIds[0];
+  const institutionProgramId = stored.institution_program_id;
   if (!institutionProgramId || scopeKeys.length === 0) return null;
   const granularity = filters.dateGranularity ?? "DAY";
   const rowExpression = outputExpression(datasetKey, rowField.key, granularity);
@@ -584,7 +611,7 @@ async function executeLeadSingleReport(user: AuthUser, stored: NonNullable<Await
   if (!dimension || (filters.singleDisplay !== "TABLE" && filters.singleDisplay !== "LINE")) return null;
   const range = resolvePersonalReportDateRange(filters);
   const scopeKeys = resolveReportingScopeKeys(user);
-  const institutionProgramId = stored.institution_program_id ?? user.institutionProgramIds[0];
+  const institutionProgramId = stored.institution_program_id;
   if (!range || scopeKeys.length === 0 || !institutionProgramId) return null;
 
   const granularity = filters.dateGranularity ?? "DAY";
@@ -640,7 +667,7 @@ async function executeLeadPivotReport(user: AuthUser, stored: NonNullable<Awaite
   if (!range) return null;
   const scopeKeys = resolveReportingScopeKeys(user);
   if (scopeKeys.length === 0) return null;
-  const institutionProgramId = stored.institution_program_id ?? user.institutionProgramIds[0];
+  const institutionProgramId = stored.institution_program_id;
   if (!institutionProgramId) return null;
 
   const rowExpression = filters.rowDimensionKey === "SOURCE"

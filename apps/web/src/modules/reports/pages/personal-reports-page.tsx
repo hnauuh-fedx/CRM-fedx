@@ -91,8 +91,14 @@ const currencyFormatter = new Intl.NumberFormat("vi-VN", {
 });
 
 type FormState = PersonalReportInput;
+type PipelineStages = Awaited<ReturnType<typeof getPersonalDashboardConfig>>["pipelineStages"];
 
 export function PersonalReportsPage() {
+  const { selectedProgramId } = useInstitutionProgram();
+  return <PersonalReportsWorkspace key={selectedProgramId ?? "no-program"} />;
+}
+
+function PersonalReportsWorkspace() {
   const auth = useAuth();
   const { selectedProgramId } = useInstitutionProgram();
   const queryClient = useQueryClient();
@@ -105,14 +111,8 @@ export function PersonalReportsPage() {
   const [form, setForm] = useState<FormState>(() => emptyForm());
   const [message, setMessage] = useState<string | null>(null);
 
-  const optionsQuery = useQuery({
-    queryKey: ["reports", "personal", "options"],
-    queryFn: () => getPersonalReportOptions(auth.accessToken!),
-  });
-  const reportsQuery = useQuery({
-    queryKey: ["reports", "personal"],
-    queryFn: () => listPersonalReports(auth.accessToken!),
-  });
+  const optionsQuery = useQuery({ queryKey: ["reports", "personal", "options", selectedProgramId], queryFn: () => getPersonalReportOptions(auth.accessToken!) });
+  const reportsQuery = useQuery({ queryKey: ["reports", "personal", "list", selectedProgramId], queryFn: () => listPersonalReports(auth.accessToken!), enabled: Boolean(selectedProgramId) });
   const dashboardConfigQuery = useQuery({
     queryKey: ["reports", "personal", "dashboard", "config", selectedProgramId],
     queryFn: () => getPersonalDashboardConfig(auth.accessToken!),
@@ -121,9 +121,9 @@ export function PersonalReportsPage() {
   const selectedReport =
     reportsQuery.data?.items.find((report) => report.id === selectedId) ?? null;
   const resultQuery = useQuery({
-    queryKey: ["reports", "personal", selectedId, "result"],
+    queryKey: ["reports", "personal", selectedId, "result", selectedProgramId],
     queryFn: () => getPersonalReportResult(selectedId!, auth.accessToken!),
-    enabled: Boolean(selectedId),
+    enabled: Boolean(selectedReport && selectedProgramId),
   });
   const selectedDefinition = optionsQuery.data?.modules.find(
     (module) => module.key === form.module,
@@ -278,6 +278,7 @@ export function PersonalReportsPage() {
           definitions={optionsQuery.data?.modules ?? []}
           datasets={optionsQuery.data?.datasets ?? []}
           accessToken={auth.accessToken!}
+          pipelineStages={dashboardConfigQuery.data?.pipelineStages ?? []}
           isEditing={Boolean(editingId)}
           isPending={saveMutation.isPending}
           error={
@@ -293,12 +294,7 @@ export function PersonalReportsPage() {
 
       <div className="grid gap-6 xl:grid-cols-[360px_minmax(0,1fr)]">
         <Card>
-          <CardHeader>
-            <CardTitle>Báo cáo đã lưu</CardTitle>
-            <CardDescription>
-              Gồm báo cáo của bạn và mẫu được đồng nghiệp chia sẻ.
-            </CardDescription>
-          </CardHeader>
+          <CardHeader><CardTitle>Báo cáo đã lưu</CardTitle><CardDescription>Gồm báo cáo của bạn và mẫu được đồng nghiệp chia sẻ trong chương trình đang làm việc.</CardDescription></CardHeader>
           <CardContent className="flex flex-col gap-2">
             {reportsQuery.isLoading ? (
               <>
@@ -365,6 +361,7 @@ export function PersonalReportsPage() {
 
 type ReportBuilderProps = {
   form: FormState;
+  pipelineStages: PipelineStages;
   definitions: Awaited<ReturnType<typeof getPersonalReportOptions>>["modules"];
   datasets: Awaited<ReturnType<typeof getPersonalReportOptions>>["datasets"];
   accessToken: string;
