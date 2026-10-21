@@ -12,7 +12,7 @@ import {
   type Table as DataTable,
   type SortingState,
 } from "@tanstack/react-table";
-import { Plus, Search } from "lucide-react";
+import { Pencil, Plus, Search } from "lucide-react";
 
 import { AutoFilterActions } from "@/components/shared/auto-filter-actions";
 import { EmptyState } from "@/components/shared/data-states";
@@ -28,7 +28,7 @@ import { Field, FieldError, FieldGroup, FieldLabel } from "@/components/ui/field
 import { Input } from "@/components/ui/input";
 import { useAuth } from "@/modules/auth/auth-context";
 import { useInstitutionProgram } from "@/modules/institutions/institution-program-context";
-import { createLeadSource, getLeadSourceFilterOptions, getLeadSources } from "@/services/marketing-reference.service";
+import { createLeadSource, getLeadSourceFilterOptions, getLeadSources, updateLeadSource } from "@/services/marketing-reference.service";
 import type {
   LeadSourceFilterOptions,
   LeadSourceFilters,
@@ -62,7 +62,8 @@ function ProgramLeadSourcesPage() {
   const [draftFilters, setDraftFilters] = useState(emptyFilters);
   const [filters, setFilters] = useState(emptyFilters);
   const [sorting, setSorting] = useState<SortingState>([{ id: "createdAt", desc: true }]);
-  const [createdSourceName, setCreatedSourceName] = useState<string | null>(null);
+  const [statusMessage, setStatusMessage] = useState<string | null>(null);
+  const canManage = (auth.can("lead_source.manage") || auth.can("system.manage")) && hasSelectedProgram;
   const selectedSort = sorting[0] ?? { id: "createdAt", desc: true };
   const sortBy = sortableColumns.has(selectedSort.id as LeadSourceSortField)
     ? (selectedSort.id as LeadSourceSortField)
@@ -85,7 +86,7 @@ function ProgramLeadSourcesPage() {
   );
   const table = useReactTable({
     data,
-    columns: useColumns(),
+    columns: useColumns(canManage ? selectedProgramId : null, setStatusMessage),
     state: { sorting },
     manualSorting: true,
     enableMultiSort: false,
@@ -109,9 +110,9 @@ function ProgramLeadSourcesPage() {
         title="Nguồn lead"
         scopeLabel="Theo chương trình"
         description="Theo dõi nguồn lead và số lead đang hoạt động của chương trình đang làm việc."
-        actions={(auth.can("lead_source.manage") || auth.can("system.manage")) && hasSelectedProgram ? (
-          <CreateLeadSourceDialog programId={selectedProgramId!} onCreated={(name) => {
-            setCreatedSourceName(name);
+        actions={canManage ? (
+          <LeadSourceDialog programId={selectedProgramId!} onSaved={(name) => {
+            setStatusMessage(`Đã thêm nguồn “${name}”.`);
             setDraftFilters(emptyFilters);
             setFilters(emptyFilters);
             setPage(1);
@@ -119,7 +120,7 @@ function ProgramLeadSourcesPage() {
           }} />
         ) : undefined}
       />
-      {createdSourceName && <p role="status" className="text-sm text-muted-foreground">Đã thêm nguồn “{createdSourceName}”.</p>}
+      {statusMessage && <p role="status" className="text-sm text-muted-foreground">{statusMessage}</p>}
       <LeadSourceFilters
         filters={draftFilters}
         options={optionsQuery.data}
@@ -153,18 +154,22 @@ function ProgramLeadSourcesPage() {
   );
 }
 
-function CreateLeadSourceDialog({ programId, onCreated }: { programId: string; onCreated: (name: string) => void }) {
+function LeadSourceDialog({ programId, source, onSaved }: { programId: string; source?: LeadSourceItem; onSaved: (name: string) => void }) {
   const auth = useAuth();
   const { programs } = useInstitutionProgram();
   const program = programs.find((item) => item.id === programId);
   const queryClient = useQueryClient();
   const [open, setOpen] = useState(false);
-  const form = useForm<LeadSourceInput>({ defaultValues: { name: "" } });
+  const isEdit = Boolean(source);
+  const form = useForm<LeadSourceInput>({ defaultValues: { name: source?.name ?? "" } });
   const mutation = useMutation({
-    mutationFn: (input: LeadSourceInput) => createLeadSource(input, auth.accessToken!, programId),
+    mutationFn: (input: LeadSourceInput) => source
+      ? updateLeadSource(source.id, input, auth.accessToken!, programId)
+      : createLeadSource(input, auth.accessToken!, programId),
     onSuccess: (_result, input) => {
       setOpen(false);
-      onCreated(input.name);
+      onSaved(input.name);
+      void queryClient.invalidateQueries({ queryKey: ["leads"] });
       void queryClient.invalidateQueries({ queryKey: ["lead-sources", programId] });
       void queryClient.invalidateQueries({ queryKey: ["leads", "action-options"] });
       void queryClient.invalidateQueries({ queryKey: ["leads", "options"] });
@@ -174,16 +179,24 @@ function CreateLeadSourceDialog({ programId, onCreated }: { programId: string; o
     <Dialog open={open} onOpenChange={(nextOpen) => {
       if (mutation.isPending) return;
       if (nextOpen) {
-        form.reset({ name: "" });
+        form.reset({ name: source?.name ?? "" });
         mutation.reset();
       }
       setOpen(nextOpen);
     }}>
-      <DialogTrigger asChild><Button type="button"><Plus data-icon="inline-start" aria-hidden="true" />Thêm nguồn</Button></DialogTrigger>
+      <DialogTrigger asChild>
+        {source ? (
+          <Button type="button" variant="ghost" size="icon" className="size-9" aria-label={`Sửa tên nguồn ${source.name}`} title="Sửa tên nguồn">
+            <Pencil aria-hidden="true" />
+          </Button>
+        ) : (
+          <Button type="button"><Plus data-icon="inline-start" aria-hidden="true" />Thêm nguồn</Button>
+        )}
+      </DialogTrigger>
       <DialogContent className="max-h-[90dvh] overflow-y-auto" showCloseButton={!mutation.isPending}>
         <DialogHeader>
-          <DialogTitle>Thêm nguồn lead</DialogTitle>
-          <DialogDescription>Nguồn mới thuộc chương trình {program ? `${program.institutionName} - ${program.name}` : "đang làm việc"}.</DialogDescription>
+          <DialogTitle>{isEdit ? "Sửa tên nguồn lead" : "Thêm nguồn lead"}</DialogTitle>
+          <DialogDescription>{isEdit ? "Tên mới sẽ hiển thị ở mọi lead đang dùng nguồn này. Nguồn" : "Nguồn mới"} thuộc chương trình {program ? `${program.institutionName} - ${program.name}` : "đang làm việc"}.</DialogDescription>
         </DialogHeader>
         <form noValidate className="flex flex-col gap-5" onSubmit={form.handleSubmit((values) => {
           if (mutation.isPending) return;
@@ -200,14 +213,14 @@ function CreateLeadSourceDialog({ programId, onCreated }: { programId: string; o
           {mutation.error && <Alert variant="destructive"><AlertDescription>{mutation.error.message}</AlertDescription></Alert>}
           <FieldGroup>
             <Field data-invalid={Boolean(form.formState.errors.name)} data-disabled={mutation.isPending}>
-              <FieldLabel htmlFor="lead-source-name">Tên nguồn *</FieldLabel>
-              <Input id="lead-source-name" placeholder="Ví dụ: Facebook Ads" maxLength={150} aria-required="true" aria-invalid={Boolean(form.formState.errors.name)} aria-describedby={form.formState.errors.name ? "lead-source-name-error" : undefined} disabled={mutation.isPending} {...form.register("name")} />
+              <FieldLabel htmlFor={isEdit ? `lead-source-name-${source!.id}` : "lead-source-name"}>Tên nguồn *</FieldLabel>
+              <Input id={isEdit ? `lead-source-name-${source!.id}` : "lead-source-name"} placeholder="Ví dụ: Facebook Ads" maxLength={150} aria-required="true" aria-invalid={Boolean(form.formState.errors.name)} aria-describedby={form.formState.errors.name ? "lead-source-name-error" : undefined} disabled={mutation.isPending} {...form.register("name")} />
               <FieldError id="lead-source-name-error" errors={[form.formState.errors.name]} />
             </Field>
           </FieldGroup>
           <DialogFooter>
             <Button type="button" variant="outline" disabled={mutation.isPending} onClick={() => setOpen(false)}>Hủy</Button>
-            <Button type="submit" disabled={mutation.isPending}>{mutation.isPending ? "Đang lưu…" : "Lưu nguồn"}</Button>
+            <Button type="submit" disabled={mutation.isPending}>{mutation.isPending ? "Đang lưu…" : isEdit ? "Lưu thay đổi" : "Lưu nguồn"}</Button>
           </DialogFooter>
         </form>
       </DialogContent>
@@ -215,7 +228,7 @@ function CreateLeadSourceDialog({ programId, onCreated }: { programId: string; o
   );
 }
 
-function useColumns() {
+function useColumns(manageProgramId: string | null, onStatus: (message: string) => void) {
   return useMemo<ColumnDef<LeadSourceItem>[]>(
     () => [
       { accessorKey: "name", header: "Nguồn lead", cell: ({ row }) => <span className="font-medium">{row.original.name}</span> },
@@ -223,8 +236,16 @@ function useColumns() {
       { id: "institutionProgram", header: "Chương trình", enableSorting: false, cell: ({ row }) => row.original.institutionProgram ? `${row.original.institutionProgram.institutionName} / ${row.original.institutionProgram.name}` : "Chưa gán chương trình" },
       { accessorKey: "activeLeadCount", header: "Lead đang hoạt động", enableSorting: false },
       { accessorKey: "createdAt", header: "Ngày tạo", cell: ({ row }) => formatDate(row.original.createdAt) },
+      ...(manageProgramId ? [{
+        id: "actions",
+        header: () => <span className="sr-only">Thao tác</span>,
+        enableSorting: false,
+        cell: ({ row }: { row: { original: LeadSourceItem } }) => (
+          <LeadSourceDialog programId={manageProgramId} source={row.original} onSaved={(name) => onStatus(`Đã đổi tên nguồn thành “${name}”.`)} />
+        ),
+      } satisfies ColumnDef<LeadSourceItem>] : []),
     ],
-    [],
+    [manageProgramId, onStatus],
   );
 }
 

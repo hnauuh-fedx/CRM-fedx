@@ -90,6 +90,32 @@ export async function createLeadSource(actor: AuthUser, input: LeadSourceInput, 
   });
 }
 
+export async function updateLeadSource(actor: AuthUser, sourceId: string, input: LeadSourceInput, institutionProgramId: string, ipAddress?: string) {
+  return prisma.$transaction(async (tx) => {
+    const current = await tx.lead_sources.findFirst({
+      where: { id: sourceId, institution_program_id: institutionProgramId },
+      select: { id: true, name: true },
+    });
+    if (!current) return { ok: false as const, reason: "not_found" as const };
+    if (current.name === input.name) return { ok: true as const, data: { id: current.id, name: current.name } };
+    const source = await tx.lead_sources.update({
+      where: { id: sourceId },
+      data: { name: input.name },
+      select: { id: true, name: true },
+    });
+    await tx.audit_logs.create({ data: {
+      user_id: actor.id,
+      entity_type: "lead_source",
+      entity_id: source.id,
+      action: "update",
+      ip_address: ipAddress,
+      old_data: { name: current.name },
+      new_data: { name: source.name, institutionProgramId },
+    } });
+    return { ok: true as const, data: { id: source.id, name: source.name } };
+  });
+}
+
 export async function listLeadSources(query: LeadSourceListQuery) {
   const where = {
     AND: [

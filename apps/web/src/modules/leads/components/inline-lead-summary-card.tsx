@@ -234,7 +234,7 @@ export function InlineLeadSummaryCard({
   const secondaryPhones = draft.secondaryPhones ?? [];
 
   return (
-    <Card className="border-border/70 shadow-xs">
+    <Card className="@container border-border/70 shadow-xs">
       <CardHeader className="flex flex-row items-start justify-between gap-4">
         <div>
           <CardTitle>Thông tin cơ bản</CardTitle>
@@ -282,7 +282,7 @@ export function InlineLeadSummaryCard({
               : "Không thể lưu thông tin. Vui lòng thử lại."}
           </p>
         )}
-        <dl className="grid gap-4 sm:grid-cols-2 xl:grid-cols-1 2xl:grid-cols-2">
+        <dl className="grid gap-4 @sm:grid-cols-2">
           {isEditing("fullName") ? (
             <InlineField id="inline-lead-full-name" label="Họ và tên" error={errors.fullName}>
               <Input id="inline-lead-full-name" value={draft.fullName} onChange={(event) => update("fullName", event.target.value)} autoComplete="name" aria-invalid={Boolean(errors.fullName)} autoFocus={lastOpenedField === "fullName"} />

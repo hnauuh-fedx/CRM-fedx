@@ -2,7 +2,6 @@ import { ChevronDown, GraduationCap } from "lucide-react";
 import { useId, useState } from "react";
 import { NavLink, useLocation } from "react-router-dom";
 
-import { Badge } from "@/components/ui/badge";
 import { Separator } from "@/components/ui/separator";
 import { cn } from "@/lib/utils";
 import {
@@ -34,28 +33,26 @@ export function Sidebar({ items, sectionLabel = "Chức năng", className, onNav
     <aside
       className={cn(
         "flex h-full shrink-0 flex-col border-r bg-card text-card-foreground transition-[width] duration-200",
-        isCollapsed ? "w-20" : "w-72",
+        isCollapsed ? "w-16" : "w-60",
         className,
       )}
       aria-label="Thanh điều hướng"
     >
-      <div className={cn("flex h-20 items-center gap-3 px-5", isCollapsed && "justify-center px-0")}>
-        <span className="flex size-11 items-center justify-center rounded-xl bg-primary text-primary-foreground shadow-sm">
-          <GraduationCap aria-hidden="true" />
+      <div className={cn("flex h-14 shrink-0 items-center gap-2.5 px-4", isCollapsed && "justify-center px-0")}>
+        <span className="flex size-8 shrink-0 items-center justify-center rounded-lg bg-primary text-primary-foreground shadow-sm">
+          <GraduationCap aria-hidden="true" className="size-4.5" />
         </span>
-        <div className={cn("flex min-w-0 flex-col gap-1", isCollapsed && "hidden")}>
-          <p className="truncate text-sm font-semibold">Admission CRM</p>
-          <Badge variant="secondary" className="rounded-md">
-            Quản lý tuyển sinh
-          </Badge>
+        <div className={cn("flex min-w-0 flex-col", isCollapsed && "hidden")}>
+          <p className="truncate text-sm leading-5 font-semibold">Admission CRM</p>
+          <p className="truncate text-xs leading-4 text-muted-foreground">Quản lý tuyển sinh</p>
         </div>
       </div>
       <Separator />
 
-      <nav className={cn("flex-1 overflow-y-auto px-3 py-6", isCollapsed && "px-2")} aria-label="Điều hướng chính">
+      <nav className={cn("flex-1 overflow-y-auto px-2.5 py-4", isCollapsed && "px-2")} aria-label="Điều hướng chính">
         {overviewItem && (
           <>
-            <p className={cn("mb-3 px-3 text-xs font-medium uppercase tracking-[0.16em] text-muted-foreground", isCollapsed && "sr-only")}>
+            <p className={cn("mb-1.5 px-2.5 text-[11px] font-medium uppercase tracking-[0.12em] text-muted-foreground", isCollapsed && "sr-only")}>
               Tổng quan
             </p>
             <NavigationLink item={overviewItem} onNavigate={onNavigate} isCollapsed={isCollapsed} />
@@ -63,7 +60,7 @@ export function Sidebar({ items, sectionLabel = "Chức năng", className, onNav
         )}
 
         {sectionItems.length > 0 && (
-          <p className={cn("mb-3 px-3 text-xs font-medium uppercase tracking-[0.16em] text-muted-foreground", overviewItem && "mt-8", isCollapsed && "sr-only")}>
+          <p className={cn("mb-1.5 px-2.5 text-[11px] font-medium uppercase tracking-[0.12em] text-muted-foreground", overviewItem && "mt-5", isCollapsed && "sr-only")}>
             {sectionLabel}
           </p>
         )}
@@ -83,9 +80,9 @@ export function Sidebar({ items, sectionLabel = "Chức năng", className, onNav
       </nav>
 
       <Separator />
-      <div className={cn("flex flex-col gap-1 p-5 text-xs text-muted-foreground", isCollapsed && "hidden")}>
+      <div className={cn("flex flex-col gap-0.5 px-4 py-3 text-xs text-muted-foreground", isCollapsed && "hidden")}>
         <p className="font-medium text-foreground">Phạm vi bảo mật</p>
-        <p className="leading-5">Dữ liệu hiển thị theo quyền truy cập được cấp.</p>
+        <p className="leading-4">Dữ liệu hiển thị theo quyền truy cập được cấp.</p>
       </div>
     </aside>
   );
@@ -110,8 +107,8 @@ function NavigationLink({ item, onNavigate, isNested, isCollapsed }: NavigationL
       title={isCollapsed ? item.label : undefined}
       aria-label={isCollapsed ? item.label : undefined}
       className={cn(
-        "mb-1 flex min-h-11 items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium transition-colors",
-        isNested && "ml-4 min-h-10 border-l border-border pl-4 text-xs",
+        "mb-0.5 flex min-h-9 items-center gap-2.5 rounded-md px-2.5 py-1.5 text-sm font-medium transition-colors [&_svg]:size-4 [&_svg]:shrink-0",
+        isNested && "ml-4 min-h-8 rounded-l-none border-l border-border pl-3 text-[13px]",
         isCollapsed && "justify-center px-0",
         isActive
           ? "bg-accent text-accent-foreground shadow-xs"
@@ -140,11 +137,11 @@ function NavigationGroup({ item, onNavigate, isCollapsed, onExpand }: Navigation
   const Icon = item.icon;
 
   return (
-    <div className="mb-1">
+    <div className="mb-0.5">
       <button
         type="button"
         className={cn(
-          "flex min-h-11 w-full items-center gap-3 rounded-lg px-3 py-2.5 text-left text-sm font-medium transition-colors",
+          "flex min-h-9 w-full items-center gap-2.5 rounded-md px-2.5 py-1.5 text-left text-sm font-medium transition-colors [&_svg]:size-4 [&_svg]:shrink-0",
           isCollapsed && "justify-center px-0",
           isActive
             ? "bg-accent text-accent-foreground shadow-xs"
@@ -172,7 +169,7 @@ function NavigationGroup({ item, onNavigate, isCollapsed, onExpand }: Navigation
       </button>
 
       {!isCollapsed && isOpen && (
-        <div id={contentId} className="mt-1">
+        <div id={contentId} className="mt-0.5 mb-1">
           {item.children.map((child) => (
             <NavigationLink key={child.href} item={child} onNavigate={onNavigate} isNested />
           ))}

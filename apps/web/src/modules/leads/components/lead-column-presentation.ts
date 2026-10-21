@@ -2,28 +2,36 @@ import type { CSSProperties } from "react";
 import type { Column } from "@tanstack/react-table";
 import type { LeadListItem } from "../lead.types";
 
+/**
+ * Columns with a configured width keep it; other columns grow to their longest value.
+ * `left` is the measured sticky offset because auto-sized pinned columns have no known size.
+ */
 export function leadColumnStyle(
   column: Column<LeadListItem>,
   header: boolean,
+  fixedWidth: boolean,
+  left?: number,
 ): CSSProperties {
   const pinned = column.getIsPinned() === "left";
+  const width = fixedWidth ? column.getSize() : undefined;
   return {
     paddingLeft: column.id === "view" ? 8 : undefined,
     paddingRight: column.id === "view" ? 8 : undefined,
-    width: column.getSize(),
-    minWidth: column.getSize(),
-    maxWidth: column.getSize(),
+    width,
+    minWidth: width,
+    maxWidth: width,
     position: pinned ? "sticky" : undefined,
-    left: pinned ? column.getStart("left") : undefined,
+    left: pinned ? (left ?? column.getStart("left")) : undefined,
     zIndex: pinned ? (header ? 20 : 10) : undefined,
   };
 }
-export function leadColumnClass(pinned: boolean, header: boolean) {
+export function leadColumnClass(pinned: boolean, header: boolean, lastPinned = false) {
+  const divider = lastPinned ? " border-r" : "";
   if (header)
     return pinned
-      ? "overflow-hidden border-r bg-muted px-3 font-medium"
-      : "overflow-hidden px-3 font-medium text-muted-foreground";
+      ? `whitespace-nowrap bg-muted px-3 font-medium${divider}`
+      : "whitespace-nowrap px-3 font-medium text-muted-foreground";
   return pinned
-    ? "overflow-hidden border-r bg-background px-3 py-4 group-hover:bg-muted group-data-[state=selected]:bg-muted"
-    : "overflow-hidden px-3 py-4";
+    ? `whitespace-nowrap bg-card px-3 py-4 group-hover:bg-muted group-data-[state=selected]:bg-muted${divider}`
+    : "whitespace-nowrap px-3 py-4";
 }

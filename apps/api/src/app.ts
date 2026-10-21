@@ -37,6 +37,7 @@ import { customFieldsRouter } from "./modules/custom-fields/custom-fields.router
 import { publicWebhookRouter, webhooksAdminRouter } from "./modules/webhooks/webhooks.router";
 import { zaloRouter } from "./modules/integrations/zalo/zalo.router";
 import { metaRouter } from "./modules/integrations/meta/meta.router";
+import { tiktokRouter } from "./modules/integrations/tiktok/tiktok.router";
 import "./modules/integrations/zalo/zalo-worker.service";
 import "./modules/integrations/meta/meta-worker.service";
 
@@ -94,6 +95,7 @@ app.use("/api/custom-fields", customFieldsRouter);
 app.use("/api/settings/webhooks", webhooksAdminRouter);
 app.use("/api/integrations/zalo", zaloRouter);
 app.use("/api/integrations/meta", metaRouter);
+app.use("/api/integrations/tiktok", tiktokRouter);
 
 const errorHandler: ErrorRequestHandler = (error, _request, response, _next) => {
   if (error instanceof MarketingFormConfigError) {

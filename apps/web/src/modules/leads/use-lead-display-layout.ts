@@ -7,6 +7,7 @@ import { useSyncExternalStore, useState, useCallback } from "react";
 import type { LeadListItem } from "./lead.types";
 import {
   defaultDisplayColumnWidth,
+  maxPinnedDisplayFields,
   type ListLayoutScreen,
 } from "@admission-crm/shared/display-layout";
 const desktopQuery = "(min-width: 768px)";
@@ -82,12 +83,23 @@ export function useLeadDisplayLayout(
   );
   // Reserve the two action columns and enough room to scroll the unpinned data.
   const hasPinSpace = containerWidth >= 48 + 56 + 240 + pinnedWidth;
+  // The name column stays visible while scrolling horizontally. When the layout does not pin it,
+  // columns ordered before it are pinned with it so the configured order is kept.
+  const layoutPinned = query.data?.pinnedFields ?? [];
+  const orderedFields = configuredFields ?? ["fullName"];
+  const namePrefix = orderedFields.slice(0, orderedFields.indexOf("fullName") + 1);
+  const pinnedFields = new Set([
+    ...layoutPinned,
+    ...(layoutPinned.includes("fullName") || namePrefix.length > maxPinnedDisplayFields
+      ? []
+      : namePrefix),
+  ]);
   const columnPinning = {
     left: [
       "select",
       "view",
       ...(enabled && desktop && hasPinSpace
-        ? (query.data?.pinnedFields ?? [])
+        ? orderedFields.filter((key) => pinnedFields.has(key))
         : []),
     ],
     right: [],
