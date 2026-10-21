@@ -169,6 +169,7 @@ export const AUTOMATION_TRIGGER_TYPES = [
   "lead_created",
   "lead_pipeline_stage_changed",
   "lead_assigned",
+  "lead_unassigned",
   "lead_unprocessed",
   "scheduled",
   "admission_profile_created",
@@ -182,6 +183,7 @@ export const AUTOMATION_TRIGGER_TYPES = [
 ] as const;
 
 const automationTriggerLabels: Record<(typeof AUTOMATION_TRIGGER_TYPES)[number], string> = {
+  lead_unassigned: "Lead được bỏ Sale phụ trách thủ công",
   lead_created: "Lead được tạo mới",
   lead_pipeline_stage_changed: "Lead đổi giai đoạn pipeline",
   lead_assigned: "Lead được phân công",

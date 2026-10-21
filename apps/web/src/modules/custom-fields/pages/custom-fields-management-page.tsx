@@ -1,3 +1,4 @@
+import { PageLoadingBoundary } from "@/components/shared/page-loading-state";
 import { StaticTableHeader } from "@/components/shared/static-table-header";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import {
@@ -437,7 +438,8 @@ export function CustomFieldsManagementPage({
     createMutation.error ?? updateMutation.error ?? createGroupMutation.error;
 
   return (
-    <div className="flex flex-col gap-6">
+    <PageLoadingBoundary variant="settings" queries={[query, groupQuery]}>
+      <div className="flex flex-col gap-6">
       <PageHeader
         eyebrow={config.eyebrow}
         title={config.title}
@@ -524,6 +526,7 @@ export function CustomFieldsManagementPage({
         statusMutation={statusMutation}
       />
     </div>
+    </PageLoadingBoundary>
   );
 }
 

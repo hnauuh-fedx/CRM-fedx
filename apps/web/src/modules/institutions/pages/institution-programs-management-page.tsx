@@ -1,3 +1,4 @@
+import { PageLoadingBoundary } from "@/components/shared/page-loading-state";
 import { AutoFilterActions } from "@/components/shared/auto-filter-actions";
 import { EmptyState } from "@/components/shared/data-states";
 import { EditorDialog } from "@/components/shared/editor-dialog";
@@ -132,7 +133,8 @@ export function InstitutionProgramsManagementPage() {
   const pagination = listQuery.data?.pagination;
 
   return (
-    <div className="mx-auto flex max-w-7xl flex-col gap-6">
+    <PageLoadingBoundary variant="list" queries={[listQuery]}>
+      <div className="mx-auto flex max-w-7xl flex-col gap-6">
       <PageHeader
         eyebrow="Tuyển sinh"
         title="Chương trình tuyển sinh"
@@ -315,6 +317,7 @@ export function InstitutionProgramsManagementPage() {
         </DialogFooter>
       </EditorDialog>
     </div>
+    </PageLoadingBoundary>
   );
 }
 

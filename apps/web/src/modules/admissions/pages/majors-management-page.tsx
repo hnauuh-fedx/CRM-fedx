@@ -1,3 +1,4 @@
+import { PageLoadingBoundary } from "@/components/shared/page-loading-state";
 const pageSize = 20;
 import { StaticTableHeader } from "@/components/shared/static-table-header";
 import { TablePagination } from "@/components/shared/table-pagination";
@@ -167,7 +168,8 @@ function ProgramMajorsManagement() {
   const pagination = listQuery.data?.pagination;
 
   return (
-    <div className="mx-auto flex max-w-7xl flex-col gap-6">
+    <PageLoadingBoundary variant="list" queries={[listQuery]}>
+      <div className="mx-auto flex max-w-7xl flex-col gap-6">
       <PageHeader
         eyebrow="Quản lý"
         title="Quản lý ngành"
@@ -297,6 +299,7 @@ function ProgramMajorsManagement() {
         </DialogContent>
       </Dialog>
     </div>
+    </PageLoadingBoundary>
   );
 }
 

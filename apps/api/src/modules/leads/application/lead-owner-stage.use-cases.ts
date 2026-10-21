@@ -40,6 +40,7 @@ type LeadAssignmentInput = {
   departmentId?: string;
   resolveAssigneeId?: (tx: Prisma.TransactionClient) => Promise<string>;
   skipIfAssigned?: boolean;
+  manualUnassignmentEventId?: string;
 };
 
 export { leadUpdatePermissions } from "./lead-authorization";
@@ -305,8 +306,11 @@ export async function assignVisibleLead(
     if (!lead) {
       return { ok: false as const, reason: "lead_not_found" as const };
     }
-    if (input.skipIfAssigned && lead.assigned_to) {
-      return { ok: true as const, data: { id: leadId, assigneeId: lead.assigned_to, assignmentId: null, assignedAt: null, preserved: true as const } };
+    if ((input.skipIfAssigned || input.manualUnassignmentEventId) && lead.assigned_to) {
+      return { ok: true as const, data: { id: leadId, assigneeId: lead.assigned_to, assignmentId: null, assignedAt: null, preserved: true as const, skipReason: "already_assigned" } };
+    }
+    if (input.manualUnassignmentEventId && lead.manual_unassignment_event_id !== input.manualUnassignmentEventId) {
+      return { ok: true as const, data: { id: leadId, assigneeId: lead.assigned_to, assignmentId: null, assignedAt: null, preserved: true as const, skipReason: "stale_unassignment_event" } };
     }
     const assigneeId = input.resolveAssigneeId
       ? await input.resolveAssigneeId(tx)
@@ -401,7 +405,7 @@ export async function assignVisibleLead(
     });
     await tx.leads.update({
       where: { id: leadId },
-      data: { assigned_to: assignee.id, updated_at: new Date() },
+      data: { assigned_to: assignee.id, manual_unassignment_event_id: null, updated_at: new Date() },
     });
     // The new main assignee cannot also remain the secondary assignee.
     await tx.leads.updateMany({
@@ -471,6 +475,7 @@ async function findVisibleLead(
       pipeline_stage_id: true,
       status: true,
       assigned_to: true,
+      manual_unassignment_event_id: true,
     },
   });
 }

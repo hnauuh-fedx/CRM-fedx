@@ -1,4 +1,5 @@
-import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
+import { PublicMarketingFormShell as PublicShell, PublicMarketingFormLoadingState } from "../public-marketing-form-shell";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { createMarketingFormEmbedMessage, parseMarketingFormEmbedMessage, sanitizeMarketingFormTracking, type MarketingFormEmbedMessage, type MarketingFormTracking } from "@admission-crm/shared/marketing-form-embed";
 import { CheckCircle2 } from "lucide-react";
@@ -69,18 +70,10 @@ export function PublicMarketingFormPage() {
       window.location.assign(result.redirectUrl);
     },
   });
-  if (query.isLoading) return <PublicShell isEmbed={isEmbed}><p className="text-center text-white">Đang tải biểu mẫu…</p></PublicShell>;
+  if (query.isLoading) return <PublicMarketingFormLoadingState isEmbed={isEmbed} />;
   if (!query.data || query.isError) return <PublicShell isEmbed={isEmbed}><p className="text-center text-white">Biểu mẫu không khả dụng hoặc đã ngừng nhận thông tin.</p></PublicShell>;
   const form = query.data;
   return <PublicShell backgroundColor={form.backgroundColor} isEmbed={isEmbed}>
     {mutation.isSuccess ? <div role="status" className="mx-auto flex max-w-md flex-col items-center gap-4 rounded-2xl bg-background p-8 text-center"><CheckCircle2 aria-hidden="true" /><h1 className="text-2xl font-semibold">Đã gửi thông tin</h1><p>{mutation.data.message || String(form.successSettings?.message ?? "Cảm ơn Quý Anh, Chị đã gửi thông tin.")}</p>{isEmbed && !parentOrigin && mutation.data.redirectMode === "landing_page" && mutation.data.redirectUrl && <a className="inline-flex min-h-11 items-center rounded-md bg-primary px-4 py-2 text-primary-foreground" href={mutation.data.redirectUrl} target="_top">Tiếp tục</a>}</div> : <MarketingFormFill key={publicKey} mode="public" form={form} onSubmit={payload => mutation.mutate(payload)} isPending={mutation.isPending} error={mutation.isError ? mutation.error instanceof ApiError ? mutation.error.message : "Không thể gửi thông tin. Vui lòng thử lại." : undefined} />}
   </PublicShell>;
-}
-function PublicShell({ children, backgroundColor, isEmbed = false }: { children: ReactNode; backgroundColor?: string; isEmbed?: boolean }) {
-  return (
-    <main className={`flex ${isEmbed ? "min-h-170" : "min-h-dvh"} items-center justify-center px-4 ${isEmbed ? "py-4" : "py-8"}`} style={{ backgroundColor: backgroundColor ?? "#08366f" }}>
-      <div className="absolute inset-0 bg-[radial-gradient(circle_at_75%_10%,rgba(255,255,255,0.22),transparent_28%),linear-gradient(135deg,rgba(0,0,0,0.28),transparent_38%)]" aria-hidden="true" />
-      <div className="relative w-full">{children}</div>
-    </main>
-  );
 }

@@ -1,3 +1,4 @@
+import { PageLoadingBoundary } from "@/components/shared/page-loading-state";
 import { StaticTableHeader } from "@/components/shared/static-table-header";
 import { useQuery } from "@tanstack/react-query";
 import {
@@ -188,7 +189,8 @@ export function DuplicateLeadsPage() {
   const result = duplicatesQuery.data;
 
   return (
-    <div className="mx-auto flex max-w-7xl flex-col gap-6">
+    <PageLoadingBoundary variant="list" queries={[duplicatesQuery]}>
+      <div className="mx-auto flex max-w-7xl flex-col gap-6">
       <PageHeader
         eyebrow="CRM Marketing / Khách hàng"
         title="Check trùng data"
@@ -308,5 +310,6 @@ export function DuplicateLeadsPage() {
         </CardContent>
       </Card>
     </div>
+    </PageLoadingBoundary>
   );
 }

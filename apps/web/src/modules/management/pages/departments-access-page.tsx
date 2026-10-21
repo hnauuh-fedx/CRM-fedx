@@ -1,3 +1,4 @@
+import { PageLoadingBoundary } from "@/components/shared/page-loading-state";
 const pageSize = 20;
 import { StaticTableHeader } from "@/components/shared/static-table-header";
 import { TablePagination } from "@/components/shared/table-pagination";
@@ -155,7 +156,8 @@ export function DepartmentsAccessPage() {
   const pagination = listQuery.data?.pagination;
 
   return (
-    <div className="mx-auto flex max-w-7xl flex-col gap-6">
+    <PageLoadingBoundary variant="list" queries={[listQuery, optionsQuery]}>
+      <div className="mx-auto flex max-w-7xl flex-col gap-6">
       <PageHeader
         eyebrow="Hệ thống"
         title="Quản lý phòng ban"
@@ -311,6 +313,7 @@ export function DepartmentsAccessPage() {
         </DialogContent>
       </Dialog>
     </div>
+    </PageLoadingBoundary>
   );
 }
 

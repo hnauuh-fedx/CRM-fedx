@@ -122,9 +122,13 @@ async function executeAssignAction(node: AutomationNode, context: AutomationCont
   if (!assignToUserId || !context.leadId) throw new UnrecoverableError("Node phân công thiếu nhân viên hoặc lead context.");
   const actor = await requireActor(context);
   const result = { nextSourceHandle: "default", delayMinutes: 0 };
-  const mutation = await assignVisibleLead(actor, context.leadId, { assigneeId: assignToUserId, skipIfAssigned: Boolean(context.marketingFormSubmissionId) }, context.institutionProgramId, async (tx) => markActionCompleted(tx, nodeExecutionId, result));
+  const mutation = await assignVisibleLead(actor, context.leadId, {
+    assigneeId: assignToUserId,
+    skipIfAssigned: Boolean(context.marketingFormSubmissionId || context.manualUnassignmentEventId),
+    manualUnassignmentEventId: context.manualUnassignmentEventId,
+  }, context.institutionProgramId, async (tx, assignment) => completeAssignmentAction(tx, context, node.id, nodeExecutionId, assignment.assignmentId, result));
   if (!mutation.ok) throw new UnrecoverableError(`Không thể phân công lead: ${mutation.reason}`);
-  if ("preserved" in mutation.data) await markActionCompleted(prisma, nodeExecutionId, result);
+  if ("preserved" in mutation.data) await recordSkippedAssignment(context, node.id, nodeExecutionId, mutation.data.skipReason, result);
   return result;
 }
 
@@ -136,7 +140,8 @@ async function executeAssignPoolAction(node: AutomationNode, context: Automation
   let monitorId: string | null = null;
   const mutation = await assignVisibleLead(actor, context.leadId, {
     departmentId,
-    skipIfAssigned: Boolean(context.marketingFormSubmissionId),
+    skipIfAssigned: Boolean(context.marketingFormSubmissionId || context.manualUnassignmentEventId),
+    manualUnassignmentEventId: context.manualUnassignmentEventId,
     resolveAssigneeId: (tx) => resolveAutomationAssignee(tx, {
       ruleId: context.ruleId,
       nodeId: node.id,
@@ -149,7 +154,7 @@ async function executeAssignPoolAction(node: AutomationNode, context: Automation
       assigneeWeights,
     }),
   }, context.institutionProgramId, async (tx, assignment) => {
-    await markActionCompleted(tx, nodeExecutionId, result);
+    await completeAssignmentAction(tx, context, node.id, nodeExecutionId, assignment.assignmentId, result);
     if (reassignmentPolicy?.enabled) {
       const monitor = await createReassignmentMonitor(tx, {
         ruleId: context.ruleId,
@@ -170,7 +175,7 @@ async function executeAssignPoolAction(node: AutomationNode, context: Automation
     }
   });
   if (!mutation.ok) throw new UnrecoverableError(`Không thể chia Lead tự động: ${mutation.reason}`);
-  if ("preserved" in mutation.data) await markActionCompleted(prisma, nodeExecutionId, result);
+  if ("preserved" in mutation.data) await recordSkippedAssignment(context, node.id, nodeExecutionId, mutation.data.skipReason, result);
   if (monitorId) {
     const { enqueueReassignmentMonitorJobs } = await import("./automation-reassignment-queue.service.js");
     await enqueueReassignmentMonitorJobs(monitorId).catch((error) => {
@@ -394,6 +399,30 @@ async function markActionCompleted(tx: TransactionClient | typeof prisma, nodeEx
     where: { id: nodeExecutionId },
     data: { status: "action_completed", next_source_handle: result.nextSourceHandle, delay_minutes: result.delayMinutes, action_completed_at: new Date(), error_message: null },
   });
+}
+
+async function recordSkippedAssignment(context: AutomationContext, nodeId: string, nodeExecutionId: string, reason: string | undefined, result: AutomationActionResult) {
+  await prisma.$transaction(async (tx) => {
+    if (context.manualUnassignmentEventId) {
+      await tx.audit_logs.create({ data: {
+        user_id: context.actorId, entity_type: "lead", entity_id: context.leadId,
+        action: "automation_assignment_skipped",
+        new_data: { eventId: context.manualUnassignmentEventId, ruleId: context.ruleId, nodeId, nodeExecutionId, reason: reason ?? "already_assigned" },
+      } });
+    }
+    await markActionCompleted(tx, nodeExecutionId, result);
+  });
+}
+
+async function completeAssignmentAction(tx: TransactionClient, context: AutomationContext, nodeId: string, nodeExecutionId: string, assignmentId: string, result: AutomationActionResult) {
+  if (context.manualUnassignmentEventId) {
+    await tx.audit_logs.create({ data: {
+      user_id: context.actorId, entity_type: "lead", entity_id: context.leadId,
+      action: "automation_assignment_completed",
+      new_data: { eventId: context.manualUnassignmentEventId, ruleId: context.ruleId, nodeId, nodeExecutionId, assignmentId },
+    } });
+  }
+  await markActionCompleted(tx, nodeExecutionId, result);
 }
 
 async function requireActor(context: AutomationContext) {

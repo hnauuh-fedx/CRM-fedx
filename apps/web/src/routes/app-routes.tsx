@@ -2,7 +2,7 @@ import { lazy, Suspense } from "react";
 import { Navigate, Route, Routes } from "react-router-dom";
 
 import { MainLayout } from "@/components/layout/main-layout";
-import { Spinner } from "@/components/ui/spinner";
+import { RouteLoadingState } from "./route-loading-state";
 import { LoginPage } from "@/modules/auth/pages/login-page";
 import { WorkspacePage } from "@/modules/dashboard/pages/workspace-page";
 import { ForbiddenPage } from "@/pages/forbidden-page";
@@ -251,12 +251,7 @@ const AutomationBuilderPage = lazy(() =>
 export function AppRoutes() {
   return (
     <Suspense
-      fallback={
-        <output className="flex items-center justify-center gap-2 p-10 text-sm text-muted-foreground">
-          <Spinner aria-label="Đang tải chức năng" />
-          Đang tải chức năng&hellip;
-        </output>
-      }
+      fallback={<RouteLoadingState />}
     >
       <Routes>
         <Route path="/dang-nhap" element={<LoginPage />} />

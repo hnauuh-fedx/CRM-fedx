@@ -1,3 +1,4 @@
+import { PageLoadingBoundary } from "@/components/shared/page-loading-state";
 import { useAsyncTask } from "@/hooks/use-async-task";
 import { StaticTableHeader } from "@/components/shared/static-table-header";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
@@ -347,7 +348,8 @@ export function WebhooksPage() {
   const detail = detailQuery.data;
 
   return (
-    <div className="mx-auto flex max-w-7xl flex-col gap-6">
+    <PageLoadingBoundary variant="list" queries={[listQuery]}>
+      <div className="mx-auto flex max-w-7xl flex-col gap-6">
       <PageHeader
         eyebrow="Cài đặt · Tích hợp"
         title="Inbound Webhooks"
@@ -481,6 +483,7 @@ export function WebhooksPage() {
         setTestValidation={setTestValidation}
       />
     </div>
+    </PageLoadingBoundary>
   );
 }
 

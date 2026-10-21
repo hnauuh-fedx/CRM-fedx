@@ -1,5 +1,6 @@
 import { prisma } from "../../../database/prisma";
-import type { Prisma } from "../../../generated/prisma/client";
+import { Prisma } from "../../../generated/prisma/client";
+import { createManualUnassignmentEvent, dispatchManualUnassignmentEvent } from "../../automations/manual-unassignment-event.service";
 import {
   hasValidAdmissionReferences,
   saveAdmissionProfile,
@@ -252,6 +253,8 @@ export async function updateLead(
     return { ok: false as const, reason: "permission_denied" as const };
   }
   const result = await prisma.$transaction(async (tx) => {
+    await tx.$executeRaw(Prisma.sql`SELECT pg_advisory_xact_lock(hashtext(${`lead-assignment:${leadId}`}))`);
+    let manualUnassignmentEventId: string | null = null;
     const existing = await findVisibleLeadForMutation(
       actor,
       leadId,
@@ -347,7 +350,7 @@ export async function updateLead(
       data: {
         ...toLeadData(input),
         ...(hasStageSelection ? { pipeline_stage_id: nextStageId } : {}),
-        ...(assignmentChanged ? { assigned_to: nextAssignee?.id ?? null } : {}),
+        ...(assignmentChanged ? { assigned_to: nextAssignee?.id ?? null, manual_unassignment_event_id: null } : {}),
         ...(secondaryChanged ? { secondary_assigned_to: nextSecondaryAssignee?.id ?? null } : {}),
         updated_at: new Date(),
       },
@@ -432,6 +435,12 @@ export async function updateLead(
           },
         });
       } else {
+        if (existing.assigned_to) {
+          const lead = await tx.leads.findUniqueOrThrow({ where: { id: leadId }, select: { institution_program_id: true } });
+          manualUnassignmentEventId = await createManualUnassignmentEvent(tx, {
+            leadId, actorId: actor.id, institutionProgramId: lead.institution_program_id,
+          });
+        }
         await tx.lead_activities.create({
           data: {
             lead_id: leadId,
@@ -473,6 +482,7 @@ export async function updateLead(
       ok: true as const,
       data: {
         id: leadId,
+        manualUnassignmentEventId,
         assignmentEvent: assignmentChanged
           ? nextAssignee
             ? ("lead_assigned" as const)
@@ -482,7 +492,10 @@ export async function updateLead(
     };
   });
 
-  if (result.ok && result.data.assignmentEvent) {
+  if (result.ok && result.data.manualUnassignmentEventId) {
+    // Persisted in the mutation transaction; worker recovery also handles API crashes.
+    void dispatchManualUnassignmentEvent(result.data.manualUnassignmentEventId).catch(console.error);
+  } else if (result.ok && result.data.assignmentEvent === "lead_assigned") {
     triggerAutomation(result.data.assignmentEvent, {
       leadId: result.data.id,
       actorId: actor.id,

@@ -1,3 +1,4 @@
+import { PageLoadingBoundary } from "@/components/shared/page-loading-state";
 import {
   DisplayLayoutList,
   SelectedDisplayLayout,
@@ -66,7 +67,8 @@ function DisplayLayoutsWorkspace() {
     refetchOnReconnect: false,
   });
   return (
-    <div className="mx-auto flex w-full min-w-0 max-w-400 flex-col gap-6">
+    <PageLoadingBoundary variant="settings" queries={[list]}>
+      <div className="mx-auto flex w-full min-w-0 max-w-400 flex-col gap-6">
       <PageHeader
         eyebrow="Quản trị"
         title="Cấu hình hiển thị"
@@ -148,5 +150,6 @@ function DisplayLayoutsWorkspace() {
         draftKey={params.get("draft") ?? "new"}
       />
     </div>
+    </PageLoadingBoundary>
   );
 }

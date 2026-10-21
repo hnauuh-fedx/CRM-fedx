@@ -1,3 +1,4 @@
+import { PageLoadingBoundary } from "@/components/shared/page-loading-state";
 import { TablePagination } from "@/components/shared/table-pagination";
 import { isAccessScopeWithinRole, resolveEffectiveAccessScope } from "@admission-crm/shared/access-scope";
 import { useState } from "react";
@@ -136,7 +137,8 @@ export function UsersAccessPage() {
   const pagination = listQuery.data?.pagination;
 
   return (
-    <div className="mx-auto flex max-w-7xl flex-col gap-6">
+    <PageLoadingBoundary variant="list" queries={[listQuery, optionsQuery]}>
+      <div className="mx-auto flex max-w-7xl flex-col gap-6">
       <PageHeader
         eyebrow="Hệ thống"
         title="Quản lý người dùng"
@@ -339,6 +341,7 @@ export function UsersAccessPage() {
         </DialogContent>
       </Dialog>
     </div>
+    </PageLoadingBoundary>
   );
 }
 

@@ -2,6 +2,7 @@
   "name": "@admission-crm/api",
   "private": true,
   "scripts": {
+    "test:integration:manual-unassignment": "node scripts/test-manual-unassignment-isolated.cjs",
     "test:display-layout": "tsx --test src/modules/display-layouts/display-layout.test.ts",
     "test:integration:display-layout": "tsx src/integration/display-layout.integration.ts",
     "dev": "tsx watch src/server.ts",

@@ -1,3 +1,4 @@
+import { PageLoadingBoundary } from "@/components/shared/page-loading-state";
 import { StaticTableHeader } from "@/components/shared/static-table-header";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import {
@@ -246,7 +247,8 @@ function PersonalReportsWorkspace() {
   }
 
   return (
-    <div className="mx-auto flex max-w-7xl flex-col gap-6">
+    <PageLoadingBoundary variant="dashboard" queries={[reportsQuery, optionsQuery]}>
+      <div className="mx-auto flex max-w-7xl flex-col gap-6">
       <PageHeader
         eyebrow="Báo cáo"
         title="Báo cáo thống kê"
@@ -356,6 +358,7 @@ function PersonalReportsWorkspace() {
         />
       </div>
     </div>
+    </PageLoadingBoundary>
   );
 }
 

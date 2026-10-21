@@ -1,3 +1,5 @@
+import { PageLoadingState } from "@/components/shared/page-loading-state";
+import { PageLoadingBoundary } from "@/components/shared/page-loading-state";
 const pageSize = 20;
 import { ServerDataTable } from "@/components/shared/server-data-table";
 import { StaticTableHeader } from "@/components/shared/static-table-header";
@@ -794,7 +796,8 @@ function ProgramMarketingFormsPage() {
     );
 
   return (
-    <div className="mx-auto flex max-w-7xl flex-col gap-6">
+    <PageLoadingBoundary variant="list" queries={[listQuery, optionsQuery]}>
+      <div className="mx-auto flex max-w-7xl flex-col gap-6">
       <PageHeader
         eyebrow="CRM Marketing"
         title="Form & Survey"
@@ -896,6 +899,7 @@ function ProgramMarketingFormsPage() {
       />
       <MarketingFormSecretDialog dialog={dialog} setDialog={setDialog} />
     </div>
+    </PageLoadingBoundary>
   );
 }
 
@@ -960,8 +964,7 @@ function ProgramMarketingFormDetailPage() {
         description="Chọn chương trình trên thanh phía trên để mở Form & Survey."
       />
     );
-  if (formQuery.isLoading)
-    return <TableLoadingState label="Đang tải chi tiết Form & Survey" />;
+  if (formQuery.isLoading) return <PageLoadingState variant="settings" label="Đang tải chi tiết Form & Survey" />;
   if (formQuery.isError || !formQuery.data) {
     return (
       <ErrorState

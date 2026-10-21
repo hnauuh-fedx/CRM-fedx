@@ -1,0 +1,196 @@
+TAP version 13
+# Subtest: custom field formatter keeps file names and metadata separate from selection codes
+ok 1 - custom field formatter keeps file names and metadata separate from selection codes
+  ---
+  duration_ms: 1.407
+  type: 'test'
+  ...
+# Subtest: guards reject incomplete files, mixed arrays and non-string selection values
+ok 2 - guards reject incomplete files, mixed arrays and non-string selection values
+  ---
+  duration_ms: 0.2538
+  type: 'test'
+  ...
+# Subtest: province lookup accepts a known code and preserves an unknown legacy code
+ok 3 - province lookup accepts a known code and preserves an unknown legacy code
+  ---
+  duration_ms: 0.2317
+  type: 'test'
+  ...
+# Subtest: dropdown fields list their values; sensitive and hidden fields are excluded
+ok 4 - dropdown fields list their values; sensitive and hidden fields are excluded
+  ---
+  duration_ms: 2.1807
+  type: 'test'
+  ...
+# Subtest: date fields offer comparison operators, ranges, presets and empty checks
+ok 5 - date fields offer comparison operators, ranges, presets and empty checks
+  ---
+  duration_ms: 0.2158
+  type: 'test'
+  ...
+# Subtest: validation only asks for a value when the operator needs one
+ok 6 - validation only asks for a value when the operator needs one
+  ---
+  duration_ms: 0.3701
+  type: 'test'
+  ...
+# Subtest: conditions round-trip through the URL and keep other query params
+ok 7 - conditions round-trip through the URL and keep other query params
+  ---
+  duration_ms: 0.7261
+  type: 'test'
+  ...
+# Subtest: import errors render only one page while keeping navigation to all remaining errors
+ok 8 - import errors render only one page while keeping navigation to all remaining errors
+  ---
+  duration_ms: 32.7745
+  type: 'test'
+  ...
+# Subtest: single page disables navigation and preserves missing values
+ok 9 - single page disables navigation and preserves missing values
+  ---
+  duration_ms: 5.4865
+  type: 'test'
+  ...
+# Subtest: maximum Bizfly result reports all 5000 errors without rendering all rows
+ok 10 - maximum Bizfly result reports all 5000 errors without rendering all rows
+  ---
+  duration_ms: 70.1117
+  type: 'test'
+  ...
+# Subtest: choice configuration cannot create implicit columns in the question editor
+ok 11 - choice configuration cannot create implicit columns in the question editor
+  ---
+  duration_ms: 1.1985
+  type: 'test'
+  ...
+# Subtest: visibility fills the row and option rows avoid fixed-width desktop tracks
+ok 12 - visibility fills the row and option rows avoid fixed-width desktop tracks
+  ---
+  duration_ms: 0.6832
+  type: 'test'
+  ...
+# Subtest: Other stays structured, validates text and clears all content when hidden
+ok 13 - Other stays structured, validates text and clears all content when hidden
+  ---
+  duration_ms: 2.5129
+  type: 'test'
+  ...
+# Subtest: Other renders as a dedicated option, not a fabricated regular option value
+ok 14 - Other renders as a dedicated option, not a fabricated regular option value
+  ---
+  duration_ms: 14.1053
+  type: 'test'
+  ...
+# Subtest: rating shares bounded validation and exposes native keyboard-accessible stars
+ok 15 - rating shares bounded validation and exposes native keyboard-accessible stars
+  ---
+  duration_ms: 7.2646
+  type: 'test'
+  ...
+# Subtest: multiple choice uses arrays, preserving comma-containing answers
+ok 16 - multiple choice uses arrays, preserving comma-containing answers
+  ---
+  duration_ms: 0.3021
+  type: 'test'
+  ...
+# Subtest: empty optional values and scalar selections are checked separately
+ok 17 - empty optional values and scalar selections are checked separately
+  ---
+  duration_ms: 0.1235
+  type: 'test'
+  ...
+# Subtest: duplicating creates an independent question with unique key and no CRM target
+ok 18 - duplicating creates an independent question with unique key and no CRM target
+  ---
+  duration_ms: 0.218
+  type: 'test'
+  ...
+# Subtest: preview/public share defaults and required/option validation
+ok 19 - preview/public share defaults and required/option validation
+  ---
+  duration_ms: 0.3046
+  type: 'test'
+  ...
+# Subtest: changing an ancestor clears dependent child and grandchild, regardless of field order
+ok 20 - changing an ancestor clears dependent child and grandchild, regardless of field order
+  ---
+  duration_ms: 0.4171
+  type: 'test'
+  ...
+# Subtest: shared renderer exposes Vietnamese labels and a preview-only contract
+ok 21 - shared renderer exposes Vietnamese labels and a preview-only contract
+  ---
+  duration_ms: 5.6927
+  type: 'test'
+  ...
+# Subtest: choice questions expose semantic legends and focusable validation groups
+ok 22 - choice questions expose semantic legends and focusable validation groups
+  ---
+  duration_ms: 3.0118
+  type: 'test'
+  ...
+# Subtest: question descriptions are escaped, linked to every control, and hidden with their question
+ok 23 - question descriptions are escaped, linked to every control, and hidden with their question
+  ---
+  duration_ms: 15.3564
+  type: 'test'
+  ...
+# Subtest: multi-page renderer shows only first-page questions and semantic groups
+ok 24 - multi-page renderer shows only first-page questions and semantic groups
+  ---
+  duration_ms: 1.6352
+  type: 'test'
+  ...
+# Subtest: hidden required answers are cleared, never resurrect on showing, and omitted from payload/renderer
+ok 25 - hidden required answers are cleared, never resurrect on showing, and omitted from payload/renderer
+  ---
+  duration_ms: 0.481
+  type: 'test'
+  ...
+# Subtest: stable IDs reject external, removed, duplicate and no-op targets; first page remains fixed
+ok 26 - stable IDs reject external, removed, duplicate and no-op targets; first page remains fixed
+  ---
+  duration_ms: 1.7297
+  type: 'test'
+  ...
+# Subtest: move preserves all question metadata and does not mutate source; editor follows non-adjacent moves
+ok 27 - move preserves all question metadata and does not mutate source; editor follows non-adjacent moves
+  ---
+  duration_ms: 0.2909
+  type: 'test'
+  ...
+# Subtest: native handler flow ignores external drops and cancelled drags, then moves once
+ok 28 - native handler flow ignores external drops and cancelled drags, then moves once
+  ---
+  duration_ms: 4.6238
+  type: 'test'
+  ...
+# Subtest: Alt arrows match pointer move; plain arrows and saving/fixed page cannot reorder
+ok 29 - Alt arrows match pointer move; plain arrows and saving/fixed page cannot reorder
+  ---
+  duration_ms: 0.5823
+  type: 'test'
+  ...
+# Subtest: removing an earlier condition preserves the remaining row identity
+ok 30 - removing an earlier condition preserves the remaining row identity
+  ---
+  duration_ms: 1.4353
+  type: 'test'
+  ...
+# Subtest: replacement and appended conditions receive fresh identities without changing API values
+ok 31 - replacement and appended conditions receive fresh identities without changing API values
+  ---
+  duration_ms: 0.1778
+  type: 'test'
+  ...
+1..31
+# tests 31
+# suites 0
+# pass 31
+# fail 0
+# cancelled 0
+# skipped 0
+# todo 0
+# duration_ms 6782.8819

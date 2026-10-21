@@ -1,3 +1,4 @@
+import { PageLoadingBoundary } from "@/components/shared/page-loading-state";
 import { StaticTableHeader } from "@/components/shared/static-table-header";
 import { customFieldPermissionForms } from "@/modules/custom-fields/custom-field-permissions";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
@@ -152,7 +153,8 @@ export function RolesAccessPage() {
   const scopes = optionsQuery.data?.scopes ?? [];
 
   return (
-    <div className="mx-auto flex max-w-7xl flex-col gap-6">
+    <PageLoadingBoundary variant="list" queries={[rolesQuery, optionsQuery]}>
+      <div className="mx-auto flex max-w-7xl flex-col gap-6">
       <PageHeader
         eyebrow="Hệ thống"
         title="Vai trò & scope truy cập"
@@ -345,6 +347,7 @@ export function RolesAccessPage() {
         </DialogContent>
       </Dialog>
     </div>
+    </PageLoadingBoundary>
   );
 }
 

@@ -1,3 +1,4 @@
+import { PageLoadingBoundary } from "@/components/shared/page-loading-state";
 import { ServerDataTable } from "@/components/shared/server-data-table";
 import { TablePagination } from "@/components/shared/table-pagination";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
@@ -148,7 +149,8 @@ export function LeadAssignmentsPage() {
   });
 
   return (
-    <div className="mx-auto flex max-w-7xl flex-col gap-6">
+    <PageLoadingBoundary variant="list" queries={[listQuery, optionsQuery]}>
+      <div className="mx-auto flex max-w-7xl flex-col gap-6">
       <PageHeader
         eyebrow="CRM Sale"
         title="Phân công lead"
@@ -196,6 +198,7 @@ export function LeadAssignmentsPage() {
         onNext={() => setPage((current) => current + 1)}
       />
     </div>
+    </PageLoadingBoundary>
   );
 }
 

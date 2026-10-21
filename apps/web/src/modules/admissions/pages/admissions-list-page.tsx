@@ -1,3 +1,4 @@
+import { PageLoadingBoundary } from "@/components/shared/page-loading-state";
 import { ServerDataTable } from "@/components/shared/server-data-table";
 import { TablePagination } from "@/components/shared/table-pagination";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
@@ -258,7 +259,8 @@ export function AdmissionsListPage() {
   });
 
   return (
-    <div className="mx-auto flex max-w-7xl flex-col gap-6">
+    <PageLoadingBoundary variant="list" queries={[listQuery, optionsQuery]}>
+      <div className="mx-auto flex max-w-7xl flex-col gap-6">
       <PageHeader
         eyebrow="CRM Tuyển sinh"
         title="Danh sách hồ sơ tuyển sinh"
@@ -388,6 +390,7 @@ export function AdmissionsListPage() {
         }
       />
     </div>
+    </PageLoadingBoundary>
   );
 }
 

@@ -3,6 +3,7 @@ import { CreateLeadDialog } from "../components/create-lead-dialog";
 import { useLeadListColumns } from "../components/lead-list-columns";
 import { useLeadDisplayLayout, getLeadListLayoutScreen } from "../use-lead-display-layout";
 import { LeadDisplayLayoutStatus, EditLeadDisplayLayoutButton } from "../components/lead-display-layout-status";
+import { PageLoadingBoundary } from "@/components/shared/page-loading-state";
 import { LeadDetailLayout } from "../components/lead-detail-layout";
 import { leadColumnStyle, leadColumnClass } from "../components/lead-column-presentation";
 import { defaultDisplayColumnWidth, minDisplayColumnWidth, maxDisplayColumnWidth } from "@admission-crm/shared/display-layout";
@@ -390,7 +391,8 @@ export function LeadsListPage({
   });
 
   return (
-    <div className="mx-auto flex w-full min-w-0 max-w-400 flex-col gap-6">
+    <PageLoadingBoundary variant="lead-list" queries={[leadsQuery, optionsQuery, displayLayout]}>
+      <div className="mx-auto flex w-full min-w-0 max-w-400 flex-col gap-6">
       <PageHeader
         eyebrow={eyebrow}
         title={title}
@@ -568,6 +570,7 @@ export function LeadsListPage({
         setViewState={setViewState}
       />
     </div>
+    </PageLoadingBoundary>
   );
 }
 

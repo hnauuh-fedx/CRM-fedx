@@ -1,3 +1,4 @@
+import { PageLoadingBoundary } from "@/components/shared/page-loading-state";
 import { TablePagination } from "@/components/shared/table-pagination";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Pencil, Plus, Search } from "lucide-react";
@@ -176,7 +177,8 @@ export function StudentServicesPage() {
   );
 
   return (
-    <div className="mx-auto flex max-w-7xl flex-col gap-6">
+    <PageLoadingBoundary variant="list" queries={[listQuery, optionsQuery]}>
+      <div className="mx-auto flex max-w-7xl flex-col gap-6">
       <PageHeader
         eyebrow="CRM Sinh viên"
         title="Dịch vụ sinh viên"
@@ -300,6 +302,7 @@ export function StudentServicesPage() {
         onUpdate={(id, input) => updateMutation.mutate({ id, input })}
       />
     </div>
+    </PageLoadingBoundary>
   );
 }
 

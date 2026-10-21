@@ -1,7 +1,8 @@
-import { useState } from "react";
+import { Suspense, useState } from "react";
 import { Outlet, useLocation } from "react-router-dom";
 
 import { useAuth } from "@/modules/auth/auth-context";
+import { RouteLoadingState } from "@/routes/route-loading-state";
 import { InstitutionProgramProvider, useInstitutionProgram } from "@/modules/institutions/institution-program-context";
 import { getActiveNavigationSection, getNavigationSections } from "./navigation";
 import { Sidebar } from "./sidebar";
@@ -76,12 +77,14 @@ function MainLayoutContent() {
 
         <main id="main-content" className="flex-1 p-4 sm:p-6 lg:p-8 xl:p-8" tabIndex={-1}>
           {programContext.hasSelectedProgram ? (
-            <Outlet />
+            <Suspense key={location.pathname} fallback={<RouteLoadingState />}>
+              <Outlet />
+            </Suspense>
+          ) : programContext.isLoading ? (
+            <RouteLoadingState />
           ) : (
             <p role="status" className="rounded-xl border bg-background p-6 text-sm text-muted-foreground">
-              {programContext.isLoading
-                ? "Đang tải danh sách chương trình..."
-                : "Chưa có chương trình hoạt động để làm việc."}
+              Chưa có chương trình hoạt động để làm việc.
             </p>
           )}
         </main>

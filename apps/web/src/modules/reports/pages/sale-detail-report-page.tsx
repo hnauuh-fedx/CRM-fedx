@@ -1,3 +1,4 @@
+import { PageLoadingBoundary } from "@/components/shared/page-loading-state";
 import { ErrorState } from "@/components/shared/error-state";
 import { PageHeader } from "@/components/shared/page-header";
 import { Card } from "@/components/ui/card";
@@ -20,7 +21,8 @@ export function SaleDetailReportPage() {
   });
 
   return (
-    <div className="mx-auto flex max-w-7xl flex-col gap-6">
+    <PageLoadingBoundary variant="dashboard" queries={[reportQuery]}>
+      <div className="mx-auto flex max-w-7xl flex-col gap-6">
       <PageHeader
         eyebrow="Báo cáo"
         title="Báo cáo Sale chi tiết"
@@ -49,6 +51,7 @@ export function SaleDetailReportPage() {
         />
       )}
     </div>
+    </PageLoadingBoundary>
   );
 }
 

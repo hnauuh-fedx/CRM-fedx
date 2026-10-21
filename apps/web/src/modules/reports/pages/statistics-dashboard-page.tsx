@@ -1,3 +1,4 @@
+import { PageLoadingBoundary } from "@/components/shared/page-loading-state";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   ArrowDown,
@@ -234,7 +235,8 @@ function StatisticsDashboardWorkspace({ readOnly = false, header = defaultHeader
   }
 
   return (
-    <div className="mx-auto flex max-w-7xl flex-col gap-6">
+    <PageLoadingBoundary variant="dashboard" queries={[dashboardQuery]}>
+      <div className="mx-auto flex max-w-7xl flex-col gap-6">
       <PageHeader
         eyebrow={header.eyebrow}
         title={header.title}
@@ -303,6 +305,7 @@ function StatisticsDashboardWorkspace({ readOnly = false, header = defaultHeader
         />
       )}
     </div>
+    </PageLoadingBoundary>
   );
 }
 

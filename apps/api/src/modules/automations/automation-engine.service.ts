@@ -72,6 +72,10 @@ export async function triggerAutomation(
   options: { eventId?: string; retryFailedExecutions?: boolean } = {},
 ) {
   if (isAutomationDisabled) return { matched: 0, started: 0, failed: 0, unavailable: true };
+  // This trigger is emitted only by the durable manual-unassignment dispatcher.
+  if (triggerType === "lead_unassigned" && !context.manualUnassignmentEventId) {
+    return { matched: 0, started: 0, failed: 0, unavailable: false };
+  }
   const lead = context.leadId
     ? await prisma.leads.findFirst({
         where: { id: context.leadId, deleted_at: null },
@@ -462,6 +466,7 @@ if (automationWorker) {
       import("./automation-scheduler.service.js").then(({ dispatchDueScheduledAutomations }) => dispatchDueScheduledAutomations()),
       import("./automation-scheduler.service.js").then(({ dispatchExpiringAdmissionAutomations }) => dispatchExpiringAdmissionAutomations()),
       import("./marketing-form-automation-event.service.js").then(({ recoverMarketingFormAutomationEvents }) => recoverMarketingFormAutomationEvents()),
+      import("./manual-unassignment-event.service.js").then(({ recoverManualUnassignmentEvents }) => recoverManualUnassignmentEvents()),
     ]).catch((error) => console.error("Automation schedule scan failed", error));
   };
   scanSchedules();

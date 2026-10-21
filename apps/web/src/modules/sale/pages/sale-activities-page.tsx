@@ -1,3 +1,4 @@
+import { PageLoadingBoundary } from "@/components/shared/page-loading-state";
 import { ServerDataTable } from "@/components/shared/server-data-table";
 import { TablePagination } from "@/components/shared/table-pagination";
 import { useQuery } from "@tanstack/react-query";
@@ -100,7 +101,8 @@ export function SaleActivitiesPage() {
   });
 
   return (
-    <div className="mx-auto flex max-w-7xl flex-col gap-6">
+    <PageLoadingBoundary variant="list" queries={[listQuery, optionsQuery]}>
+      <div className="mx-auto flex max-w-7xl flex-col gap-6">
       <PageHeader
         eyebrow="CRM Sale"
         title="Hoạt động"
@@ -144,6 +146,7 @@ export function SaleActivitiesPage() {
         onNext={() => setPage((current) => current + 1)}
       />
     </div>
+    </PageLoadingBoundary>
   );
 }
 

@@ -82,6 +82,7 @@ const statuses = [1, 2, 3].map((n) => ({
   createdAt: "2026-10-01T00:00:00Z",
 }));
 let flow = { "status-1": ["status-2"] };
+let permissionDeleteAttempts = 0;
 const options = {
   sources: [source],
   leadSources: [source],
@@ -166,6 +167,10 @@ try {
       if (request.method !== "GET") {
         const body = await readBody(request);
         writes.push({ path, body, method: request.method });
+        if (path === "/api/permissions/permission-1") {
+          if (request.method === "PATCH") return json(response, { id: "permission-1" });
+          if (request.method === "DELETE" && ++permissionDeleteAttempts > 1) return json(response, { id: "permission-1" });
+        }
         if (path === "/api/admissions/statuses/flow") {
           flow = { ...flow, [body.fromStatusId]: body.toStatusIds };
           return json(response, body);
@@ -191,6 +196,38 @@ try {
       if (path === "/api/display-layouts/effective") return json(response, { name: "M?c ??nh", baseTemplateId: null, visibleFields: ["fullName", "phone", "source", "assignee", "createdAt"], pinnedFields: [], columnWidths: {} });
       if (path === "/api/institution-programs/options")
         return json(response, { data: [{ ...program, code: "P1" }] });
+      if (path === "/api/permissions/options")
+        return json(response, { modules: ["lead", "system"], statuses: ["active", "inactive"] });
+      if (path === "/api/permissions")
+        return json(response, {
+          data: [
+            { id: "permission-1", code: "lead.create", name: "Tạo lead", module: "lead", description: "Quyền mẫu", isActive: true, roleCount: 0, createdAt: null },
+            { id: "permission-2", code: "user.manage", name: "Quản lý người dùng", module: "system", description: null, isActive: true, roleCount: 2, createdAt: null },
+          ],
+          pagination: pagination(url),
+          sort: { sortBy: "code", sortOrder: "asc" },
+          filters: Object.fromEntries(url.searchParams),
+        });
+      if (path === "/api/display-layouts/effective") {
+        const presentation = {
+          visibleFields: ["fullName", "phone", "source", "assignee", "createdAt"],
+          pinnedFields: [],
+          columnWidths: {},
+        };
+        return json(response, {
+          ...presentation,
+          inherited: presentation,
+          name: "Bố cục mặc định",
+          source: "SYSTEM",
+          ambiguousDepartment: false,
+          policy: { visibility: false, order: false, pinning: false, widths: false },
+          baseTemplateId: null,
+          baseVersion: 0,
+          personalRevision: 0,
+          personalized: false,
+          personalizationStale: false,
+        });
+      }
       if (path === "/api/admissions/fees/options")
         return json(response, { statuses: ["pending", "paid"] });
       if (path === "/api/admissions/documents/options")
@@ -641,6 +678,63 @@ try {
   console.log(
     "PASS transition prompt cancel, failed confirmation preserved and successful retry with original command",
   );
+  await go("permissions");
+  await wait("document.querySelector('#permission-search')");
+  await button("Sau");
+  await waitRequest((r) => r.path === "/api/permissions" && r.query.page === "2");
+  await fill("#permission-search", "  lead  ");
+  await waitRequest((r) => r.path === "/api/permissions" && r.query.search === "lead" && r.query.page === "1");
+  await button("Xóa lọc");
+  await wait("document.querySelector('#permission-search').value === ''");
+  await click("#permission-filter-module");
+  await evaluate("[...document.querySelectorAll('[role=option]')].find(e=>e.textContent.trim()==='lead').setAttribute('data-module-option','true')");
+  await click("[data-module-option]");
+  await click("#permission-filter-status");
+  await evaluate("[...document.querySelectorAll('[role=option]')].find(e=>e.textContent.trim()==='Đã tắt').setAttribute('data-status-option','true')");
+  await click("[data-status-option]");
+  await waitRequest((r) => r.path === "/api/permissions" && r.query.module === "lead" && r.query.status === "inactive" && r.query.page === "1");
+  await button("Xóa lọc");
+  await button("Thêm quyền");
+  const writesBeforeValidation = writes.length;
+  await button("Lưu quyền", dialog);
+  await wait("document.querySelector('[role=dialog] [role=alert]')");
+  assert.equal(writes.length, writesBeforeValidation, "Validation phải chặn request tạo quyền thiếu thông tin.");
+  await click("#permission-code");
+  await evaluate("[...document.querySelectorAll('[role=option]')].find(e=>e.textContent.trim()==='lead.create').setAttribute('data-permission-option','true')");
+  await click("[data-permission-option]");
+  assert.equal(await evaluate("document.querySelector('#permission-module').value"), "lead");
+  await fill("#permission-name", "Bản nháp quyền");
+  await evaluate("document.querySelector('#fixture-render').click()");
+  assert.equal(await evaluate("document.querySelector('#permission-name').value"), "Bản nháp quyền");
+  await button("Lưu quyền", dialog);
+  await wait("document.querySelector('[role=dialog]')?.textContent.includes('Lỗi lưu fixture')");
+  assert.equal(await evaluate("document.querySelector('#permission-name').value"), "Bản nháp quyền");
+  assert.equal(writes.at(-1).path, "/api/permissions");
+  assert.equal(writes.at(-1).body.code, "lead.create");
+  await key("Escape", "Escape");
+  await wait("!document.querySelector('[role=dialog]')");
+  await button("Thêm quyền");
+  assert.equal(await evaluate("document.querySelector('[role=dialog] [role=alert]') === null"), true, "Mở lại phải xóa lỗi mutation trước đó.");
+  await key("Escape", "Escape");
+  await wait("!document.querySelector('[role=dialog]')");
+  await click("tbody tr:first-child button:first-child");
+  await wait("document.querySelector('#permission-name')?.value === 'Tạo lead'");
+  await fill("#permission-name", "Tên quyền đã sửa");
+  await button("Lưu quyền", dialog);
+  await wait("!document.querySelector('[role=dialog]')");
+  assert.equal(writes.at(-1).path, "/api/permissions/permission-1");
+  assert.equal(writes.at(-1).method, "PATCH");
+  assert.equal(writes.at(-1).body.name, "Tên quyền đã sửa");
+  assert.equal(await evaluate("document.querySelector('tbody tr:nth-child(2) button:last-child').disabled"), true, "Quyền đang được vai trò sử dụng phải khóa nút xóa.");
+  await click("tbody tr:first-child button:last-child");
+  await wait("document.querySelector('[role=dialog]')?.textContent.includes('lead.create')");
+  await button("Xóa quyền", dialog);
+  await wait("document.querySelector('[role=dialog]')?.textContent.includes('Lỗi lưu fixture')");
+  await button("Xóa quyền", dialog);
+  await wait("!document.querySelector('[role=dialog]')");
+  assert.equal(writes.at(-1).path, "/api/permissions/permission-1");
+  assert.equal(writes.at(-1).method, "DELETE");
+  console.log("PASS permission filters/page reset, create validation/draft/error reset, edit target/save, used-permission delete guard, failed delete/retry");
   assert.deepEqual(
     unknown,
     [],

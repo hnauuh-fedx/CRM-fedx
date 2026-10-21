@@ -1,7 +1,7 @@
+import { SessionLoadingState } from "@/components/shared/page-loading-state";
 import { Navigate, useLocation, useNavigate } from "react-router-dom";
 
 import LoginForm from "@/components/shadcn-space/blocks/login-01/login";
-import { Spinner } from "@/components/ui/spinner";
 import { ApiError } from "@/services/api";
 import { useAuth } from "../auth-context";
 import type { LoginFormValues } from "../login.schema";
@@ -17,16 +17,7 @@ export function LoginPage() {
   const navigate = useNavigate();
   const from = (location.state as LoginLocationState | null)?.from ?? "/tong-quan";
 
-  if (auth.isRestoring) {
-    return (
-      <main className="flex min-h-dvh items-center justify-center bg-background">
-        <output className="flex items-center gap-2 text-sm text-muted-foreground">
-        <Spinner aria-label="Đang kiểm tra phiên đăng nhập" />
-        Đang kiểm tra phiên đăng nhập…
-        </output>
-      </main>
-    );
-  }
+  if (auth.isRestoring) return <SessionLoadingState />;
 
   if (auth.restoreError && !auth.user) return <SessionRestoreError message={auth.restoreError} onRetry={auth.retryRestore} />;
 

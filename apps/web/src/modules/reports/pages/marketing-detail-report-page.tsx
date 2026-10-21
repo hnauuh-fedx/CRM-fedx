@@ -1,3 +1,4 @@
+import { PageLoadingBoundary } from "@/components/shared/page-loading-state";
 import { StaticTableHeader } from "@/components/shared/static-table-header";
 import { useQuery } from "@tanstack/react-query";
 import {
@@ -35,7 +36,8 @@ export function MarketingDetailReportPage() {
   });
 
   return (
-    <div className="mx-auto flex max-w-7xl flex-col gap-6">
+    <PageLoadingBoundary variant="dashboard" queries={[reportQuery]}>
+      <div className="mx-auto flex max-w-7xl flex-col gap-6">
       <PageHeader
         eyebrow="Báo cáo"
         title="Báo cáo Marketing chi tiết"
@@ -123,6 +125,7 @@ export function MarketingDetailReportPage() {
         </>
       )}
     </div>
+    </PageLoadingBoundary>
   );
 }
 

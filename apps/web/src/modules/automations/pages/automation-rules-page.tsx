@@ -1,3 +1,4 @@
+import { PageLoadingBoundary } from "@/components/shared/page-loading-state";
 import { TablePagination } from "@/components/shared/table-pagination";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import {
@@ -398,7 +399,8 @@ function ProgramAutomationRulesPage() {
     toggleMutation.error ?? archiveMutation.error ?? duplicateMutation.error;
 
   return (
-    <div className="mx-auto flex max-w-7xl flex-col gap-6">
+    <PageLoadingBoundary variant="cards" queries={[rulesQuery, optionsQuery]}>
+      <div className="mx-auto flex max-w-7xl flex-col gap-6">
       <PageHeader
         eyebrow="Quản lý hệ thống"
         title="Rule Automation"
@@ -574,6 +576,7 @@ function ProgramAutomationRulesPage() {
         />
       )}
     </div>
+    </PageLoadingBoundary>
   );
 }
 

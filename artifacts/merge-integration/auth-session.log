@@ -1,0 +1,1 @@
+PASS auth sessions: persistence, expiry, concurrency, reuse, CSRF, revocation, account status and audit

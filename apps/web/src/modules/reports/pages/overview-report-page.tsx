@@ -1,3 +1,4 @@
+import { PageLoadingState } from "@/components/shared/page-loading-state";
 import { useQuery } from "@tanstack/react-query";
 import { ClipboardList, GraduationCap, Target, TrendingUp, Wallet } from "lucide-react";
 
@@ -5,7 +6,6 @@ import { BreakdownCard, MetricCard } from "@/components/shared/dashboard-cards";
 import { ErrorState } from "@/components/shared/error-state";
 import { PageHeader } from "@/components/shared/page-header";
 import { Card } from "@/components/ui/card";
-import { Skeleton } from "@/components/ui/skeleton";
 import { useAuth } from "@/modules/auth/auth-context";
 import { getOverviewReport } from "@/services/report.service";
 
@@ -19,17 +19,7 @@ export function OverviewReportPage() {
     queryFn: () => getOverviewReport(auth.accessToken!),
   });
 
-  if (reportQuery.isLoading) {
-    return (
-      <output className="mx-auto flex max-w-7xl flex-col gap-6" aria-label="Đang tải báo cáo tổng hợp">
-        <Skeleton className="h-20 max-w-xl" />
-        <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-5">
-          {[1, 2, 3, 4, 5].map((item) => <Skeleton key={item} className="h-32" />)}
-        </div>
-        <Skeleton className="h-72" />
-      </output>
-    );
-  }
+  if (reportQuery.isLoading) return <PageLoadingState variant="dashboard" label="Đang tải báo cáo tổng hợp" />;
 
   if (reportQuery.isError || !reportQuery.data) {
     return (

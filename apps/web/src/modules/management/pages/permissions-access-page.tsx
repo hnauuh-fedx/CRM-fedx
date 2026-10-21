@@ -1,13 +1,14 @@
-const pageSize = 20;
+import { PageLoadingBoundary } from "@/components/shared/page-loading-state";
 import { StaticTableHeader } from "@/components/shared/static-table-header";
 import { TablePagination } from "@/components/shared/table-pagination";
 import { customFieldPermissionDefinitions } from "@/modules/custom-fields/custom-field-permissions";
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { useMutation, useQuery, useQueryClient, type UseMutationResult } from "@tanstack/react-query";
 import { Pencil, Plus, Search, ShieldCheck, Trash2 } from "lucide-react";
-import { useState } from "react";
+import { useState, type Dispatch, type SetStateAction } from "react";
 import { AutoFilterActions } from "@/components/shared/auto-filter-actions";
 import { EmptyState } from "@/components/shared/data-states";
 import { ErrorState } from "@/components/shared/error-state";
+import { FilterSelect } from "@/components/shared/filter-select";
 import { PageHeader } from "@/components/shared/page-header";
 import { TableLoadingState } from "@/components/shared/table-loading-state";
 import { Badge } from "@/components/ui/badge";
@@ -55,6 +56,7 @@ import type {
   ManagedPermission,
   PermissionInput,
 } from "../permission-management.types";
+const pageSize = 20;
 const emptyFilters = { search: "", module: "", status: "" };
 const emptyForm: PermissionInput = {
   code: "",
@@ -399,148 +401,182 @@ export function PermissionsAccessPage() {
   const pagination = listQuery.data?.pagination;
 
   return (
-    <div className="mx-auto flex max-w-7xl flex-col gap-6">
-      <PageHeader
-        eyebrow="Hệ thống"
-        title="Danh mục quyền"
-        scopeLabel="Quyền quản trị"
-        description="Quản lý mã quyền chức năng dùng để cấp quyền cho vai trò trong hệ thống."
-        actions={
-          <Button
-            type="button"
-            onClick={() => {
-              createMutation.reset();
-              setDialog({ type: "create" });
-            }}
-          >
-            <Plus aria-hidden="true" />
-            Thêm quyền
-          </Button>
-        }
-      />
+    <PageLoadingBoundary variant="list" queries={[listQuery, optionsQuery]}>
+      <div className="mx-auto flex max-w-7xl flex-col gap-6">
+        <PageHeader
+          eyebrow="Hệ thống"
+          title="Danh mục quyền"
+          scopeLabel="Quyền quản trị"
+          description="Quản lý mã quyền chức năng dùng để cấp quyền cho vai trò trong hệ thống."
+          actions={
+            <Button
+              type="button"
+              onClick={() => {
+                createMutation.reset();
+                setDialog({ type: "create" });
+              }}
+            >
+              <Plus aria-hidden="true" />
+              Thêm quyền
+            </Button>
+          }
+        />
 
-      <Card className="gap-4 border-border/70 py-5 shadow-xs">
-        <CardHeader className="gap-1 px-5">
-          <CardTitle className="flex items-center gap-2">
-            <ShieldCheck
-              className="size-5 text-muted-foreground"
-              aria-hidden="true"
-            />
-            Bộ lọc quyền
-          </CardTitle>
-          <CardDescription>
-            Tìm theo mã, tên quyền hoặc module nghiệp vụ.
-          </CardDescription>
-        </CardHeader>
-        <CardContent className="px-5">
-          <form
-            className="grid gap-3 md:grid-cols-[minmax(220px,1fr)_220px_180px_auto_auto] md:items-end"
-            onSubmit={(event) => {
-              event.preventDefault();
-              setAppliedFilters({ ...filters, search: filters.search.trim() });
-              setPage(1);
-            }}
-          >
-            <Field>
-              <FieldLabel htmlFor="permission-search">Tìm kiếm</FieldLabel>
-              <div className="relative">
-                <Search
-                  className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground"
-                  aria-hidden="true"
-                />
-                <Input
-                  id="permission-search"
-                  className="pl-9"
-                  value={filters.search}
-                  onChange={(event) =>
-                    setFilters((value) => ({
-                      ...value,
-                      search: event.target.value,
-                    }))
-                  }
-                  placeholder="Mã hoặc tên quyền"
-                />
-              </div>
-            </Field>
-            <Field>
-              <FieldLabel>Module</FieldLabel>
-              <Select
-                value={filters.module || "__all__"}
-                onValueChange={(module) =>
-                  setFilters((value) => ({
+        <PermissionFiltersCard
+          filters={filters}
+          modules={optionsQuery.data?.modules ?? []}
+          onChange={setFilters}
+          onApply={() => {
+            setAppliedFilters({ ...filters, search: filters.search.trim() });
+            setPage(1);
+          }}
+          onReset={() => {
+            setFilters(emptyFilters);
+            setAppliedFilters(emptyFilters);
+            setPage(1);
+          }}
+        />
+
+        <PermissionResults
+          pagination={pagination}
+          data={data}
+          listQuery={listQuery}
+          updateMutation={updateMutation}
+          setDialog={setDialog}
+          deleteMutation={deleteMutation}
+          page={page}
+          setPage={setPage}
+        />
+
+        <PermissionDialogs
+          dialog={dialog}
+          onClose={() => setDialog(null)}
+          createMutation={createMutation}
+          updateMutation={updateMutation}
+          deleteMutation={deleteMutation}
+        />
+      </div>
+    </PageLoadingBoundary>
+  );
+}
+
+type PermissionFilters = typeof emptyFilters;
+type PermissionWriteMutation = UseMutationResult<
+  { id: string }, Error, PermissionInput, unknown
+>;
+type PermissionDeleteMutation = UseMutationResult<
+  { id: string }, Error, void, unknown
+>;
+
+type PermissionFiltersCardProps = {
+  filters: PermissionFilters;
+  modules: string[];
+  onChange: Dispatch<SetStateAction<PermissionFilters>>;
+  onApply: () => void;
+  onReset: () => void;
+};
+
+function PermissionFiltersCard({
+  filters,
+  modules,
+  onChange,
+  onApply,
+  onReset,
+}: PermissionFiltersCardProps) {
+  return (
+    <Card className="gap-4 border-border/70 py-5 shadow-xs">
+      <CardHeader className="gap-1 px-5">
+        <CardTitle className="flex items-center gap-2">
+          <ShieldCheck
+            className="size-5 text-muted-foreground"
+            aria-hidden="true"
+          />
+          Bộ lọc quyền
+        </CardTitle>
+        <CardDescription>
+          Tìm theo mã, tên quyền hoặc module nghiệp vụ.
+        </CardDescription>
+      </CardHeader>
+      <CardContent className="px-5">
+        <form
+          className="grid gap-3 md:grid-cols-[minmax(220px,1fr)_220px_180px_auto_auto] md:items-end"
+          onSubmit={(event) => {
+            event.preventDefault();
+            onApply();
+          }}
+        >
+          <Field>
+            <FieldLabel htmlFor="permission-search">Tìm kiếm</FieldLabel>
+            <div className="relative">
+              <Search
+                className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground"
+                aria-hidden="true"
+              />
+              <Input
+                id="permission-search"
+                className="pl-9"
+                value={filters.search}
+                onChange={(event) =>
+                  onChange((value) => ({
                     ...value,
-                    module: module === "__all__" ? "" : module,
+                    search: event.target.value,
                   }))
                 }
-              >
-                <SelectTrigger className="w-full">
-                  <SelectValue placeholder="Chọn module" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="__all__">Tất cả</SelectItem>
-                  {(optionsQuery.data?.modules ?? []).map((module) => (
-                    <SelectItem key={module} value={module}>
-                      {module}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </Field>
-            <Field>
-              <FieldLabel>Trạng thái</FieldLabel>
-              <Select
-                value={filters.status || "__all__"}
-                onValueChange={(status) =>
-                  setFilters((value) => ({
-                    ...value,
-                    status: status === "__all__" ? "" : status,
-                  }))
-                }
-              >
-                <SelectTrigger className="w-full">
-                  <SelectValue placeholder="Chọn trạng thái" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="__all__">Tất cả</SelectItem>
-                  <SelectItem value="active">Đang bật</SelectItem>
-                  <SelectItem value="inactive">Đã tắt</SelectItem>
-                </SelectContent>
-              </Select>
-            </Field>
-            <AutoFilterActions
-              snapshot={filters}
-              onApply={() => {
-                setAppliedFilters({
-                  ...filters,
-                  search: filters.search.trim(),
-                });
-                setPage(1);
-              }}
-              onReset={() => {
-                setFilters(emptyFilters);
-                setAppliedFilters(emptyFilters);
-                setPage(1);
-              }}
-            />
-          </form>
-        </CardContent>
-      </Card>
+                placeholder="Mã hoặc tên quyền"
+              />
+            </div>
+          </Field>
+          <FilterSelect
+            id="permission-filter-module"
+            label="Module"
+            value={filters.module}
+            options={modules.map((module) => ({ value: module, label: module }))}
+            onChange={(module) => onChange((value) => ({ ...value, module }))}
+          />
+          <FilterSelect
+            id="permission-filter-status"
+            label="Trạng thái"
+            value={filters.status}
+            options={[
+              { value: "active", label: "Đang bật" },
+              { value: "inactive", label: "Đã tắt" },
+            ]}
+            onChange={(status) => onChange((value) => ({ ...value, status }))}
+          />
+          <AutoFilterActions
+            snapshot={filters}
+            onApply={onApply}
+            onReset={onReset}
+          />
+        </form>
+      </CardContent>
+    </Card>
+  );
+}
 
-      <PermissionResults
-        pagination={pagination}
-        data={data}
-        listQuery={listQuery}
-        updateMutation={updateMutation}
-        setDialog={setDialog}
-        deleteMutation={deleteMutation}
-        page={page}
-        setPage={setPage}
-      />
+type PermissionDialogsProps = {
+  dialog: DialogState;
+  onClose: () => void;
+  createMutation: PermissionWriteMutation;
+  updateMutation: PermissionWriteMutation;
+  deleteMutation: PermissionDeleteMutation;
+};
 
+function PermissionDialogs({
+  dialog,
+  onClose,
+  createMutation,
+  updateMutation,
+  deleteMutation,
+}: PermissionDialogsProps) {
+  const editingPermission = dialog?.type === "edit" ? dialog.permission : null;
+  const deletingPermission = dialog?.type === "delete" ? dialog.permission : null;
+  return (
+    <>
       <Dialog
         open={dialog?.type === "create"}
         onOpenChange={(open) => {
-          if (!open) setDialog(null);
+          if (!open) onClose();
         }}
       >
         <DialogContent>
@@ -562,7 +598,7 @@ export function PermissionsAccessPage() {
       <Dialog
         open={Boolean(editingPermission)}
         onOpenChange={(open) => {
-          if (!open) setDialog(null);
+          if (!open) onClose();
         }}
       >
         <DialogContent>
@@ -593,7 +629,7 @@ export function PermissionsAccessPage() {
       <Dialog
         open={Boolean(deletingPermission)}
         onOpenChange={(open) => {
-          if (!open) setDialog(null);
+          if (!open) onClose();
         }}
       >
         <DialogContent>
@@ -620,7 +656,7 @@ export function PermissionsAccessPage() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
-    </div>
+    </>
   );
 }
 

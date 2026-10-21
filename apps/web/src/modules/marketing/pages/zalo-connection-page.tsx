@@ -1,3 +1,4 @@
+import { PageLoadingBoundary } from "@/components/shared/page-loading-state";
 import { StaticTableHeader } from "@/components/shared/static-table-header";
 import { useMutation,useQuery,useQueryClient } from "@tanstack/react-query";
 import {
@@ -125,7 +126,8 @@ export function ZaloConnectionPage() {
     },
   });
   return (
-    <div className="mx-auto flex max-w-7xl flex-col gap-6">
+    <PageLoadingBoundary variant="settings" queries={[connections, options]}>
+      <div className="mx-auto flex max-w-7xl flex-col gap-6">
       <PageHeader
         eyebrow="CRM Marketing / Kênh kết nối"
         title="Zalo Official Account"
@@ -227,6 +229,7 @@ export function ZaloConnectionPage() {
         </>
       )}
     </div>
+    </PageLoadingBoundary>
   );
 }
 

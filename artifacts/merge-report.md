@@ -1,0 +1,157 @@
+# K?t qu? merge update-lead-info-interface v?o main
+
+- Merge commit: `674ade8` (parents `fddaa90`, `561ee89`).
+- Nh?nh ngu?n `origin/update-lead-info-interface` ?? l? ancestor c?a `main`.
+- ?? k?t h?p auth c? qu?n l? phi?n, ph?n quy?n theo ch??ng tr?nh, layout c?u h?nh, lead filters, ?i?n tho?i/nh?n vi?n ph? v? automation assignment.
+- C?c truy v?n ph?n c?ng t? ??ng/th? c?ng c?a main ?? chuy?n sang user_program_roles ?? t??ng th?ch m? h?nh quy?n m?i.
+- ?? kh?i ph?c thay ??i local: 90 t?p gi? nguy?n n?i dung sau chu?n h?a newline; 17 t?p k?t h?p v?i merge; kh?ng thi?u t?p n?o.
+- B?n sao l?u thay ??i local: `stash@{0}` v?i t?n `backup-before-update-lead-info-merge-20261018`. Thay ??i local v?n ch?a commit.
+
+## Ki?m tra
+
+- Typecheck API v? frontend tr?n main sau kh?i ph?c local: PASS (exit 0).
+- Build frontend tr??c v? sau kh?i ph?c local: PASS.
+- Unit test API: 190 PASS; frontend: 31 PASS.
+- Database test ri?ng: auth-session, user-program-roles (c? th?m h?i quy ?i?u ki?n nh?n lead automation), effective-access-scope: PASS.
+- UI browser: 375/768/1440px; l?a ch?n lead, ph?n trang, b?n nh?p, c?p nh?t quy?n, admission, automation, Meta v? transition notes: PASS.
+- React Doctor: b?n merge 84/100; baseline nh?nh ngu?n 71/100; c?n c?nh b?o c?u tr?c/accessibility ?? ghi trong log.
+- git diff --check: PASS; kh?ng c?n unmerged paths.
+
+Ch?a push remote v? ch?a ?p d?ng c?c migration m?i v?o database CRM hi?n t?i. Database test ?? ???c t?o ri?ng v? d?n sau ki?m tra.
+
+## C?c t?p trong merge commit
+
+- `apps/api/package.json`
+- `apps/api/prisma/migrations/20261016090000_add_lead_secondary_phones/migration.sql`
+- `apps/api/prisma/migrations/20261016100000_add_lead_secondary_assignee/migration.sql`
+- `apps/api/prisma/schema.prisma`
+- `apps/api/src/database/seed-demo-data.ts`
+- `apps/api/src/database/seed-director-access.ts`
+- `apps/api/src/database/seed-sale-access.ts`
+- `apps/api/src/integration/bizfly-lead-import.integration.ts`
+- `apps/api/src/integration/effective-access-scope.integration.ts`
+- `apps/api/src/integration/lead-source-program-scope.integration.ts`
+- `apps/api/src/integration/personal-report-program-scope.integration.ts`
+- `apps/api/src/integration/reporting-security.integration.ts`
+- `apps/api/src/integration/student-conversion.integration.ts`
+- `apps/api/src/integration/user-program-role-migration.integration.ts`
+- `apps/api/src/integration/user-program-roles.integration.ts`
+- `apps/api/src/integration/user-role-scope-management.integration.ts`
+- `apps/api/src/maintenance/assign-shared-lead-sources.ts`
+- `apps/api/src/maintenance/migrate-user-program-roles.ts`
+- `apps/api/src/modules/admissions/admission-profile-write.service.ts`
+- `apps/api/src/modules/auth/access-scope.test.ts`
+- `apps/api/src/modules/auth/auth.service.ts`
+- `apps/api/src/modules/automations/automation-action-registry.ts`
+- `apps/api/src/modules/automations/automation-assignment.service.ts`
+- `apps/api/src/modules/automations/automation-observability.service.ts`
+- `apps/api/src/modules/automations/automation.service.ts`
+- `apps/api/src/modules/campaigns/campaign-list.service.ts`
+- `apps/api/src/modules/campaigns/marketing-form-management.service.ts`
+- `apps/api/src/modules/campaigns/marketing-form-public.service.ts`
+- `apps/api/src/modules/campaigns/marketing-reference.router.ts`
+- `apps/api/src/modules/campaigns/marketing-reference.service.ts`
+- `apps/api/src/modules/campaigns/utm-analytics.service.ts`
+- `apps/api/src/modules/customer-lists/customer-lists.router.ts`
+- `apps/api/src/modules/dashboard/director-dashboard.service.ts`
+- `apps/api/src/modules/departments/department-management.service.ts`
+- `apps/api/src/modules/integrations/zalo/zalo-integration.service.ts`
+- `apps/api/src/modules/leads/application/assign-leads.use-case.ts`
+- `apps/api/src/modules/leads/application/create-lead.use-case.ts`
+- `apps/api/src/modules/leads/application/get-lead-action-options.query.ts`
+- `apps/api/src/modules/leads/application/lead-mutation-support.test.ts`
+- `apps/api/src/modules/leads/application/lead-mutation-support.ts`
+- `apps/api/src/modules/leads/application/lead-owner-stage.use-cases.ts`
+- `apps/api/src/modules/leads/application/open-lead.use-case.ts`
+- `apps/api/src/modules/leads/application/update-lead.use-case.ts`
+- `apps/api/src/modules/leads/bizfly-lead-import.service.ts`
+- `apps/api/src/modules/leads/bizfly-lead-import.test.ts`
+- `apps/api/src/modules/leads/domain/lead-input.ts`
+- `apps/api/src/modules/leads/domain/lead-lifecycle-status.ts`
+- `apps/api/src/modules/leads/lead-custom-fields.service.ts`
+- `apps/api/src/modules/leads/lead-duplicates.service.ts`
+- `apps/api/src/modules/leads/lead-filter.service.test.ts`
+- `apps/api/src/modules/leads/lead-filter.service.ts`
+- `apps/api/src/modules/leads/lead-import.service.ts`
+- `apps/api/src/modules/leads/lead-list-status.test.ts`
+- `apps/api/src/modules/leads/lead-list.service.ts`
+- `apps/api/src/modules/leads/lead-scope.test.ts`
+- `apps/api/src/modules/leads/leads.router.ts`
+- `apps/api/src/modules/leads/sale-overview.service.ts`
+- `apps/api/src/modules/reports/personal-dashboard.service.ts`
+- `apps/api/src/modules/reports/personal-report.service.ts`
+- `apps/api/src/modules/reports/report-definitions.ts`
+- `apps/api/src/modules/reports/report-detail.service.ts`
+- `apps/api/src/modules/reports/report-overview.service.ts`
+- `apps/api/src/modules/reports/reports.router.ts`
+- `apps/api/src/modules/roles/role-management.service.test.ts`
+- `apps/api/src/modules/roles/role-management.service.ts`
+- `apps/api/src/modules/roles/roles.router.ts`
+- `apps/api/src/modules/students/student-business.service.ts`
+- `apps/api/src/modules/students/student-conversion.service.ts`
+- `apps/api/src/modules/students/student-list.service.ts`
+- `apps/api/src/modules/students/student-membership.ts`
+- `apps/api/src/modules/students/students.router.ts`
+- `apps/api/src/modules/users/user-management.service.ts`
+- `apps/api/src/modules/users/users.router.ts`
+- `apps/web/src/components/layout/navigation.ts`
+- `apps/web/src/components/shared/business-records-page.tsx`
+- `apps/web/src/components/shared/data-pagination.tsx`
+- `apps/web/src/modules/auth/auth-context.tsx`
+- `apps/web/src/modules/institutions/pages/institution-programs-management-page.tsx`
+- `apps/web/src/modules/leads/components/configured-lead-form-fields.tsx`
+- `apps/web/src/modules/leads/components/hover-more-popover.tsx`
+- `apps/web/src/modules/leads/components/inline-lead-summary-card.tsx`
+- `apps/web/src/modules/leads/components/lead-assignee.tsx`
+- `apps/web/src/modules/leads/components/lead-detail-layout.tsx`
+- `apps/web/src/modules/leads/components/lead-filter-builder.tsx`
+- `apps/web/src/modules/leads/components/lead-filter-condition-row.tsx`
+- `apps/web/src/modules/leads/components/lead-filter-condition-value.tsx`
+- `apps/web/src/modules/leads/components/lead-filter-panel.tsx`
+- `apps/web/src/modules/leads/components/lead-form.tsx`
+- `apps/web/src/modules/leads/components/lead-import-errors-table.tsx`
+- `apps/web/src/modules/leads/components/lead-list-columns.tsx`
+- `apps/web/src/modules/leads/components/lead-phone.tsx`
+- `apps/web/src/modules/leads/components/phone-fields.tsx`
+- `apps/web/src/modules/leads/components/student-membership-action.tsx`
+- `apps/web/src/modules/leads/filter-fields.ts`
+- `apps/web/src/modules/leads/filter-operators.ts`
+- `apps/web/src/modules/leads/filter-serialization.ts`
+- `apps/web/src/modules/leads/filter-validation.ts`
+- `apps/web/src/modules/leads/lead-form.helpers.ts`
+- `apps/web/src/modules/leads/lead-note.helpers.ts`
+- `apps/web/src/modules/leads/lead-stage-color.helpers.ts`
+- `apps/web/src/modules/leads/lead.schema.ts`
+- `apps/web/src/modules/leads/lead.types.ts`
+- `apps/web/src/modules/leads/pages/lead-detail-page.tsx`
+- `apps/web/src/modules/leads/pages/leads-list-page.tsx`
+- `apps/web/src/modules/management/pages/permissions-access-page.tsx`
+- `apps/web/src/modules/management/pages/roles-access-page.tsx`
+- `apps/web/src/modules/management/pages/users-access-page.tsx`
+- `apps/web/src/modules/management/user-management.types.ts`
+- `apps/web/src/modules/marketing/pages/lead-sources-page.tsx`
+- `apps/web/src/modules/reports/components/dashboard-kpi-editor-dialog.tsx`
+- `apps/web/src/modules/reports/components/report-filter-editor.tsx`
+- `apps/web/src/modules/reports/pages/personal-reports-page.tsx`
+- `apps/web/src/modules/reports/pages/statistics-dashboard-page.tsx`
+- `apps/web/src/modules/reports/report.types.ts`
+- `apps/web/src/routes/app-routes.tsx`
+- `apps/web/src/services/customer-list.service.ts`
+- `apps/web/src/services/lead.service.ts`
+- `apps/web/src/services/marketing-reference.service.ts`
+- `apps/web/tests/lead-filter-builder.browser.cjs`
+- `apps/web/tests/lead-filter.test.ts`
+- `apps/web/tests/lead-import-errors-table.test.tsx`
+- `apps/web/tests/lead-source-creation.browser.cjs`
+- `apps/web/tests/lead-status-filter.browser.cjs`
+- `apps/web/tests/react-doctor-refactor.browser-smoke.mjs`
+- `apps/web/tests/report-program-scope.browser.cjs`
+- `apps/web/tests/student-conversion.browser.cjs`
+- `apps/web/tests/user-program-access.browser.cjs`
+- `database/migrations/20261012_add_user_program_roles.sql`
+- `database/migrations/20261013_student_conversion_permissions.sql`
+- `package-lock.json`
+- `packages/shared/package.json`
+- `packages/shared/src/access-scope.ts`
+- `packages/shared/src/lead-phone.ts`
+- `packages/shared/src/lead-source.ts`

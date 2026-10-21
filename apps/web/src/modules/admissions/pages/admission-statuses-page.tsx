@@ -1,3 +1,4 @@
+import { PageLoadingBoundary } from "@/components/shared/page-loading-state";
 import type { Dispatch } from "react";
 import type { UseQueryResult } from "@tanstack/react-query";
 import { TablePagination } from "@/components/shared/table-pagination";
@@ -212,7 +213,8 @@ export function AdmissionStatusesPage() {
   const pagination = listQuery.data?.pagination;
 
   return (
-    <div className="mx-auto flex max-w-7xl flex-col gap-6">
+    <PageLoadingBoundary variant="list" queries={[listQuery]}>
+      <div className="mx-auto flex max-w-7xl flex-col gap-6">
       <PageHeader
         eyebrow="CRM Tuyển sinh"
         title="Trạng thái hồ sơ"
@@ -331,6 +333,7 @@ export function AdmissionStatusesPage() {
         }
       />
     </div>
+    </PageLoadingBoundary>
   );
 }
 

@@ -780,6 +780,7 @@ model leads {
   pipeline_stage_id                        String?                          @db.Uuid
   owner_id                                 String?                          @db.Uuid
   assigned_to                              String?                          @db.Uuid
+  manual_unassignment_event_id              String?                          @db.Uuid
   secondary_assigned_to                    String?                          @db.Uuid
   status                                   String                           @default("ACTIVE") @db.VarChar(50)
   lead_score                               Int?                             @default(0)

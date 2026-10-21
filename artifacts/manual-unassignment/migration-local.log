@@ -1,0 +1,11 @@
+{
+  "database": "crm_db",
+  "column": {
+    "data_type": "uuid",
+    "is_nullable": "YES"
+  },
+  "migrationApplied": true,
+  "checksumMatches": true,
+  "readSmoke": "PASS",
+  "temporaryTestDatabasesRemaining": 0
+}

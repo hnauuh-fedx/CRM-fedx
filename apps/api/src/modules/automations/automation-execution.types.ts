@@ -9,6 +9,7 @@ export type AutomationContext = {
   studentId?: string;
   marketingFormId?: string;
   marketingFormSubmissionId?: string;
+  manualUnassignmentEventId?: string;
   institutionProgramId?: string;
   causationRuleIds?: string[];
   payload?: unknown;

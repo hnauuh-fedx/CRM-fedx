@@ -1,3 +1,4 @@
+import { PageLoadingState } from "@/components/shared/page-loading-state";
 import { StaticTableHeader } from "@/components/shared/static-table-header";
 import { useQuery } from "@tanstack/react-query";
 import {
@@ -26,7 +27,6 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { Skeleton } from "@/components/ui/skeleton";
 import {
   Table,
   TableBody,
@@ -155,7 +155,7 @@ export function DirectorDashboardPage() {
     placeholderData: (previousData) => previousData,
   });
 
-  if (dashboardQuery.isLoading) return <DirectorDashboardSkeleton />;
+  if (dashboardQuery.isLoading) return <PageLoadingState variant="dashboard" label="Đang tải tổng quan" />;
 
   if (!dashboardQuery.data) {
     return (
@@ -1053,26 +1053,6 @@ function DirectorKpiCard({
         </TooltipContent>
       </Tooltip>
     </Card>
-  );
-}
-
-function DirectorDashboardSkeleton() {
-  return (
-    <output
-      className="mx-auto flex max-w-7xl flex-col gap-6"
-      aria-label="Đang tải dashboard điều hành"
-    >
-      <Skeleton className="h-20 max-w-xl" />
-      <Skeleton className="h-40" />
-      <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
-        {[1, 2, 3, 4].map((item) => (
-          <Skeleton key={item} className="h-44" />
-        ))}
-      </div>
-      <Skeleton className="h-72" />
-      <Skeleton className="h-72" />
-      <span className="sr-only">Đang tải dashboard điều hành</span>
-    </output>
   );
 }
 

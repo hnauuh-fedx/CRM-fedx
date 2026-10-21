@@ -1,0 +1,6 @@
+PASS 375px: Lead selection/pagination, create draft, Admission failed save + permission refresh
+PASS 768px: Lead selection/pagination, create draft, Admission failed save + permission refresh
+PASS 1440px: Lead selection/pagination, create draft, Admission failed save + permission refresh
+PASS runtime fields hydration, input, parent render/latest callback; async task error, retry and reset
+PASS transition prompt cancel, failed confirmation preserved and successful retry with original command
+PASS fee failed save, status flow membership, automation retry/replay/rollback IDs, Meta permissions/actions, assignment callback

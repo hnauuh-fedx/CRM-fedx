@@ -1,4 +1,5 @@
 import { prisma } from "../../../database/prisma";
+import { Prisma } from "../../../generated/prisma/client";
 import type { AuthUser } from "../../auth/auth.types";
 import { triggerAutomation } from "../../automations/automation-engine.service";
 import { getLeadScopeWhere } from "../lead-list.service";
@@ -21,6 +22,10 @@ export async function assignLeads(
 
   const uniqueLeadIds = [...new Set(leadIds)];
   const result = await prisma.$transaction(async (tx) => {
+    // Use the same lock and deterministic order as individual assignments.
+    for (const leadId of [...uniqueLeadIds].sort()) {
+      await tx.$executeRaw(Prisma.sql`SELECT pg_advisory_xact_lock(hashtext(${`lead-assignment:${leadId}`}))`);
+    }
     const leads = await tx.leads.findMany({
       where: {
         id: { in: uniqueLeadIds },
@@ -63,7 +68,7 @@ export async function assignLeads(
     });
     await tx.leads.updateMany({
       where: { id: { in: uniqueLeadIds } },
-      data: { assigned_to: assignee.id, updated_at: new Date() },
+      data: { assigned_to: assignee.id, manual_unassignment_event_id: null, updated_at: new Date() },
     });
     // The new main assignee cannot also remain the secondary assignee.
     await tx.leads.updateMany({

@@ -1,3 +1,4 @@
+import { PageLoadingBoundary } from "@/components/shared/page-loading-state";
 const pageSize = 20;
 import { ServerDataTable } from "@/components/shared/server-data-table";
 import { StaticTableHeader } from "@/components/shared/static-table-header";
@@ -232,7 +233,8 @@ export function UtmTrackingsPage() {
   });
 
   return (
-    <div className="mx-auto flex max-w-7xl flex-col gap-6">
+    <PageLoadingBoundary variant="list" queries={[listQuery, optionsQuery]}>
+      <div className="mx-auto flex max-w-7xl flex-col gap-6">
       <PageHeader
         eyebrow="CRM Marketing"
         title="Phân tích UTM"
@@ -314,6 +316,7 @@ export function UtmTrackingsPage() {
         }
       />
     </div>
+    </PageLoadingBoundary>
   );
 }
 

@@ -1,3 +1,4 @@
+import { PageLoadingState } from "@/components/shared/page-loading-state";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { ArrowLeft, Loader2, Pause, Play, Save } from "lucide-react";
 import { useCallback, useEffect, useRef, useState } from "react";
@@ -14,7 +15,6 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
-import { Skeleton } from "@/components/ui/skeleton";
 import { useAuth } from "@/modules/auth/auth-context";
 import { ApiError } from "@/services/api";
 import {
@@ -178,14 +178,7 @@ export function AutomationBuilderPage() {
     "lead.view_assigned",
   ].some(auth.can);
 
-  if (ruleQuery.isLoading) {
-    return (
-      <div className="flex h-screen flex-col gap-4 p-6">
-        <Skeleton className="h-10 w-80" />
-        <Skeleton className="h-full w-full" />
-      </div>
-    );
-  }
+  if (ruleQuery.isLoading || optionsQuery.isLoading) return <PageLoadingState variant="builder" label="Đang tải trình thiết kế automation" />;
 
   if (ruleQuery.isError || !rule) {
     return (

@@ -1,3 +1,4 @@
+import { PageLoadingBoundary } from "@/components/shared/page-loading-state";
 import { SalePerformanceContent } from "@/modules/reports/components/sale-performance-content";
 import { useQuery } from "@tanstack/react-query";
 import { useMemo, useState } from "react";
@@ -23,7 +24,8 @@ export function SaleKpiPage() {
   });
 
   return (
-    <div className="mx-auto flex max-w-7xl flex-col gap-6">
+    <PageLoadingBoundary variant="dashboard" queries={[reportQuery]}>
+      <div className="mx-auto flex max-w-7xl flex-col gap-6">
       <PageHeader
         eyebrow="CRM Sale"
         title="KPI đội nhóm"
@@ -58,6 +60,7 @@ export function SaleKpiPage() {
         />
       )}
     </div>
+    </PageLoadingBoundary>
   );
 }
 

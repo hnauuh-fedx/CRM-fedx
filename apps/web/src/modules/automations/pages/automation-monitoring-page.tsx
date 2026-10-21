@@ -1,3 +1,4 @@
+import { PageLoadingBoundary } from "@/components/shared/page-loading-state";
 import { StaticTableHeader } from "@/components/shared/static-table-header";
 import { TablePagination } from "@/components/shared/table-pagination";
 import type { UseMutationResult, UseQueryResult } from "@tanstack/react-query";
@@ -249,7 +250,8 @@ export function AutomationMonitoringPage() {
   );
 
   return (
-    <div className="mx-auto flex max-w-7xl flex-col gap-6">
+    <PageLoadingBoundary variant="list" queries={[metricsQuery, executionsQuery, transferRulesQuery]}>
+      <div className="mx-auto flex max-w-7xl flex-col gap-6">
       <PageHeader
         eyebrow="Rule Automation"
         title="Giám sát vận hành"
@@ -352,6 +354,7 @@ export function AutomationMonitoringPage() {
         rollbackMutation={rollbackMutation}
       />
     </div>
+    </PageLoadingBoundary>
   );
 }
 

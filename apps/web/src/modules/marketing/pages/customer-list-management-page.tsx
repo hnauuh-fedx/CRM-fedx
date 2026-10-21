@@ -1,3 +1,5 @@
+import { PageLoadingState } from "@/components/shared/page-loading-state";
+import { PageLoadingBoundary } from "@/components/shared/page-loading-state";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   ArrowLeft,
@@ -113,7 +115,8 @@ export function CustomerListManagementPage() {
     listQuery.data?.capabilities.canManage ?? auth.can("customer_list.manage");
 
   return (
-    <div className="mx-auto flex max-w-7xl flex-col gap-6">
+    <PageLoadingBoundary variant="list" queries={[listQuery, optionsQuery]}>
+      <div className="mx-auto flex max-w-7xl flex-col gap-6">
       <PageHeader
         eyebrow="CRM Marketing / Khách hàng"
         title="Quản lý danh sách"
@@ -248,6 +251,7 @@ export function CustomerListManagementPage() {
         setPage={setPage}
       />
     </div>
+    </PageLoadingBoundary>
   );
 }
 
@@ -259,8 +263,7 @@ export function CustomerListDetailPage() {
     queryFn: () => getCustomerList(customerListId, auth.accessToken!),
     enabled: Boolean(customerListId),
   });
-  if (listQuery.isLoading)
-    return <TableLoadingState label="Đang tải danh sách khách hàng" />;
+  if (listQuery.isLoading) return <PageLoadingState variant="lead-list" label="Đang tải danh sách khách hàng" />;
   if (listQuery.isError || !listQuery.data)
     return (
       <ErrorState

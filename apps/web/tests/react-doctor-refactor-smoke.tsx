@@ -11,6 +11,7 @@ import { AdmissionStatusesPage } from "../src/modules/admissions/pages/admission
 import { AutomationMonitoringPage } from "../src/modules/automations/pages/automation-monitoring-page";
 import { MetaConnectionPage } from "../src/modules/marketing/pages/meta-connection-page";
 import { LeadAssignmentsPage } from "../src/modules/sale/pages/lead-assignments-page";
+import { PermissionsAccessPage } from "../src/modules/management/pages/permissions-access-page";
 import { InstitutionProgramProvider } from "../src/modules/institutions/institution-program-context";
 import "../src/index.css";
 import { RuntimeCustomFieldsSection } from "../src/modules/custom-fields/runtime-custom-fields-section";
@@ -156,6 +157,7 @@ function Fixture() {
         <Route path="/automation" element={<AutomationMonitoringPage />} />
         <Route path="/meta" element={<MetaConnectionPage />} />
         <Route path="/assignments" element={<LeadAssignmentsPage />} />
+        <Route path="/permissions" element={<PermissionsAccessPage />} />
       </Routes>
     </>
   );

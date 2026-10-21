@@ -1,6 +1,7 @@
 import { StudentMembershipAction } from "../components/student-membership-action";
 import { LeadAssigneeLines } from "../components/lead-assignee";
 import { LeadPhoneLines } from "../components/lead-phone";
+import { PageLoadingState } from "@/components/shared/page-loading-state";
 import { LeadDetailLayout } from "../components/lead-detail-layout";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import {
@@ -182,20 +183,7 @@ export function LeadDetailPage({
   const transition = useLeadWorkflowTransition(leadQuery.data?.data);
   const [isEditing, setIsEditing] = useState(false);
 
-  if (leadQuery.isLoading) {
-    return (
-      <output
-        className="mx-auto flex max-w-7xl flex-col gap-6"
-        aria-label="Đang tải chi tiết lead"
-      >
-        <Skeleton className="h-20 max-w-md" />
-        <div className="grid gap-6 lg:grid-cols-[1.1fr_0.9fr]">
-          <Skeleton className="h-72" />
-          <Skeleton className="h-72" />
-        </div>
-      </output>
-    );
-  }
+  if (leadQuery.isLoading) return <PageLoadingState variant="detail" label="Đang tải chi tiết lead" />;
   if (leadQuery.isError || !leadQuery.data) {
     return (
       <Card className="mx-auto max-w-xl border-border/70 shadow-xs">

@@ -222,7 +222,11 @@ export async function processReassignmentWarning(
   now = new Date(),
   warningKind: "first" | "second" = "first",
 ) {
+  const target = await prisma.automation_reassignment_monitors.findUnique({ where: { id: monitorId }, select: { lead_id: true } });
+  if (!target) return { ok: true as const, outcome: "inactive" as const };
   const result = await prisma.$transaction(async (tx) => {
+    // Serialize warnings with manual unassignment/opening and assignment changes.
+    await tx.$executeRaw(Prisma.sql`SELECT pg_advisory_xact_lock(hashtext(${`lead-assignment:${target.lead_id}`}))`);
     await lockMonitor(tx, monitorId);
     const monitor = await tx.automation_reassignment_monitors.findUnique({ where: { id: monitorId } });
     if (!monitor || !["pending", "warned"].includes(monitor.status)) return { ok: true as const, outcome: "inactive" as const };

@@ -1,0 +1,6 @@
+{
+  "migration": "20260928160000_add_meta_messenger_integration",
+  "applied": true,
+  "checksumMatches": true,
+  "metaTablesCreated": 5
+}

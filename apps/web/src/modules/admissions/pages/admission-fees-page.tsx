@@ -1,3 +1,4 @@
+import { PageLoadingBoundary } from "@/components/shared/page-loading-state";
 import type { Dispatch } from "react";
 import type { UseQueryResult } from "@tanstack/react-query";
 import { TablePagination } from "@/components/shared/table-pagination";
@@ -261,7 +262,8 @@ export function AdmissionFeesPage() {
   ];
 
   return (
-    <div className="mx-auto flex max-w-7xl flex-col gap-6">
+    <PageLoadingBoundary variant="list" queries={[listQuery, optionsQuery]}>
+      <div className="mx-auto flex max-w-7xl flex-col gap-6">
       <PageHeader
         eyebrow="CRM Tuyển sinh"
         title="Phí / học phí"
@@ -368,6 +370,7 @@ export function AdmissionFeesPage() {
         onClose={() => setDialog(null)}
       />
     </div>
+    </PageLoadingBoundary>
   );
 }
 

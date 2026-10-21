@@ -114,7 +114,7 @@ export function SelectedDisplayLayout({
         onReload={() => query.refetch()}
       />
     );
-  if (query.isFetching) return <Skeleton className="h-80 w-full" />;
+  if (query.isLoading) return <Skeleton className="h-80 w-full" />;
   if (!query.data) return null;
   return (
     <DisplayLayoutEditor
