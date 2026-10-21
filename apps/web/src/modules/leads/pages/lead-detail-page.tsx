@@ -41,6 +41,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Textarea } from "@/components/ui/textarea";
 import { cn } from "@/lib/utils";
+import { useBalancedColumns } from "@/hooks/use-balanced-columns";
 import { useAuth } from "@/modules/auth/auth-context";
 import { LeadSurveyHistory } from "@/modules/marketing/lead-survey-history";
 import { ApiError } from "@/services/api";
@@ -342,6 +343,10 @@ export function PipelineProgressCard({
     options,
     fallbackStages,
   );
+  const stageColumns = useBalancedColumns<HTMLOListElement>(
+    visibleStages.length,
+    144,
+  );
 
   return (
     <Card
@@ -373,7 +378,9 @@ export function PipelineProgressCard({
           </p>
         ) : (
           <ol
-            className="grid gap-2 sm:grid-cols-2 lg:grid-cols-3 2xl:grid-cols-6"
+            ref={stageColumns.ref}
+            style={stageColumns.style}
+            className="grid gap-2"
             aria-label="Tiến trình xử lý lead"
           >
             {visibleStages.map((stage, index) => {
@@ -406,7 +413,7 @@ export function PipelineProgressCard({
                     variant="outline"
                     style={stageStyle}
                     className={cn(
-                      "h-auto min-h-12 w-full justify-start whitespace-normal bg-muted/30 text-left font-semibold hover:bg-background",
+                      "h-auto min-h-11 w-full justify-start whitespace-normal bg-muted/30 px-3 text-left text-[13px] leading-tight font-semibold hover:bg-background",
                       isCurrent && "shadow-sm hover:opacity-90",
                       canSelect && "cursor-pointer",
                     )}
@@ -566,29 +573,32 @@ export function ActivityWorkspace({
           <CardTitle className="sr-only">
             Thông tin hoạt động của Lead
           </CardTitle>
-          <div className="overflow-x-auto">
-            <TabsList
-              aria-label="Thông tin hoạt động của Lead"
-              className="h-auto w-max"
-            >
-              {tabs.map((tab) => {
-                const Icon = tab.icon;
-                return (
-                  <TabsTrigger
-                    key={tab.id}
-                    value={tab.id}
-                    className="min-h-11 gap-2"
-                  >
-                    <Icon aria-hidden="true" />
-                    {tab.label}
-                    {tab.count !== undefined && (
-                      <Badge variant="secondary">{tab.count}</Badge>
-                    )}
-                  </TabsTrigger>
-                );
-              })}
-            </TabsList>
-          </div>
+          <TabsList
+            aria-label="Thông tin hoạt động của Lead"
+            className="w-full flex-wrap justify-start group-data-[orientation=horizontal]/tabs:h-auto"
+          >
+            {tabs.map((tab) => {
+              const Icon = tab.icon;
+              return (
+                <TabsTrigger
+                  key={tab.id}
+                  value={tab.id}
+                  className="min-h-9 flex-none gap-1.5 px-2.5 text-[13px]"
+                >
+                  <Icon aria-hidden="true" />
+                  {tab.label}
+                  {tab.count !== undefined && (
+                    <Badge
+                      variant="secondary"
+                      className="h-5 min-w-5 px-1.5 text-[11px] tabular-nums"
+                    >
+                      {tab.count}
+                    </Badge>
+                  )}
+                </TabsTrigger>
+              );
+            })}
+          </TabsList>
         </CardHeader>
         <CardContent>
           <TabsContent value="activities">
@@ -753,7 +763,7 @@ function FilesPanel({
 
 export function SourceOccurrencesCard({ lead }: { lead: LeadDetail }) {
   return (
-    <Card className="border-border/70 shadow-xs">
+    <Card className="@container border-border/70 shadow-xs">
       <CardHeader>
         <CardTitle className="flex items-center gap-2">
           <Network aria-hidden="true" />
@@ -770,7 +780,7 @@ export function SourceOccurrencesCard({ lead }: { lead: LeadDetail }) {
             Chưa có lịch sử nguồn.
           </p>
         ) : (
-          <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-1 2xl:grid-cols-2">
+          <div className="grid gap-3 @sm:grid-cols-2">
             {lead.sourceOccurrences.map((occurrence, index) => (
               <details
                 key={occurrence.id}
@@ -824,9 +834,9 @@ export function LeadSummaryCard({
   onEdit: () => void;
 }) {
   return (
-    <Card className="border-border/70 shadow-xs">
+    <Card className="@container border-border/70 shadow-xs">
       <CardHeader className="flex flex-row items-start justify-between gap-4"><div><CardTitle>Thông tin cơ bản</CardTitle><CardDescription>Thông tin liên hệ và nghiệp vụ hiện tại.</CardDescription></div>{canUpdate && <Button type="button" size="icon-sm" variant="ghost" onClick={onEdit} aria-label="Chỉnh sửa thông tin Lead"><Pencil aria-hidden="true" /></Button>}</CardHeader>
-      <CardContent><dl className="grid gap-4 sm:grid-cols-2 xl:grid-cols-1 2xl:grid-cols-2">
+      <CardContent><dl className="grid gap-4 @sm:grid-cols-2">
         <DetailValue label="Họ và tên" value={lead.fullName} />
         <div><dt className="text-sm text-muted-foreground">Số điện thoại</dt><dd className="mt-1 text-sm font-medium"><LeadPhoneLines lead={lead} /></dd></div>
         <DetailValue label="Email" value={lead.email ?? "Chưa cập nhật"} />

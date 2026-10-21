@@ -39,6 +39,7 @@ import {
 } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
 import { cn } from "@/lib/utils";
+import { useBalancedColumns } from "@/hooks/use-balanced-columns";
 import { useAuth } from "@/modules/auth/auth-context";
 import { useInstitutionProgram } from "@/modules/institutions/institution-program-context";
 import {
@@ -547,6 +548,10 @@ export function LeadProgressSelector({
   allOptionSelected = !value,
   singleRowDesktop = false,
 }: LeadProgressSelectorProps) {
+  const balancedColumns = useBalancedColumns<HTMLFieldSetElement>(
+    stages.length + (allOptionLabel ? 1 : 0),
+    128,
+  );
   if (stages.length === 0) {
     return (
       <p className="text-sm text-muted-foreground">
@@ -558,10 +563,10 @@ export function LeadProgressSelector({
   return (
     <div className="flex flex-col gap-3">
       <fieldset
+        ref={singleRowDesktop ? balancedColumns.ref : undefined}
+        style={singleRowDesktop ? balancedColumns.style : undefined}
         className={cn(
-          singleRowDesktop
-            ? "grid grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-4 2xl:grid-cols-[repeat(auto-fit,minmax(9rem,1fr))]"
-            : "flex flex-wrap gap-2",
+          singleRowDesktop ? "grid min-w-0 gap-2" : "flex flex-wrap gap-2",
         )}
       >
         <legend className="sr-only">Chọn tiến trình học viên</legend>
@@ -570,7 +575,7 @@ export function LeadProgressSelector({
             type="button"
             aria-pressed={allOptionSelected}
             onClick={() => onChange("")}
-            className={`relative flex min-h-14 items-center justify-between gap-2 rounded-md border px-3 py-2 text-left text-xs font-semibold leading-tight transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring ${
+            className={`relative flex min-h-12 items-center justify-between gap-2 rounded-md border px-3 py-2 text-left text-xs font-semibold leading-tight transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring ${
               singleRowDesktop ? "min-w-0" : "min-w-36 flex-1"
             } ${
               allOptionSelected
@@ -616,7 +621,7 @@ export function LeadProgressSelector({
               aria-pressed={selected}
               onClick={() => onChange(stage.id)}
               style={buttonStyle}
-              className={`relative flex min-h-14 items-center justify-between gap-2 rounded-md border px-3 py-2 text-left text-xs font-semibold leading-tight transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring ${
+              className={`relative flex min-h-12 items-center justify-between gap-2 rounded-md border px-3 py-2 text-left text-xs font-semibold leading-tight transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring ${
                 singleRowDesktop ? "min-w-0" : "min-w-36 flex-1"
               } ${
                 selected

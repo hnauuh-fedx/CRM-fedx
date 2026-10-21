@@ -84,6 +84,14 @@ export function createLeadSource(input: LeadSourceInput, accessToken: string, in
   }, accessToken);
 }
 
+export function updateLeadSource(sourceId: string, input: LeadSourceInput, accessToken: string, institutionProgramId: string) {
+  return apiRequest<{ id: string; name: string }>(`/lead-sources/${sourceId}`, {
+    method: "PATCH",
+    headers: { "X-Institution-Program-Id": institutionProgramId },
+    body: JSON.stringify(input),
+  }, accessToken);
+}
+
 export function getUtmTrackings(params: UtmTrackingParams, accessToken: string) {
   const query = new URLSearchParams({
     page: String(params.page),

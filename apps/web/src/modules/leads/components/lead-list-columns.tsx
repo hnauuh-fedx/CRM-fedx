@@ -21,19 +21,16 @@ function formatDate(value: string | null) {
   return value ? dateFormatter.format(new Date(value)) : "-";
 }
 const dateFields = new Set(['cccdIssueDate', 'decisionSignedDate']);
-const leadInformationFields = leadDisplayFields.slice(9).map(field => ({
-  key: field.key as keyof LeadListItem, label: field.label,
-  format: dateFields.has(field.key) ? formatDate : undefined,
-}));
 function getLeadWorkflowLabel(lead: LeadListItem) {
   if (lead.lifecycleStatus.value === "FAIL") return lead.lifecycleStatus.label;
   return lead.pipelineStage?.name ?? "Chưa chọn tiến trình";
 }
-function TableValue({ value }: { value: unknown }) {
+// Columns size to their longest value; only the multi-line note keeps a short ellipsis.
+function TableValue({ value, compact = false }: { value: unknown; compact?: boolean }) {
   const text = typeof value === "string" && value.trim() ? value : "-";
   return (
     <span
-      className="block max-w-56 truncate"
+      className={compact ? "block max-w-56 truncate" : "block max-w-150 truncate"}
       title={text === "-" ? undefined : text}
     >
       {text}
@@ -98,11 +95,20 @@ export function useLeadListColumns(detailBasePath: string) {
         ),
         enableSorting: false,
       },
+      ...leadDisplayFields.map((field) => dataColumns[field.key] ?? informationColumn(field.key as keyof LeadListItem, field.label)),
+    ],
+    [detailBasePath],
+  );
+}
+
+// Columns with a dedicated cell; other display fields use informationColumn. Order follows leadDisplayFields.
+const dataColumns: Record<string, ColumnDef<LeadListItem>> = Object.fromEntries(
+  ([
       {
         accessorKey: "fullName",
         header: "Họ và tên",
         cell: ({ row }) => (
-          <div className="min-w-0 truncate" title={row.original.fullName}>
+          <div className="max-w-150 truncate" title={row.original.fullName}>
             <span className="font-medium">{row.original.fullName}</span>
           </div>
         ),
@@ -124,13 +130,13 @@ export function useLeadListColumns(detailBasePath: string) {
         id: "origin",
         header: "Nhóm nguồn",
         enableSorting: false,
-        cell: ({ row }) => row.original.origin?.name ?? "-",
+        cell: ({ row }) => <TableValue value={row.original.origin?.name} />,
       },
       {
         id: "source",
         header: "Nguồn học viên",
         enableSorting: false,
-        cell: ({ row }) => row.original.source?.name ?? "-",
+        cell: ({ row }) => <TableValue value={row.original.source?.name} />,
       },
       {
         id: "assignee",
@@ -160,23 +166,29 @@ export function useLeadListColumns(detailBasePath: string) {
         enableSorting: false,
         cell: ({ row }) => <TableValue value={row.original.majorName} />,
       },
-      ...leadInformationFields.map(({ key, label, format }) => ({
-        id: key,
-        header: label,
-        enableSorting: false,
-        cell: ({ row }: { row: { original: LeadListItem } }) => (
-          <TableValue
-            value={
-              key === "note" ? getLatestLeadNoteText(row.original.latestNote ?? row.original.note) : format
-                ? format((row.original[key] as string | null) ?? null)
-                : row.original[key]
-            }
-          />
-        ),
-      })),
-    ],
-    [detailBasePath],
-  );
+  ] satisfies ColumnDef<LeadListItem>[]).map((column) => [
+    "accessorKey" in column ? String(column.accessorKey) : column.id!,
+    column,
+  ]),
+);
+
+function informationColumn(key: keyof LeadListItem, label: string): ColumnDef<LeadListItem> {
+  const format = dateFields.has(key) ? formatDate : undefined;
+  return {
+    id: key,
+    header: label,
+    enableSorting: false,
+    cell: ({ row }) => (
+      <TableValue
+        compact={key === "note"}
+        value={
+          key === "note" ? getLatestLeadNoteText(row.original.latestNote ?? row.original.note) : format
+            ? format((row.original[key] as string | null) ?? null)
+            : row.original[key]
+        }
+      />
+    ),
+  };
 }
 
 function LeadWorkflowCell({ lead }: { lead: LeadListItem }) {

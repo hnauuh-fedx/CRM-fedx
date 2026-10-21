@@ -1,22 +1,21 @@
-import { useEffect, useState, type Dispatch, type SetStateAction, type KeyboardEvent } from "react";
+import { useEffect, useState, type Dispatch, type SetStateAction } from "react";
 import { CreateLeadDialog } from "../components/create-lead-dialog";
 import { useLeadListColumns } from "../components/lead-list-columns";
 import { useLeadDisplayLayout, getLeadListLayoutScreen } from "../use-lead-display-layout";
 import { LeadDisplayLayoutStatus, EditLeadDisplayLayoutButton } from "../components/lead-display-layout-status";
 import { LeadDetailLayout } from "../components/lead-detail-layout";
-import { leadColumnStyle, leadColumnClass } from "../components/lead-column-presentation";
+import { LeadListTable } from "../components/lead-list-table";
 import { defaultDisplayColumnWidth, minDisplayColumnWidth, maxDisplayColumnWidth } from "@admission-crm/shared/display-layout";
 import type { UseQueryResult } from "@tanstack/react-query";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import {
-  flexRender,
   getCoreRowModel,
   useReactTable,
   type Table as DataTable,
   type RowSelectionState,
   type SortingState,
 } from "@tanstack/react-table";
-import { ArrowDown, ArrowUp, ArrowUpDown, ChevronDown, ExternalLink, FileSpreadsheet, ListPlus, Upload } from "lucide-react";
+import { ChevronDown, ExternalLink, FileSpreadsheet, ListPlus, Upload } from "lucide-react";
 import { Link, useSearchParams } from "react-router-dom";
 
 import { DataPagination } from "@/components/shared/data-pagination";
@@ -40,7 +39,6 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Spinner } from "@/components/ui/spinner";
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { useAuth } from "@/modules/auth/auth-context";
 import { ApiError } from "@/services/api";
 import { addLeadsToCustomerList, createCustomerList, getCustomerListLeads, getCustomerLists } from "@/services/customer-list.service";
@@ -486,7 +484,6 @@ export function LeadsListPage({
       <LeadResultsCard
         isLayoutLoading={isLayoutLoading}
         layoutContainerRef={layoutContainerRef}
-        enableDisplayLayout
         table={table}
         data={data}
         pagination={pagination}
@@ -1038,7 +1035,6 @@ function AssignToCustomerListDialog({
 type LeadResultsCardProps = {
   isLayoutLoading: boolean;
   layoutContainerRef: (node: HTMLDivElement | null) => void;
-  enableDisplayLayout: boolean;
   table: DataTable<LeadListItem>;
   data: LeadListItem[];
   pagination?: LeadListResponse["pagination"];
@@ -1142,7 +1138,6 @@ function LeadBulkActionsMenu({
 function LeadResultsCard({
   isLayoutLoading,
   layoutContainerRef,
-  enableDisplayLayout,
   table,
   data,
   pagination,
@@ -1166,7 +1161,7 @@ function LeadResultsCard({
   const { isLoading: isDataLoading, isError, isFetching, errorMessage } = queryState;
   const isLoading = isDataLoading || isLayoutLoading;
   return (
-    <Card ref={layoutContainerRef} className="gap-0 overflow-hidden border-border/70 py-0 shadow-xs">
+    <Card ref={layoutContainerRef} className="isolate gap-0 overflow-clip border-border/70 py-0 shadow-xs">
       <CardHeader className="border-b py-5">
         <CardTitle>Thông tin lead</CardTitle>
         <CardDescription>
@@ -1203,7 +1198,7 @@ function LeadResultsCard({
             description="Danh sách sẽ cập nhật khi lead được tạo hoặc phân công cho bạn."
           />
         ) : (
-          <LeadTable table={table} onEditLead={onEditLead} enableDisplayLayout={enableDisplayLayout} />
+          <LeadListTable table={table} onEditLead={onEditLead} />
         )}
       </CardContent>
       {pagination && pagination.total > 0 && (
@@ -1225,125 +1220,9 @@ function LeadResultsCard({
   );
 }
 
-function LeadTable({
-  enableDisplayLayout,
-  table,
-  onEditLead,
-}: {
-  enableDisplayLayout: boolean;
-  table: DataTable<LeadListItem>;
-  onEditLead: (leadId: string) => void;
-}) {
-  function openLeadWithKeyboard(
-    event: KeyboardEvent<HTMLTableRowElement>,
-    leadId: string,
-  ) {
-    if (event.key === "Enter" || event.key === " ") {
-      event.preventDefault();
-      onEditLead(leadId);
-    }
-  }
-
-  return (
-    <Table className={enableDisplayLayout ? "table-fixed" : "min-w-max"} style={enableDisplayLayout ? { width: table.getTotalSize() } : undefined}>
-      <caption className="sr-only">
-        Toàn bộ trường thông tin lead được phép truy cập
-      </caption>
-      <TableHeader className="bg-muted/55 text-xs uppercase tracking-wide text-muted-foreground">
-        {table.getHeaderGroups().map((headerGroup) => (
-          <TableRow key={headerGroup.id} className="hover:bg-muted/55">
-            {headerGroup.headers.map((header) => {
-              const canSort = header.column.getCanSort();
-              const sortDirection = header.column.getIsSorted();
-              const isSelectColumn = header.column.id === "select";
-              const isViewColumn = header.column.id === "view";
-              return (
-                <TableHead
-                  key={header.id}
-                  scope="col"
-                  style={enableDisplayLayout ? leadColumnStyle(header.column, true) : undefined}
-                  className={
-                    enableDisplayLayout ? leadColumnClass(header.column.getIsPinned() === "left", true) : isSelectColumn
-                      ? "sticky left-0 z-20 w-12 min-w-12 max-w-12 bg-muted px-4 text-center"
-                      : isViewColumn
-                        ? "sticky left-12 z-20 w-14 min-w-14 max-w-14 border-r bg-muted px-2 text-center"
-                        : "px-5 font-medium text-muted-foreground"
-                  }
-                  aria-sort={
-                    sortDirection === "asc"
-                      ? "ascending"
-                      : sortDirection === "desc"
-                        ? "descending"
-                        : undefined
-                  }
-                >
-                  {canSort ? (
-                    <button
-                      type="button"
-                      className="inline-flex min-h-11 items-center gap-2 rounded-md focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
-                      onClick={header.column.getToggleSortingHandler()}
-                      aria-label={`Sắp xếp theo ${String(header.column.columnDef.header)}`}
-                    >
-                      {flexRender(
-                        header.column.columnDef.header,
-                        header.getContext(),
-                      )}
-                      {sortDirection === "asc" ? (
-                        <ArrowUp aria-hidden="true" />
-                        ) : sortDirection === "desc" ? (
-                          <ArrowDown aria-hidden="true" />
-                        ) : (
-                          <ArrowUpDown aria-hidden="true" />
-                        )}
-                      </button>
-                    ) : (
-                      flexRender(header.column.columnDef.header, header.getContext())
-                    )}
-                  </TableHead>
-                );
-              })}
-            </TableRow>
-          ))}
-        </TableHeader>
-        <TableBody>
-          {table.getRowModel().rows.map((row) => (
-            <TableRow
-              key={row.id}
-              data-state={row.getIsSelected() ? "selected" : undefined}
-              className="group cursor-pointer focus-visible:bg-muted/50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring"
-              tabIndex={0}
-              aria-label={`Mở chi tiết ${row.original.fullName}`}
-              onClick={() => onEditLead(row.original.id)}
-              onKeyDown={(event) => openLeadWithKeyboard(event, row.original.id)}
-            >
-              {row.getVisibleCells().map((cell) => {
-                const isSelectColumn = cell.column.id === "select";
-                const isViewColumn = cell.column.id === "view";
-                return (
-                  <TableCell
-                    key={cell.id}
-                    className={
-                      isSelectColumn
-                        ? "sticky left-0 z-10 w-12 min-w-12 max-w-12 bg-background px-2.5 py-2 text-center group-hover:bg-muted group-data-[state=selected]:bg-muted"
-                        : isViewColumn
-                          ? "sticky left-12 z-10 w-14 min-w-14 max-w-14 border-r bg-background px-2 py-2 text-center group-hover:bg-muted group-data-[state=selected]:bg-muted"
-                          : "px-2.5 py-2"
-                    }
-                  >
-                    {flexRender(cell.column.columnDef.cell, cell.getContext())}
-                  </TableCell>
-                );
-              })}
-            </TableRow>
-          ))}
-        </TableBody>
-      </Table>
-  );
-}
-
 function EditLeadHeader({ lead }: { lead?: LeadDetail }) {
   return (
-    <DialogHeader className="shrink-0 border-b px-6 py-5 pr-14">
+    <DialogHeader className="shrink-0 border-b px-6 py-5 pr-14 lg:[zoom:0.9]">
       <div className="flex flex-col justify-between gap-4 sm:flex-row sm:items-start">
         <div className="space-y-2">
           <DialogTitle>{lead?.fullName ?? "Chi tiết Lead"}</DialogTitle>
@@ -1393,7 +1272,7 @@ function EditLeadContent({
   accessToken: string;
 }) {
   return (
-    <div className="flex min-h-0 flex-1 flex-col gap-6 overflow-y-auto bg-muted/20 p-4 sm:p-6">
+    <div className="flex min-h-0 flex-1 flex-col gap-6 overflow-y-auto bg-muted/20 p-4 sm:p-6 lg:[zoom:0.9]">
       <LeadOpenInitialization key={lead.id} lead={lead} isOpen={isOpen} />
       <PipelineProgressCard
         lead={lead}

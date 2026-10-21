@@ -8,6 +8,7 @@ import {
 } from "../../middlewares/auth.middleware";
 import {
   createLeadSource,
+  updateLeadSource,
   getLeadSourceFilterOptions,
   getMarketingFormFilterOptions,
   getUtmTrackingFilterOptions,
@@ -195,6 +196,27 @@ leadSourcesRouter.post("/", requireAuthentication, requireAnyPermission("lead_so
       return;
     }
     response.status(201).json(result.data);
+  } catch (error) {
+    next(error);
+  }
+});
+
+leadSourcesRouter.patch("/:id", requireAuthentication, requireAnyPermission("lead_source.manage", "system.manage"), async (request, response, next) => {
+  try {
+    const sourceId = z.uuid().safeParse(request.params.id);
+    const parsed = leadSourceInputSchema.safeParse(request.body);
+    if (!sourceId.success || !parsed.success) {
+      response.status(400).json({ message: parsed.success ? "Nguồn lead không hợp lệ." : parsed.error.issues[0]?.message ?? "Thông tin nguồn lead không hợp lệ." });
+      return;
+    }
+    const institutionProgramId = getInstitutionProgramScope(request);
+    if (!institutionProgramId) throw new InstitutionProgramScopeError(400, "Vui lòng chọn chương trình đang làm việc.");
+    const result = await updateLeadSource(request.authUser!, sourceId.data, parsed.data, institutionProgramId, request.ip);
+    if (!result.ok) {
+      response.status(404).json({ message: "Không tìm thấy nguồn lead trong chương trình đang làm việc." });
+      return;
+    }
+    response.json(result.data);
   } catch (error) {
     next(error);
   }

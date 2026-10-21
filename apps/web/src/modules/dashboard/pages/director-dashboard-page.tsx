@@ -16,7 +16,6 @@ import { PageHeader } from "@/components/shared/page-header";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { DateRangeFilter } from "@/components/ui/date-range-filter";
-import { Field, FieldLabel } from "@/components/ui/field";
 import { Progress } from "@/components/ui/progress";
 import {
   Select,
@@ -184,7 +183,7 @@ export function DirectorDashboardPage() {
   );
 
   return (
-    <div className="mx-auto flex max-w-7xl flex-col gap-6">
+    <div className="mx-auto flex max-w-7xl flex-col gap-5">
       <PageHeader
         eyebrow="Điều hành"
         title="Dashboard giám đốc"
@@ -201,19 +200,19 @@ export function DirectorDashboardPage() {
 
       <Card
         className={cn(
-          "gap-5 border-border/70 py-5 shadow-xs transition-colors",
+          "gap-3 border-border/70 py-4 shadow-xs transition-colors",
           activeFilterDescription && "border-primary/40 bg-primary/5",
         )}
       >
-        <CardHeader className="flex flex-row items-center justify-between gap-4 px-5">
-          <CardTitle className="text-2xl font-bold">Thống kê tổng</CardTitle>
+        <CardHeader className="flex flex-row items-center justify-between gap-4 px-4">
+          <CardTitle className="text-lg font-semibold">Thống kê tổng</CardTitle>
           {dashboardQuery.isFetching && (
             <span className="text-xs text-muted-foreground" role="status">
               Đang cập nhật…
             </span>
           )}
         </CardHeader>
-        <CardContent className="flex flex-col gap-5 px-5">
+        <CardContent className="flex flex-col gap-4 px-4">
           <SharedDashboardFilter
             filter={filter}
             options={dashboard.filterOptions}
@@ -229,7 +228,7 @@ export function DirectorDashboardPage() {
             </p>
           )}
 
-          <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
+          <div className="grid grid-cols-2 gap-2 sm:gap-3 xl:grid-cols-4">
             <DirectorKpiCard
               title="Tổng data"
               value={dashboard.summary.totalData}
@@ -307,8 +306,8 @@ function LeadSourceBreakdown({
 }: LeadSourceBreakdownProps) {
   return (
     <Card className="gap-0 overflow-hidden border-border/70 py-0 shadow-xs">
-      <CardHeader className="flex flex-row items-center justify-between gap-4 border-b px-5 py-5">
-        <CardTitle className="text-2xl font-bold">
+      <CardHeader className="flex flex-row items-center justify-between gap-4 border-b px-4 py-3.5">
+        <CardTitle className="text-lg font-semibold">
           Phân bổ data theo nguồn
         </CardTitle>
         {isFetching && (
@@ -322,7 +321,7 @@ function LeadSourceBreakdown({
       </CardHeader>
       <div
         className={cn(
-          "border-b px-5 py-4 transition-colors",
+          "border-b px-4 py-3 transition-colors",
           activeDescription && "bg-primary/5",
         )}
       >
@@ -448,8 +447,8 @@ function LeadPipelineMatrix({
 
   return (
     <Card className="gap-0 overflow-hidden border-border/70 py-0 shadow-xs">
-      <CardHeader className="flex flex-row items-center justify-between gap-4 border-b px-5 py-5">
-        <CardTitle className="text-2xl font-bold">
+      <CardHeader className="flex flex-row items-center justify-between gap-4 border-b px-4 py-3.5">
+        <CardTitle className="text-lg font-semibold">
           Phân bổ data theo nhân viên và tiến trình
         </CardTitle>
         {isFetching && (
@@ -463,7 +462,7 @@ function LeadPipelineMatrix({
       </CardHeader>
       <div
         className={cn(
-          "border-b px-5 py-4 transition-colors",
+          "border-b px-4 py-3 transition-colors",
           activeDescription && "bg-primary/5",
         )}
       >
@@ -640,53 +639,43 @@ function SharedDashboardFilter({
   }
 
   return (
-    <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-[1.15fr_0.9fr_1.5fr_auto] xl:items-end">
-      <Field>
-        <FieldLabel>Trường thông tin</FieldLabel>
-        <Select
-          value={filter.field}
-          onValueChange={(value) => changeField(value as SharedFilterField)}
-        >
-          <SelectTrigger className="w-full">
-            <SelectValue />
-          </SelectTrigger>
-          <SelectContent>
-            <SelectGroup>
-              <SelectItem value="NONE">Chưa chọn</SelectItem>
-              {availableFields.includes("MAJOR") && (
-                <SelectItem value="MAJOR">Ngành đăng ký</SelectItem>
-              )}
-              {availableFields.includes("SOURCE") && (
-                <SelectItem value="SOURCE">Nguồn</SelectItem>
-              )}
-              {availableFields.includes("ASSIGNEE") && (
-                <SelectItem value="ASSIGNEE">Nhân viên</SelectItem>
-              )}
-              {availableFields.includes("PIPELINE_STAGE") && (
-                <SelectItem value="PIPELINE_STAGE">Tiến trình</SelectItem>
-              )}
-            </SelectGroup>
-          </SelectContent>
-        </Select>
-      </Field>
-
-      <Field>
-        <FieldLabel>Điều kiện</FieldLabel>
-        <DashboardFilterCondition filter={filter} onChange={onChange} />
-      </Field>
-
-      <Field>
-        <FieldLabel>Giá trị</FieldLabel>
-        <DashboardFilterValue
-          filter={filter}
-          options={options}
-          onChange={onChange}
-        />
-      </Field>
+    <div className="grid grid-cols-2 gap-2 xl:grid-cols-[minmax(0,1fr)_minmax(0,0.7fr)_minmax(0,1.4fr)_auto]">
+      <Select
+        value={filter.field === "NONE" ? "" : filter.field}
+        onValueChange={(value) => changeField(value as SharedFilterField)}
+      >
+        <SelectTrigger size="sm" className="col-span-2 w-full sm:col-span-1" aria-label="Trường thông tin">
+          <SelectValue placeholder="Trường thông tin" />
+        </SelectTrigger>
+        <SelectContent position="popper" align="start">
+          <SelectGroup>
+            <SelectItem value="NONE">Không lọc theo trường</SelectItem>
+            {availableFields.includes("MAJOR") && (
+              <SelectItem value="MAJOR">Ngành đăng ký</SelectItem>
+            )}
+            {availableFields.includes("SOURCE") && (
+              <SelectItem value="SOURCE">Nguồn</SelectItem>
+            )}
+            {availableFields.includes("ASSIGNEE") && (
+              <SelectItem value="ASSIGNEE">Nhân viên</SelectItem>
+            )}
+            {availableFields.includes("PIPELINE_STAGE") && (
+              <SelectItem value="PIPELINE_STAGE">Tiến trình</SelectItem>
+            )}
+          </SelectGroup>
+        </SelectContent>
+      </Select>
+      <DashboardFilterCondition filter={filter} onChange={onChange} />
+      <DashboardFilterValue
+        filter={filter}
+        options={options}
+        onChange={onChange}
+      />
       <Button
         type="button"
+        size="sm"
         variant="outline"
-        className="w-full md:w-auto"
+        className="col-span-2 w-full sm:col-span-1 xl:w-auto"
         onClick={onReset}
         disabled={filter.field === "NONE" && !filter.timePreset}
       >
@@ -695,7 +684,7 @@ function SharedDashboardFilter({
       <QuickDateFilters filter={filter} onChange={onChange} />
       {activeDescription && (
         <p
-          className="rounded-lg border border-primary/20 bg-background/80 px-3 py-2 text-sm text-primary md:col-span-2 xl:col-span-4"
+          className="rounded-md border border-primary/20 bg-background/80 px-3 py-1.5 text-xs leading-5 text-primary col-span-2 xl:col-span-4"
           role="status"
           aria-live="polite"
         >
@@ -715,7 +704,7 @@ function DashboardFilterCondition({
 }) {
   return (
     <Select
-      value={filter.operator}
+      value={filter.field === "NONE" ? "" : filter.operator}
       disabled={filter.field === "NONE"}
       onValueChange={(operator) =>
         onChange({
@@ -724,10 +713,10 @@ function DashboardFilterCondition({
         })
       }
     >
-      <SelectTrigger className="w-full">
-        <SelectValue placeholder="Chọn trường trước" />
+      <SelectTrigger size="sm" className="w-full" aria-label="Điều kiện">
+        <SelectValue placeholder="Điều kiện" />
       </SelectTrigger>
-      <SelectContent>
+      <SelectContent position="popper" align="start">
         <SelectGroup>
           <SelectItem value="EQUALS">Bằng</SelectItem>
           <SelectItem value="NOT_EQUALS">Không bằng</SelectItem>
@@ -753,14 +742,10 @@ function DashboardFilterValue({
       disabled={filter.field === "NONE" || categoryOptions.length === 0}
       onValueChange={(value) => onChange({ ...filter, value })}
     >
-      <SelectTrigger className="w-full">
-        <SelectValue
-          placeholder={
-            filter.field === "NONE" ? "Chọn trường trước" : "Chọn giá trị"
-          }
-        />
+      <SelectTrigger size="sm" className="w-full" aria-label="Giá trị">
+        <SelectValue placeholder="Giá trị" />
       </SelectTrigger>
-      <SelectContent>
+      <SelectContent position="popper" align="start">
         <SelectGroup>
           {categoryOptions.length === 0 ? (
             <SelectItem value="NO_OPTIONS" disabled>
@@ -797,10 +782,10 @@ function QuickDateFilters({
   const isCustomDateActive = filter.timePreset === "CUSTOM" && !selectedQuarter;
 
   return (
-    <div className="flex flex-col gap-2 md:col-span-2 xl:col-span-4">
-      <p className="text-sm font-medium">Ngày tạo</p>
+    <div className="col-span-2 xl:col-span-4">
       <div
-        className="flex flex-wrap gap-2"
+        role="group"
+        className="flex flex-wrap gap-1.5"
         aria-label="Lọc nhanh theo ngày tạo"
       >
         {datePresetOptions.map((option) => {
@@ -810,6 +795,7 @@ function QuickDateFilters({
               key={option.value}
               type="button"
               size="sm"
+              className="px-2.5 font-normal"
               variant={isActive ? "default" : "outline"}
               aria-pressed={isActive}
               onClick={() =>
@@ -850,7 +836,7 @@ function QuickDateFilters({
           <SelectTrigger size="sm" aria-label="Lọc ngày tạo theo quý">
             <SelectValue placeholder="Theo quý" />
           </SelectTrigger>
-          <SelectContent>
+          <SelectContent position="popper" align="start">
             <SelectGroup>
               {quarterOptions.map((option) => (
                 <SelectItem key={option.value} value={option.value}>
@@ -862,11 +848,11 @@ function QuickDateFilters({
         </Select>
         <DateRangeFilter
           className="w-auto"
-          buttonClassName={
-            isCustomDateActive
-              ? "bg-primary text-primary-foreground hover:bg-primary/90 hover:text-primary-foreground"
-              : undefined
-          }
+          buttonClassName={cn(
+            "h-8 px-2.5",
+            isCustomDateActive &&
+              "bg-primary text-primary-foreground hover:bg-primary/90 hover:text-primary-foreground",
+          )}
           isActive={isCustomDateActive}
           placeholder="Khoảng tùy chọn"
           fromDate={filter.fromDate}
@@ -1014,44 +1000,44 @@ function DirectorKpiCard({
   description,
 }: DirectorKpiCardProps) {
   return (
-    <Card className="relative min-h-44 gap-5 border-border/70 py-5 shadow-xs">
-      <CardHeader className="grid min-h-14 grid-cols-[1fr_auto] items-start gap-3 px-5">
-        <CardTitle className="text-base leading-snug text-primary">
+    <Card className="gap-3 border-border/70 px-3 py-3 shadow-xs sm:px-4 sm:py-3.5">
+      <div className="flex items-start gap-2">
+        <span className="hidden size-7 shrink-0 items-center justify-center rounded-md bg-accent text-primary sm:flex">
+          <Icon className="size-4" aria-hidden={true} />
+        </span>
+        <CardTitle className="min-w-0 flex-1 text-sm sm:pt-1 leading-5 font-medium text-muted-foreground">
           {title}
         </CardTitle>
-        <span className="flex size-9 items-center justify-center rounded-lg bg-accent text-primary">
-          <Icon className="size-5" aria-hidden={true} />
-        </span>
-      </CardHeader>
-      <CardContent className="flex items-start justify-between gap-4 px-5">
-        <p className="text-4xl leading-none font-semibold tracking-tight tabular-nums">
+        <Tooltip>
+          <TooltipTrigger asChild>
+            <Button
+              type="button"
+              size="icon-xs"
+              variant="ghost"
+              className="-mr-1 text-muted-foreground hover:text-primary"
+              aria-label={`Xem mô tả ô ${title}`}
+            >
+              <Info aria-hidden="true" />
+            </Button>
+          </TooltipTrigger>
+          <TooltipContent className="max-w-72" side="top">
+            {description}
+          </TooltipContent>
+        </Tooltip>
+      </div>
+      <div className="mt-auto flex items-baseline gap-2">
+        <p className="text-2xl leading-none font-semibold tracking-tight tabular-nums sm:text-[1.75rem]">
           {integerFormatter.format(value)}
         </p>
         {percentage !== undefined && (
-          <div
-            className="rounded-xl border bg-muted/40 px-4 py-3 text-2xl leading-none font-semibold text-primary tabular-nums"
+          <span
+            className="rounded-md bg-primary/10 px-1.5 py-0.5 text-xs font-semibold text-primary tabular-nums"
             aria-label={`Tỷ lệ chuyển đổi ${percentFormatter.format(percentage)} phần trăm`}
           >
             {percentFormatter.format(percentage)}%
-          </div>
+          </span>
         )}
-      </CardContent>
-      <Tooltip>
-        <TooltipTrigger asChild>
-          <Button
-            type="button"
-            size="icon-sm"
-            variant="ghost"
-            className="absolute right-3 bottom-3 text-primary"
-            aria-label={`Xem mô tả ô ${title}`}
-          >
-            <Info aria-hidden="true" />
-          </Button>
-        </TooltipTrigger>
-        <TooltipContent className="max-w-72" side="left">
-          {description}
-        </TooltipContent>
-      </Tooltip>
+      </div>
     </Card>
   );
 }
@@ -1059,14 +1045,14 @@ function DirectorKpiCard({
 function DirectorDashboardSkeleton() {
   return (
     <output
-      className="mx-auto flex max-w-7xl flex-col gap-6"
+      className="mx-auto flex max-w-7xl flex-col gap-5"
       aria-label="Đang tải dashboard điều hành"
     >
-      <Skeleton className="h-20 max-w-xl" />
-      <Skeleton className="h-40" />
-      <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
+      <Skeleton className="h-16 max-w-xl" />
+      <Skeleton className="h-28" />
+      <div className="grid grid-cols-2 gap-3 xl:grid-cols-4">
         {[1, 2, 3, 4].map((item) => (
-          <Skeleton key={item} className="h-44" />
+          <Skeleton key={item} className="h-24" />
         ))}
       </div>
       <Skeleton className="h-72" />
