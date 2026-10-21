@@ -38,7 +38,7 @@ export function ServerDataTable<T>({
         {table.getRowModel().rows.map((row) => (
           <TableRow key={row.id}>
             {row.getVisibleCells().map((cell) => (
-              <TableCell key={cell.id} className="px-5 py-4">
+              <TableCell key={cell.id} className="px-3 py-2">
                 {flexRender(cell.column.columnDef.cell, cell.getContext())}
               </TableCell>
             ))}
@@ -54,7 +54,7 @@ function SortableHeader<T>({ header }: { header: Header<T, unknown> }) {
   return (
     <TableHead
       scope="col"
-      className="px-5 font-medium text-muted-foreground"
+      className="px-3 font-medium text-muted-foreground"
       aria-sort={
         direction === "asc"
           ? "ascending"

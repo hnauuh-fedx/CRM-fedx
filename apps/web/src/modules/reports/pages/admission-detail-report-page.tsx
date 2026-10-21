@@ -168,7 +168,7 @@ function RecentApplicationsTable({
             <TableBody>
               {applications.map((application) => (
                 <TableRow key={application.id}>
-                  <TableCell className="px-5">
+                  <TableCell className="px-3">
                     <p className="font-medium">{application.leadName}</p>
                     <p className="text-sm text-muted-foreground">
                       {[
@@ -186,7 +186,7 @@ function RecentApplicationsTable({
                   <TableCell>
                     {formatStatus(application.tuitionStatus)}
                   </TableCell>
-                  <TableCell className="px-5 tabular-nums">
+                  <TableCell className="px-3 tabular-nums">
                     {currencyFormatter.format(application.monthlyRevenue)}
                   </TableCell>
                 </TableRow>

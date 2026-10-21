@@ -523,7 +523,7 @@ function MajorTableRow({
 }: MajorTableRowProps) {
   return (
     <TableRow key={major.id}>
-      <TableCell className="px-5 font-medium">{major.code ?? "-"}</TableCell>
+      <TableCell className="px-3 font-medium">{major.code ?? "-"}</TableCell>
       <TableCell>{major.name}</TableCell>
       <TableCell>
         {major.leadCount} lead / {major.admissionCount} hồ sơ /{" "}

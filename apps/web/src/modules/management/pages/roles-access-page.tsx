@@ -771,7 +771,7 @@ function RoleResults({
               <TableBody>
                 {roles.map((role) => (
                   <TableRow key={role.id}>
-                    <TableCell className="px-5">
+                    <TableCell className="px-3">
                       <div className="font-medium">{role.name}</div>
                       <div className="text-sm text-muted-foreground">
                         {role.code}

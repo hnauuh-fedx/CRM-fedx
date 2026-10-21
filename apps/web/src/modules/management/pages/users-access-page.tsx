@@ -195,7 +195,7 @@ export function UsersAccessPage() {
                 <caption className="sr-only">Danh sách người dùng hệ thống</caption>
                 <TableHeader className="bg-muted/55">
                   <TableRow>
-                    <TableHead className="min-w-56 px-5">Người dùng</TableHead>
+                    <TableHead className="min-w-56 px-3">Người dùng</TableHead>
                     <TableHead>Chương trình / vai trò</TableHead>
                     <TableHead>Phòng ban</TableHead>
                     <TableHead>Scope</TableHead>
@@ -207,7 +207,7 @@ export function UsersAccessPage() {
                 <TableBody>
                   {data.map((user) => (
                     <TableRow key={user.id}>
-                      <TableCell className="px-5">
+                      <TableCell className="px-3">
                         <div className="font-medium">{user.fullName}</div>
                         <div className="text-sm text-muted-foreground">
                           {user.email}

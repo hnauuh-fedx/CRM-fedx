@@ -604,7 +604,7 @@ function DepartmentResults({
               <TableBody>
                 {data.map((department) => (
                   <TableRow key={department.id}>
-                    <TableCell className="px-5">
+                    <TableCell className="px-3">
                       <div className="font-medium">{department.name}</div>
                       <div className="text-sm text-muted-foreground">
                         {department.code ?? "Chưa có mã"}

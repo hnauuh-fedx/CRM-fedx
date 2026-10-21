@@ -585,7 +585,7 @@ function Analytics(props: AnalyticsProps) {
               <TableBody>
                 {response.data.map((group) => (
                   <TableRow key={group.groupKey}>
-                    <TableCell className="px-5 py-4 font-medium">
+                    <TableCell className="px-3 py-2 font-medium">
                       {getGroupLabel(group, dimension)}
                     </TableCell>
                     <TableCell className="tabular-nums">
@@ -603,7 +603,7 @@ function Analytics(props: AnalyticsProps) {
                     <TableCell className="tabular-nums">
                       {group.conversionRate}%
                     </TableCell>
-                    <TableCell className="px-5 text-right">
+                    <TableCell className="px-3 text-right">
                       <Button
                         type="button"
                         size="sm"
@@ -747,7 +747,7 @@ function LeadDialog(props: LeadDialogProps) {
                         )}
                       </div>
                     </TableCell>
-                    <TableCell className="px-4">
+                    <TableCell className="px-3">
                       {formatDate(lead.createdAt)}
                     </TableCell>
                   </TableRow>

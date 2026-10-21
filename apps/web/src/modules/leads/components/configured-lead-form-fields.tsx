@@ -66,6 +66,8 @@ type Props = {
   canManageAssignment: boolean;
   disabled: boolean;
   onStageChange: (value: string) => void;
+  /** Fields edited elsewhere on the page (e.g. the stage on the detail page) and left out of the form. */
+  hiddenFields?: string[];
 };
 export function ConfiguredLeadFormFields(props: Props) {
   const keys = configuredFormKeys(
@@ -75,7 +77,7 @@ export function ConfiguredLeadFormFields(props: Props) {
       ...Object.keys(props.form.formState.errors),
       ...Object.keys(props.form.formState.dirtyFields),
     ],
-  );
+  ).filter((key) => !props.hiddenFields?.includes(key));
   return (
     <div
       className="grid min-w-0 gap-4 md:grid-cols-2 xl:grid-cols-3"

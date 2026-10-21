@@ -382,13 +382,13 @@ function LeadSourceBreakdown({
             ) : (
               breakdown.rows.map((row) => (
                 <TableRow key={row.id ?? "UNASSIGNED_SOURCE"}>
-                  <TableCell className="border-r px-4 py-3 font-medium whitespace-normal break-words">
+                  <TableCell className="border-r px-3 py-2 font-medium whitespace-normal break-words">
                     {row.name}
                   </TableCell>
-                  <TableCell className="border-r px-4 py-3 text-right tabular-nums">
+                  <TableCell className="border-r px-3 py-2 text-right tabular-nums">
                     {integerFormatter.format(row.total)}
                   </TableCell>
-                  <TableCell className="px-4 py-3">
+                  <TableCell className="px-3 py-2">
                     <div className="grid grid-cols-[4.5rem_1fr] items-center gap-3">
                       <span className="text-right tabular-nums">
                         {sourcePercentFormatter.format(row.percentage)}%
@@ -405,13 +405,13 @@ function LeadSourceBreakdown({
           </TableBody>
           <TableFooter>
             <TableRow className="hover:bg-muted/50">
-              <TableCell className="border-r px-4 py-3 font-semibold">
+              <TableCell className="border-r px-3 py-2 font-semibold">
                 Tổng
               </TableCell>
-              <TableCell className="border-r px-4 py-3 text-right font-bold tabular-nums">
+              <TableCell className="border-r px-3 py-2 text-right font-bold tabular-nums">
                 {integerFormatter.format(breakdown.total)}
               </TableCell>
-              <TableCell className="px-4 py-3 font-bold tabular-nums">
+              <TableCell className="px-3 py-2 font-bold tabular-nums">
                 {breakdown.total > 0 ? "100%" : "0%"}
               </TableCell>
             </TableRow>
@@ -497,7 +497,7 @@ function LeadPipelineMatrix({
             <TableRow className="border-b-2 hover:!bg-transparent">
               <TableHead
                 scope="col"
-                className="h-auto border-r px-2 py-3 text-xs font-semibold whitespace-normal lg:px-3 lg:text-sm 2xl:px-4"
+                className="h-auto border-r px-2 py-2 text-xs font-semibold whitespace-normal lg:px-3 lg:text-sm 2xl:px-4"
               >
                 Nhân viên phụ trách
               </TableHead>
@@ -519,7 +519,7 @@ function LeadPipelineMatrix({
               ))}
               <TableHead
                 scope="col"
-                className="h-auto px-2 py-3 text-right text-xs font-semibold whitespace-normal lg:px-3 lg:text-sm 2xl:px-4"
+                className="h-auto px-2 py-2 text-right text-xs font-semibold whitespace-normal lg:px-3 lg:text-sm 2xl:px-4"
               >
                 Tổng
               </TableHead>
@@ -538,7 +538,7 @@ function LeadPipelineMatrix({
             ) : (
               matrix.rows.map((row) => (
                 <TableRow key={row.id ?? "UNASSIGNED_ASSIGNEE"}>
-                  <TableCell className="border-r px-2 py-3 text-xs font-bold whitespace-normal break-words lg:px-3 lg:text-sm 2xl:px-4">
+                  <TableCell className="border-r px-2 py-2 text-xs font-bold whitespace-normal break-words lg:px-3 lg:text-sm 2xl:px-4">
                     {row.name}
                   </TableCell>
                   {matrix.columns.map((column, index) => {
@@ -556,7 +556,7 @@ function LeadPipelineMatrix({
                       </TableCell>
                     );
                   })}
-                  <TableCell className="px-2 py-3 text-right text-xs font-semibold whitespace-normal break-all text-primary tabular-nums lg:px-3 lg:text-sm 2xl:px-4">
+                  <TableCell className="px-2 py-2 text-right text-xs font-semibold whitespace-normal break-all text-primary tabular-nums lg:px-3 lg:text-sm 2xl:px-4">
                     {integerFormatter.format(row.total)}
                   </TableCell>
                 </TableRow>
@@ -565,7 +565,7 @@ function LeadPipelineMatrix({
           </TableBody>
           <TableFooter>
             <TableRow className="hover:bg-muted/50">
-              <TableCell className="border-r px-2 py-3 text-xs font-semibold whitespace-normal lg:px-3 lg:text-sm 2xl:px-4">
+              <TableCell className="border-r px-2 py-2 text-xs font-semibold whitespace-normal lg:px-3 lg:text-sm 2xl:px-4">
                 Tổng
               </TableCell>
               {matrix.columns.map((column, index) => (
@@ -579,7 +579,7 @@ function LeadPipelineMatrix({
                   {integerFormatter.format(column.total)}
                 </TableCell>
               ))}
-              <TableCell className="px-2 py-3 text-right text-xs font-bold whitespace-normal break-all text-primary tabular-nums lg:px-3 lg:text-sm 2xl:px-4">
+              <TableCell className="px-2 py-2 text-right text-xs font-bold whitespace-normal break-all text-primary tabular-nums lg:px-3 lg:text-sm 2xl:px-4">
                 {integerFormatter.format(matrix.total)}
               </TableCell>
             </TableRow>
@@ -1042,29 +1042,6 @@ function DirectorKpiCard({
   );
 }
 
-<<<<<<< HEAD
-=======
-function DirectorDashboardSkeleton() {
-  return (
-    <output
-      className="mx-auto flex max-w-7xl flex-col gap-5"
-      aria-label="Đang tải dashboard điều hành"
-    >
-      <Skeleton className="h-16 max-w-xl" />
-      <Skeleton className="h-28" />
-      <div className="grid grid-cols-2 gap-3 xl:grid-cols-4">
-        {[1, 2, 3, 4].map((item) => (
-          <Skeleton key={item} className="h-24" />
-        ))}
-      </div>
-      <Skeleton className="h-72" />
-      <Skeleton className="h-72" />
-      <span className="sr-only">Đang tải dashboard điều hành</span>
-    </output>
-  );
-}
-
->>>>>>> origin/fix-to-deploy-server
 function toRequestFilters(filter: SharedFilterState): DirectorDashboardFilters {
   const request: DirectorDashboardFilters = {};
   if (filter.field === "MAJOR" && filter.value) request.majorId = filter.value;

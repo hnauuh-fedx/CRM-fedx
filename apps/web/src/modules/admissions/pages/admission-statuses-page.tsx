@@ -345,7 +345,7 @@ function SortableHead(props: {
 }) {
   const { label, sortBy, state, onSort } = props;
   return (
-    <TableHead className="px-5 font-medium text-muted-foreground">
+    <TableHead className="px-3 font-medium text-muted-foreground">
       <button
         type="button"
         className="inline-flex min-h-11 items-center gap-2 rounded-md focus-visible:outline-2 focus-visible:outline-ring"
@@ -720,10 +720,10 @@ function AdmissionStatusResults({
                   state={state}
                   onSort={(sortBy) => dispatch({ type: "toggleSort", sortBy })}
                 />
-                <TableHead className="px-5 font-medium text-muted-foreground">
+                <TableHead className="px-3 font-medium text-muted-foreground">
                   Màu hiển thị
                 </TableHead>
-                <TableHead className="px-5 font-medium text-muted-foreground">
+                <TableHead className="px-3 font-medium text-muted-foreground">
                   Số hồ sơ
                 </TableHead>
                 <SortableHead
@@ -733,7 +733,7 @@ function AdmissionStatusResults({
                   onSort={(sortBy) => dispatch({ type: "toggleSort", sortBy })}
                 />
                 {canManage && (
-                  <TableHead className="px-5 text-right font-medium text-muted-foreground">
+                  <TableHead className="px-3 text-right font-medium text-muted-foreground">
                     Thao tác
                   </TableHead>
                 )}
@@ -742,21 +742,21 @@ function AdmissionStatusResults({
             <TableBody>
               {statuses.map((status) => (
                 <TableRow key={status.id}>
-                  <TableCell className="px-5 py-4 font-medium">
+                  <TableCell className="px-3 py-2 font-medium">
                     {status.name}
                   </TableCell>
-                  <TableCell className="px-5 py-4">{status.code}</TableCell>
-                  <TableCell className="px-5 py-4">
+                  <TableCell className="px-3 py-2">{status.code}</TableCell>
+                  <TableCell className="px-3 py-2">
                     <ColorBadge status={status} />
                   </TableCell>
-                  <TableCell className="px-5 py-4">
+                  <TableCell className="px-3 py-2">
                     {status.profileCount}
                   </TableCell>
-                  <TableCell className="px-5 py-4">
+                  <TableCell className="px-3 py-2">
                     {formatDate(status.createdAt)}
                   </TableCell>
                   {canManage && (
-                    <TableCell className="px-5 py-4">
+                    <TableCell className="px-3 py-2">
                       <div className="flex justify-end gap-2">
                         <Button
                           type="button"

@@ -24,7 +24,7 @@ import { EmptyState } from "@/components/shared/data-states";
 import { ErrorState } from "@/components/shared/error-state";
 import { PageHeader } from "@/components/shared/page-header";
 import { TableLoadingState } from "@/components/shared/table-loading-state";
-import { Badge } from "@/components/ui/badge";
+import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import { Card, CardAction, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
@@ -44,7 +44,8 @@ import { useAuth } from "@/modules/auth/auth-context";
 import { ApiError } from "@/services/api";
 import { addLeadsToCustomerList, createCustomerList, getCustomerListLeads, getCustomerLists } from "@/services/customer-list.service";
 import { assignLeads, deleteLeads, getLead, getLeadActionOptions, getLeadFilterOptions, getLeads, importLeads } from "@/services/lead.service";
-import { LeadProgressSelector } from "../components/lead-form";
+import { LeadProgressSelector, progressOptionClassName } from "../components/lead-form";
+import { openLeadInEditModeState } from "../lead-detail-navigation";
 import { LeadImportErrorsTable } from "../components/lead-import-errors-table";
 import { LeadCustomFieldsCard } from "../components/lead-custom-fields-card";
 import { InlineLeadSummaryCard } from "../components/inline-lead-summary-card";
@@ -390,7 +391,7 @@ export function LeadsListPage({
 
   return (
     <PageLoadingBoundary variant="lead-list" queries={[leadsQuery, optionsQuery, displayLayout]}>
-      <div className="mx-auto flex w-full min-w-0 max-w-400 flex-col gap-6">
+      <div className="mx-auto flex w-full min-w-0 max-w-400 flex-col gap-4">
       <PageHeader
         eyebrow={eyebrow}
         title={title}
@@ -416,14 +417,14 @@ export function LeadsListPage({
         }
       />
 
-      <Card className="gap-4 border-border/70 py-5 shadow-xs">
-        <CardHeader className="gap-1 px-5">
-          <CardTitle>Tiến trình</CardTitle>
-          <CardDescription>
+      <Card className="gap-3 border-border/70 py-4 shadow-xs">
+        <CardHeader className="gap-0.5 px-4">
+          <CardTitle className="text-base">Tiến trình</CardTitle>
+          <CardDescription className="text-xs">
             Chọn một bước để lọc danh sách lead đang ở tiến trình đó.
           </CardDescription>
         </CardHeader>
-        <CardContent className="flex flex-col gap-3 px-5">
+        <CardContent className="px-4">
           <LeadProgressSelector
             value={filters.pipelineStageId}
             stages={optionsQuery.data?.stages ?? []}
@@ -436,52 +437,57 @@ export function LeadsListPage({
               setFilters((current) => ({ ...current, pipelineStageId, status: "" }));
               setViewState((current) => ({ ...current, page: 1 }));
             }}
+            trailingRow={({ style, columns }) => {
+              const showFail = !customerListId;
+              const sharesRow = showFail && columns >= 3;
+              return (
+                <div className="grid items-end gap-x-2 gap-y-3" style={style}>
+                  {showFail && (
+                    <div className="flex min-w-0 flex-col gap-1.5">
+                      <span id="lead-fail-filter-label" className="text-xs font-medium text-muted-foreground">
+                        Trạng thái
+                      </span>
+                      <FailStatusFilterButton
+                        selected={filters.status === "FAIL"}
+                        count={optionsQuery.data?.failedLeads ?? 0}
+                        onSelect={() => {
+                          setDraftFilters((current) => ({ ...current, pipelineStageId: "", status: "FAIL" }));
+                          setFilters((current) => ({ ...current, pipelineStageId: "", status: "FAIL" }));
+                          setViewState((current) => ({ ...current, page: 1 }));
+                        }}
+                      />
+                    </div>
+                  )}
+                  <div className={cn("flex min-w-0 items-stretch gap-4", sharesRow ? "col-[2/-1]" : "col-span-full")}>
+                    {sharesRow && <span aria-hidden="true" className="ml-2 w-px shrink-0 bg-foreground/15" />}
+                    <LeadFilterPanel
+                      embedded
+                      filters={draftFilters}
+                      options={optionsQuery.data}
+                      filterConditions={filterConditions}
+                      canViewSensitiveLeadData={canViewSensitiveLeadData}
+                      onChange={(field, value) => {
+                        setDraftFilters((current) => ({ ...current, [field]: value }));
+                        if (field !== "search") {
+                          setFilters((current) => ({ ...current, [field]: value }));
+                          setViewState((current) => ({ ...current, page: 1 }));
+                        }
+                      }}
+                      onReset={() => {
+                        setDraftFilters(emptyFilters);
+                        setFilters(emptyFilters);
+                        applyFilterConditions([]);
+                      }}
+                      onApplyConditions={applyFilterConditions}
+                    />
+                  </div>
+                </div>
+              );
+            }}
           />
-          {!customerListId && (
-            <Field className="gap-2 sm:max-w-48">
-              <FieldLabel htmlFor="lead-fail-filter">Trạng thái</FieldLabel>
-              <Button
-                id="lead-fail-filter"
-                type="button"
-                variant={filters.status === "FAIL" ? "destructive" : "outline"}
-                aria-pressed={filters.status === "FAIL"}
-                aria-label="Lọc lead ở trạng thái Fail"
-                className="min-h-14 w-full justify-between"
-                onClick={() => {
-                  setDraftFilters((current) => ({ ...current, pipelineStageId: "", status: "FAIL" }));
-                  setFilters((current) => ({ ...current, pipelineStageId: "", status: "FAIL" }));
-                  setViewState((current) => ({ ...current, page: 1 }));
-                }}
-              >
-                Fail
-                <Badge variant="secondary" className="tabular-nums">
-                  {compactNumberFormatter.format(optionsQuery.data?.failedLeads ?? 0)}
-                </Badge>
-              </Button>
-            </Field>
-          )}
         </CardContent>
       </Card>
 
-      <LeadFilterPanel
-        filters={draftFilters}
-        options={optionsQuery.data}
-        filterConditions={filterConditions}
-        canViewSensitiveLeadData={canViewSensitiveLeadData}
-        onChange={(field, value) => {
-          setDraftFilters((current) => ({ ...current, [field]: value }));
-          if (field !== "search") {
-            setFilters((current) => ({ ...current, [field]: value }));
-            setViewState((current) => ({ ...current, page: 1 }));
-          }
-        }}
-        onReset={() => {
-          setDraftFilters(emptyFilters);
-          setFilters(emptyFilters);
-          applyFilterConditions([]);
-        }}
-        onApplyConditions={applyFilterConditions}
-      />
       <LeadDisplayLayoutStatus enabled query={displayLayout} screen={layoutScreen} />
       <LeadResultsCard
         isLayoutLoading={isLayoutLoading}
@@ -1165,9 +1171,9 @@ function LeadResultsCard({
   const isLoading = isDataLoading || isLayoutLoading;
   return (
     <Card ref={layoutContainerRef} className="isolate gap-0 overflow-clip border-border/70 py-0 shadow-xs">
-      <CardHeader className="border-b py-5">
-        <CardTitle>Thông tin lead</CardTitle>
-        <CardDescription>
+      <CardHeader className="gap-0.5 border-b px-4 py-3 [.border-b]:pb-3">
+        <CardTitle className="text-base">Thông tin lead</CardTitle>
+        <CardDescription className="text-xs">
           {pagination
             ? `Hiển thị đầy đủ thông tin hồ sơ của ${data.length} trong tổng số ${pagination.total} lead. Kéo ngang để xem thêm trường.`
             : "Đang lấy dữ liệu lead…"}
@@ -1237,7 +1243,7 @@ function EditLeadHeader({ lead }: { lead?: LeadDetail }) {
         </div>
         {lead && (
           <Button asChild type="button" size="sm" variant="outline">
-            <Link to={`/sale/leads/${lead.id}`}>
+            <Link to={`/sale/leads/${lead.id}`} state={openLeadInEditModeState}>
               <ExternalLink aria-hidden="true" />
               Mở trang chi tiết
             </Link>
@@ -1275,7 +1281,7 @@ function EditLeadContent({
   accessToken: string;
 }) {
   return (
-    <div className="flex min-h-0 flex-1 flex-col gap-6 overflow-y-auto bg-muted/20 p-4 sm:p-6 lg:[zoom:0.9]">
+    <div className="flex min-h-0 flex-1 flex-col gap-4 overflow-y-auto bg-muted/20 p-4 sm:p-5 lg:[zoom:0.9]">
       <LeadOpenInitialization key={lead.id} lead={lead} isOpen={isOpen} />
       <PipelineProgressCard
         lead={lead}
@@ -1293,8 +1299,8 @@ function EditLeadContent({
           {transition.error.message}
         </p>
       )}
-      <div className="grid items-start gap-6 xl:grid-cols-[minmax(320px,0.82fr)_minmax(0,1.48fr)]">
-        <aside className="flex min-w-0 flex-col gap-6">
+      <div className="grid items-start gap-4 xl:grid-cols-[minmax(320px,0.82fr)_minmax(0,1.48fr)]">
+        <aside className="flex min-w-0 flex-col gap-4">
           <LeadDetailLayout lead={lead} enabled canUpdate={canUpdate} options={options}>
           <InlineLeadSummaryCard
             lead={lead}
@@ -1388,4 +1394,48 @@ function updateLeadSorting(
 ): SortingState {
   const next = typeof updater === "function" ? updater(current) : updater;
   return next.length > 0 ? next.slice(0, 1) : [{ id: "createdAt", desc: true }];
+}
+
+const failStatusColor = "#dc2626";
+
+/** Fail filter drawn like a progress option so it lines up with the stage buttons above it. */
+function FailStatusFilterButton({
+  selected,
+  count,
+  onSelect,
+}: {
+  selected: boolean;
+  count: number;
+  onSelect: () => void;
+}) {
+  return (
+    <button
+      type="button"
+      aria-pressed={selected}
+      aria-labelledby="lead-fail-filter-label lead-fail-filter-text"
+      onClick={onSelect}
+      style={
+        selected
+          ? { backgroundColor: failStatusColor, borderColor: failStatusColor, color: "#fff" }
+          : { borderColor: `${failStatusColor}66`, boxShadow: `inset 0 3px 0 ${failStatusColor}` }
+      }
+      className={cn(
+        progressOptionClassName,
+        "min-w-0",
+        selected ? "shadow-sm" : "bg-muted/30 text-foreground hover:bg-background",
+      )}
+    >
+      <span id="lead-fail-filter-text" className="min-w-0">Fail</span>
+      <span
+        className="shrink-0 rounded-full px-2 py-0.5 text-[0.7rem] tabular-nums"
+        style={
+          selected
+            ? { backgroundColor: "rgb(255 255 255 / 0.2)", color: "#fff" }
+            : { backgroundColor: `${failStatusColor}1A`, color: failStatusColor }
+        }
+      >
+        {compactNumberFormatter.format(count)}
+      </span>
+    </button>
+  );
 }

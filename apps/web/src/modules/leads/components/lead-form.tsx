@@ -98,6 +98,8 @@ export type LeadFormProps = {
   onSubmit: (values: LeadFormInput) => void;
   dialogLayout?: boolean;
   useDisplayLayout?: boolean;
+  /** Leave out the stage picker when the page already provides one (lead detail page). */
+  hideProgress?: boolean;
 };
 
 export function LeadForm({
@@ -109,6 +111,7 @@ export function LeadForm({
   onSubmit,
   dialogLayout = false,
   useDisplayLayout = false,
+  hideProgress = false,
 }: LeadFormProps) {
   const auth = useAuth();
   const canManageAssignment =
@@ -256,7 +259,7 @@ export function LeadForm({
         ref={formRef}
         className={cn(
           "flex flex-col",
-          dialogLayout ? "min-h-0 flex-1 gap-0" : "gap-6",
+          dialogLayout ? "min-h-0 flex-1 gap-0" : "gap-4",
         )}
         noValidate
         onSubmit={(event) => {
@@ -269,20 +272,22 @@ export function LeadForm({
       >
         <div
           className={cn(
-            "flex flex-col gap-6",
+            "flex flex-col gap-4",
             dialogLayout && "min-h-0 flex-1 overflow-y-auto px-6 py-5",
           )}
         >
           <LeadFormSurface layout={surfaceLayout} enabled={useDisplayLayout}
             form={form} options={options} canManageAssignment={canManageAssignment} disabled={submissionBlocked}
-            onStageChange={syncStageFields} transitionError={transition.error} customFieldError={customFieldsQuery.isError}
+            onStageChange={syncStageFields} hiddenFields={hideProgress ? ["pipelineStageId"] : undefined} transitionError={transition.error} customFieldError={customFieldsQuery.isError}
             customFields={<CustomFieldInputs fields={customFields.filter((field) => field.group.isSystem)} control={form.control} isPending={isPending} />}>
-          <LeadProgressSection
-            transition={transition}
-            form={form}
-            options={options}
-            syncStageFields={syncStageFields}
-          />
+          {!hideProgress && (
+            <LeadProgressSection
+              transition={transition}
+              form={form}
+              options={options}
+              syncStageFields={syncStageFields}
+            />
+          )}
 
           <LeadBasicInformationSection
             isRequired={isRequired}
@@ -522,6 +527,10 @@ function formatProgressCount(count?: number) {
   return compactNumberFormatter.format(count ?? 0);
 }
 
+/** Shared look of a progress filter option, so related filters (e.g. Fail) match its size and border. */
+export const progressOptionClassName =
+  "relative flex min-h-12 items-center justify-between gap-2 rounded-md border px-3 py-2 text-left text-xs font-semibold leading-tight transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring";
+
 type LeadProgressSelectorProps = {
   value: string;
   stages: Array<{
@@ -536,6 +545,8 @@ type LeadProgressSelectorProps = {
   allOptionCount?: number;
   allOptionSelected?: boolean;
   singleRowDesktop?: boolean;
+  /** Extra row laid out on the same balanced column grid as the options (single-row mode only). */
+  trailingRow?: (layout: { style: CSSProperties; columns: number }) => ReactNode;
 };
 
 export function LeadProgressSelector({
@@ -547,6 +558,7 @@ export function LeadProgressSelector({
   allOptionCount,
   allOptionSelected = !value,
   singleRowDesktop = false,
+  trailingRow,
 }: LeadProgressSelectorProps) {
   const balancedColumns = useBalancedColumns<HTMLFieldSetElement>(
     stages.length + (allOptionLabel ? 1 : 0),
@@ -575,7 +587,7 @@ export function LeadProgressSelector({
             type="button"
             aria-pressed={allOptionSelected}
             onClick={() => onChange("")}
-            className={`relative flex min-h-12 items-center justify-between gap-2 rounded-md border px-3 py-2 text-left text-xs font-semibold leading-tight transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring ${
+            className={`${progressOptionClassName} ${
               singleRowDesktop ? "min-w-0" : "min-w-36 flex-1"
             } ${
               allOptionSelected
@@ -621,7 +633,7 @@ export function LeadProgressSelector({
               aria-pressed={selected}
               onClick={() => onChange(stage.id)}
               style={buttonStyle}
-              className={`relative flex min-h-12 items-center justify-between gap-2 rounded-md border px-3 py-2 text-left text-xs font-semibold leading-tight transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring ${
+              className={`${progressOptionClassName} ${
                 singleRowDesktop ? "min-w-0" : "min-w-36 flex-1"
               } ${
                 selected
@@ -641,6 +653,11 @@ export function LeadProgressSelector({
           );
         })}
       </fieldset>
+      {singleRowDesktop &&
+        trailingRow?.({
+          style: balancedColumns.style,
+          columns: balancedColumns.columns,
+        })}
       {clearLabel && (
         <Button
           type="button"
@@ -739,7 +756,7 @@ function LeadBasicInformationSection({
           errors={form.formState.errors}
           autoComplete="name"
         />
-        <PhoneFields form={form} label={`S? ?i?n tho?i${isRequired("phone") ? " *" : ""}`} />
+        <PhoneFields form={form} label={`Số điện thoại${isRequired("phone") ? " *" : ""}`} />
         <Field data-invalid={Boolean(form.formState.errors.sourceId)}>
           <FieldLabel htmlFor="lead-form-source">
             Nguồn học viên{isRequired("sourceId") ? " *" : ""}

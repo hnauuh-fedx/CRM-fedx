@@ -382,7 +382,7 @@ function SortableHead(props: {
 }) {
   const { label, sortBy, state, onSort } = props;
   return (
-    <TableHead className="px-5 font-medium text-muted-foreground">
+    <TableHead className="px-3 font-medium text-muted-foreground">
       <button
         type="button"
         className="inline-flex min-h-11 items-center gap-2 rounded-md focus-visible:outline-2 focus-visible:outline-ring"
@@ -791,10 +791,10 @@ function AdmissionFeeResults({
                   state={state}
                   onSort={(sortBy) => dispatch({ type: "toggleSort", sortBy })}
                 />
-                <TableHead className="px-5 font-medium text-muted-foreground">
+                <TableHead className="px-3 font-medium text-muted-foreground">
                   Thí sinh
                 </TableHead>
-                <TableHead className="px-5 font-medium text-muted-foreground">
+                <TableHead className="px-3 font-medium text-muted-foreground">
                   Ngành
                 </TableHead>
                 <SortableHead
@@ -821,7 +821,7 @@ function AdmissionFeeResults({
                   state={state}
                   onSort={(sortBy) => dispatch({ type: "toggleSort", sortBy })}
                 />
-                <TableHead className="px-5 text-right font-medium text-muted-foreground">
+                <TableHead className="px-3 text-right font-medium text-muted-foreground">
                   Thao tác
                 </TableHead>
               </TableRow>
@@ -829,28 +829,28 @@ function AdmissionFeeResults({
             <TableBody>
               {fees.map((fee) => (
                 <TableRow key={fee.id}>
-                  <TableCell className="px-5 py-4 font-medium">
+                  <TableCell className="px-3 py-2 font-medium">
                     {fee.admissionCode ?? "-"}
                   </TableCell>
-                  <TableCell className="px-5 py-4">
+                  <TableCell className="px-3 py-2">
                     {fee.candidateName ?? "-"}
                   </TableCell>
-                  <TableCell className="px-5 py-4">
+                  <TableCell className="px-3 py-2">
                     {fee.majorName ?? "-"}
                   </TableCell>
-                  <TableCell className="px-5 py-4">
+                  <TableCell className="px-3 py-2">
                     <PaymentStatusBadge value={fee.feeStatus} />
                   </TableCell>
-                  <TableCell className="px-5 py-4">
+                  <TableCell className="px-3 py-2">
                     <PaymentStatusBadge value={fee.tuitionStatus} />
                   </TableCell>
-                  <TableCell className="px-5 py-4">
+                  <TableCell className="px-3 py-2">
                     {formatMoney(fee.monthlyRevenue)}
                   </TableCell>
-                  <TableCell className="px-5 py-4">
+                  <TableCell className="px-3 py-2">
                     {formatDate(fee.createdAt)}
                   </TableCell>
-                  <TableCell className="px-5 py-4">
+                  <TableCell className="px-3 py-2">
                     <div className="flex min-w-72 flex-wrap justify-end gap-2">
                       {canUpdate && (
                         <>

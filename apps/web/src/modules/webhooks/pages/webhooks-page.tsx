@@ -704,7 +704,7 @@ function WebhookDetails({
                 <Table>
                   <TableHeader>
                     <TableRow>
-                      <TableHead className="px-5">Thời gian</TableHead>
+                      <TableHead className="px-3">Thời gian</TableHead>
                       <TableHead>Trạng thái</TableHead>
                       <TableHead>Hành động</TableHead>
                       <TableHead>Lead</TableHead>
@@ -717,7 +717,7 @@ function WebhookDetails({
                   <TableBody>
                     {logs.map((log) => (
                       <TableRow key={log.id}>
-                        <TableCell className="px-5">
+                        <TableCell className="px-3">
                           {formatDate(log.receivedAt)}
                         </TableCell>
                         <TableCell>
@@ -1489,7 +1489,7 @@ function WebhookResults({
               <TableBody>
                 {items.map((item) => (
                   <TableRow key={item.id}>
-                    <TableCell className="px-5 font-medium">
+                    <TableCell className="px-3 font-medium">
                       {item.name}
                     </TableCell>
                     <TableCell>Lead</TableCell>

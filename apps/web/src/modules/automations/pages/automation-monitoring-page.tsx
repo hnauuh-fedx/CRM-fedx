@@ -451,7 +451,7 @@ function ReassignmentObservabilitySection({
                   <TableBody>
                     {reassignment.perProgram.map((program) => (
                       <TableRow key={program.institutionProgramId ?? "global"}>
-                        <TableCell className="px-5 font-medium">
+                        <TableCell className="px-3 font-medium">
                           {program.institutionProgramName}
                         </TableCell>
                         <TableCell className="text-right tabular-nums">
@@ -518,7 +518,7 @@ function ReassignmentObservabilitySection({
                   <TableBody>
                     {reassignment.recent.map((entry) => (
                       <TableRow key={entry.id}>
-                        <TableCell className="px-5">
+                        <TableCell className="px-3">
                           <div className="font-medium">{entry.ruleName}</div>
                           <div className="text-xs text-muted-foreground">
                             {entry.institutionProgramName}
@@ -903,7 +903,7 @@ function AutomationExecutionHistory({
               <TableBody>
                 {executions.map((execution) => (
                   <TableRow key={execution.id}>
-                    <TableCell className="px-5">
+                    <TableCell className="px-3">
                       <div className="font-medium">{execution.rule.name}</div>
                       <div className="text-xs text-muted-foreground">
                         v{execution.version ?? "-"} ·{" "}

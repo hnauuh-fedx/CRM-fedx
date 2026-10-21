@@ -169,7 +169,7 @@ function TopCampaignsTable({ campaigns }: TopCampaignsTableProps) {
             <TableBody>
               {campaigns.map((campaign) => (
                 <TableRow key={campaign.id ?? campaign.name}>
-                  <TableCell className="px-5">
+                  <TableCell className="px-3">
                     <p className="font-medium">{campaign.name}</p>
                     <p className="text-sm text-muted-foreground">
                       {[campaign.type, campaign.status]
