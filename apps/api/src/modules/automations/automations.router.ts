@@ -786,6 +786,10 @@ automationsRouter.patch(
         return;
       }
       if (!updated.ok) {
+        if (updated.reason === "invalid_information_update") {
+          response.status(422).json({ message: updated.message });
+          return;
+        }
         response.status(409).json({ message: "Hãy tắt rule trước khi thay đổi cấu hình thực thi." });
         return;
       }

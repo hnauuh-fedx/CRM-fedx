@@ -176,3 +176,13 @@ test("admission status action cannot bypass student conversion with enrolled sta
 
   assert.ok(result.some((issue) => issue.code === "INVALID_NODE_CONFIG" && issue.nodeId === "enroll"));
 });
+
+test("information update validates writable fields, typed values and write permission", () => {
+  const writableFields = [{ reference: "system:fullName", key: "fullName", label: "Họ tên", description: null, dataType: "TEXT", groupKey: "lead", groupLabel: "Lead", source: "system" as const, isSensitive: false, canClear: false, options: [] }];
+  const valid = node("update", "action_update_information", { informationUpdates: [{ field: "system:fullName", operation: "set", value: "Tên mới" }] });
+  assert.deepEqual(validateAutomationSemantics(graph([valid]), { ...catalog, writableFields }), []);
+  assert.ok(validateAutomationSemantics(graph([valid]), catalog).some((issue) => issue.code === "INVALID_REFERENCE"));
+  assert.ok(validateAutomationSemantics(graph([valid]), { ...catalog, writableFields, canUpdateLead: false }).some((issue) => issue.code === "INSUFFICIENT_PERMISSION"));
+  const invalid = node("update", "action_update_information", { informationUpdates: [{ field: "system:fullName", operation: "clear" }] });
+  assert.ok(validateAutomationSemantics(graph([invalid]), { ...catalog, writableFields }).some((issue) => issue.code === "INVALID_NODE_CONFIG"));
+});

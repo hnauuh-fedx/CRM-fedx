@@ -318,6 +318,7 @@ export async function processInboundWebhookRequest(
       institutionProgramId: snapshot.institutionProgramId,
       duplicatePolicy: snapshot.duplicatePolicy,
       leadInput,
+      creationSource: { channel: "webhook", webhookId: request.webhook_id, webhookName: snapshot.webhookName, requestId },
       originName: mapping.originName,
       sourceOccurrence: mapping.originName ? {
         webhookId: request.webhook_id,

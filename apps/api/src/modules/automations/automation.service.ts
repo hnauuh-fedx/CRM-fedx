@@ -1,3 +1,6 @@
+import { visibleAssignmentResults } from "./automation-assignment-result.serializer";
+import { automationInformationUpdatesSchema, validateInformationUpdate } from "@admission-crm/shared/automation-information-update";
+import { getLeadWritableFields } from "../leads/lead-information-update.service";
 import { Prisma } from "../../generated/prisma/client";
 
 import { prisma } from "../../database/prisma";
@@ -333,7 +336,7 @@ export async function duplicateAutomationRule(user: AuthUser, id: string, ipAddr
 export async function updateAutomationRule(user: AuthUser, id: string, input: AutomationRuleUpdateInput) {
   const existing = await prisma.automation_rules.findFirst({
     where: { id, archived_at: null, ...(await getAutomationRuleScopeWhere(user)) },
-    select: { id: true, name: true, version: true, is_active: true, institution_program_id: true },
+    select: { id: true, name: true, version: true, is_active: true, institution_program_id: true, graph_data: true },
   });
   if (!existing) return null;
   if (input.institutionProgramId !== undefined && !(await canAccessAutomationProgram(user, input.institutionProgramId))) return null;
@@ -348,6 +351,24 @@ export async function updateAutomationRule(user: AuthUser, id: string, input: Au
   const executionConfigChanged = input.graphData !== undefined ||
     input.triggerType !== undefined ||
     input.institutionProgramId !== undefined;
+
+  if (executionConfigChanged) {
+    const graph = (input.graphData ?? existing.graph_data) as unknown as AutomationGraphData;
+    const updateNodes = Array.isArray(graph?.nodes) ? graph.nodes.filter((node) => node && typeof node === "object" && node.type === "action_update_information") : [];
+    if (updateNodes.length) {
+      const fields = await getLeadWritableFields(user, input.institutionProgramId ?? existing.institution_program_id);
+      const messages = updateNodes.flatMap((node) => {
+        const parsed = automationInformationUpdatesSchema.safeParse(node.data?.informationUpdates);
+        if (!parsed.success) return parsed.error.issues.map((issue) => issue.message);
+        return parsed.data.flatMap((update) => {
+          const field = fields.find((candidate) => candidate.reference === update.field);
+          const message = field ? validateInformationUpdate(update, field) : "Trường cập nhật không còn khả dụng hoặc không có quyền chỉnh sửa.";
+          return message ? [message] : [];
+        });
+      });
+      if (messages.length) return { ok: false as const, reason: "invalid_information_update" as const, message: messages[0] };
+    }
+  }
 
   const updated = await prisma.automation_rules.update({
     where: { id },
@@ -536,6 +557,7 @@ async function validateRuleConfiguration(
         restrictedAdmissionCreationStatusIds: new Set(options.admissionStatuses.filter((status) => status.code === "APPROVED" || status.code === "ENROLLED").map((status) => status.id)),
         admissionClassIds: new Set(options.admissionClasses.map((item) => item.id)),
         customFieldDataTypes: new Map(options.customDataFields.map((field) => [field.reference, field.dataType])),
+        writableFields: options.writableFields,
         canAssign: user.permissions.includes("lead.assign") || user.permissions.includes("lead.reassign"),
         canCreateReminder: user.permissions.includes("reminder.create"),
         canUpdateLead: leadUpdatePermissions.some((permission) => user.permissions.includes(permission)),
@@ -650,6 +672,7 @@ export async function getAutomationExecution(user: AuthUser, ruleId: string, exe
           node_type: true,
           status: true,
           attempt_count: true,
+          assignment_result: true,
           error_message: true,
           started_at: true,
           completed_at: true,
@@ -658,6 +681,7 @@ export async function getAutomationExecution(user: AuthUser, ruleId: string, exe
     },
   });
   if (!log) return null;
+  const assignmentResults = await visibleAssignmentResults(log.automation_node_executions.map((node) => node.assignment_result), await getAutomationRuleScopeWhere(user), user.permissions.includes("automation.manage") || user.permissions.includes("automation.manage_global"));
   return {
     id: log.id,
     source: log.source,
@@ -668,7 +692,8 @@ export async function getAutomationExecution(user: AuthUser, ruleId: string, exe
     errorMessage: redactAutomationText(log.error_message),
     startedAt: log.started_at?.toISOString() ?? null,
     completedAt: log.completed_at?.toISOString() ?? null,
-    nodes: log.automation_node_executions.map((node) => ({
+    nodes: log.automation_node_executions.map((node, index) => ({
+      assignmentResult: assignmentResults[index],
       id: node.id,
       nodeId: node.node_id,
       nodeType: node.node_type,
@@ -1133,6 +1158,7 @@ export async function getAutomationOptions(user: AuthUser, institutionProgramId?
     })),
     targetRoles,
     customDataFields,
+    writableFields: await getLeadWritableFields(user, resolvedInstitutionProgramId ?? null),
     customerLists,
     webhookEndpoints,
     providerCapabilities: { email: isAutomationEmailProviderAvailable() },

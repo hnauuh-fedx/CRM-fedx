@@ -1,0 +1,6 @@
+PASS: concurrent rules, first writer preserved, provenance, retry idempotency, scoped API
+PASS: manual assignment preserved, same sale, secondary retained, pool cursor unchanged
+PASS: pool assignment and duplicate concurrent delivery
+PASS: direct versus least-loaded/weighted pools concurrently
+PASS: checkpoint failure rolls back owner, assignment, audit, notification and cursor
+PASS: stale manual event and form assignment guard

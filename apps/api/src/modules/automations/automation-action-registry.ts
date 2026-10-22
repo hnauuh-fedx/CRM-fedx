@@ -1,6 +1,8 @@
 import { UnrecoverableError } from "bullmq";
 
 import { prisma } from "../../database/prisma";
+import { Prisma } from "../../generated/prisma/client";
+import { updateLeadInformationInTransaction } from "../leads/lead-information-update.service";
 import { getAuthUser } from "../auth/auth.service";
 import { assignVisibleLead, changeVisibleLeadStage, leadUpdatePermissions } from "../leads/lead-owner-stage-mutations.service";
 import { getLeadScopeWhere } from "../leads/lead-list.service";
@@ -13,6 +15,7 @@ import {
   createAdmissionProfile,
 } from "../admissions/admission-profile-management.service";
 import { resolveAutomationAssignee } from "./automation-assignment.service";
+import { assignmentCheckpoint, completeAssignment as completeAssignmentAction, preserveAssignment } from "./automation-assignment-result.service";
 import { createReassignmentMonitor } from "./automation-reassignment.service";
 import { evaluateAutomationConditions } from "./automation-condition-evaluator";
 import { getAutomationEventValues } from "./automation-event-values";
@@ -31,6 +34,7 @@ const executors = {
   action_assign: executeAssignAction,
   action_assign_pool: executeAssignPoolAction,
   action_update_stage: executeUpdateStageAction,
+  action_update_information: executeUpdateInformationAction,
   action_activity: executeActivityAction,
   action_reminder: executeReminderAction,
   action_message: executeMessageAction,
@@ -43,6 +47,29 @@ const executors = {
 } satisfies Record<Exclude<AutomationNode["type"], "trigger">, AutomationActionExecutor>;
 
 export const REGISTERED_AUTOMATION_EXECUTOR_TYPES = Object.freeze(Object.keys(executors));
+
+async function executeUpdateInformationAction(node: AutomationNode, context: AutomationContext, nodeExecutionId: string): Promise<AutomationActionResult> {
+  if (!context.leadId) throw new UnrecoverableError("Node cập nhật thông tin thiếu Lead đang thực thi.");
+  const actor = await requireActor(context);
+  const result: AutomationActionResult = { nextSourceHandle: "default", delayMinutes: 0 };
+  return prisma.$transaction(async (tx) => {
+    // Re-check under a transaction lock: two concurrent deliveries may both pass the worker's initial check.
+    await tx.$executeRaw(Prisma.sql`SELECT pg_advisory_xact_lock(hashtext(${`automation-information:${nodeExecutionId}`}))`);
+    const execution = await tx.automation_node_executions.findUniqueOrThrow({ where: { id: nodeExecutionId } });
+    if (execution.status === "action_completed_no_change" || execution.status === "completed_no_change") return { ...result, noChange: true };
+    if (execution.status === "action_completed" || execution.status === "completed") return result;
+    try {
+      const mutation = await updateLeadInformationInTransaction(tx, actor, context.leadId!, node.data.informationUpdates, context.institutionProgramId);
+      result.noChange = mutation.changedFields.length === 0;
+    } catch (error) {
+      // Retain transient database failures for the worker retry policy.
+      if (error instanceof Prisma.PrismaClientKnownRequestError || error instanceof Prisma.PrismaClientUnknownRequestError) throw error;
+      throw new UnrecoverableError(error instanceof Error ? error.message : "Không thể cập nhật thông tin.");
+    }
+    await markActionCompleted(tx, nodeExecutionId, result);
+    return result;
+  });
+}
 
 export async function executeRegisteredAutomationNode(
   node: AutomationNode,
@@ -121,14 +148,15 @@ async function executeAssignAction(node: AutomationNode, context: AutomationCont
   const { assignToUserId } = node.data;
   if (!assignToUserId || !context.leadId) throw new UnrecoverableError("Node phân công thiếu nhân viên hoặc lead context.");
   const actor = await requireActor(context);
-  const result = { nextSourceHandle: "default", delayMinutes: 0 };
+  const result: AutomationActionResult = { nextSourceHandle: "default", delayMinutes: 0 };
   const mutation = await assignVisibleLead(actor, context.leadId, {
     assigneeId: assignToUserId,
-    skipIfAssigned: Boolean(context.marketingFormSubmissionId || context.manualUnassignmentEventId),
+    skipIfAssigned: true,
+    reuseCompletedAssignment: (tx) => assignmentCheckpoint(tx, nodeExecutionId, result),
+    onPreserved: (tx, reason, assigneeId) => preserveAssignment(tx, context, node, nodeExecutionId, reason, assigneeId, result),
     manualUnassignmentEventId: context.manualUnassignmentEventId,
   }, context.institutionProgramId, async (tx, assignment) => completeAssignmentAction(tx, context, node.id, nodeExecutionId, assignment.assignmentId, result));
   if (!mutation.ok) throw new UnrecoverableError(`Không thể phân công lead: ${mutation.reason}`);
-  if ("preserved" in mutation.data) await recordSkippedAssignment(context, node.id, nodeExecutionId, mutation.data.skipReason, result);
   return result;
 }
 
@@ -136,11 +164,13 @@ async function executeAssignPoolAction(node: AutomationNode, context: Automation
   const { assignmentStrategy, assigneeIds, assigneeWeights, departmentId, reassignmentPolicy } = node.data;
   if (!context.leadId || !assignmentStrategy || (!assigneeIds?.length && !departmentId)) throw new UnrecoverableError("Node chia Lead thiếu chiến lược, team/danh sách nhân viên hoặc lead context.");
   const actor = await requireActor(context);
-  const result = { nextSourceHandle: "default", delayMinutes: 0 };
+  const result: AutomationActionResult = { nextSourceHandle: "default", delayMinutes: 0 };
   let monitorId: string | null = null;
   const mutation = await assignVisibleLead(actor, context.leadId, {
     departmentId,
-    skipIfAssigned: Boolean(context.marketingFormSubmissionId || context.manualUnassignmentEventId),
+    skipIfAssigned: true,
+    reuseCompletedAssignment: (tx) => assignmentCheckpoint(tx, nodeExecutionId, result),
+    onPreserved: (tx, reason, assigneeId) => preserveAssignment(tx, context, node, nodeExecutionId, reason, assigneeId, result),
     manualUnassignmentEventId: context.manualUnassignmentEventId,
     resolveAssigneeId: (tx) => resolveAutomationAssignee(tx, {
       ruleId: context.ruleId,
@@ -175,7 +205,6 @@ async function executeAssignPoolAction(node: AutomationNode, context: Automation
     }
   });
   if (!mutation.ok) throw new UnrecoverableError(`Không thể chia Lead tự động: ${mutation.reason}`);
-  if ("preserved" in mutation.data) await recordSkippedAssignment(context, node.id, nodeExecutionId, mutation.data.skipReason, result);
   if (monitorId) {
     const { enqueueReassignmentMonitorJobs } = await import("./automation-reassignment-queue.service.js");
     await enqueueReassignmentMonitorJobs(monitorId).catch((error) => {
@@ -397,32 +426,8 @@ export function extendCausation(context: Pick<AutomationContext, "causationRuleI
 async function markActionCompleted(tx: TransactionClient | typeof prisma, nodeExecutionId: string, result: AutomationActionResult) {
   await tx.automation_node_executions.update({
     where: { id: nodeExecutionId },
-    data: { status: "action_completed", next_source_handle: result.nextSourceHandle, delay_minutes: result.delayMinutes, action_completed_at: new Date(), error_message: null },
+    data: { status: result.noChange ? "action_completed_no_change" : "action_completed", next_source_handle: result.nextSourceHandle, delay_minutes: result.delayMinutes, action_completed_at: new Date(), error_message: null },
   });
-}
-
-async function recordSkippedAssignment(context: AutomationContext, nodeId: string, nodeExecutionId: string, reason: string | undefined, result: AutomationActionResult) {
-  await prisma.$transaction(async (tx) => {
-    if (context.manualUnassignmentEventId) {
-      await tx.audit_logs.create({ data: {
-        user_id: context.actorId, entity_type: "lead", entity_id: context.leadId,
-        action: "automation_assignment_skipped",
-        new_data: { eventId: context.manualUnassignmentEventId, ruleId: context.ruleId, nodeId, nodeExecutionId, reason: reason ?? "already_assigned" },
-      } });
-    }
-    await markActionCompleted(tx, nodeExecutionId, result);
-  });
-}
-
-async function completeAssignmentAction(tx: TransactionClient, context: AutomationContext, nodeId: string, nodeExecutionId: string, assignmentId: string, result: AutomationActionResult) {
-  if (context.manualUnassignmentEventId) {
-    await tx.audit_logs.create({ data: {
-      user_id: context.actorId, entity_type: "lead", entity_id: context.leadId,
-      action: "automation_assignment_completed",
-      new_data: { eventId: context.manualUnassignmentEventId, ruleId: context.ruleId, nodeId, nodeExecutionId, assignmentId },
-    } });
-  }
-  await markActionCompleted(tx, nodeExecutionId, result);
 }
 
 async function requireActor(context: AutomationContext) {

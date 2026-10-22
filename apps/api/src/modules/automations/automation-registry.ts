@@ -1,4 +1,5 @@
 import { AUTOMATION_EVENT_FIELDS, AUTOMATION_SYSTEM_FIELDS } from "./automation-field-registry";
+import { automationInformationUpdatesSchema } from "@admission-crm/shared/automation-information-update";
 import type { AutomationNode, AutomationNodeData, AutomationNodeType } from "./automation.types";
 
 export type AutomationConfigControl =
@@ -34,6 +35,11 @@ export type AutomationNodeDefinition = {
 };
 
 const nodes: AutomationNodeDefinition[] = [
+  {
+    type: "action_update_information", category: "action", label: "Cập nhật thông tin", description: "Gán hoặc xóa giá trị nhiều trường của Lead đang chạy qua node", icon: "refresh", tone: "teal", requiredCapabilities: ["updateLead"],
+    defaultData: { informationUpdates: [{ id: "initial-update", field: "", operation: "set" }] },
+    configFields: [],
+  },
   {
     type: "trigger", category: "trigger", label: "Khởi động", description: "Điểm bắt đầu của quy trình", icon: "zap", tone: "blue",
     configFields: [
@@ -234,6 +240,12 @@ export function validateRegisteredAutomationNode(node: AutomationNode): string[]
 
   if (!node.data.label?.trim()) missing(`Node ${node.id} phải có tên hiển thị.`);
   if (!getAutomationNodeDefinition(node.type)) return [...issues, `Loại node ${node.type} chưa được đăng ký.`];
+
+  if (node.type === "action_update_information") {
+    const result = automationInformationUpdatesSchema.safeParse(node.data.informationUpdates);
+    if (!result.success) issues.push(...result.error.issues.map((issue) => `Node ${node.id}: ${issue.message}`));
+    return issues;
+  }
 
   if (node.type === "condition") {
     const conditions = node.data.conditions ?? (node.data.field || node.data.operator

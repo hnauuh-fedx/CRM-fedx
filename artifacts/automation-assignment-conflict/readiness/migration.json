@@ -1,0 +1,12 @@
+{
+  "database": "crm_db",
+  "host": "localhost",
+  "migration": "20261022090000_automation_assignment_conflict",
+  "backup": "C:\\Users\\Admin\\AppData\\Local\\Temp\\admission-crm-backups\\crm_db-before-assignment-conflict-1792638222831.dump",
+  "backupBytes": 387331,
+  "appliedAt": "2026-10-22T03:03:45.043Z",
+  "column": {
+    "data_type": "jsonb",
+    "is_nullable": "YES"
+  }
+}

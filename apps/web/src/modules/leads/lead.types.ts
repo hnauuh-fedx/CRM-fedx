@@ -242,6 +242,7 @@ export type LeadDetail = LeadListItem & {
     type: string;
     content: string | null;
     createdAt: string | null;
+    actorLabel?: string;
     actor: { id: string; fullName: string } | null;
   }>;
   recentChanges: Array<{
@@ -249,6 +250,7 @@ export type LeadDetail = LeadListItem & {
     action: string;
     description: string;
     createdAt: string | null;
+    actorLabel?: string;
     actor: { id: string; fullName: string } | null;
   }>;
   files: Array<{

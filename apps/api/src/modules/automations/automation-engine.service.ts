@@ -325,7 +325,9 @@ async function processAutomationNode(job: Job<ExecutionJobData>) {
     ? await prisma.automation_node_executions.upsert({
         where: { execution_log_id_node_id: { execution_log_id: logId, node_id: nodeId } },
         create: { execution_log_id: logId, node_id: nodeId, node_type: node.type, status: "processing", attempt_count: 1 },
-        update: { status: "processing", attempt_count: { increment: 1 }, error_message: null },
+        // Information updates and assignments re-check their checkpoint under a transaction lock. Do not reset
+        // a committed checkpoint when another delivery passed the initial read concurrently.
+        update: { ...(["action_update_information", "action_assign", "action_assign_pool"].includes(node.type) ? {} : { status: "processing" }), attempt_count: { increment: 1 }, error_message: null },
         select: { id: true },
       })
     : await prisma.automation_node_executions.update({
@@ -336,7 +338,7 @@ async function processAutomationNode(job: Job<ExecutionJobData>) {
 
   try {
     const actionResult = decision.kind === "reuse_action_result"
-      ? { nextSourceHandle: decision.nextSourceHandle, delayMinutes: decision.delayMinutes }
+      ? { nextSourceHandle: decision.nextSourceHandle, delayMinutes: decision.delayMinutes, noChange: decision.noChange }
       : await executeRegisteredAutomationNode(node, context, nodeExecution.id);
     const nextNodes = getNextNodes(node.id, graph, actionResult.nextSourceHandle);
     // Valid graphs have one runtime path: trigger has one edge, other nodes cannot fan out,
@@ -353,7 +355,7 @@ async function processAutomationNode(job: Job<ExecutionJobData>) {
     await prisma.$transaction(async (tx) => {
       await tx.automation_node_executions.update({
         where: { id: nodeExecution.id },
-        data: { status: "completed", completed_at: new Date(), error_message: null },
+        data: { status: actionResult.noChange ? "completed_no_change" : "completed", completed_at: new Date(), error_message: null },
       });
       if (nextNodes.length === 0) {
         await tx.automation_execution_logs.update({
@@ -369,7 +371,7 @@ async function processAutomationNode(job: Job<ExecutionJobData>) {
     });
   } catch (error) {
     await prisma.automation_node_executions.updateMany({
-      where: { id: nodeExecution.id, status: { notIn: ["action_completed", "completed"] } },
+      where: { id: nodeExecution.id, status: { notIn: ["action_completed", "completed", "action_completed_no_change", "completed_no_change"] } },
       data: { status: "failed", error_message: toErrorMessage(error) },
     });
     await prisma.automation_execution_logs.update({

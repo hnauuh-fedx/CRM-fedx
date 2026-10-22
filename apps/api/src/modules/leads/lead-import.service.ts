@@ -152,7 +152,7 @@ export async function importLeadsFromWorkbook(
       continue;
     }
 
-    const result = await createLead(user, normalized.input, ipAddress);
+    const result = await createLead(user, normalized.input, ipAddress, { channel: "import" });
     if (!result.ok) {
       errors.push({
         row: rowNumber,

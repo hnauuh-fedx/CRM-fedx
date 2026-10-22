@@ -1,0 +1,24 @@
+T01 T04 T06: worker assignment, monitor, history, round-robin and completed-event replay
+T02: no duplicate events; direct replacement; rejected write and rollback
+T03: disabled/archived/other-program rules and absent manual source
+T05 T07: independent cursors and competing rules create only one assignment/monitor
+T08 T09: bulk/manual race; both assignment node types reject assigned/stale events
+T08: real Redis delay preserves a replacement Sale and does not advance cursor/create monitor
+T06: Redis worker retry after committed assignment does not repeat cursor, notification or monitor
+T10 T11 T12: stale jobs/opens cancelled; fresh monitor; expiry preserves counters; current open stops transfer
+T10: concurrent manual removal and running expiry cannot restore a stale owner
+T13: reassignment limit, maximum pool cycles, exhausted pool and no eligible Sale stop
+T14: persisted outage/recovery, denied permission/scope and deleted lead
+T14: engine enqueue failure/recovery on the same execution ID; revoked stored permissions reject node execution
+Manual unassignment integration passed (PostgreSQL + Redis).
+Automation Job failed: 78d39f65-1e2d-5892-84a2-bd427b36bb90-pool Error: Injected downstream enqueue failure after assignment commit
+    at Queue.queue.add (D:\Project Visual Studio Code\crm_website\admission-crm\apps\api\src\integration\manual-unassignment.integration.ts:243:17)
+    at enqueueAutomationJob (D:\Project Visual Studio Code\crm_website\admission-crm\apps\api\src\modules\automations\automation-engine.service.ts:59:25)
+    at Worker.processAutomationNode (D:\Project Visual Studio Code\crm_website\admission-crm\apps\api\src\modules\automations\automation-engine.service.ts:350:13)
+    at process.processTicksAndRejections (node:internal/process/task_queues:105:5)
+    at async D:\Project Visual Studio Code\crm_website\admission-crm\node_modules\bullmq\dist\cjs\classes\worker.js:589:32
+Automation rule failed to start {
+  ruleId: '65c765d0-cf46-467f-9463-c2fd8bf4ccad',
+  triggerType: 'lead_unassigned',
+  error: 'Injected Redis enqueue outage'
+}

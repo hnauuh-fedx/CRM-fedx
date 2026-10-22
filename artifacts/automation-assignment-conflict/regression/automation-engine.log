@@ -1,0 +1,20 @@
+Automation Job failed: ad82012a-bc56-4d7c-82cb-615608cb0c34-activity UnrecoverableError: Lead không tồn tại trong phạm vi của tài khoản kích hoạt.
+    at executeActivityAction (D:\Project Visual Studio Code\crm_website\admission-crm\apps\api\src\modules\automations\automation-action-registry.ts:237:24)
+    at process.processTicksAndRejections (node:internal/process/task_queues:105:5)
+    at async Worker.processAutomationNode (D:\Project Visual Studio Code\crm_website\admission-crm\apps\api\src\modules\automations\automation-engine.service.ts:342:9)
+    at async D:\Project Visual Studio Code\crm_website\admission-crm\node_modules\bullmq\dist\cjs\classes\worker.js:589:32
+AssertionError [ERR_ASSERTION]: Expected values to be strictly equal:
++ actual - expected
+
++ 'failed'
+- 'completed'
+
+    at main (D:\Project Visual Studio Code\crm_website\admission-crm\apps\api\src\integration\automation-engine.integration.ts:534:12)
+    at process.processTicksAndRejections (node:internal/process/task_queues:105:5) {
+  generatedMessage: true,
+  code: 'ERR_ASSERTION',
+  actual: 'failed',
+  expected: 'completed',
+  operator: 'strictEqual',
+  diff: 'simple'
+}

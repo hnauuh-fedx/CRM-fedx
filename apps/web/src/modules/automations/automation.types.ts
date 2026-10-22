@@ -1,3 +1,5 @@
+import type { AutomationAssignmentResult } from "@admission-crm/shared/automation-assignment";
+import type { AutomationInformationUpdate, AutomationWritableField } from "@admission-crm/shared/automation-information-update";
 import type { AutomationReassignmentPolicy } from "@admission-crm/shared/automation-reassignment-policy";
 import type { AutomationAssigneeWeight, AutomationAssignmentStrategy } from "@admission-crm/shared/automation-assignment";
 
@@ -50,6 +52,7 @@ export type AutomationNodeType =
   | "action_assign"
   | "action_assign_pool"
   | "action_update_stage"
+  | "action_update_information"
   | "action_activity"
   | "action_reminder"
   | "action_message"
@@ -61,6 +64,7 @@ export type AutomationNodeType =
   | "delay";
 
 export type AutomationNodeData = {
+  informationUpdates?: AutomationInformationUpdate[];
   label: string;
   // Trigger
   triggerType?: string;
@@ -170,6 +174,7 @@ export type AutomationRuleListResponse = {
 };
 
 export type AutomationOptions = {
+  writableFields: AutomationWritableField[];
   registry: AutomationRegistry;
   institutionPrograms: Array<{ id: string; name: string; institutionName: string }>;
   triggerTypes: string[];
@@ -211,6 +216,7 @@ export type AutomationDataFieldOption = {
 };
 
 export type AutomationDataField = {
+  readOnlyReason?: string;
   reference: string;
   key: string;
   label: string;
@@ -274,6 +280,7 @@ export type AutomationExecutionDetail = {
     nodeType: string;
     status: string;
     attemptCount: number;
+    assignmentResult?: AutomationAssignmentResult | null;
     errorMessage: string | null;
     startedAt: string | null;
     completedAt: string | null;
@@ -302,6 +309,7 @@ export type AutomationOperationsExecutionDetail = Omit<AutomationOperationsExecu
     nodeType: string;
     status: string;
     attemptCount: number;
+    assignmentResult?: AutomationAssignmentResult | null;
     errorMessage: string | null;
     startedAt: string | null;
     actionCompletedAt: string | null;

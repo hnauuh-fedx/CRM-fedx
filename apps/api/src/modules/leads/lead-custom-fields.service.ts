@@ -178,8 +178,8 @@ export async function getLeadCustomFields(
   };
 }
 
-export async function getLeadCustomFieldDefinitions(user: AuthUser, programId: string | null, canEdit: boolean) {
-  const fields = await prisma.custom_fields.findMany({
+export async function getLeadCustomFieldDefinitions(user: AuthUser, programId: string | null, canEdit: boolean, client: Pick<Prisma.TransactionClient, "custom_fields"> = prisma) {
+  const fields = await client.custom_fields.findMany({
     where: applicable(programId),
     include: { custom_field_groups: true },
     orderBy: [{ custom_field_groups: { display_order: "asc" } }, { display_order: "asc" }, { id: "asc" }],

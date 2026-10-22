@@ -1,3 +1,4 @@
+import { AssignmentResultDetails } from "../assignment-result-details";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Loader2, TestTube2 } from "lucide-react";
 import { useState } from "react";
@@ -33,6 +34,8 @@ const nodeStatusLabels: Record<string, string> = {
   processing: "Đang xử lý",
   action_completed: "Đã chạy action",
   completed: "Hoàn tất",
+  action_completed_no_change: "Không có thay đổi",
+  completed_no_change: "Không có thay đổi",
   failed: "Thất bại",
 };
 
@@ -275,15 +278,16 @@ function AutomationTestExecutionResult({
             {executionQuery.data.nodes.map((node) => (
               <div
                 key={node.id}
-                className="flex items-center justify-between gap-3 rounded border bg-background px-2 py-1.5"
+                className="flex flex-wrap items-center justify-between gap-3 rounded border bg-background px-2 py-1.5"
               >
                 <span className="truncate">
                   {node.nodeType} · {node.nodeId}
                 </span>
                 <span className="shrink-0 text-xs text-muted-foreground">
-                  {nodeStatusLabels[node.status] ?? node.status} ·{" "}
+                  {node.assignmentResult?.kind === "conflict" ? "Xung đột phân công" : nodeStatusLabels[node.status] ?? node.status} ·{" "}
                   {node.attemptCount} lần
                 </span>
+                <AssignmentResultDetails result={node.assignmentResult} />
               </div>
             ))}
           </div>

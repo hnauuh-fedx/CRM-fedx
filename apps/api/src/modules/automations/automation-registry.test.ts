@@ -14,6 +14,7 @@ test("registry exposes every supported builder node with a unique type", () => {
 
   assert.equal(new Set(nodeTypes).size, nodeTypes.length);
   assert.deepEqual(nodeTypes, [
+    "action_update_information",
     "trigger",
     "condition",
     "action_notification",

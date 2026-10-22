@@ -130,9 +130,9 @@ export function AutomationBuilderPage() {
       }),
   });
 
-  const handleNodesChange = useCallback((next: AutomationNode[]) => {
+  const handleNodesChange = useCallback((next: AutomationNode[], markDirty = true) => {
     setNodes(next);
-    setIsDirty(true);
+    if (markDirty) setIsDirty(true);
   }, []);
 
   const handleEdgesChange = useCallback((next: AutomationEdge[]) => {

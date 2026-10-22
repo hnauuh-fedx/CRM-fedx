@@ -1,0 +1,7 @@
+import { createRoot } from "react-dom/client";
+import { MemoryRouter } from "react-router-dom";
+import { AssignmentResultDetails } from "../src/modules/automations/pages/assignment-result-details";
+import type { AutomationAssignmentResult } from "@admission-crm/shared/automation-assignment";
+import "../src/index.css";
+const base: AutomationAssignmentResult = { kind: "conflict", reason: "already_assigned", currentAssigneeId: "sale-a", currentAssigneeName: "Nguyễn Thị Thanh An", requestedAssigneeId: "sale-b", requestedAssigneeName: "Trần Văn Bình", candidateIds: [], departmentId: null, assignmentId: "assignment", source: { ruleId: "rule-a", ruleName: "Rule A — Chia lead tuyển sinh từ chiến dịch tháng 10", version: 3, nodeId: "assign", executionId: "execution", canOpenRule: true } };
+createRoot(document.getElementById("root")!).render(<MemoryRouter><main className="mx-auto flex max-w-xl flex-col gap-4 p-4"><h1>Xung đột phân công — đã giữ sale hiện tại</h1>{[base, { ...base, requestedAssigneeId: null, requestedAssigneeName: undefined }, { ...base, source: null, sourceRestricted: true }, { ...base, kind: "unchanged" as const }, { ...base, kind: "stale_event" as const, source: null, currentAssigneeId: null }].map((result, index) => <section key={index} className="min-w-0 rounded border p-3" data-case={index}><AssignmentResultDetails result={result} /></section>)}</main></MemoryRouter>);

@@ -1,3 +1,4 @@
+import { visibleAssignmentResults } from "./automation-assignment-result.serializer";
 import { Prisma } from "../../generated/prisma/client";
 
 import { redisCommandConnection } from "../../config/redis";
@@ -164,6 +165,7 @@ export async function getAutomationExecutionForOperations(user: AuthUser, execut
           node_type: true,
           status: true,
           attempt_count: true,
+          assignment_result: true,
           error_message: true,
           started_at: true,
           action_completed_at: true,
@@ -173,6 +175,7 @@ export async function getAutomationExecutionForOperations(user: AuthUser, execut
     },
   });
   if (!item) return null;
+  const assignmentResults = await visibleAssignmentResults(item.automation_node_executions.map((node) => node.assignment_result), ruleScope, user.permissions.includes("automation.manage") || user.permissions.includes("automation.manage_global"));
 
   return {
     id: item.id,
@@ -191,7 +194,8 @@ export async function getAutomationExecutionForOperations(user: AuthUser, execut
     errorMessage: redactAutomationText(item.error_message),
     startedAt: item.started_at?.toISOString() ?? null,
     completedAt: item.completed_at?.toISOString() ?? null,
-    nodes: item.automation_node_executions.map((node) => ({
+    nodes: item.automation_node_executions.map((node, index) => ({
+      assignmentResult: assignmentResults[index],
       id: node.id,
       nodeId: node.node_id,
       nodeType: node.node_type,

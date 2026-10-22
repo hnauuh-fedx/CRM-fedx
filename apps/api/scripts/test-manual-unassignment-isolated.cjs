@@ -15,13 +15,13 @@ async function main() {
   await admin.query(`CREATE DATABASE "${database}"`);
   const target = new URL(base); target.pathname = `/${database}`;
   const env = { ...process.env, NODE_ENV: 'test', DATABASE_URL: target.toString(), WEBHOOK_QUEUE_ENABLED: 'false' };
-  const logs = path.resolve('../../artifacts/manual-unassignment');
+  const logs = process.env.AUTOMATION_TEST_ARTIFACT_DIR ? path.resolve(process.env.AUTOMATION_TEST_ARTIFACT_DIR) : path.resolve(process.argv.includes('automation-assignment-conflict') ? '../../artifacts/automation-assignment-conflict/backend' : process.argv.includes('automation-information-update') ? '../../artifacts/automation-information-update/backend' : '../../artifacts/manual-unassignment');
   mkdirSync(logs, { recursive: true });
   const run = (label, script, args) => {
     const result = spawnSync(process.execPath, [script, ...args], { env, encoding: 'utf8', timeout: 180_000 });
     writeFileSync(path.join(logs, `${label}.log`), (result.stdout ?? '') + (result.stderr ?? ''));
     console.log(`${label}: ${result.status === 0 ? 'PASS' : 'FAIL'}`);
-    if (result.status !== 0) throw new Error(`${label} failed; see artifacts/manual-unassignment/${label}.log`);
+    if (result.status !== 0) throw new Error(`${label} failed; see ${path.relative(path.resolve('../..'), path.join(logs, `${label}.log`))}`);
   };
   try {
     const prismaCli = require.resolve('prisma/build/index.js');
@@ -29,6 +29,10 @@ async function main() {
     const client = new Client({ connectionString: target.toString() });
     await client.connect();
     try {
+      if (process.argv.includes('automation-assignment-conflict')) {
+        await client.query('ALTER TABLE automation_node_executions DROP COLUMN assignment_result');
+        await client.query(readFileSync('prisma/migrations/20261022090000_automation_assignment_conflict/migration.sql', 'utf8'));
+      }
       // Verify the actual additive migration independently of db push.
       await client.query('ALTER TABLE leads DROP COLUMN manual_unassignment_event_id');
       await client.query(readFileSync('prisma/migrations/20261016130000_manual_unassignment_event/migration.sql', 'utf8'));
@@ -44,6 +48,11 @@ async function main() {
       for (const code of ['lead.assign', 'lead.reassign', 'lead.view_department', 'lead.view_assigned', 'lead.update_all', 'lead.view_all', 'automation.manage', 'automation.manage_global', 'automation.view_logs']) {
         await client.query('INSERT INTO permissions(code,name,module) VALUES($1,$1,$2)', [code, code.startsWith('lead.') ? 'lead' : 'system']);
       }
+      if (process.argv.includes('automation-information-update')) {
+        await client.query("INSERT INTO permissions(code,name,module) VALUES('lead.sensitive.view','Test sensitive view','lead')");
+        await client.query("INSERT INTO permissions(code,name,module) VALUES('admission.update','Test admission update','admission')");
+        await client.query("INSERT INTO lead_origins(name,normalized_name,institution_program_id) SELECT 'Test origin','test origin',id FROM institution_programs");
+      }
       // Baseline fixtures needed by the existing program-scope regression suite.
       await client.query("INSERT INTO roles(code,name) VALUES('DIRECTOR','Test director')");
       await client.query("INSERT INTO role_access_scopes(role_id,scope_code) SELECT id,'ALL' FROM roles WHERE code='DIRECTOR'");
@@ -51,6 +60,9 @@ async function main() {
       await client.query("INSERT INTO role_institution_programs(role_id,institution_program_id) SELECT roles.id,institution_programs.id FROM roles CROSS JOIN institution_programs WHERE roles.code='DIRECTOR'");
       await client.query("INSERT INTO users(email,password_hash,full_name) VALUES('director@tvu.edu.vn','test-only','Test director')");
       await client.query("INSERT INTO user_roles(user_id,role_id) SELECT users.id,roles.id FROM users CROSS JOIN roles WHERE users.email='director@tvu.edu.vn' AND roles.code='DIRECTOR'");
+      if (process.argv.includes('automation-information-update')) {
+        await client.query("INSERT INTO user_program_roles(user_id,institution_program_id,role_id) SELECT users.id,role_institution_programs.institution_program_id,role_institution_programs.role_id FROM users CROSS JOIN role_institution_programs WHERE users.email='director@tvu.edu.vn'");
+      }
     } finally { await client.end(); }
     const tests = process.argv.slice(2);
     const selected = tests.length ? tests : ['manual-unassignment', 'automation-engine', 'automation-program-scope', 'automation-reassignment', 'lead-assignment-open', 'marketing-form-automation-event', 'lead-workflow'];

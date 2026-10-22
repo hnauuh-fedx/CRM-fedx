@@ -1,3 +1,4 @@
+import { createLeadCreationSnapshot } from "../leads/lead-creation-history";
 import { prisma } from "../../database/prisma";
 import { validateMarketingFormOther, isMarketingFormOtherAnswerValid } from "@admission-crm/shared/marketing-form-config";
 import { createHash, randomUUID } from "node:crypto";
@@ -143,7 +144,7 @@ async function findDefaultLeadSource(client: Pick<typeof prisma, "lead_sources">
     where: institutionProgramId
       ? { institution_program_id: institutionProgramId }
       : { id: { in: [] } },
-    select: { id: true },
+    select: { id: true, name: true },
     orderBy: [{ institution_program_id: "desc" }, { created_at: "asc" }],
   });
 }
@@ -543,7 +544,7 @@ export async function submitMarketingForm(input: PublicSubmissionInput) {
 
     const configuredSourceId = normalized.source_id || form.source_id;
     const fallbackSource = configuredSourceId
-      ? await tx.lead_sources.findFirst({ where: { id: configuredSourceId, OR: [{ institution_program_id: programId }, { institution_program_id: null }] }, select: { id: true } })
+      ? await tx.lead_sources.findFirst({ where: { id: configuredSourceId, OR: [{ institution_program_id: programId }, { institution_program_id: null }] }, select: { id: true, name: true } })
       : await findDefaultLeadSource(tx, programId);
     if (!fallbackSource) {
       const errorMessage = "Chưa có nguồn lead để tạo lead từ biểu mẫu.";
@@ -580,13 +581,17 @@ export async function submitMarketingForm(input: PublicSubmissionInput) {
         },
       });
     }
+    const creation = createLeadCreationSnapshot({
+      fullName, phone, sourceName: fallbackSource.name, email: normalized.email, gender: normalized.gender, dateOfBirth: normalized.date_of_birth,
+      note: normalized.note, sourceId: fallbackSource.id, institutionProgramId: programId, majorId: normalized.major_id,
+    }, { channel: input.isWebhook ? "webhook" : "public_form", formId: form.id, formName: form.name });
     await tx.lead_activities.create({
       data: {
         lead_id: lead.id,
-        user_id: actorId,
+        user_id: null,
         type: "marketing_form_submitted",
-        content: `Lead được tạo từ biểu mẫu ${form.name}.`,
-        metadata: { marketingFormId: form.id, campaignId: form.campaign_id },
+        content: `Lead được tạo ${input.isWebhook ? "qua API/webhook của biểu mẫu" : "từ biểu mẫu"} ${form.name}.`,
+        metadata: { marketingFormId: form.id, campaignId: form.campaign_id, creation },
       },
     });
     await tx.audit_logs.create({
@@ -596,7 +601,7 @@ export async function submitMarketingForm(input: PublicSubmissionInput) {
         entity_id: lead.id,
         action: "create_from_marketing_form",
         ip_address: input.ipAddress,
-        new_data: { marketingFormId: form.id, sourceId: fallbackSource.id },
+        new_data: { marketingFormId: form.id, sourceId: fallbackSource.id, creation },
       },
     });
     const submission = await createSubmission("processed", undefined, lead.id);

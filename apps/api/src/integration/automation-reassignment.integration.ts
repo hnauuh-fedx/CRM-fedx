@@ -46,6 +46,7 @@ async function cleanup() {
   if (ruleIds.length) await prisma.automation_rules.deleteMany({ where: { id: { in: ruleIds } } });
   if (userIds.length) {
     await prisma.user_departments.deleteMany({ where: { user_id: { in: userIds } } });
+    await prisma.user_program_roles.deleteMany({ where: { user_id: { in: userIds } } });
     await prisma.user_roles.deleteMany({ where: { user_id: { in: userIds } } });
     await prisma.users.deleteMany({ where: { id: { in: userIds } } });
   }
@@ -117,6 +118,10 @@ async function main() {
     { user_id: thirdSale.id, role_id: saleRole.id },
     { user_id: fourthSale.id, role_id: saleRole.id },
   ] });
+  await prisma.user_program_roles.createMany({ data: [manager, firstSale, secondSale, thirdSale, fourthSale].map((user) => ({
+    user_id: user.id, institution_program_id: program.id,
+    role_id: user.id === manager.id || user.id === secondSale.id ? managerRole.id : saleRole.id,
+  })) });
   await prisma.user_departments.createMany({ data: [manager.id, firstSale.id, secondSale.id, thirdSale.id, fourthSale.id].map((userId) => ({
     user_id: userId,
     department_id: department.id,

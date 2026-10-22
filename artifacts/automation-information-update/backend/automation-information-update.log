@@ -1,0 +1,2 @@
+PASS: all 79 system fields visible; 83 writable system/custom fields, 12 custom types, partial preservation, no-op and workflow/permission guards.
+PASS: typed updates, clear, no-op, audit redaction, permissions, scope, invalid dates, duplicate phones, retired fields/options, rollback, save/reopen, concurrent deliveries and retry.
