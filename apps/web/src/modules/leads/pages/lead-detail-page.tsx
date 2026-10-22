@@ -685,10 +685,10 @@ function RecentChangesPanel({ lead }: { lead: LeadDetail }) {
           <div className="rounded-lg border bg-card p-4">
             <div className="flex flex-wrap items-center gap-2">
               <Badge variant="secondary">Nhật ký</Badge>
-              <p className="text-sm font-semibold">{change.description}</p>
+              <p className="min-w-0 whitespace-pre-wrap break-words text-sm font-semibold">{change.description}</p>
             </div>
             <p className="mt-2 text-xs text-muted-foreground">
-              {change.actor?.fullName ?? "Hệ thống"} ·{" "}
+              {change.actorLabel ?? change.actor?.fullName ?? "Hệ thống"} ·{" "}
               {formatDateTime(change.createdAt)}
             </p>
           </div>
@@ -1204,17 +1204,17 @@ function TimelineCard({
               className="shrink-0 text-primary"
               aria-hidden="true"
             />
-            <div>
+            <div className="min-w-0 flex-1">
               <p className="text-sm font-medium">
                 {activityLabels[activity.type] ?? activity.type}
               </p>
               {activity.content && (
-                <p className="text-sm text-muted-foreground">
+                <p className="whitespace-pre-wrap break-words text-sm text-muted-foreground">
                   {activity.content}
                 </p>
               )}
               <p className="text-xs text-muted-foreground">
-                {activity.actor?.fullName ?? "Hệ thống"} ·{" "}
+                {activity.actorLabel ?? activity.actor?.fullName ?? "Hệ thống"} ·{" "}
                 {formatDateTime(activity.createdAt)}
               </p>
             </div>

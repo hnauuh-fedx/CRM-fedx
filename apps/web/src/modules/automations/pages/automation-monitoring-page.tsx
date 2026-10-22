@@ -1,3 +1,4 @@
+import { AssignmentResultDetails } from "./assignment-result-details";
 import { PageLoadingBoundary } from "@/components/shared/page-loading-state";
 import { StaticTableHeader } from "@/components/shared/static-table-header";
 import { TablePagination } from "@/components/shared/table-pagination";
@@ -1067,17 +1068,18 @@ function AutomationExecutionDetail({
                           variant={
                             node.status === "failed"
                               ? "destructive"
-                              : node.status === "completed"
+                              : node.status === "completed" || node.status === "completed_no_change"
                                 ? "default"
                                 : "secondary"
                           }
                         >
-                          {node.status}
+                          {node.assignmentResult?.kind === "conflict" ? "Xung đột phân công — đã giữ sale hiện tại" : node.status === "completed_no_change" || node.status === "action_completed_no_change" ? "Không có thay đổi" : node.status}
                         </Badge>
                       </TableCell>
                       <TableCell>{node.attemptCount}</TableCell>
                       <TableCell className="max-w-72 whitespace-normal text-sm text-muted-foreground">
-                        {node.errorMessage ?? "-"}
+                        {node.errorMessage ?? (node.assignmentResult ? null : "-")}
+                        <AssignmentResultDetails result={node.assignmentResult} />
                       </TableCell>
                     </TableRow>
                   ))}

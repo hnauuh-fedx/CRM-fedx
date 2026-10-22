@@ -40,6 +40,8 @@ type LeadAssignmentInput = {
   departmentId?: string;
   resolveAssigneeId?: (tx: Prisma.TransactionClient) => Promise<string>;
   skipIfAssigned?: boolean;
+  reuseCompletedAssignment?: (tx: Prisma.TransactionClient) => Promise<boolean>;
+  onPreserved?: (tx: Prisma.TransactionClient, reason: string, assigneeId: string | null) => Promise<void>;
   manualUnassignmentEventId?: string;
 };
 
@@ -306,10 +308,15 @@ export async function assignVisibleLead(
     if (!lead) {
       return { ok: false as const, reason: "lead_not_found" as const };
     }
+    if (await input.reuseCompletedAssignment?.(tx)) {
+      return { ok: true as const, data: { id: leadId, assigneeId: lead.assigned_to, assignmentId: null, assignedAt: null, preserved: true as const, skipReason: "already_completed" } };
+    }
     if ((input.skipIfAssigned || input.manualUnassignmentEventId) && lead.assigned_to) {
+      await input.onPreserved?.(tx, input.assigneeId === lead.assigned_to ? "same_assignee" : "already_assigned", lead.assigned_to);
       return { ok: true as const, data: { id: leadId, assigneeId: lead.assigned_to, assignmentId: null, assignedAt: null, preserved: true as const, skipReason: "already_assigned" } };
     }
     if (input.manualUnassignmentEventId && lead.manual_unassignment_event_id !== input.manualUnassignmentEventId) {
+      await input.onPreserved?.(tx, "stale_unassignment_event", lead.assigned_to);
       return { ok: true as const, data: { id: leadId, assigneeId: lead.assigned_to, assignmentId: null, assignedAt: null, preserved: true as const, skipReason: "stale_unassignment_event" } };
     }
     const assigneeId = input.resolveAssigneeId

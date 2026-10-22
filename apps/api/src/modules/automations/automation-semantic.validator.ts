@@ -4,8 +4,10 @@ import type { AutomationGraphValidationIssue } from "./automation-graph.validato
 import { AUTOMATION_REGISTRY, getAutomationNodeDefinition } from "./automation-registry";
 import type { AutomationGraphData } from "./automation.types";
 import { isValidAutomationSchedule } from "./automation-schedule";
+import { validateInformationUpdate, type AutomationWritableField } from "@admission-crm/shared/automation-information-update";
 
 export type AutomationSemanticCatalog = {
+  writableFields?: AutomationWritableField[];
   assigneeIds: Set<string>;
   departmentIds: Set<string>;
   pipelineStageIds: Set<string>;
@@ -41,6 +43,13 @@ export function validateAutomationSemantics(
   const issues: AutomationGraphValidationIssue[] = [];
 
   for (const node of graph.nodes) {
+    if (node.type === "action_update_information") {
+      for (const update of node.data.informationUpdates ?? []) {
+        const field = catalog.writableFields?.find((candidate) => candidate.reference === update.field);
+        const message = field ? validateInformationUpdate(update, field) : "Trường cập nhật không còn khả dụng hoặc không có quyền chỉnh sửa.";
+        if (message) issues.push({ code: field ? "INVALID_NODE_CONFIG" : "INVALID_REFERENCE", nodeId: node.id, message: `Node ${node.id}: ${message}` });
+      }
+    }
     if (node.type === "trigger" && node.data.triggerType === "scheduled" && node.data.scheduleTimezone && node.data.scheduleTime && node.data.scheduleDays) {
       if (!isValidAutomationSchedule({
         timezone: node.data.scheduleTimezone,

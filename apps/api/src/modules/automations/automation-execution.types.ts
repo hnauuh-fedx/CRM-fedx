@@ -26,4 +26,4 @@ export type ExecutableAutomationRule = {
   createdBy: string | null;
 };
 
-export type AutomationActionResult = { nextSourceHandle: string | null; delayMinutes: number };
+export type AutomationActionResult = { nextSourceHandle: string | null; delayMinutes: number; noChange?: boolean };

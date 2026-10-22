@@ -1,0 +1,5 @@
+{
+  "extends": "./tsconfig.json",
+  "include": ["src/modules/automations/**/*.ts", "src/modules/automations/**/*.tsx", "src/vite-env.d.ts"],
+  "references": []
+}

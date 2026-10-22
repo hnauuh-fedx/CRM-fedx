@@ -2,6 +2,8 @@
   "name": "@admission-crm/api",
   "private": true,
   "scripts": {
+    "test:integration:automation-information-update": "node scripts/test-manual-unassignment-isolated.cjs automation-information-update",
+    "test:integration:automation-information-live": "tsx src/integration/automation-information-live.integration.ts",
     "test:integration:manual-unassignment": "node scripts/test-manual-unassignment-isolated.cjs",
     "test:display-layout": "tsx --test src/modules/display-layouts/display-layout.test.ts",
     "test:integration:display-layout": "tsx src/integration/display-layout.integration.ts",
@@ -70,7 +72,9 @@
     "test:integration:effective-scope": "tsx src/integration/effective-access-scope.integration.ts",
     "test:integration:user-program-access": "tsx src/integration/user-program-roles.integration.ts",
     "db:migrate:user-program-access": "tsx src/maintenance/migrate-user-program-roles.ts",
-    "test:integration:report-program-scope": "tsx src/integration/personal-report-program-scope.integration.ts"
+    "test:integration:report-program-scope": "tsx src/integration/personal-report-program-scope.integration.ts",
+    "test:integration:automation-assignment-conflict": "node scripts/test-manual-unassignment-isolated.cjs automation-assignment-conflict",
+    "test:integration:automation-assignment-live": "tsx src/integration/automation-assignment-live.integration.ts"
   },
   "dependencies": {
     "@admission-crm/shared": "*",

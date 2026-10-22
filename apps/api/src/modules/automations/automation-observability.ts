@@ -121,11 +121,11 @@ export function selectRecoverableNodeIds(
   if (failedNodeIds.length > 0) return [...new Set(failedNodeIds)];
 
   const recoverableNodeIds = nodes
-    .filter((node) => node.status === "processing" || node.status === "action_completed")
+    .filter((node) => node.status === "processing" || node.status === "action_completed" || node.status === "action_completed_no_change")
     .map((node) => node.nodeId);
   if (recoverableNodeIds.length > 0) return [...new Set(recoverableNodeIds)];
 
-  const completedNodes = nodes.filter((node) => node.status === "completed");
+  const completedNodes = nodes.filter((node) => node.status === "completed" || node.status === "completed_no_change");
   const completed = new Set(completedNodes.map((node) => node.nodeId));
   const completedById = new Map(completedNodes.map((node) => [node.nodeId, node]));
   const recorded = new Set(nodes.map((node) => node.nodeId));

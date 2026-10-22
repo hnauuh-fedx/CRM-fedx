@@ -49,6 +49,7 @@ import type {
 } from "../../automation.types";
 import { AutomationAssigneePicker } from "./automation-assignee-picker";
 import { AutomationFieldPicker } from "./automation-field-picker";
+import { InformationUpdateFields } from "./information-update-fields";
 import { ResizableNodePanel } from "./resizable-node-panel";
 
 type TemplateFieldKey =
@@ -1481,6 +1482,14 @@ function NodeActionFields({
           onChange={handleChange}
           onInsertToken={insertFieldToken}
         />
+        {selectedNode.type === "action_update_information" ? (
+          <InformationUpdateFields
+            updates={localData.informationUpdates ?? []}
+            fields={options?.writableFields ?? []}
+            isLoading={isLoadingOptions}
+            onChange={(updates) => handleChange("informationUpdates", updates)}
+          />
+        ) : null}
         {selectedNode.type === "action_assign_pool" ? (
           <>
             <AssignmentPoolFields

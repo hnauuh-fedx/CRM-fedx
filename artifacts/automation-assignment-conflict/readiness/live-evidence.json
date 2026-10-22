@@ -1,0 +1,67 @@
+{
+  "testedAt": "2026-10-22T03:23:06.350Z",
+  "database": "crm_db",
+  "existingServices": true,
+  "queue": "automation_engine_queue",
+  "cases": [
+    {
+      "variant": "direct",
+      "leadId": "df255861-c56c-463f-adbf-1b6a86f0f973",
+      "winnerRuleId": "da2ee28c-ab59-4b88-a069-7a1c14433104",
+      "conflictRuleId": "d1ab2d99-ccdd-402b-8126-f1f1842fd0a6",
+      "outcome": {
+        "kind": "conflict",
+        "reason": "already_assigned",
+        "source": {
+          "nodeId": "assign",
+          "ruleId": "da2ee28c-ab59-4b88-a069-7a1c14433104",
+          "version": 1,
+          "ruleName": "ASSIGN LIVE e398f92f Rule A",
+          "executionId": "4b23de41-e3a7-4e2e-abba-260bf148aa9d",
+          "canOpenRule": true
+        },
+        "assignmentId": "6d7e7cf3-e41a-4971-9fae-f2afc936bac1",
+        "candidateIds": [],
+        "departmentId": null,
+        "currentAssigneeId": "8201e6de-b685-4eab-af2c-58d05af650d6",
+        "currentAssigneeName": "Sale A kiểm thử",
+        "requestedAssigneeId": "f4289b42-916a-459e-a688-691a4d52a5f8",
+        "requestedAssigneeName": "Sale B kiểm thử"
+      },
+      "executions": [
+        "4b23de41-e3a7-4e2e-abba-260bf148aa9d",
+        "46bd8268-d3bc-4e14-946c-1fa5924d37cf"
+      ]
+    },
+    {
+      "variant": "pool",
+      "leadId": "32c499bc-634f-4fd8-85dc-16d7cbc2853f",
+      "winnerRuleId": "da2ee28c-ab59-4b88-a069-7a1c14433104",
+      "conflictRuleId": "d1ab2d99-ccdd-402b-8126-f1f1842fd0a6",
+      "outcome": {
+        "kind": "conflict",
+        "reason": "already_assigned",
+        "source": {
+          "nodeId": "assign",
+          "ruleId": "da2ee28c-ab59-4b88-a069-7a1c14433104",
+          "version": 1,
+          "ruleName": "ASSIGN LIVE e398f92f Rule A",
+          "executionId": "ddc754de-70df-44b5-a2c1-2962149a94c5",
+          "canOpenRule": true
+        },
+        "assignmentId": "a7fd5a16-1c97-4185-882d-4724db24ab32",
+        "candidateIds": [
+          "f4289b42-916a-459e-a688-691a4d52a5f8"
+        ],
+        "departmentId": null,
+        "currentAssigneeId": "8201e6de-b685-4eab-af2c-58d05af650d6",
+        "currentAssigneeName": "Sale A kiểm thử",
+        "requestedAssigneeId": null
+      },
+      "executions": [
+        "ddc754de-70df-44b5-a2c1-2962149a94c5",
+        "1d007739-bd5e-4ea1-89a0-ea85d8ed2be9"
+      ]
+    }
+  ]
+}

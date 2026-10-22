@@ -1,4 +1,5 @@
 import type { AutomationReassignmentPolicy } from "@admission-crm/shared/automation-reassignment-policy";
+import type { AutomationInformationUpdate } from "@admission-crm/shared/automation-information-update";
 import type { AutomationAssigneeWeight, AutomationAssignmentStrategy } from "@admission-crm/shared/automation-assignment";
 
 export type { AutomationReassignmentPolicy } from "@admission-crm/shared/automation-reassignment-policy";
@@ -50,6 +51,7 @@ export type AutomationNodeType =
   | "action_assign"
   | "action_assign_pool"
   | "action_update_stage"
+  | "action_update_information"
   | "action_activity"
   | "action_reminder"
   | "action_message"
@@ -61,6 +63,7 @@ export type AutomationNodeType =
   | "delay";
 
 export type AutomationNodeData = {
+  informationUpdates?: AutomationInformationUpdate[];
   label: string;
   // Trigger
   triggerType?: string;

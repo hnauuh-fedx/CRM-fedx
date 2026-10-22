@@ -1,6 +1,63 @@
 import { prisma } from "../../database/prisma";
+import { leadFormFieldCatalog } from "@admission-crm/shared/lead-form-field-catalog";
 
 type TransactionClient = Parameters<Parameters<typeof prisma.$transaction>[0]>[0];
+
+/** Patch only the supplied fields; automation must never replace an entire profile form. */
+export async function patchCandidateInformation(tx: TransactionClient, leadId: string, values: Record<string, unknown>) {
+  const changes: Record<string, { before: unknown; after: unknown }> = {};
+  const changed = (key: string, before: unknown, after: unknown) => {
+    if (JSON.stringify(before ?? null) === JSON.stringify(after ?? null)) return false;
+    changes[key] = { before: before ?? null, after: after ?? null };
+    return true;
+  };
+  const profileFields = leadFormFieldCatalog.flatMap((group) => group.fields).filter((field) => field.storage.startsWith("student_profiles.") && Object.hasOwn(values, field.key));
+  if (profileFields.length) {
+    const profile = await tx.student_profiles.findUnique({ where: { lead_id: leadId } });
+    const data: Record<string, unknown> = {};
+    for (const field of profileFields) {
+      const column = field.storage.split(".")[1];
+      const before = (profile as Record<string, unknown> | null)?.[column];
+      if (changed(field.key, before, values[field.key])) data[column] = values[field.key];
+    }
+    if (Object.keys(data).length) await tx.student_profiles.upsert({ where: { lead_id: leadId }, create: { lead_id: leadId, ...data }, update: { ...data, updated_at: new Date() } });
+  }
+  const addressGroups: Record<string, Record<string, string>> = {
+    specific: { specificAddress: "detail_address" }, permanent: { permanentAddress: "detail_address" },
+    residence: { currentResidence: "detail_address" },
+    current: { currentAddress: "detail_address", province: "province", district: "district", ward: "ward", hamlet: "hamlet" },
+  };
+  for (const [type, fields] of Object.entries(addressGroups)) {
+    const provided = Object.entries(fields).filter(([key]) => Object.hasOwn(values, key));
+    if (!provided.length) continue;
+    const address = await tx.addresses.findFirst({ where: { lead_id: leadId, type }, orderBy: { id: "asc" } });
+    const data: Record<string, unknown> = {};
+    for (const [key, column] of provided) if (changed(key, (address as Record<string, unknown> | null)?.[column], values[key])) data[column] = values[key];
+    if (!Object.keys(data).length) continue;
+    if (address) await tx.addresses.update({ where: { id: address.id }, data });
+    else await tx.addresses.create({ data: { lead_id: leadId, type, ...data } });
+  }
+  for (const index of [1, 2]) {
+    const fields: Record<string, string> = { [`relative${index}FullName`]: "full_name", [`relative${index}Relationship`]: "relationship", [`relative${index}Phone`]: "phone", [`relative${index}Job`]: "job" };
+    const addressKey = `relative${index}Address`;
+    const provided = Object.entries(fields).filter(([key]) => Object.hasOwn(values, key));
+    if (!provided.length && !Object.hasOwn(values, addressKey)) continue;
+    const relative = await tx.relatives.findFirst({ where: { lead_id: leadId, is_primary: index === 1 }, include: { addresses: true }, orderBy: { id: "asc" } });
+    const data: Record<string, unknown> = {};
+    for (const [key, column] of provided) if (changed(key, (relative as Record<string, unknown> | null)?.[column], values[key])) data[column] = values[key];
+    const addressChanged = Object.hasOwn(values, addressKey) && changed(addressKey, relative?.addresses?.detail_address, values[addressKey]);
+    if (!Object.keys(data).length && !addressChanged) continue;
+    const fullName = values[`relative${index}FullName`] ?? relative?.full_name;
+    if (typeof fullName !== "string" || !fullName.trim()) throw new Error(`Cần có họ tên người thân ${index} trước khi cập nhật thông tin liên hệ.`);
+    if (addressChanged) {
+      if (relative?.address_id) await tx.addresses.update({ where: { id: relative.address_id }, data: { detail_address: values[addressKey] as string | null } });
+      else if (values[addressKey] !== null) data.address_id = (await tx.addresses.create({ data: { lead_id: leadId, type: index === 1 ? "relative_primary" : "relative_secondary", detail_address: values[addressKey] as string }, select: { id: true } })).id;
+    }
+    if (relative) await tx.relatives.update({ where: { id: relative.id }, data });
+    else await tx.relatives.create({ data: { lead_id: leadId, is_primary: index === 1, full_name: fullName, ...data } });
+  }
+  return changes;
+}
 
 export type CandidateProfileInput = {
   birthPlace?: string;

@@ -1,3 +1,4 @@
+import type { LeadCreationSource } from "./lead-creation-history";
 import { prisma } from "../../database/prisma";
 import type { Prisma } from "../../generated/prisma/client";
 import type { AuthUser } from "../auth/auth.types";
@@ -24,6 +25,7 @@ type MutationInput = {
   institutionProgramId: string;
   duplicatePolicy: InboundLeadDuplicatePolicy;
   leadInput: LeadInput;
+  creationSource?: LeadCreationSource;
   originName?: string;
   sourceOccurrence?: {
     webhookId: string;
@@ -256,7 +258,7 @@ export async function applyInboundLeadMutation(
         tx,
         input.actor,
         leadInput,
-        { allowDuplicate: true, allowMissingSource: true, ipAddress: input.ipAddress },
+        { allowDuplicate: true, allowMissingSource: true, ipAddress: input.ipAddress, creationSource: input.creationSource ?? { channel: "api" } },
       );
       if (!created.ok) throw new InboundMutationFailure("create_failed");
       const customResult = await saveSaleCustomFieldValues(

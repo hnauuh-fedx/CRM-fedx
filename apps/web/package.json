@@ -2,6 +2,8 @@
   "name": "@admission-crm/web",
   "private": true,
   "scripts": {
+    "test:automation-information-browser": "node tests/automation-information.browser-smoke.mjs",
+    "typecheck:automation": "tsc --noEmit -p tsconfig.automation-check.json",
     "test:page-loading-browser": "node tests/page-loading.browser-smoke.mjs",
     "test:display-layout-surfaces-browser": "node tests/display-layout-surfaces.browser-smoke.mjs",
     "test:display-layout-browser": "node tests/display-layout.browser-smoke.mjs",
@@ -23,7 +25,8 @@
     "test:marketing-form-g4-browser": "node tests/marketing-form-g4.browser-smoke.mjs",
     "test:survey-visibility-browser": "node tests/marketing-form-g4.browser-smoke.mjs --survey-only",
     "test:survey-confirmation-browser": "node tests/marketing-form-g4.browser-smoke.mjs --confirmation-only",
-    "test:survey-focus-browser": "node tests/marketing-form-g4.browser-smoke.mjs --focus-only"
+    "test:survey-focus-browser": "node tests/marketing-form-g4.browser-smoke.mjs --focus-only",
+    "test:automation-assignment-conflict-browser": "node tests/automation-assignment-conflict.browser.mjs"
   },
   "dependencies": {
     "@admission-crm/shared": "*",

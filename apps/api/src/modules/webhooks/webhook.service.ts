@@ -1004,6 +1004,7 @@ async function processWebhookRecord(
       institutionProgramId: webhook.institution_program_id,
       duplicatePolicy: webhook.duplicate_policy as WebhookDuplicatePolicy,
       leadInput,
+      creationSource: { channel: "webhook", webhookId: webhook.id, webhookName: webhook.name, requestId },
       originName: mapping.originName,
       sourceOccurrence: mapping.originName ? {
         webhookId: webhook.id,

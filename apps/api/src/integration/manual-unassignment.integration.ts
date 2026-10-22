@@ -61,6 +61,7 @@ async function main() {
     const [manager, a, b, c] = users;
     await prisma.user_roles.createMany({ data: users.map((user, i) => ({ user_id: user.id, role_id: i === 0 ? managerRole.id : saleRole.id })) });
     await prisma.user_departments.createMany({ data: users.map((user) => ({ user_id: user.id, department_id: dept.id })) });
+    await prisma.user_program_roles.createMany({ data: users.map((user, i) => ({ user_id: user.id, institution_program_id: program.id, role_id: i === 0 ? managerRole.id : saleRole.id })) });
     const actor = await getAuthUser(manager.id, program.id);
     assert.ok(actor);
     const pool: AutomationNode = { id: "pool", type: "action_assign_pool", position: { x: 0, y: 100 }, data: {

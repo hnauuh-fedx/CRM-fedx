@@ -1735,6 +1735,7 @@ model automation_node_executions {
   node_type                     String                         @db.VarChar(100)
   status                        String                         @default("processing") @db.VarChar(50)
   attempt_count                 Int                            @default(0)
+  assignment_result             Json?
   next_source_handle            String?                        @db.VarChar(100)
   delay_minutes                 Int                            @default(0)
   error_message                 String?

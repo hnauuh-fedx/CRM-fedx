@@ -8,13 +8,16 @@ import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover
 import type { AutomationDataField } from "../../automation.types";
 
 type AutomationFieldPickerProps = {
+  labelId?: string;
+  invalid?: boolean;
+  errorId?: string;
   fields: AutomationDataField[];
   selectedReference?: string;
   placeholder: string;
   onSelect: (field: AutomationDataField) => void;
 };
 
-export function AutomationFieldPicker({ fields, selectedReference, placeholder, onSelect }: AutomationFieldPickerProps) {
+export function AutomationFieldPicker({ fields, selectedReference, placeholder, onSelect, labelId, invalid, errorId }: AutomationFieldPickerProps) {
   const [open, setOpen] = useState(false);
   const [search, setSearch] = useState("");
   const selectedField = fields.find((field) => field.reference === selectedReference);
@@ -35,7 +38,7 @@ export function AutomationFieldPicker({ fields, selectedReference, placeholder, 
   return (
     <Popover open={open} onOpenChange={(nextOpen) => { setOpen(nextOpen); if (!nextOpen) setSearch(""); }}>
       <PopoverTrigger asChild>
-        <Button type="button" variant="outline" role="combobox" aria-expanded={open} className="h-auto min-h-10 w-full justify-between py-2 text-left font-normal">
+        <Button data-automation-field-picker="" type="button" variant="outline" role="combobox" aria-labelledby={labelId} aria-invalid={invalid} aria-describedby={invalid ? errorId : undefined} aria-expanded={open} className="h-auto min-h-11 w-full justify-between py-2 text-left font-normal">
           <span className="min-w-0 truncate">{selectedField?.label ?? placeholder}</span>
           <ChevronsUpDown className="ml-2 size-4 shrink-0 text-muted-foreground" aria-hidden="true" />
         </Button>
@@ -58,12 +61,14 @@ export function AutomationFieldPicker({ fields, selectedReference, placeholder, 
                   key={field.reference}
                   type="button"
                   className="flex min-h-11 w-full items-center gap-2 rounded-sm px-2 py-2 text-left text-sm hover:bg-accent focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-                  onClick={() => { onSelect(field); setOpen(false); setSearch(""); }}
+                  aria-disabled={Boolean(field.readOnlyReason)}
+                  onClick={() => { if (field.readOnlyReason) return; onSelect(field); setOpen(false); setSearch(""); }}
                 >
                   <Check className={`size-4 shrink-0 ${selectedReference === field.reference ? "opacity-100" : "opacity-0"}`} aria-hidden="true" />
                   <span className="min-w-0 flex-1">
                     <span className="block truncate font-medium">{field.label}</span>
                     <span className="block truncate text-xs text-muted-foreground">{field.key}</span>
+                    {field.readOnlyReason ? <span className="block text-xs text-muted-foreground">{field.readOnlyReason}</span> : null}
                   </span>
                   <Badge variant={field.source === "custom" ? "outline" : "secondary"} className="shrink-0 text-[10px]">
                     {field.source === "custom" ? "Tùy chỉnh" : field.dataType}

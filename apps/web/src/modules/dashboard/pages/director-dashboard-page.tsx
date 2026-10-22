@@ -1042,29 +1042,6 @@ function DirectorKpiCard({
   );
 }
 
-<<<<<<< HEAD
-=======
-function DirectorDashboardSkeleton() {
-  return (
-    <output
-      className="mx-auto flex max-w-7xl flex-col gap-5"
-      aria-label="Đang tải dashboard điều hành"
-    >
-      <Skeleton className="h-16 max-w-xl" />
-      <Skeleton className="h-28" />
-      <div className="grid grid-cols-2 gap-3 xl:grid-cols-4">
-        {[1, 2, 3, 4].map((item) => (
-          <Skeleton key={item} className="h-24" />
-        ))}
-      </div>
-      <Skeleton className="h-72" />
-      <Skeleton className="h-72" />
-      <span className="sr-only">Đang tải dashboard điều hành</span>
-    </output>
-  );
-}
-
->>>>>>> origin/fix-to-deploy-server
 function toRequestFilters(filter: SharedFilterState): DirectorDashboardFilters {
   const request: DirectorDashboardFilters = {};
   if (filter.field === "MAJOR" && filter.value) request.majorId = filter.value;

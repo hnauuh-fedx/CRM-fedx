@@ -3,6 +3,8 @@
   "private": true,
   "type": "module",
   "exports": {
+    "./vietnam-provinces": "./src/vietnam-provinces.ts",
+    "./automation-information-update": "./src/automation-information-update.ts",
     "./marketing-form-layout": "./src/marketing-form-layout.ts",
     "./marketing-form-visibility": "./src/marketing-form-visibility.ts",
     "./marketing-form-submission-policy": "./src/marketing-form-submission-policy.ts",

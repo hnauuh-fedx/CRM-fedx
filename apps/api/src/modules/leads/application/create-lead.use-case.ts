@@ -1,3 +1,4 @@
+import { createLeadCreationSnapshot, type LeadCreationSource } from "../lead-creation-history";
 import { prisma } from "../../../database/prisma";
 import type { Prisma } from "../../../generated/prisma/client";
 import {
@@ -27,6 +28,7 @@ import {
 } from "./lead-mutation-support";
 
 export type CreateLeadOptions = {
+  creationSource?: LeadCreationSource;
   allowDuplicate?: boolean;
   allowMissingSource?: boolean;
   ipAddress?: string;
@@ -67,16 +69,18 @@ async function persistLeadInTransaction(
     }
   }
 
+  let sourceName: string | undefined;
   if (input.sourceId || !options.allowMissingSource) {
     const source = input.sourceId
       ? await tx.lead_sources.findUnique({
           where: { id: input.sourceId },
-          select: { id: true, institution_program_id: true },
+          select: { id: true, name: true, institution_program_id: true },
         })
       : null;
     if (!source || !input.institutionProgramId || source.institution_program_id !== input.institutionProgramId) {
       return { ok: false as const, reason: "source_not_found" as const };
     }
+    sourceName = source.name;
   }
 
   if (!(await hasValidAdmissionReferences(tx, input))) {
@@ -134,12 +138,16 @@ async function persistLeadInTransaction(
   await saveAdmissionProfile(tx, lead.id, input);
   await saveLeadAttributionAndTags(tx, lead.id, input);
 
+  const creation = createLeadCreationSnapshot({ ...input, sourceName, pipelineStageName: selectedStage?.name, assigneeName: assignee?.full_name, secondaryAssigneeName: secondaryAssignee?.full_name }, options.creationSource ?? {
+    channel: options.skipAuthorization ? "api" : options.importInitialization ? "import" : "manual",
+  }, options.skipAuthorization ? undefined : actor.fullName);
   await tx.lead_activities.create({
     data: {
       lead_id: lead.id,
-      user_id: actor.id,
+      user_id: options.skipAuthorization ? null : actor.id,
       type: "lead_created",
-      content: "Tạo lead mới.",
+      content: options.skipAuthorization ? "API đã đổ dữ liệu tạo lead." : `${actor.fullName} tạo lead mới.`,
+      metadata: { creation },
     },
   });
   await tx.audit_logs.create({
@@ -150,6 +158,7 @@ async function persistLeadInTransaction(
       action: "create",
       ip_address: options.ipAddress,
       new_data: {
+        creation,
         fullName: input.fullName,
         sourceId: input.sourceId,
         assigneeId: assignee?.id ?? null,
@@ -268,6 +277,7 @@ export async function createLead(
   actor: AuthUser,
   input: LeadInput,
   ipAddress?: string,
+  creationSource?: LeadCreationSource,
 ) {
   if (!canCreateLead(actor)) {
     return { ok: false as const, reason: "permission_denied" as const };
@@ -280,7 +290,7 @@ export async function createLead(
   }
 
   const result = await prisma.$transaction((tx) =>
-    createLeadInTransaction(tx, actor, input, { ipAddress }),
+    createLeadInTransaction(tx, actor, input, { ipAddress, creationSource }),
   );
 
   if (result.ok) {

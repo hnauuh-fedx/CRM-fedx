@@ -28,7 +28,7 @@ type AutomationBuilderCanvasProps = {
   edges: AutomationEdge[];
   nodeDefinitions: AutomationNodeDefinition[];
   selectedNodeId: string | null;
-  onNodesChange: (nodes: AutomationNode[]) => void;
+  onNodesChange: (nodes: AutomationNode[], markDirty?: boolean) => void;
   onEdgesChange: (edges: AutomationEdge[]) => void;
   onNodeSelect: (nodeId: string | null) => void;
 };
@@ -60,6 +60,9 @@ export function AutomationBuilderCanvas({
           ...defaultData,
           ...(defaultData.conditions
             ? { conditions: defaultData.conditions.map((condition) => ({ ...condition, id: crypto.randomUUID() })) }
+            : {}),
+          ...(defaultData.informationUpdates
+            ? { informationUpdates: defaultData.informationUpdates.map((update) => ({ ...update, id: crypto.randomUUID() })) }
             : {}),
           label,
         },
@@ -123,7 +126,14 @@ export function AutomationBuilderCanvas({
         edges={initialEdges}
         onNodesChange={(changes) => {
           const graphChanges = changes.filter((change) => change.type !== "select");
-          if (graphChanges.length > 0) onNodesChange(applyNodeChanges(graphChanges, initialNodes) as AutomationNode[]);
+          if (graphChanges.length > 0) {
+            // React Flow measures nodes on mount; keep those dimensions in state
+            // without treating a measurement as a user edit to the rule.
+            onNodesChange(
+              applyNodeChanges(graphChanges, initialNodes) as AutomationNode[],
+              graphChanges.some((change) => change.type !== "dimensions"),
+            );
+          }
         }}
         onEdgesChange={(changes) => {
           const graphChanges = changes.filter((change) => change.type !== "select");

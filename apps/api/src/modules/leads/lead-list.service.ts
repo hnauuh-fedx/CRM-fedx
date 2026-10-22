@@ -1,3 +1,5 @@
+import { describeLeadCreation, recordObject } from "./lead-creation-history";
+import { leadCreationActions, loadLeadCreationHistory } from "./lead-creation-history.service";
 import { isEnrolledStudent, studentMembershipWhere } from "../students/student-membership";
 import type { Prisma } from "../../generated/prisma/client";
 import type { AuthUser } from "../auth/auth.types";
@@ -720,6 +722,7 @@ export async function getLeadDetail(user: AuthUser, leadId: string, institutionP
         select: {
           id: true,
           type: true,
+          metadata: true,
           content: true,
           created_at: true,
           users: { select: { id: true, full_name: true } },
@@ -733,6 +736,8 @@ export async function getLeadDetail(user: AuthUser, leadId: string, institutionP
   if (!lead || (isEnrolledStudent(lead.students) && !user.permissions.some((p) => ["student.view", "student.view_all"].includes(p)))) {
     return null;
   }
+  const creationHistory = await loadLeadCreationHistory(leadId);
+  const creationDisplay = describeLeadCreation(creationHistory.creation, canViewSensitive);
   const failedStageId = getFailedLeadStageId(lead.status);
   const [relatedFiles, relatedTags, recentChanges] = await prisma.$transaction([
     prisma.file_relations.findMany({
@@ -935,19 +940,27 @@ export async function getLeadDetail(user: AuthUser, leadId: string, institutionP
       createdAt: note.created_at?.toISOString() ?? null,
       author: note.users ? { id: note.users.id, fullName: note.users.full_name } : null,
     })),
-    activities: lead.lead_activities.map((activity) => ({
-      id: activity.id,
-      type: activity.type,
-      content: activity.content,
-      createdAt: activity.created_at?.toISOString() ?? null,
-      actor: activity.users ? { id: activity.users.id, fullName: activity.users.full_name } : null,
-    })),
+    activities: lead.lead_activities.map((activity) => {
+      const metadata = recordObject(activity.metadata);
+      const isCreation = activity.type === "lead_created" || Boolean(recordObject(metadata.creation).channel) ||
+        (activity.type === "marketing_form_submitted" && activity.content?.startsWith("Lead được tạo"));
+      const display = recordObject(metadata.creation).channel ? describeLeadCreation(metadata.creation, canViewSensitive) : creationDisplay;
+      return {
+        id: activity.id,
+        type: activity.type,
+        content: isCreation ? display.description : activity.content,
+        createdAt: activity.created_at?.toISOString() ?? null,
+        actorLabel: isCreation ? display.actorLabel : undefined,
+        actor: isCreation && display.automated ? null : activity.users ? { id: activity.users.id, fullName: activity.users.full_name } : null,
+      };
+    }),
     recentChanges: recentChanges.map((change) => ({
       id: change.id,
       action: change.action,
-      description: describeLeadChange(change.action, change.new_data),
+      description: leadCreationActions.includes(change.action) ? creationDisplay.description : describeLeadChange(change.action, change.new_data),
+      actorLabel: leadCreationActions.includes(change.action) ? creationDisplay.actorLabel : undefined,
       createdAt: change.created_at?.toISOString() ?? null,
-      actor: change.users ? { id: change.users.id, fullName: change.users.full_name } : null,
+      actor: leadCreationActions.includes(change.action) && creationDisplay.automated ? null : change.users ? { id: change.users.id, fullName: change.users.full_name } : null,
     })),
     files: relatedFiles.flatMap((relation) =>
       relation.files

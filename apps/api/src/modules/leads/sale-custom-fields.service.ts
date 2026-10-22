@@ -1,4 +1,5 @@
 import { hasCustomFieldPermission } from "../custom-fields/custom-field-permissions";
+import { isDeepStrictEqual } from "node:util";
 import { Prisma } from "../../generated/prisma/client";
 import { prisma } from "../../database/prisma";
 import type { AuthUser } from "../auth/auth.types";
@@ -422,8 +423,10 @@ export async function saveSaleCustomFieldValues(
   programId: string | null,
   values: SaleCustomFieldInput[],
   ip?: string,
+  skipUnchanged = false,
 ) {
-  if (values.length === 0) return { ok: true as const };
+  const changedFieldIds: string[] = [];
+  if (values.length === 0) return { ok: true as const, changedFieldIds };
   const fields = await tx.custom_fields.findMany({
     where: {
       ...applicable(entityType, programId),
@@ -460,6 +463,8 @@ export async function saveSaleCustomFieldValues(
       where: valueWhere(item.field.id, entityType, entityId),
     });
     const oldValue = readValue(item.field, old);
+    if (skipUnchanged && isDeepStrictEqual(oldValue, item.value)) continue;
+    changedFieldIds.push(item.field.id);
     if (item.value === null) {
       if (old) await tx.custom_field_values.delete({ where: { id: old.id } });
     } else {
@@ -515,7 +520,7 @@ export async function saveSaleCustomFieldValues(
       },
     });
   }
-  return { ok: true as const };
+  return { ok: true as const, changedFieldIds };
 }
 
 async function runtimeEntityContext(

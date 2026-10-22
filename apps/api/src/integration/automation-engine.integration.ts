@@ -18,6 +18,7 @@ const delayedActivityContent = `[AUTOMATION ${runId}] Hoàn tất sau delay`;
 const matchingLeadName = `Automation Matching Lead ${runId}`;
 
 const permissionDefinitions = [
+  { code: "student.view", name: "Xem sinh viên", module: "student" },
   { code: "automation.manage", name: "Quản lý Rule Automation", module: "system" },
   { code: "automation.manage_global", name: "Quản lý Rule Automation toàn hệ thống", module: "system" },
   { code: "audit.view", name: "Xem audit log", module: "system" },
@@ -195,6 +196,11 @@ async function createFixtures() {
       { user_id: scoped.id, role_id: scopedRole.id },
     ],
   });
+  await prisma.user_program_roles.createMany({ data: [
+    { user_id: actor.id, role_id: actorRole.id, institution_program_id: program.id },
+    { user_id: target.id, role_id: targetRole.id, institution_program_id: program.id },
+    { user_id: scoped.id, role_id: scopedRole.id, institution_program_id: program.id },
+  ] });
   await prisma.user_access_scopes.createMany({
     data: [
       { user_id: actor.id, scope: "ALL" },
@@ -336,6 +342,7 @@ async function cleanup() {
   await prisma.leads.deleteMany({ where: { id: { in: leadIds } } });
   await prisma.user_access_scopes.deleteMany({ where: { user_id: { in: userIds } } });
   await prisma.user_departments.deleteMany({ where: { user_id: { in: userIds } } });
+  await prisma.user_program_roles.deleteMany({ where: { user_id: { in: userIds } } });
   await prisma.user_roles.deleteMany({ where: { user_id: { in: userIds } } });
   await prisma.users.deleteMany({ where: { id: { in: userIds } } });
   await prisma.role_permissions.deleteMany({ where: { role_id: { in: roleIds } } });
@@ -526,6 +533,11 @@ async function main() {
     assert.equal(matchingRun.status, 202, "Lead khớp điều kiện phải được nhận chạy thử.");
     const matchingExecution = await waitForExecution(baseUrl, actorToken, matchingRun.payload.executionId);
     assert.equal(matchingExecution.status, "completed");
+    // Conversion does not grant student visibility implicitly. The positive fixture
+    // needs student.view for its following template; the same read without it stays denied.
+    const { getAutomationLeadData } = await import("../modules/automations/automation-data-field.service.js");
+    assert.equal(await getAutomationLeadData({ ...programScopedActor, permissions: programScopedActor.permissions.filter((permission) => permission !== "student.view") }, fixtures.matchingLead.id, fixtures.program.id, ["system:fullName"]), null);
+    assert.ok(await getAutomationLeadData(programScopedActor, fixtures.matchingLead.id, fixtures.program.id, ["system:fullName"]));
     assert.equal(matchingExecution.source, "manual_test");
     assert.deepEqual(
       matchingExecution.nodes.map((node: JsonRecord) => node.nodeId).sort(),
