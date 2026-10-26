@@ -19,6 +19,8 @@ model addresses {
   created_at     DateTime?   @default(now()) @db.Timestamp(6)
   leads          leads?      @relation(fields: [lead_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
   relatives      relatives[]
+
+  @@index([lead_id, type], map: "idx_addresses_lead_type")
 }
 
 model admission_documents {
@@ -58,7 +60,7 @@ model admission_profiles {
   registration_station      String?               @db.VarChar(150)
   decision_number           String?               @db.VarChar(150)
   decision_signed_date      DateTime?             @db.Date
-  monthly_revenue           Decimal?              @default(0) @db.Decimal(15, 2)
+  monthly_revenue           DateTime?             @db.Date
   created_at                DateTime?             @default(now()) @db.Timestamp(6)
   updated_at                DateTime?             @default(now()) @db.Timestamp(6)
   admission_statuses        admission_statuses?   @relation(fields: [admission_status_id], references: [id], onDelete: NoAction, onUpdate: NoAction)
@@ -815,6 +817,7 @@ model leads {
   automation_sla_dispatches                automation_sla_dispatches[]
   automation_bulk_dispatches               automation_bulk_dispatches[]
   automation_contact_preferences           automation_contact_preferences[]
+  lead_unmatched_field_values              lead_unmatched_field_values[]
 
   @@index([assigned_to], map: "idx_leads_assigned_to")
   @@index([secondary_assigned_to], map: "idx_leads_secondary_assigned_to")
@@ -822,6 +825,7 @@ model leads {
   @@index([cccd], map: "idx_leads_cccd")
   @@index([created_at], map: "idx_leads_created_at")
   @@index([deleted_at, created_at, id], map: "idx_leads_active_created_page")
+  @@index([deleted_at, updated_at, id], map: "idx_leads_active_updated_page")
   @@index([email], map: "idx_leads_email")
   @@index([owner_id], map: "idx_leads_owner_id")
   @@index([phone], map: "idx_leads_phone")
@@ -1071,6 +1075,8 @@ model relatives {
   created_at   DateTime?  @default(now()) @db.Timestamp(6)
   addresses    addresses? @relation(fields: [address_id], references: [id], onDelete: NoAction, onUpdate: NoAction)
   leads        leads?     @relation(fields: [lead_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+
+  @@index([lead_id, is_primary], map: "idx_relatives_lead_primary")
 }
 
 model reminders {
@@ -1763,4 +1769,20 @@ model user_program_roles {
   @@id([user_id, institution_program_id])
   @@index([institution_program_id, role_id], map: "idx_user_program_roles_program_role")
   @@index([role_id], map: "idx_user_program_roles_role")
+}
+
+/// Raw inbound values (webhook) that could not be matched to a CRM option or type; shown with "*" until resolved.
+model lead_unmatched_field_values {
+  id          String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  lead_id     String   @db.Uuid
+  field_key   String   @db.VarChar(200)
+  field_label String   @db.VarChar(255)
+  raw_value   String
+  webhook_id  String?  @db.Uuid
+  request_id  String?  @db.Uuid
+  created_at  DateTime @default(now()) @db.Timestamp(6)
+  updated_at  DateTime @default(now()) @db.Timestamp(6)
+  leads       leads    @relation(fields: [lead_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+
+  @@unique([lead_id, field_key], map: "uq_lead_unmatched_field_values_lead_field")
 }

@@ -63,6 +63,7 @@ import {
   getEffectiveFieldOptions,
   getFieldDependency,
   leadFieldLabels,
+  marketingLeadFieldOptions,
   optionFieldTypes,
 } from "../marketing-form-editor-config";
 import { MarketingFormLayoutPanel } from "../marketing-form-layout-panel";
@@ -79,6 +80,9 @@ import { useMarketingFormLeaveGuard } from "../use-marketing-form-leave-guard";
 import { useMarketingFormReorder } from "../use-marketing-form-reorder";
 import { AutoFilterActions } from "@/components/shared/auto-filter-actions";
 import { EmptyState } from "@/components/shared/data-states";
+import { GroupedFieldPicker, type GroupedFieldOption } from "@/components/shared/grouped-field-picker";
+import { getLeadFieldGroup } from "@admission-crm/shared/lead-field-groups";
+import { getMarketingLeadField, marketingLeadFieldLabel, marketingLeadMappingFields } from "@admission-crm/shared/marketing-form-lead-fields";
 import { ErrorState } from "@/components/shared/error-state";
 import { FilterSelect } from "@/components/shared/filter-select";
 import { PageHeader } from "@/components/shared/page-header";
@@ -330,32 +334,10 @@ const fieldSchema = z.object({
   options: z.array(
     z.union([z.string(), z.object({ value: z.string(), label: z.string() })]),
   ),
-  leadField: z
-    .enum([
-      "full_name",
-      "phone",
-      "email",
-      "gender",
-      "date_of_birth",
-      "note",
-      "source_id",
-      "institution_program_id",
-      "major_id",
-    ])
+  leadField: z.enum(marketingLeadMappingFields)
     .nullable()
     .optional(),
-  crmMappingField: z
-    .enum([
-      "full_name",
-      "phone",
-      "email",
-      "gender",
-      "date_of_birth",
-      "note",
-      "source_id",
-      "institution_program_id",
-      "major_id",
-    ])
+  crmMappingField: z.enum(marketingLeadMappingFields)
     .nullable()
     .optional(),
   validationRules: z.record(z.string(), z.unknown()).nullable().optional(),
@@ -398,17 +380,7 @@ const formSchema = z
     mappings: z.array(
       z.object({
         sourceField: z.string(),
-        leadField: z.enum([
-          "full_name",
-          "phone",
-          "email",
-          "gender",
-          "date_of_birth",
-          "note",
-          "source_id",
-          "institution_program_id",
-          "major_id",
-        ]),
+        leadField: z.enum(marketingLeadMappingFields),
         isRequired: z.boolean(),
       }),
     ),
@@ -1436,6 +1408,10 @@ function FormSettingsDrawer({
     ["advanced", "Nâng cao"],
     ["mapping", "Mapping"],
   ] as const;
+  const mappingOptions = marketingLeadFieldOptions(
+    Object.keys(leadFieldLabels) as MarketingFormLeadField[],
+    { value: "__none__", label: "Không mapping" },
+  );
 
   return (
     <div className="fixed inset-0 z-50 bg-black/55">
@@ -1597,11 +1573,13 @@ function FormSettingsDrawer({
                 >
                   <Input readOnly value="leads" />
                   <Input readOnly value={field.label} />
-                  <Select
+                  <GroupedFieldPicker
                     value={
                       field.crmMappingField ?? field.leadField ?? "__none__"
                     }
-                    onValueChange={(value) => {
+                    options={mappingOptions}
+                    aria-label={`Trường CRM cho ${field.label}`}
+                    onChange={(value) => {
                       const next =
                         value === "__none__"
                           ? null
@@ -1613,19 +1591,7 @@ function FormSettingsDrawer({
                         shouldDirty: true,
                       });
                     }}
-                  >
-                    <SelectTrigger>
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="__none__">Không mapping</SelectItem>
-                      {Object.entries(leadFieldLabels).map(([value, label]) => (
-                        <SelectItem key={value} value={value}>
-                          {label}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
+                  />
                 </div>
               ))}
             </div>
@@ -2515,6 +2481,16 @@ function MarketingFormEditor({
   );
 }
 
+/** Default question type for a Lead form field, from its catalog data type. */
+function questionTypeForLeadField(field: string): MarketingFormFieldType {
+  const dataType = getMarketingLeadField(field)?.dataType;
+  if (dataType === "DATE") return "date";
+  if (dataType === "NUMBER") return "number";
+  if (dataType === "PHONE") return "phone";
+  if (dataType === "TEXTAREA") return "textarea";
+  return "text";
+}
+
 type FieldPickerChoice = {
   value: MarketingFormLeadField | "__custom__" | "__education_level__";
   label: string;
@@ -2611,24 +2587,34 @@ function AddFieldPickerDialog({
   const [selectedType, setSelectedType] =
     useState<MarketingFormFieldType>("text");
   const [showMore, setShowMore] = useState(false);
-  const [search, setSearch] = useState("");
+  const choices = [
+    ...crmFieldChoices,
+    // Other Lead form fields supported by the API (education, address, relatives, admission...).
+    ...(options?.leadFields ?? [])
+      .filter((field) => !crmFieldChoices.some((choice) => choice.value === field))
+      .map((field): FieldPickerChoice => ({
+        value: field,
+        label: marketingLeadFieldLabel(field),
+        defaultType: questionTypeForLeadField(field),
+      })),
+  ];
   const selectedChoice =
-    crmFieldChoices.find((field) => field.value === selectedField) ??
-    crmFieldChoices[0];
-  const fieldChoices = crmFieldChoices.filter((field) =>
-    field.label.toLowerCase().includes(search.trim().toLowerCase()),
-  );
+    choices.find((field) => field.value === selectedField) ?? choices[0];
+  const pickerOptions = choices.map((choice): GroupedFieldOption => {
+    const group = choice.value.startsWith("__") ? undefined : getLeadFieldGroup(choice.value);
+    return {
+      value: choice.value,
+      label: choice.label,
+      groupKey: group?.id ?? "",
+      groupLabel: group?.label ?? "",
+    };
+  });
   const typeChoices = showMore
     ? [...compactQuestionTypes, ...extendedQuestionTypes]
     : compactQuestionTypes;
-  const extraLeadFields: MarketingFormLeadField[] = [];
-  for (const field of options?.leadFields ?? []) {
-    if (!crmFieldChoices.some((choice) => choice.value === field))
-      extraLeadFields.push(field);
-  }
 
   function handleSelectField(value: FieldPickerChoice["value"]) {
-    const nextChoice = crmFieldChoices.find((field) => field.value === value);
+    const nextChoice = choices.find((field) => field.value === value);
     setSelectedField(value);
     if (nextChoice) setSelectedType(nextChoice.defaultType);
   }
@@ -2686,38 +2672,14 @@ function AddFieldPickerDialog({
             <FieldLabel htmlFor="field-picker-crm-field">
               Chọn trường dữ liệu
             </FieldLabel>
-            <Select
+            <GroupedFieldPicker
+              id="field-picker-crm-field"
               value={selectedField}
-              onValueChange={(value) =>
+              options={pickerOptions}
+              onChange={(value) =>
                 handleSelectField(value as FieldPickerChoice["value"])
               }
-            >
-              <SelectTrigger id="field-picker-crm-field">
-                <SelectValue placeholder="Chọn trường dữ liệu" />
-              </SelectTrigger>
-              <SelectContent className="max-h-80">
-                <div className="p-2">
-                  <Input
-                    value={search}
-                    onChange={(event) => setSearch(event.target.value)}
-                    placeholder="Tìm trường dữ liệu"
-                  />
-                </div>
-                <div className="px-2 py-1 text-xs font-semibold uppercase text-muted-foreground">
-                  Thông tin cơ bản
-                </div>
-                {fieldChoices.map((field) => (
-                  <SelectItem key={field.value} value={field.value}>
-                    {field.label}
-                  </SelectItem>
-                ))}
-                {extraLeadFields.map((field) => (
-                  <SelectItem key={field} value={field}>
-                    {leadFieldLabels[field]}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
+            />
           </Field>
           <Field>
             <FieldLabel>Kiểu câu hỏi của trường</FieldLabel>
@@ -3712,7 +3674,6 @@ function MarketingBuilderTabContent({
     return (
       <MarketingFormCrmPanel
         form={form}
-        labels={leadFieldLabels}
         targets={options?.leadFields ?? []}
       />
     );

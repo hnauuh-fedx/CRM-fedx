@@ -6,6 +6,7 @@ import { getLeadScopeWhere, listLeads, type LeadListQuery } from "../leads/lead-
 import {
   customerListDynamicWhere,
   describeCustomerListFilters,
+  isSensitiveCustomerListField,
   hasCustomerListFilters,
   normalizeCustomerListFilterConfig,
   type CustomerListFilterConfig,
@@ -94,7 +95,7 @@ async function serializeList(user: AuthUser, list: CustomerListRecord) {
 }
 
 async function filterReferencesAreVisible(user: AuthUser, config: CustomerListFilterConfig, institutionProgramId: string) {
-  if (config.conditions.some((item) => ["phone", "email"].includes(item.field))
+  if (config.conditions.some((item) => isSensitiveCustomerListField(item.field))
     && !user.permissions.includes("lead.sensitive.view")) return false;
   const valuesFor = (field: string) => [...new Set(config.conditions.filter((item) => item.field === field && item.value).map((item) => item.value!))];
   const stageIds = valuesFor("pipelineStageId");

@@ -1,5 +1,8 @@
 import type {
   LeadActionOptions,
+  LeadBulkUpdateField,
+  LeadBulkUpdateOptions,
+  LeadBulkUpdateResult,
   LeadDetail,
   LeadFilterOptions,
   LeadCustomFieldsResponse,
@@ -188,6 +191,18 @@ export function assignLeads(leadIds: string[], assigneeId: string, accessToken: 
   return apiRequest<{ leadIds: string[]; assigneeId: string; assignedCount: number }>(
     "/leads/bulk-assign",
     { method: "POST", body: JSON.stringify({ leadIds, assigneeId }) },
+    accessToken,
+  );
+}
+
+export function getLeadBulkUpdateOptions(accessToken: string) {
+  return apiRequest<LeadBulkUpdateOptions>("/leads/bulk-update/options", {}, accessToken);
+}
+
+export function bulkUpdateLeads(leadIds: string[], field: LeadBulkUpdateField, value: string, accessToken: string) {
+  return apiRequest<LeadBulkUpdateResult>(
+    "/leads/bulk-update",
+    { method: "POST", body: JSON.stringify({ leadIds, field, value }) },
     accessToken,
   );
 }

@@ -12,6 +12,7 @@ import {
 } from "./domain/lead-lifecycle-status";
 import { buildLeadFilterWhere, type FilterCondition } from "./lead-filter.service";
 import { getLeadCustomFieldDefinitions } from "./lead-custom-fields.service";
+import { listVisibleUnmatchedValues } from "./lead-unmatched-values.service";
 
 export const leadListPermissions = [
   "lead.view_all",
@@ -397,7 +398,7 @@ export async function listLeads(
         registrationStation: admission?.registration_station ?? null,
         decisionNumber: admission?.decision_number ?? null,
         decisionSignedDate: admission?.decision_signed_date?.toISOString().slice(0, 10) ?? null,
-        monthlyRevenue: admission?.monthly_revenue?.toString() ?? null,
+        monthlyRevenue: admission?.monthly_revenue?.toISOString().slice(0, 10) ?? null,
         gclid: lead.utm_trackings[0]?.gclid ?? null,
         tags: (tagsByLeadId.get(lead.id) ?? []).join(", "),
         note: lead.note,
@@ -463,7 +464,7 @@ export async function getLeadFilterOptions(user: AuthUser, institutionProgramId?
     ...(institutionProgramId ? { institution_program_id: institutionProgramId } : {}),
   };
 
-  const [sources, institutionPrograms, assignees, stages, majors, stageCounts, totalLeads, failedLeads] = await prisma.$transaction([
+  const [sources, institutionPrograms, assignees, stages, majors, admissionStatuses, stageCounts, totalLeads, failedLeads] = await prisma.$transaction([
     prisma.lead_sources.findMany({
       where: { leads: { some: scopeWhere } },
       select: { id: true, name: true },
@@ -503,6 +504,10 @@ export async function getLeadFilterOptions(user: AuthUser, institutionProgramId?
       select: { id: true, name: true },
       orderBy: { name: "asc" },
     }),
+    prisma.admission_statuses.findMany({
+      select: { id: true, name: true },
+      orderBy: [{ name: "asc" }, { id: "asc" }],
+    }),
     prisma.leads.groupBy({
       by: ["pipeline_stage_id"],
       where: { AND: [scopeWhere, { status: ACTIVE_LEAD_STATUS }] },
@@ -537,6 +542,7 @@ export async function getLeadFilterOptions(user: AuthUser, institutionProgramId?
       count: stageCountById.get(stage.id) ?? 0,
     })),
     majors,
+    admissionStatuses,
     totalLeads,
     failedLeads,
     customFields: customFieldDefinitions.fields,
@@ -792,6 +798,7 @@ export async function getLeadDetail(user: AuthUser, leadId: string, institutionP
   const primaryRelative = lead.relatives.find((relative) => relative.is_primary);
   const secondaryRelative = lead.relatives.find((relative) => !relative.is_primary);
   const admission = lead.admission_profiles;
+  const unmatchedFieldValues = await listVisibleUnmatchedValues(lead.id, user, canViewSensitive);
 
   return {
     recordType: isEnrolledStudent(lead.students) ? "student" : "candidate",
@@ -906,9 +913,10 @@ export async function getLeadDetail(user: AuthUser, leadId: string, institutionP
     registrationStation: admission?.registration_station ?? null,
     decisionNumber: admission?.decision_number ?? null,
     decisionSignedDate: admission?.decision_signed_date?.toISOString().slice(0, 10) ?? null,
-    monthlyRevenue: admission?.monthly_revenue?.toString() ?? null,
+    monthlyRevenue: admission?.monthly_revenue?.toISOString().slice(0, 10) ?? null,
     gclid: lead.utm_trackings[0]?.gclid ?? null,
     tags: relatedTags.flatMap((tag) => tag.tags ? [tag.tags.name] : []).join(", "),
+    unmatchedFieldValues,
     assignments: lead.lead_assignments.map((assignment) => ({
       id: assignment.id,
       assignedAt: assignment.assigned_at?.toISOString() ?? null,

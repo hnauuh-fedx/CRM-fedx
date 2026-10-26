@@ -53,7 +53,9 @@ export async function updateAdmissionFeePayment(
     const data = {
       fee_status: emptyToNull(input.feeStatus) ?? existing.fee_status,
       tuition_status: emptyToNull(input.tuitionStatus) ?? existing.tuition_status,
-      monthly_revenue: emptyToNull(input.monthlyRevenue) ?? existing.monthly_revenue ?? 0,
+      monthly_revenue: input.monthlyRevenue === undefined
+        ? existing.monthly_revenue
+        : emptyToNull(input.monthlyRevenue) ? new Date(input.monthlyRevenue!) : null,
       updated_at: new Date(),
     };
     await tx.admission_profiles.update({ where: { id: profileId }, data });
@@ -81,12 +83,12 @@ export async function updateAdmissionFeePayment(
         old_data: {
           feeStatus: existing.fee_status,
           tuitionStatus: existing.tuition_status,
-          monthlyRevenue: existing.monthly_revenue == null ? null : String(existing.monthly_revenue),
+          monthlyRevenue: existing.monthly_revenue?.toISOString().slice(0, 10) ?? null,
         },
         new_data: {
           feeStatus: data.fee_status,
           tuitionStatus: data.tuition_status,
-          monthlyRevenue: data.monthly_revenue == null ? null : String(data.monthly_revenue),
+          monthlyRevenue: data.monthly_revenue?.toISOString().slice(0, 10) ?? null,
           paymentAmount: emptyToNull(input.paymentAmount),
           paymentMethod: emptyToNull(input.paymentMethod),
           paidAt: emptyToNull(input.paidAt),
@@ -130,7 +132,7 @@ export async function confirmAdmissionFeeDebt(
         old_data: {
           feeStatus: existing.fee_status,
           tuitionStatus: existing.tuition_status,
-          monthlyRevenue: existing.monthly_revenue == null ? null : String(existing.monthly_revenue),
+          monthlyRevenue: existing.monthly_revenue?.toISOString().slice(0, 10) ?? null,
         },
         new_data: {
           debtStatus: input.debtStatus,

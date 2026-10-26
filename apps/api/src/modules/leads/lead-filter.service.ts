@@ -4,6 +4,7 @@ import { prisma } from "../../database/prisma";
 import { hasCustomFieldPermission } from "../custom-fields/custom-field-permissions";
 import type { AuthUser } from "../auth/auth.types";
 import { ACTIVE_LEAD_STATUS, FAILED_LEAD_STATUS_PREFIX } from "./domain/lead-lifecycle-status";
+import { getLeadFieldFilterDefinition, leadFieldFilterDefinitions, leadFieldWhere } from "./lead-field-filter";
 
 /**
  * Bộ lọc nâng cao cho danh sách lead: trường hệ thống + trường tùy chỉnh,
@@ -34,9 +35,19 @@ const sensitiveSystemFields = new Set<SystemFieldKey>(["phone", "email"]);
 /** Cột NOT NULL trong bảng leads. */
 const requiredTextFields = new Set<SystemFieldKey>(["fullName", "phone"]);
 
+/** Other Lead form fields, filtered through the shared catalog (related tables included). */
+const catalogFieldKeys = leadFieldFilterDefinitions
+  .map((field) => field.key)
+  .filter((key) => !(systemFieldKeys as readonly string[]).includes(key));
+const isCatalogField = (field: string) => catalogFieldKeys.includes(field);
+
 const filterConditionSchema = z.object({
   combinator: z.enum(["AND", "OR"]).optional(),
-  field: z.union([z.enum(systemFieldKeys), z.string().regex(/^cf:[0-9a-fA-F-]{36}$/)]),
+  field: z.union([
+    z.enum(systemFieldKeys),
+    z.string().refine(isCatalogField),
+    z.string().regex(/^cf:[0-9a-fA-F-]{36}$/),
+  ]),
   operator: z.enum(filterOperators),
   value: z.union([z.string().trim().max(500), z.number().finite(), z.boolean()]).nullish(),
   valueTo: z.union([z.string().trim().max(500), z.number().finite()]).nullish(),
@@ -224,6 +235,61 @@ function systemFieldWhere(field: SystemFieldKey, condition: FilterCondition): Pr
   return nullable ? { OR: [{ [name]: null }, { NOT: match }] } : { NOT: match };
 }
 
+/** Lead form field ngoài nhóm trường cũ: chuyển toán tử sang predicate dùng chung. */
+async function catalogFieldWhere(condition: FilterCondition): Promise<Prisma.leadsWhereInput> {
+  const definition = getLeadFieldFilterDefinition(condition.field)!;
+  const { operator, value } = condition;
+  if (definition.kind === "list") return tagFieldWhere(condition);
+  if (operator === "HAS_VALUE" || operator === "HAS_NO_VALUE") {
+    return leadFieldWhere(definition.key, { type: "hasValue" }, operator === "HAS_NO_VALUE");
+  }
+  const negate = isNegative(operator);
+  if (definition.kind === "text") {
+    if (!textOperators.has(operator)) invalid();
+    const mode = operator === "STARTS_WITH" ? "startsWith" : operator === "ENDS_WITH" ? "endsWith"
+      : operator === "EQUALS" || operator === "NOT_EQUALS" ? "equals" : "contains";
+    return leadFieldWhere(definition.key, { type: "text", mode, value: textValue(value) }, negate);
+  }
+  if (definition.kind === "select") {
+    if (operator !== "EQUALS" && operator !== "NOT_EQUALS") invalid();
+    const selected = textValue(value);
+    // Reference fields (major, admission status, ...) store ids; gender stores a fixed code.
+    if (definition.key !== "gender" && !z.uuid().safeParse(selected).success) invalid();
+    return leadFieldWhere(definition.key, { type: "equals", value: selected }, negate);
+  }
+  if (definition.kind === "date") return leadFieldWhere(definition.key, { type: "range", ...resolveDateRange(condition) }, negate);
+  if (operator === "EQUALS" || operator === "NOT_EQUALS") return leadFieldWhere(definition.key, { type: "equals", value: numberOf(value) }, negate);
+  if (operator === "GT") return leadFieldWhere(definition.key, { type: "range", gt: numberOf(value) });
+  if (operator === "GTE") return leadFieldWhere(definition.key, { type: "range", gte: numberOf(value) });
+  if (operator === "LT") return leadFieldWhere(definition.key, { type: "range", lt: numberOf(value) });
+  if (operator === "LTE") return leadFieldWhere(definition.key, { type: "range", lte: numberOf(value) });
+  if (operator === "BETWEEN") {
+    const [min, max] = [numberOf(value), numberOf(condition.valueTo)].sort((a, b) => a - b);
+    return leadFieldWhere(definition.key, { type: "range", gte: min, lte: max });
+  }
+  return invalid();
+}
+
+/** Tags dùng bảng đa hình entity_tags nên lấy trước danh sách lead khớp, giống trường tùy chỉnh. */
+async function tagFieldWhere(condition: FilterCondition): Promise<Prisma.leadsWhereInput> {
+  const { operator, value } = condition;
+  const presence = operator === "HAS_VALUE" || operator === "HAS_NO_VALUE";
+  if (!presence && !textOperators.has(operator)) invalid();
+  const tagWhere = presence ? {} : { tags: { is: { name: positiveTextFilter(operator, value) } } };
+  const rows = await prisma.entity_tags.findMany({
+    where: { entity_type: "lead", ...tagWhere },
+    select: { entity_id: true },
+    distinct: ["entity_id"],
+    take: CUSTOM_FIELD_MATCH_LIMIT + 1,
+  });
+  if (rows.length > CUSTOM_FIELD_MATCH_LIMIT) {
+    throw new LeadFilterError(400, "Điều kiện lọc Tags khớp quá nhiều lead. Vui lòng thu hẹp điều kiện.");
+  }
+  const leadIds = rows.map((row) => row.entity_id);
+  const negate = operator === "HAS_NO_VALUE" || isNegative(operator);
+  return negate ? { id: { notIn: leadIds } } : { id: { in: leadIds } };
+}
+
 /** Trường có thể lọc theo số lượng giá trị (lead có nhiều số điện thoại / nhiều nhân viên). */
 const countableFields = new Set<string>(["phone", "assigneeId"]);
 
@@ -336,6 +402,9 @@ export async function buildLeadFilterWhere(
   if (conditions.some((condition) => !condition.field.startsWith("cf:") && sensitiveSystemFields.has(condition.field as SystemFieldKey)) && !canViewSensitiveLeadData) {
     throw new LeadFilterError(403, "Bạn không có quyền lọc theo số điện thoại hoặc email.");
   }
+  if (!canViewSensitiveLeadData && conditions.some((condition) => isCatalogField(condition.field) && getLeadFieldFilterDefinition(condition.field)?.isSensitive)) {
+    throw new LeadFilterError(403, "Bạn không có quyền lọc theo trường dữ liệu nhạy cảm.");
+  }
   const customFields = await resolveCustomFields(user, conditions);
 
   let combined: Prisma.leadsWhereInput | null = null;
@@ -344,7 +413,9 @@ export async function buildLeadFilterWhere(
       ? await countFieldWhere(condition.field, condition)
       : condition.field.startsWith("cf:")
         ? await customFieldWhere(customFields.get(condition.field.slice(3))!, condition)
-        : systemFieldWhere(condition.field as SystemFieldKey, condition);
+        : isCatalogField(condition.field)
+          ? await catalogFieldWhere(condition)
+          : systemFieldWhere(condition.field as SystemFieldKey, condition);
     combined = combined === null
       ? where
       : condition.combinator === "OR" ? { OR: [combined, where] } : { AND: [combined, where] };

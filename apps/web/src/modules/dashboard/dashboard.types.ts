@@ -12,7 +12,6 @@ export type DirectorDashboardResponse = {
     leadToApplicationRate: number;
     applicationToStudentRate: number;
     conversionRate: number;
-    monthlyRevenue: number;
   };
   filterOptions: {
     majors: Array<{ id: string; name: string }>;

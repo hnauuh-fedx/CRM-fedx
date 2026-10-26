@@ -1,10 +1,10 @@
+import type { FilterOperator } from "@/modules/leads/filter-fields";
 export type OverviewReportResponse = {
   summary: {
     totalLeads: number;
     totalApplications: number;
     totalStudents: number;
     conversionRate: number;
-    monthlyRevenue: number;
   };
   applicationsByStatus: ReportBreakdownItem[];
   applicationsByMajor: ReportBreakdownItem[];
@@ -25,12 +25,25 @@ export type PersonalReportDateGranularity = "DAY" | "WEEK" | "MONTH" | "QUARTER"
 export type PersonalReportDatasetKey = "LEADS" | "QUALIFIED_LEADS" | "STUDENTS";
 export type PersonalReportFilterCondition = {
   fieldKey: string;
-  operator: "EQUALS" | "NOT_EQUALS" | "GREATER_THAN_OR_EQUAL" | "LESS_THAN_OR_EQUAL" | "IS_NOT_EMPTY" | "IS_EMPTY" | "DATE_PRESET" | "DATE_BETWEEN";
+  /** Lead-list-style operators (see `FilterOperator`), plus the legacy report operators of saved reports. */
+  operator: FilterOperator | "GREATER_THAN_OR_EQUAL" | "LESS_THAN_OR_EQUAL" | "IS_NOT_EMPTY" | "IS_EMPTY" | "DATE_PRESET" | "DATE_BETWEEN";
+  /** Upper bound of BETWEEN (number or date). */
+  valueTo?: string;
+  /** Day count of IS_X_DAYS_AGO. */
+  numberValue?: number;
   value?: string;
   fromDate?: string;
   toDate?: string;
 };
-export type PersonalReportDatasetField = { key: string; label: string; type: "CATEGORY" | "DATE"; allowedAsOutput: boolean; allowedAsFilter: boolean };
+export type PersonalReportDatasetField = {
+  key: string;
+  label: string;
+  type: "CATEGORY" | "DATE";
+  allowedAsOutput: boolean;
+  allowedAsFilter: boolean;
+  /** Operators and value input offered in filters, as in the Lead list filter. */
+  filterType: "text" | "number" | "date" | "enum";
+};
 export type PersonalReportDatasetDefinition = {
   key: PersonalReportDatasetKey;
   label: string;
@@ -241,7 +254,6 @@ export type AdmissionDetailReportResponse = {
     totalApplications: number;
     enrolledStudentCount: number;
     conversionRate: number;
-    monthlyRevenue: number;
     documentCount: number;
     pendingDocumentCount: number;
   };
@@ -262,7 +274,7 @@ export type AdmissionReportApplication = {
   applicationReceivedDate: string | null;
   feeStatus: string | null;
   tuitionStatus: string | null;
-  monthlyRevenue: number;
+  monthlyRevenue: string | null;
 };
 
 export type StudentDetailReportResponse = {

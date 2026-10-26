@@ -80,3 +80,28 @@ export type SaleKpiResponse = {
   staffKpi: Array<{ id: string; name: string; total: number }>;
   pipelineBreakdown: Array<{ id: string | null; name: string; total: number }>;
 };
+
+export type CustomerLookupType = "all" | "candidates" | "students";
+export type CustomerLookupSortBy = "fullName" | "createdAt" | "updatedAt";
+export type CustomerLookupFilters = { search: string; type: CustomerLookupType; sourceId: string; assigneeId: string };
+
+export type CustomerLookupItem = {
+  id: string;
+  fullName: string;
+  type: "candidate" | "student";
+  assignee: Person | null;
+  source: SimpleRef | null;
+  createdAt: string | null;
+  updatedAt: string | null;
+  canOpenDetail: boolean;
+};
+
+export type CustomerLookupResponse = {
+  data: CustomerLookupItem[];
+  pagination: Pagination;
+};
+
+export type CustomerLookupOptions = {
+  sources: SimpleRef[];
+  assignees: Person[];
+};

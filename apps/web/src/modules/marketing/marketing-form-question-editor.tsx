@@ -1,4 +1,5 @@
 import type { UseFormReturn } from "react-hook-form";
+import { GroupedFieldPicker } from "@/components/shared/grouped-field-picker";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Field, FieldError, FieldLabel } from "@/components/ui/field";
@@ -7,7 +8,7 @@ import { Select, SelectContent, SelectGroup, SelectItem, SelectTrigger, SelectVa
 import { ArrowDown, ArrowUp, Trash2 } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import type { MarketingFormFieldType, MarketingFormFilterOptions, MarketingFormInput, MarketingFormLeadField } from "./marketing-reference.types";
-import { leadFieldLabels, fieldTypeLabels, optionFieldTypes } from "./marketing-form-editor-config";
+import { leadFieldLabels, fieldTypeLabels, marketingLeadFieldOptions, optionFieldTypes } from "./marketing-form-editor-config";
 import { ChoiceOptionsEditor } from "./marketing-form-choice-options-editor";
 import { MarketingFormVisibilityEditor } from "./marketing-form-visibility-editor";
 import { MarketingFormQuestionDescriptionEditor } from "./marketing-form-question-description-editor";
@@ -65,19 +66,17 @@ export function FormFieldRow({ index, form, options, onMoveUp, onMoveDown, onRem
         </Field>
         <Field data-invalid={Boolean(form.formState.errors.fields?.[index]?.crmMappingField)}>
           <FieldLabel htmlFor={`marketing-field-lead-${index}`}>Lưu dữ liệu vào</FieldLabel>
-          <Select value={form.watch(`fields.${index}.crmMappingField`) ?? form.watch(`fields.${index}.leadField`) ?? "__none__"} onValueChange={(value) => {
-            const nextValue = value === "__none__" ? null : value as MarketingFormLeadField;
-            form.setValue(`fields.${index}.crmMappingField`, nextValue, { shouldDirty: true, shouldValidate: true });
-            form.setValue(`fields.${index}.leadField`, nextValue, { shouldDirty: true, shouldValidate: true });
-          }}>
-            <SelectTrigger id={`marketing-field-lead-${index}`} className="w-full" aria-invalid={Boolean(form.formState.errors.fields?.[index]?.crmMappingField)}><SelectValue /></SelectTrigger>
-            <SelectContent>
-              <SelectGroup>
-                <SelectItem value="__none__">Chỉ lưu câu trả lời</SelectItem>
-                {(options?.leadFields ?? Object.keys(leadFieldLabels) as MarketingFormLeadField[]).map((field) => <SelectItem key={field} value={field}>CRM: {leadFieldLabels[field]}</SelectItem>)}
-              </SelectGroup>
-            </SelectContent>
-          </Select>
+          <GroupedFieldPicker
+            id={`marketing-field-lead-${index}`}
+            value={form.watch(`fields.${index}.crmMappingField`) ?? form.watch(`fields.${index}.leadField`) ?? "__none__"}
+            options={marketingLeadFieldOptions(options?.leadFields ?? Object.keys(leadFieldLabels) as MarketingFormLeadField[], { value: "__none__", label: "Chỉ lưu câu trả lời" }, "CRM: ")}
+            aria-invalid={Boolean(form.formState.errors.fields?.[index]?.crmMappingField)}
+            onChange={(value) => {
+              const nextValue = value === "__none__" ? null : value as MarketingFormLeadField;
+              form.setValue(`fields.${index}.crmMappingField`, nextValue, { shouldDirty: true, shouldValidate: true });
+              form.setValue(`fields.${index}.leadField`, nextValue, { shouldDirty: true, shouldValidate: true });
+            }}
+          />
           <FieldError errors={[form.formState.errors.fields?.[index]?.crmMappingField]} />
           <p className="text-xs text-muted-foreground">{mapping ? "Ghi câu trả lời vào trường CRM đã chọn. Ngành/nguồn cần mã CRM hợp lệ." : "Lưu đáp án khảo sát, không thay đổi trường CRM dù mã câu hỏi trùng tên trường CRM."}</p>
         </Field>

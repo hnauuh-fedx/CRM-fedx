@@ -62,7 +62,8 @@ import {
 } from "@/components/ui/table";
 import { useAuth } from "@/modules/auth/auth-context";
 import { useInstitutionProgram } from "@/modules/institutions/institution-program-context";
-import { ReportFilterEditor } from "@/modules/reports/components/report-filter-editor";
+import { GroupedFieldPicker } from "@/components/shared/grouped-field-picker";
+import { ReportFilterEditor, toReportFieldOptions } from "@/modules/reports/components/report-filter-editor";
 import type {
   PersonalReport,
   PersonalReportChartType,
@@ -84,6 +85,7 @@ import {
   updatePersonalDashboardConfig,
   updatePersonalReport,
 } from "@/services/report.service";
+import { isReportConditionComplete } from "@/modules/reports/components/report-filter-rows";
 const numberFormatter = new Intl.NumberFormat("vi-VN");
 const currencyFormatter = new Intl.NumberFormat("vi-VN", {
   style: "currency",
@@ -927,8 +929,7 @@ function singleForm(name: string, singleDisplay: "TABLE" | "LINE"): FormState {
     conditions: [
       {
         fieldKey: "CREATED_DATE",
-        operator: "DATE_PRESET",
-        value: "THIS_MONTH",
+        operator: "IS_THIS_MONTH",
       },
     ],
     dateGranularity: "DAY",
@@ -948,8 +949,7 @@ function pivotForm(name: string): FormState {
     conditions: [
       {
         fieldKey: "CREATED_DATE",
-        operator: "DATE_PRESET",
-        value: "THIS_MONTH",
+        operator: "IS_THIS_MONTH",
       },
     ],
     dateGranularity: "DAY",
@@ -974,8 +974,7 @@ function singleDatasetForm(
     conditions: [
       {
         fieldKey: dataset.primaryDateField,
-        operator: "DATE_PRESET",
-        value: "THIS_MONTH",
+        operator: "IS_THIS_MONTH",
       },
     ],
     dateGranularity: "DAY",
@@ -999,8 +998,7 @@ function pivotDatasetForm(
     conditions: [
       {
         fieldKey: dataset.primaryDateField,
-        operator: "DATE_PRESET",
-        value: "THIS_MONTH",
+        operator: "IS_THIS_MONTH",
       },
     ],
     dateGranularity: "DAY",
@@ -1196,29 +1194,18 @@ function SingleReportFields({
           selectDataset={selectDataset}
         />
         <Field>
-          <FieldLabel>Output 1</FieldLabel>
-          <Select
+          <FieldLabel htmlFor="single-output">Output 1</FieldLabel>
+          <GroupedFieldPicker
+            id="single-output"
             value={form.singleDimensionKey}
-            onValueChange={(value) =>
+            options={toReportFieldOptions(dataset, dataset.singleDimensions)}
+            onChange={(value) =>
               onChange({
                 ...form,
                 singleDimensionKey: value as FormState["singleDimensionKey"],
               })
             }
-          >
-            <SelectTrigger className="w-full">
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectGroup>
-                {dataset.singleDimensions.map((item) => (
-                  <SelectItem key={item.key} value={item.key}>
-                    {item.label}
-                  </SelectItem>
-                ))}
-              </SelectGroup>
-            </SelectContent>
-          </Select>
+          />
         </Field>
       </div>
       <div className="grid gap-5 md:grid-cols-2">
@@ -1279,56 +1266,32 @@ function PivotReportFields({
           selectDataset={selectDataset}
         />
         <Field>
-          <FieldLabel>Output 1 · Dòng</FieldLabel>
-          <Select
+          <FieldLabel htmlFor="row-output">Output 1 · Dòng</FieldLabel>
+          <GroupedFieldPicker
+            id="row-output"
             value={form.rowDimensionKey}
-            onValueChange={(value) =>
+            options={toReportFieldOptions(dataset, dataset.rowDimensions)}
+            onChange={(value) =>
               onChange({
                 ...form,
                 rowDimensionKey: value as FormState["rowDimensionKey"],
               })
             }
-          >
-            <SelectTrigger className="w-full">
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectGroup>
-                {dataset.rowDimensions.map((item) => (
-                  <SelectItem key={item.key} value={item.key}>
-                    {item.label}
-                  </SelectItem>
-                ))}
-              </SelectGroup>
-            </SelectContent>
-          </Select>
+          />
         </Field>
         <Field>
-          <FieldLabel>Output 2 · Cột</FieldLabel>
-          <Select
+          <FieldLabel htmlFor="column-output">Output 2 · Cột</FieldLabel>
+          <GroupedFieldPicker
+            id="column-output"
             value={form.columnDimensionKey}
-            onValueChange={(value) =>
+            options={toReportFieldOptions(dataset, dataset.columnDimensions.filter((item) => item.key !== form.rowDimensionKey))}
+            onChange={(value) =>
               onChange({
                 ...form,
                 columnDimensionKey: value as FormState["columnDimensionKey"],
               })
             }
-          >
-            <SelectTrigger className="w-full">
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectGroup>
-                {dataset.columnDimensions
-                  .filter((item) => item.key !== form.rowDimensionKey)
-                  .map((item) => (
-                    <SelectItem key={item.key} value={item.key}>
-                      {item.label}
-                    </SelectItem>
-                  ))}
-              </SelectGroup>
-            </SelectContent>
-          </Select>
+          />
         </Field>
       </div>
       <div className="grid gap-5 md:grid-cols-2">
@@ -1513,15 +1476,7 @@ function isReportFormValid(
 ) {
   const isSingle = form.mode === "SINGLE",
     isPivot = form.mode === "PIVOT";
-  const conditionsValid = (form.conditions ?? []).every((condition) =>
-    condition.operator === "DATE_BETWEEN"
-      ? Boolean(
-          condition.fromDate &&
-            condition.toDate &&
-            condition.toDate >= condition.fromDate,
-        )
-      : Boolean(condition.value),
-  );
+  const conditionsValid = (form.conditions ?? []).every(isReportConditionComplete);
   const valid =
     form.name.trim().length >= 3 &&
     (isSingle

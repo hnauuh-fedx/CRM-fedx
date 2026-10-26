@@ -66,9 +66,19 @@ const { importBizflyRows } = await import("../modules/leads/bizfly-lead-import.s
       assert.equal(await tx.lead_activities.count({ where: { lead_id: { in: ids }, type: "lead_assigned" } }), 0);
       assert.equal(await tx.audit_logs.count({ where: { entity_id: { in: ids }, action: "assign" } }), 0);
       assert.equal(await tx.notifications.count({ where: { content: { contains: marker } } }), 0);
-      const duplicate = await importBizflyRows(actor, [{ row: 8, values: { ...values, phone: phones[0], majorName: `${marker} rejected` } }], programId, undefined, database);
-      assert.equal(duplicate.failedRows, 1);
+      // A known phone refreshes only Doanh số tháng and stage (L8 → L5); other columns such as major are ignored.
+      const reimport = { row: 8, values: { ...values, phone: phones[0], majorName: `${marker} rejected`, stageName: "L8", monthlyRevenue: "31/10/2026" } };
+      const duplicate = await importBizflyRows(actor, [reimport], programId, undefined, database);
+      assert.deepEqual(duplicate.errors, []);
+      assert.deepEqual([duplicate.importedRows, duplicate.updatedRows], [0, 1]);
+      const updatedLead = await tx.leads.findFirstOrThrow({ where: { phone: phones[0], institution_program_id: programId, deleted_at: null },
+        select: { id: true, pipeline_stages: { select: { name: true } }, admission_profiles: { select: { monthly_revenue: true } } } });
+      assert.match(updatedLead.pipeline_stages!.name, /L5/);
+      assert.equal(updatedLead.admission_profiles?.monthly_revenue?.toISOString().slice(0, 10), "2026-10-31");
+      assert.equal(await tx.audit_logs.count({ where: { entity_id: updatedLead.id, action: "import_update" } }), 1);
       assert.equal(await tx.majors.count({ where: { name: `${marker} rejected` } }), 0);
+      const repeated = await importBizflyRows(actor, [reimport], programId, undefined, database);
+      assert.deepEqual([repeated.updatedRows, repeated.unchangedRows], [0, 1]);
       throw rollback;
     }, { timeout: 30_000 });
   } catch (error) { if (error !== rollback) throw error; }

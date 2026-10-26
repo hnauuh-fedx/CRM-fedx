@@ -18,6 +18,10 @@ export type LeadImportError = {
 export type LeadImportResult = {
   totalRows: number;
   importedRows: number;
+  /** Existing leads (same phone in the program) whose imported values changed. */
+  updatedRows: number;
+  /** Existing leads whose imported values already matched. */
+  unchangedRows: number;
   failedRows: number;
   errors: LeadImportError[];
 };
@@ -123,6 +127,7 @@ const headerAliases: Record<string, keyof LeadInput | "sourceName" | "stageName"
   diemxettuyen: "admissionScore",
   monthlyrevenue: "monthlyRevenue",
   doanhthuthang: "monthlyRevenue",
+  doanhsothang: "monthlyRevenue",
   gclid: "gclid",
   tags: "tags",
 };
@@ -168,6 +173,8 @@ export async function importLeadsFromWorkbook(
   return {
     totalRows: rows.length,
     importedRows,
+    updatedRows: 0,
+    unchangedRows: 0,
     failedRows: errors.length,
     errors,
   };
@@ -325,7 +332,7 @@ function normalizeInput(mapped: Record<string, string>, references: ReferenceMap
     score2: normalizeDecimal(mapped.score2),
     score3: normalizeDecimal(mapped.score3),
     admissionScore: normalizeDecimal(mapped.admissionScore),
-    monthlyRevenue: normalizeDecimal(mapped.monthlyRevenue),
+    monthlyRevenue: normalizeDate(mapped.monthlyRevenue),
     gclid: asText(mapped.gclid),
     tags: asText(mapped.tags),
   };

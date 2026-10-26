@@ -13,7 +13,6 @@ type ListQuery<TSort extends string> = {
 };
 
 const toIso = (value?: Date | null) => value?.toISOString() ?? null;
-const toMoney = (value: unknown) => (value == null ? null : String(value));
 const documentSensitivePermissions = new Set([
   "document.sensitive.view",
   "admission_document.upload",
@@ -231,7 +230,7 @@ export async function listAdmissionFees(
       majorName: item.majors?.name ?? null,
       feeStatus: item.fee_status,
       tuitionStatus: item.tuition_status,
-      monthlyRevenue: toMoney(item.monthly_revenue),
+      monthlyRevenue: item.monthly_revenue?.toISOString().slice(0, 10) ?? null,
       createdAt: toIso(item.created_at),
     })),
     pagination: getPagination(query.page, query.limit, total),

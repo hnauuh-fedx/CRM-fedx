@@ -1,5 +1,6 @@
 import { informationFieldRules, informationReadOnlyReasons, leadInformationSystemFields } from "./lead-information-field-catalog";
 import { vietnamProvinces } from "@admission-crm/shared/vietnam-provinces";
+import { getLeadCustomFieldGroup, leadFieldGroupOrder } from "@admission-crm/shared/lead-field-groups";
 import { patchCandidateInformation } from "../students/candidate-profile.service";
 import { patchAdmissionInformation } from "../admissions/admission-profile-write.service";
 import { patchLeadAttribution } from "../campaigns/lead-attribution.service";
@@ -12,6 +13,7 @@ import { canUpdateLead } from "./application/lead-authorization";
 import { getLeadScopeWhere } from "./lead-list.service";
 import { getLeadCustomFieldDefinitions } from "./lead-custom-fields.service";
 import { saveSaleCustomFieldValues } from "./sale-custom-fields.service";
+import { clearResolvedUnmatchedValues } from "./lead-unmatched-values.service";
 import { leadPhoneDuplicateWhere } from "./application/lead-mutation-support";
 
 const systemColumns = {
@@ -40,21 +42,32 @@ export async function getLeadWritableFields(actor: AuthUser, programId: string |
         : (referenceOptions[field.key as keyof typeof referenceOptions] ?? []).map((option) => ({ code: option.id, label: option.name })),
       validationRules: informationFieldRules(field.key),
     }));
-  return [...systemFields, ...custom.fields.filter((field) => field.canView && field.canEdit)
+  const customFields = custom.fields.filter((field) => field.canView && field.canEdit)
     .map((field): AutomationWritableField => ({
       reference: `custom:${field.id}`, key: field.code, label: field.name, description: field.description,
-      dataType: field.dataType, groupKey: `custom:${field.group.key}`, groupLabel: `${field.group.label} (tùy chỉnh)`,
+      dataType: field.dataType, groupKey: getLeadCustomFieldGroup(field.group).id, groupLabel: getLeadCustomFieldGroup(field.group).label,
       source: "custom", isSensitive: field.isSensitive, canClear: !field.isRequired,
       validationRules: (field.validationRules ?? {}) as Record<string, unknown>,
       options: field.dataType === "PROVINCE" ? [...vietnamProvinces] : Array.isArray(field.options) ? field.options.flatMap((item) => {
         if (!item || typeof item !== "object" || Array.isArray(item)) return [];
         return item.isActive === true && typeof item.code === "string" && typeof item.label === "string" ? [{ code: item.code, label: item.label }] : [];
       }) : [],
-    }))];
+    }));
+  // Custom fields sit inside the Lead form cluster of their group, after that cluster's system fields.
+  return [...systemFields, ...customFields]
+    .map((field, index) => ({ field, index }))
+    .sort((left, right) => leadFieldGroupOrder(left.field.groupKey) - leadFieldGroupOrder(right.field.groupKey) || left.index - right.index)
+    .map(({ field }) => field);
 }
 
 /** The caller runs this inside the same transaction as its execution checkpoint. */
-export async function updateLeadInformationInTransaction(tx: Prisma.TransactionClient, actor: AuthUser, leadId: string, rawUpdates: unknown, programId?: string) {
+type InformationUpdateRecord = { activityContent: (changedCount: number) => string; auditAction: string; ipAddress?: string };
+const automationUpdateRecord: InformationUpdateRecord = {
+  activityContent: (changedCount) => `Automation cập nhật ${changedCount} trường thông tin.`,
+  auditAction: "automation_update_information",
+};
+
+export async function updateLeadInformationInTransaction(tx: Prisma.TransactionClient, actor: AuthUser, leadId: string, rawUpdates: unknown, programId?: string, record: InformationUpdateRecord = automationUpdateRecord) {
   if (!canUpdateLead(actor) || actor.accessScope === "READ_ONLY") throw new Error("Không có quyền cập nhật Lead.");
   if (programId && !actor.institutionProgramIds.includes(programId)) throw new Error("Không có quyền cập nhật chương trình này.");
   const parsed = automationInformationUpdatesSchema.safeParse(rawUpdates);
@@ -134,11 +147,14 @@ export async function updateLeadInformationInTransaction(tx: Prisma.TransactionC
   // The existing custom-field writer enforces applicability, sensitive-edit permission and typed storage.
   const customResult = await saveSaleCustomFieldValues(tx, actor, "LEAD", lead.id, lead.institution_program_id, customValues, undefined, true);
   if (!customResult.ok) throw new Error("Không thể cập nhật trường tùy chỉnh; kiểm tra quyền và giá trị.");
+  await clearResolvedUnmatchedValues(tx, lead.id, parsed.data
+    .filter((update) => update.operation !== "clear" && update.field.startsWith("system:"))
+    .map((update) => update.field.slice(7)));
   const changedFields = [...Object.keys(newData), ...customResult.changedFieldIds.map((id) => `custom:${id}`)];
   if (changedFields.length) {
     await tx.leads.update({ where: { id: lead.id }, data: { ...data, updated_at: new Date() } });
-    await tx.lead_activities.create({ data: { lead_id: lead.id, user_id: actor.id, type: "lead_updated", content: `Automation cập nhật ${changedFields.length} trường thông tin.` } });
-    await tx.audit_logs.create({ data: { user_id: actor.id, entity_type: "lead", entity_id: lead.id, action: "automation_update_information", old_data: oldData, new_data: { ...newData, changedFields } } });
+    await tx.lead_activities.create({ data: { lead_id: lead.id, user_id: actor.id, type: "lead_updated", content: record.activityContent(changedFields.length) } });
+    await tx.audit_logs.create({ data: { user_id: actor.id, entity_type: "lead", entity_id: lead.id, action: record.auditAction, ip_address: record.ipAddress, old_data: oldData, new_data: { ...newData, changedFields } } });
   }
   return { changedFields };
 }

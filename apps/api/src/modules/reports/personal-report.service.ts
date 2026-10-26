@@ -22,6 +22,22 @@ import {
   type PersonalReportTimePreset,
 } from "./report-definitions";
 import { resolveReportingScopeKeys } from "./reporting-scope";
+import {
+  isLegacyReportOperator,
+  isPresenceOperator,
+  isValidTypedCondition,
+  reportFilterOperators,
+  resolveReportDateBounds,
+  typedConditionSql,
+} from "./report-filter-conditions";
+import {
+  isReportLeadField,
+  isReportTagField,
+  reportTagConditionSql,
+  reportLeadCategoryCondition,
+  reportLeadFieldExpression,
+  reportLeadFieldValuesQuery,
+} from "./report-lead-fields";
 
 export type PersonalReportInput = {
   name: string;
@@ -335,8 +351,10 @@ function isStoredFilterCondition(value: unknown): value is PersonalReportFilterC
   if (!value || typeof value !== "object" || Array.isArray(value)) return false;
   const item = value as Record<string, unknown>;
   return typeof item.fieldKey === "string"
-    && ["EQUALS", "NOT_EQUALS", "GREATER_THAN_OR_EQUAL", "LESS_THAN_OR_EQUAL", "IS_NOT_EMPTY", "IS_EMPTY", "DATE_PRESET", "DATE_BETWEEN"].includes(String(item.operator))
+    && (reportFilterOperators as readonly string[]).includes(String(item.operator))
     && (item.value === undefined || typeof item.value === "string")
+    && (item.valueTo === undefined || typeof item.valueTo === "string")
+    && (item.numberValue === undefined || typeof item.numberValue === "number")
     && (item.fromDate === undefined || typeof item.fromDate === "string")
     && (item.toDate === undefined || typeof item.toDate === "string");
 }
@@ -346,6 +364,13 @@ export function validateConditions(dataset: DatasetDefinition, conditions: Perso
   return conditions.every((condition) => {
     const field = dataset.filterFields.find((item) => item.key === condition.fieldKey);
     if (!field) return false;
+    // Same operators as the Lead list filter, chosen by the field's filter type.
+    if (!isLegacyReportOperator(condition.operator)) return isValidTypedCondition(field.filterType, condition);
+    if (isReportLeadField(field.key) && field.type === "CATEGORY") {
+      if (!["LEADS", "QUALIFIED_LEADS"].includes(dataset.key)) return false;
+      return ["IS_NOT_EMPTY", "IS_EMPTY"].includes(condition.operator)
+        && condition.value === undefined && condition.fromDate === undefined && condition.toDate === undefined;
+    }
     if (field.type === "CATEGORY") {
       if (["GREATER_THAN_OR_EQUAL", "LESS_THAN_OR_EQUAL"].includes(condition.operator)) {
         return (dataset.key === "LEADS" || dataset.key === "QUALIFIED_LEADS")
@@ -377,6 +402,7 @@ export function recordIdExpression(datasetKey: PersonalReportDatasetKey) {
 
 export function rawFieldExpression(datasetKey: PersonalReportDatasetKey, fieldKey: string) {
   if (datasetKey === "LEADS" || datasetKey === "QUALIFIED_LEADS") {
+    if (isReportLeadField(fieldKey)) return reportLeadFieldExpression(fieldKey);
     if (fieldKey === "SOURCE") return Prisma.sql`fact.source_name`;
     if (fieldKey === "ASSIGNEE") return Prisma.sql`fact.assignee_name`;
     if (fieldKey === "PIPELINE_STAGE") return Prisma.sql`fact.pipeline_stage_name`;
@@ -407,6 +433,10 @@ function outputOrderExpression(datasetKey: PersonalReportDatasetKey, fieldKey: s
 }
 
 export function conditionSql(datasetKey: PersonalReportDatasetKey, condition: PersonalReportFilterCondition) {
+  if (!isLegacyReportOperator(condition.operator)) return typedReportConditionSql(datasetKey, condition);
+  if (isReportLeadField(condition.fieldKey) && ["IS_EMPTY", "IS_NOT_EMPTY"].includes(condition.operator)) {
+    return reportLeadCategoryCondition(condition.fieldKey, condition.operator, condition.value);
+  }
   if ((datasetKey === "LEADS" || datasetKey === "QUALIFIED_LEADS") && condition.fieldKey === "PIPELINE_STAGE" && ["GREATER_THAN_OR_EQUAL", "LESS_THAN_OR_EQUAL"].includes(condition.operator)) {
     return Prisma.sql`EXISTS (
       SELECT 1
@@ -432,6 +462,23 @@ export function conditionSql(datasetKey: PersonalReportDatasetKey, condition: Pe
     ? resolvePersonalReportDateRange({ timePreset: condition.value as PersonalReportTimePreset })
     : { fromDate: condition.fromDate!, toDate: condition.toDate! };
   return Prisma.sql`${expression} BETWEEN ${range!.fromDate}::date AND ${range!.toDate}::date`;
+}
+
+/** Fact columns shown with a placeholder name; presence is checked on the Lead itself. */
+const leadPresenceColumns: Record<string, string> = { ASSIGNEE: "assigned_to", SOURCE: "source_id", PIPELINE_STAGE: "pipeline_stage_id" };
+
+function typedReportConditionSql(datasetKey: PersonalReportDatasetKey, condition: PersonalReportFilterCondition) {
+  const field = personalReportDatasetDefinitions[datasetKey].fields.find((item) => item.key === condition.fieldKey);
+  if (!field) throw new Error("Trường báo cáo không nằm trong danh mục cho phép.");
+  if (isReportTagField(condition.fieldKey)) return reportTagConditionSql(condition);
+  const presenceColumn = leadPresenceColumns[condition.fieldKey];
+  if (isPresenceOperator(condition.operator) && presenceColumn && datasetKey !== "STUDENTS") {
+    const presence = condition.operator === "HAS_NO_VALUE"
+      ? Prisma.sql`presence_lead.${Prisma.raw(presenceColumn)} IS NULL`
+      : Prisma.sql`presence_lead.${Prisma.raw(presenceColumn)} IS NOT NULL`;
+    return Prisma.sql`EXISTS (SELECT 1 FROM leads presence_lead WHERE presence_lead.id = fact.lead_id AND ${presence})`;
+  }
+  return typedConditionSql(rawFieldExpression(datasetKey, condition.fieldKey), field.filterType, condition, todayInVietnam());
 }
 
 export function datasetBaseCondition(datasetKey: PersonalReportDatasetKey) {
@@ -485,6 +532,16 @@ export async function getPersonalReportFilterValues(user: AuthUser, datasetKey: 
   if (!user.institutionProgramIds.includes(institutionProgramId)) return null;
   const scopeKeys = resolveReportingScopeKeys(user);
   if (scopeKeys.length === 0) return [];
+  if (isReportLeadField(fieldKey)) {
+    const leadRows = await prisma.$queryRaw<Array<{ value: string; total: bigint | number }>>(reportLeadFieldValuesQuery(
+      fieldKey,
+      datasetFrom(datasetKey),
+      Prisma.sql`fact.scope_key IN (${Prisma.join(scopeKeys)})
+        AND fact.institution_program_id = ${institutionProgramId}::uuid
+        AND ${datasetBaseCondition(datasetKey)}`,
+    ));
+    return leadRows.map((item) => ({ value: item.value, label: item.value, count: Number(item.total) }));
+  }
   const expression = rawFieldExpression(datasetKey, fieldKey);
   const orderBy = datasetKey === "LEADS" && fieldKey === "PIPELINE_STAGE"
     ? Prisma.sql`MIN(fact.pipeline_stage_position) ASC NULLS LAST, value ASC`
@@ -524,7 +581,7 @@ async function executeDatasetSingleReport(user: AuthUser, stored: NonNullable<Aw
     GROUP BY ${expression}, ${orderExpression}
     ORDER BY ${orderExpression} ASC NULLS LAST, ${expression} ASC LIMIT 100
   `);
-  const values = rows.map((item) => ({ label: dimension.type === "DATE" ? formatColumnLabel(toIsoDate(item.label), granularity) : normalizeDimensionLabel(String(item.label || "Chưa xác định")), value: Number(item.total) }));
+  const values = rows.map((item) => ({ label: dimension.type === "DATE" ? dateLabel(item.label, granularity) : normalizeDimensionLabel(String(item.label || "Chưa xác định")), value: Number(item.total) }));
   const total = values.reduce((sum, item) => sum + item.value, 0);
   return {
     report: serializeReport(stored),
@@ -562,13 +619,13 @@ async function executeDatasetPivotReport(user: AuthUser, stored: NonNullable<Awa
       ${rowOrderExpression} ASC NULLS LAST, ${rowExpression} ASC LIMIT 5000
   `);
   const isDateColumn = columnField.type === "DATE";
-  const columnKey = (value: Date | string) => isDateColumn ? toIsoDate(value) : String(value || "Chưa xác định");
+  const columnKey = (value: Date | string | null) => isDateColumn && value ? toIsoDate(value) : String(value || "Chưa xác định");
   const columnKeys = [...new Set(rawRows.map((row) => columnKey(row.column_key)))].slice(0, 50);
-  const columns = columnKeys.map((key) => ({ key, label: isDateColumn ? formatColumnLabel(key, granularity) : normalizeDimensionLabel(key) }));
+  const columns = columnKeys.map((key) => ({ key, label: isDateColumn ? dateLabel(key === "Chưa xác định" ? null : key, granularity) : normalizeDimensionLabel(key) }));
   const valuesByRow = new Map<string, Record<string, number>>();
   const orderByRow = new Map<string, DimensionOrder>();
   for (const item of rawRows) {
-    const rowLabel = rowField.type === "DATE" ? formatColumnLabel(toIsoDate(item.row_label), granularity) : normalizeDimensionLabel(item.row_label || "Chưa xác định");
+    const rowLabel = rowField.type === "DATE" ? dateLabel(item.row_label, granularity) : normalizeDimensionLabel(item.row_label || "Chưa xác định");
     const key = columnKey(item.column_key);
     if (!columnKeys.includes(key)) continue;
     const values = valuesByRow.get(rowLabel) ?? {}; values[key] = Number(item.total); valuesByRow.set(rowLabel, values);
@@ -598,9 +655,15 @@ function compareDimensionOrder(left: DimensionOrder | undefined, right: Dimensio
 }
 
 function displayRange(filters: StoredFilters) {
-  const dateCondition = filters.conditions?.find((item) => item.operator === "DATE_PRESET" || item.operator === "DATE_BETWEEN");
-  if (dateCondition?.operator === "DATE_PRESET") return resolvePersonalReportDateRange({ timePreset: dateCondition.value as PersonalReportTimePreset });
-  if (dateCondition?.operator === "DATE_BETWEEN") return { fromDate: dateCondition.fromDate!, toDate: dateCondition.toDate! };
+  const dataset = filters.datasetKey ? personalReportDatasetDefinitions[filters.datasetKey] : undefined;
+  for (const condition of filters.conditions ?? []) {
+    if (condition.operator === "DATE_PRESET") return resolvePersonalReportDateRange({ timePreset: condition.value as PersonalReportTimePreset });
+    if (condition.operator === "DATE_BETWEEN") return { fromDate: condition.fromDate!, toDate: condition.toDate! };
+    const field = dataset?.fields.find((item) => item.key === condition.fieldKey);
+    if (field?.filterType !== "date" || isLegacyReportOperator(condition.operator) || condition.operator === "NOT_EQUALS") continue;
+    const bounds = resolveReportDateBounds(condition, todayInVietnam());
+    if (bounds.from && bounds.to) return { fromDate: bounds.from, toDate: bounds.to };
+  }
   return filters.timePreset ? resolvePersonalReportDateRange(filters) : null;
 }
 
@@ -801,6 +864,11 @@ function addUtcDays(value: Date, days: number) {
   const next = new Date(value);
   next.setUTCDate(next.getUTCDate() + days);
   return next;
+}
+
+/** Lead date fields can be empty, unlike the dataset's primary date. */
+function dateLabel(value: Date | string | null | undefined, granularity: PersonalReportDateGranularity) {
+  return value ? formatColumnLabel(toIsoDate(value), granularity) : "Chưa xác định";
 }
 
 function toIsoDate(value: Date | string) {

@@ -10,6 +10,7 @@ import {
 } from "./application/create-lead.use-case";
 import { updateLeadFromInboundInTransaction } from "./application/update-lead.use-case";
 import type { LeadInput } from "./domain/lead-input";
+import { syncInboundUnmatchedValues, type InboundUnmatchedValues } from "./lead-unmatched-values.service";
 
 type TransactionClient = Parameters<Parameters<typeof prisma.$transaction>[0]>[0];
 
@@ -37,6 +38,8 @@ type MutationInput = {
   };
   providedFields: Set<keyof LeadInput>;
   customFieldValues: InboundLeadCustomFieldValue[];
+  /** Raw values that did not match CRM options; stored with a "*" mark on the Lead. */
+  unmatchedValues?: InboundUnmatchedValues;
   canCreate: boolean;
   ipAddress?: string;
   enforceActorScope?: boolean;
@@ -243,6 +246,7 @@ export async function applyInboundLeadMutation(
         );
         if (!updated.ok)
           throw new InboundMutationFailure("custom_field_invalid");
+        await syncInboundUnmatchedValues(tx, input.actor, duplicate.id, input.unmatchedValues, input.ipAddress);
         await recordSourceOccurrence(tx, input, duplicate.id, originId);
         const completed = {
           ok: true as const,
@@ -272,6 +276,7 @@ export async function applyInboundLeadMutation(
       );
       if (!customResult.ok)
         throw new InboundMutationFailure("custom_field_invalid");
+      await syncInboundUnmatchedValues(tx, input.actor, created.data.id, input.unmatchedValues, input.ipAddress);
       await recordSourceOccurrence(tx, input, created.data.id, originId);
       const completed = {
         ok: true as const,

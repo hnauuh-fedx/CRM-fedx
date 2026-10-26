@@ -1,7 +1,8 @@
 import type { LeadListFilters, LeadListResponse, LeadSortField } from "@/modules/leads/lead.types";
 
-export type CustomerListFilterField = "fullName" | "leadCode" | "phone" | "email" | "pipelineStageId" | "sourceId" | "assigneeId" | "gender" | "dateOfBirth" | "majorId" | "createdAt";
-export type CustomerListFilterOperator = "contains" | "notContains" | "equals" | "notEquals" | "isEmpty" | "isNotEmpty" | "on" | "before" | "after" | "between" | "relative";
+/** Lead field key: the original list fields or any other Lead form field from the shared catalog. */
+export type CustomerListFilterField = string;
+export type CustomerListFilterOperator = "contains" | "notContains" | "equals" | "notEquals" | "isEmpty" | "isNotEmpty" | "on" | "before" | "after" | "between" | "relative" | "greaterThan" | "lessThan";
 export type CustomerListRelativeRange = "today" | "yesterday" | "thisWeek" | "lastWeek" | "last7Days" | "last30Days" | "thisMonth" | "lastMonth" | "thisQuarter" | "lastQuarter" | "thisYear" | "lastYear";
 export type CustomerListFilterCondition = {
   field: CustomerListFilterField;

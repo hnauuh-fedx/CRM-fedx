@@ -1,16 +1,20 @@
+import { leadFormFieldCatalog } from "@admission-crm/shared/lead-form-field-catalog";
+
 import { prisma } from "../../../database/prisma";
 import { Prisma } from "../../../generated/prisma/client";
 import { createManualUnassignmentEvent, dispatchManualUnassignmentEvent } from "../../automations/manual-unassignment-event.service";
 import {
   hasValidAdmissionReferences,
+  patchAdmissionInformation,
   saveAdmissionProfile,
 } from "../../admissions/admission-profile-write.service";
 import type { AuthUser } from "../../auth/auth.types";
 import { triggerAutomation } from "../../automations/automation-engine.service";
-import { saveLeadAttributionAndTags } from "../../campaigns/lead-attribution.service";
-import { saveCandidateProfile } from "../../students/candidate-profile.service";
+import { patchLeadAttribution, saveLeadAttributionAndTags } from "../../campaigns/lead-attribution.service";
+import { patchCandidateInformation, saveCandidateProfile } from "../../students/candidate-profile.service";
 import type { LeadInput } from "../domain/lead-input";
 import { isFailedLeadStatus } from "../domain/lead-lifecycle-status";
+import { clearResolvedUnmatchedValues } from "../lead-unmatched-values.service";
 import { recordTransitionNote, resolveTransitionNote } from "../transition-note.service";
 import {
   saveSaleCustomFieldValues,
@@ -37,6 +41,41 @@ function optionalInboundText(value: string | undefined) {
   return value?.trim() || null;
 }
 
+/** Lead columns an inbound request may overwrite; other Lead form fields live in related tables. */
+const inboundLeadColumns = {
+  fullName: "full_name",
+  phone: "phone",
+  email: "email",
+  sourceId: "source_id",
+  originId: "origin_id",
+  note: "note",
+  dateOfBirth: "date_of_birth",
+  gender: "gender",
+  cccd: "cccd",
+  majorId: "major_id",
+  temperature: "temperature",
+} as const;
+const leadCatalogFields = new Map(
+  leadFormFieldCatalog.flatMap((group) => group.fields).map((field) => [field.key, field]),
+);
+
+/** Converts a validated inbound string to the typed value the related-table writers store. */
+function inboundRelatedValue(key: string, raw: string | undefined): unknown {
+  const text = raw?.trim() ?? "";
+  if (key === "tags") return [...new Set(text.split(",").map((tag) => tag.trim()).filter(Boolean))].slice(0, 20);
+  if (!text) return null;
+  const dataType = leadCatalogFields.get(key)?.dataType;
+  if (dataType === "NUMBER") return Number(text);
+  if (dataType === "DATE") return new Date(`${text.slice(0, 10)}T00:00:00.000Z`);
+  return text;
+}
+
+function auditJson(value: unknown): Prisma.InputJsonValue {
+  if (value instanceof Date) return value.toISOString();
+  if (value === null || value === undefined) return { cleared: true };
+  return JSON.parse(JSON.stringify(value)) as Prisma.InputJsonValue;
+}
+
 export async function updateLeadFromInboundInTransaction(
   tx: Prisma.TransactionClient,
   actor: AuthUser,
@@ -47,122 +86,51 @@ export async function updateLeadFromInboundInTransaction(
   customFieldValues: SaleCustomFieldInput[],
   ipAddress?: string,
 ) {
-  const [oldLead, oldStudentProfile, oldAdmissionProfile, oldTracking] =
-    await Promise.all([
-      tx.leads.findUniqueOrThrow({
-        where: { id: leadId },
-        select: {
-          full_name: true,
-          phone: true,
-          email: true,
-          source_id: true,
-          origin_id: true,
-          note: true,
-          date_of_birth: true,
-        },
-      }),
-      tx.student_profiles.findUnique({
-        where: { lead_id: leadId },
-        select: { company_name: true, graduation_year: true },
-      }),
-      tx.admission_profiles.findUnique({
-        where: { lead_id: leadId },
-        select: { monthly_revenue: true, decision_signed_date: true },
-      }),
-      tx.utm_trackings.findFirst({
-        where: { lead_id: leadId },
-        select: { gclid: true },
-      }),
-    ]);
+  const leadSelect = {
+    full_name: true,
+    phone: true,
+    email: true,
+    source_id: true,
+    origin_id: true,
+    note: true,
+    date_of_birth: true,
+    gender: true,
+    cccd: true,
+    major_id: true,
+    temperature: true,
+  } as const;
+  const oldLead = await tx.leads.findUniqueOrThrow({ where: { id: leadId }, select: leadSelect });
 
-  const data: Prisma.leadsUncheckedUpdateInput = { updated_at: new Date() };
-  if (providedFields.has("fullName")) data.full_name = input.fullName.trim();
-  if (providedFields.has("phone")) data.phone = input.phone.trim();
-  if (providedFields.has("email")) data.email = optionalInboundText(input.email);
-  if (providedFields.has("sourceId")) data.source_id = input.sourceId;
-  if (providedFields.has("originId")) data.origin_id = input.originId;
-  if (providedFields.has("note")) data.note = optionalInboundText(input.note);
-  if (providedFields.has("dateOfBirth")) {
-    data.date_of_birth = input.dateOfBirth ? new Date(input.dateOfBirth) : null;
+  const data: Record<string, unknown> = { updated_at: new Date() };
+  for (const [key, column] of Object.entries(inboundLeadColumns)) {
+    if (!providedFields.has(key as keyof LeadInput)) continue;
+    const raw = input[key as keyof LeadInput] as string | undefined;
+    if (key === "fullName" || key === "phone") data[column] = String(raw ?? "").trim();
+    else if (key === "dateOfBirth") data[column] = raw ? new Date(raw) : null;
+    else if (key === "sourceId" || key === "originId") data[column] = raw;
+    else data[column] = optionalInboundText(raw);
   }
   const updatedLead = await tx.leads.update({
     where: { id: leadId },
-    data,
-    select: {
-      full_name: true,
-      phone: true,
-      email: true,
-      source_id: true,
-      origin_id: true,
-      note: true,
-      date_of_birth: true,
-    },
+    data: data as Prisma.leadsUncheckedUpdateInput,
+    select: leadSelect,
   });
 
-  if (providedFields.has("companyName") || providedFields.has("graduationYear")) {
-    const profileData: {
-      updated_at: Date;
-      company_name?: string | null;
-      graduation_year?: number | null;
-    } = { updated_at: new Date() };
-    if (providedFields.has("companyName")) {
-      profileData.company_name = optionalInboundText(input.companyName);
-    }
-    if (providedFields.has("graduationYear")) {
-      profileData.graduation_year = input.graduationYear
-        ? Number(input.graduationYear)
-        : null;
-    }
-    await tx.student_profiles.upsert({
-      where: { lead_id: leadId },
-      create: { lead_id: leadId, ...profileData },
-      update: profileData,
-    });
+  // Fields outside `leads` are patched only when the request sent them, so omitted fields keep their values.
+  const relatedValues: Record<string, unknown> = {};
+  for (const key of providedFields) {
+    if (!leadCatalogFields.has(key) || (key !== "majorId" && Object.hasOwn(inboundLeadColumns, key))) continue;
+    relatedValues[key] = inboundRelatedValue(key, input[key] as string | undefined);
   }
-
-  if (
-    providedFields.has("monthlyRevenue") ||
-    providedFields.has("decisionSignedDate")
-  ) {
-    const admissionData: {
-      updated_at: Date;
-      monthly_revenue?: string;
-      decision_signed_date?: Date | null;
-    } = { updated_at: new Date() };
-    if (providedFields.has("monthlyRevenue")) {
-      admissionData.monthly_revenue = input.monthlyRevenue ?? "0";
-    }
-    if (providedFields.has("decisionSignedDate")) {
-      admissionData.decision_signed_date = input.decisionSignedDate
-        ? new Date(input.decisionSignedDate)
-        : null;
-    }
-    await tx.admission_profiles.upsert({
-      where: { lead_id: leadId },
-      create: {
-        lead_id: leadId,
-        institution_program_id: institutionProgramId,
-        ...admissionData,
-      },
-      update: admissionData,
-    });
-  }
-
-  if (providedFields.has("gclid")) {
-    const tracking = await tx.utm_trackings.findFirst({
-      where: { lead_id: leadId },
-      select: { id: true },
-    });
-    if (tracking) {
-      await tx.utm_trackings.update({
-        where: { id: tracking.id },
-        data: { gclid: optionalInboundText(input.gclid) },
-      });
-    } else if (input.gclid?.trim()) {
-      await tx.utm_trackings.create({
-        data: { lead_id: leadId, gclid: input.gclid.trim() },
-      });
-    }
+  let relatedChanges: Record<string, { before: unknown; after: unknown }>;
+  try {
+    relatedChanges = {
+      ...(await patchCandidateInformation(tx, leadId, relatedValues)),
+      ...(await patchAdmissionInformation(tx, leadId, institutionProgramId, relatedValues)),
+      ...(await patchLeadAttribution(tx, leadId, relatedValues)),
+    };
+  } catch {
+    return { ok: false as const, reason: "invalid" as const };
   }
 
   const customResult = await saveSaleCustomFieldValues(
@@ -176,21 +144,6 @@ export async function updateLeadFromInboundInTransaction(
   );
   if (!customResult.ok) return customResult;
 
-  const [newStudentProfile, newAdmissionProfile, newTracking] =
-    await Promise.all([
-      tx.student_profiles.findUnique({
-        where: { lead_id: leadId },
-        select: { company_name: true, graduation_year: true },
-      }),
-      tx.admission_profiles.findUnique({
-        where: { lead_id: leadId },
-        select: { monthly_revenue: true, decision_signed_date: true },
-      }),
-      tx.utm_trackings.findFirst({
-        where: { lead_id: leadId },
-        select: { gclid: true },
-      }),
-    ]);
   await tx.lead_activities.create({
     data: {
       lead_id: leadId,
@@ -199,6 +152,8 @@ export async function updateLeadFromInboundInTransaction(
       content: "Cập nhật Lead từ inbound webhook.",
     },
   });
+  const relatedAudit = (side: "before" | "after") =>
+    Object.fromEntries(Object.entries(relatedChanges).map(([key, change]) => [key, auditJson(change[side])]));
   await tx.audit_logs.create({
     data: {
       user_id: actor.id,
@@ -207,34 +162,12 @@ export async function updateLeadFromInboundInTransaction(
       action: "webhook_update",
       ip_address: ipAddress,
       old_data: {
-        lead: {
-          ...oldLead,
-          date_of_birth: oldLead.date_of_birth?.toISOString() ?? null,
-        },
-        studentProfile: oldStudentProfile,
-        admissionProfile: oldAdmissionProfile
-          ? {
-              ...oldAdmissionProfile,
-              decision_signed_date:
-                oldAdmissionProfile.decision_signed_date?.toISOString() ?? null,
-            }
-          : null,
-        tracking: oldTracking,
+        lead: { ...oldLead, date_of_birth: oldLead.date_of_birth?.toISOString() ?? null },
+        related: relatedAudit("before"),
       },
       new_data: {
-        lead: {
-          ...updatedLead,
-          date_of_birth: updatedLead.date_of_birth?.toISOString() ?? null,
-        },
-        studentProfile: newStudentProfile,
-        admissionProfile: newAdmissionProfile
-          ? {
-              ...newAdmissionProfile,
-              decision_signed_date:
-                newAdmissionProfile.decision_signed_date?.toISOString() ?? null,
-            }
-          : null,
-        tracking: newTracking,
+        lead: { ...updatedLead, date_of_birth: updatedLead.date_of_birth?.toISOString() ?? null },
+        related: relatedAudit("after"),
         customFieldIds: customFieldValues.map((item) => item.fieldId),
       },
     },
@@ -358,6 +291,12 @@ export async function updateLead(
     await saveCandidateProfile(tx, leadId, input);
     await saveAdmissionProfile(tx, leadId, input);
     await saveLeadAttributionAndTags(tx, leadId, input);
+    // A value saved by the user replaces the unmatched webhook value marked with "*".
+    await clearResolvedUnmatchedValues(
+      tx,
+      leadId,
+      Object.entries(input).filter(([, value]) => typeof value === "string" && value.trim()).map(([key]) => key),
+    );
     await tx.lead_activities.create({
       data: {
         lead_id: leadId,

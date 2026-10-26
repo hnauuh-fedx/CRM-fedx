@@ -74,11 +74,6 @@ import type {
 
 const pageSize = 20;
 const dateFormatter = new Intl.DateTimeFormat("vi-VN");
-const moneyFormatter = new Intl.NumberFormat("vi-VN", {
-  style: "currency",
-  currency: "VND",
-  maximumFractionDigits: 0,
-});
 
 type State = {
   page: number;
@@ -145,13 +140,6 @@ function reducer(state: State, action: Action): State {
 
 function formatDate(value: string | null) {
   return value ? dateFormatter.format(new Date(value)) : "-";
-}
-
-function formatMoney(value: string | null) {
-  const numericValue = Number(value);
-  return Number.isFinite(numericValue)
-    ? moneyFormatter.format(numericValue)
-    : "-";
 }
 
 function getErrorMessage(error: unknown) {
@@ -695,7 +683,8 @@ function PaymentFields({
       />
       <TextInput
         id="monthly-revenue"
-        label="Doanh thu tháng"
+        label="Doanh số tháng"
+        type="date"
         value={form.monthlyRevenue ?? ""}
         onChange={(value) => setValue("monthlyRevenue", value)}
       />
@@ -810,7 +799,7 @@ function AdmissionFeeResults({
                   onSort={(sortBy) => dispatch({ type: "toggleSort", sortBy })}
                 />
                 <SortableHead
-                  label="Doanh thu tháng"
+                  label="Doanh số tháng"
                   sortBy="monthlyRevenue"
                   state={state}
                   onSort={(sortBy) => dispatch({ type: "toggleSort", sortBy })}
@@ -845,7 +834,7 @@ function AdmissionFeeResults({
                     <PaymentStatusBadge value={fee.tuitionStatus} />
                   </TableCell>
                   <TableCell className="px-3 py-2">
-                    {formatMoney(fee.monthlyRevenue)}
+                    {fee.monthlyRevenue ? formatDate(fee.monthlyRevenue) : "-"}
                   </TableCell>
                   <TableCell className="px-3 py-2">
                     {formatDate(fee.createdAt)}

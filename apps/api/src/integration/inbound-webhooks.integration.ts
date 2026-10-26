@@ -16,6 +16,7 @@ const programIds: string[] = [];
 const sourceIds: string[] = [];
 const webhookIds: string[] = [];
 const customFieldIds: string[] = [];
+const majorIds: string[] = [];
 let customFieldGroupId: string | null = null;
 let server: Server | null = null;
 let assertions = 0;
@@ -191,6 +192,7 @@ async function cleanup() {
       where: { id: customFieldGroupId },
     });
   await prisma.leads.deleteMany({ where: { id: { in: leadIds } } });
+  await prisma.majors.deleteMany({ where: { id: { in: majorIds } } });
   await prisma.lead_origins.deleteMany({ where: { institution_program_id: { in: programIds } } });
   await prisma.lead_sources.deleteMany({ where: { institution_program_id: { in: programIds } } });
   await prisma.user_roles.deleteMany({ where: { user_id: { in: userIds } } });
@@ -1067,20 +1069,28 @@ async function main() {
       },
     },
   );
+  equal(invalidSelect.status, 200, "Custom select sai option vẫn phải tạo Lead.");
+  check(
+    invalidSelect.payload.data.unmatched_fields.includes(`custom:${customFields[2].id}`),
+    "Response phải báo trường select chưa khớp.",
+  );
+  const invalidSelectLead = await prisma.leads.findFirstOrThrow({
+    where: { institution_program_id: programIds[0], phone: invalidSelectPhone },
+    select: { id: true },
+  });
   equal(
-    invalidSelect.payload.error.code,
-    "INVALID_FIELD_VALUE",
-    "Custom select sai option phải bị từ chối.",
+    (await prisma.lead_unmatched_field_values.findUnique({
+      where: { lead_id_field_key: { lead_id: invalidSelectLead.id, field_key: `custom:${customFields[2].id}` } },
+    }))?.raw_value,
+    "INVALID",
+    "Giá trị select chưa khớp phải được lưu nguyên văn để hiển thị kèm *.",
   );
   equal(
-    await prisma.leads.count({
-      where: {
-        institution_program_id: programIds[0],
-        phone: invalidSelectPhone,
-      },
+    await prisma.custom_field_values.count({
+      where: { custom_field_id: customFields[2].id, entity_id: invalidSelectLead.id },
     }),
     0,
-    "Custom field lỗi phải rollback Lead creation.",
+    "Giá trị chưa khớp không được ghi vào custom field.",
   );
   const invalidDatePhone = `088${Date.now().toString().slice(-7)}`;
   const invalidDate = await api(
@@ -1097,10 +1107,77 @@ async function main() {
       },
     },
   );
+  equal(invalidDate.status, 200, "Custom date không tồn tại vẫn phải tạo Lead.");
+  const invalidDateLead = await prisma.leads.findFirstOrThrow({
+    where: { institution_program_id: programIds[0], phone: invalidDatePhone },
+    select: { id: true },
+  });
   equal(
-    invalidDate.payload.error.code,
-    "INVALID_FIELD_VALUE",
-    "Custom date không tồn tại phải bị từ chối thay vì tự chuẩn hóa.",
+    (await prisma.lead_unmatched_field_values.findUnique({
+      where: { lead_id_field_key: { lead_id: invalidDateLead.id, field_key: `custom:${customFields[4].id}` } },
+    }))?.raw_value,
+    "2026-02-31",
+    "Ngày không tồn tại phải được lưu nguyên văn thay vì tự chuẩn hóa.",
+  );
+  const major = await prisma.majors.create({
+    data: { name: "Công nghệ thông tin", code: `CNTT-${runId}`, institution_program_id: programIds[0] },
+    select: { id: true },
+  });
+  majorIds.push(major.id);
+  const majorWebhook = await api(baseUrl, "/settings/webhooks", {
+    token: managerToken,
+    programId: programIds[0],
+    method: "POST",
+    body: {
+      ...webhookInput,
+      name: "Major mapping",
+      duplicatePolicy: "UPDATE_EXISTING",
+      mappings: [
+        ...webhookInput.mappings,
+        { incomingKey: "major", crmField: "majorId", isRequired: false, defaultValue: null },
+        { incomingKey: "school", crmField: "highSchoolName", isRequired: false, defaultValue: null },
+      ],
+    },
+  });
+  equal(majorWebhook.status, 201, "Phải map được ngành và trường THPT.");
+  webhookIds.push(majorWebhook.payload.id);
+  const majorPhone = `085${Date.now().toString().slice(-7)}`;
+  const unmatchedMajor = await api(baseUrl, `/webhooks/${majorWebhook.payload.webhookKey}`, {
+    secret: majorWebhook.payload.secret,
+    method: "POST",
+    body: { name: "Major Lead", phone: majorPhone, major: "Ngành chưa có", school: "THPT A" },
+  });
+  equal(unmatchedMajor.status, 200, "Ngành chưa khớp vẫn phải tạo Lead.");
+  check(unmatchedMajor.payload.data.unmatched_fields.includes("majorId"), "Response phải báo ngành chưa khớp.");
+  const majorLead = await prisma.leads.findFirstOrThrow({
+    where: { institution_program_id: programIds[0], phone: majorPhone },
+    select: { id: true, major_id: true, student_profiles: { select: { high_school_name: true } } },
+  });
+  equal(majorLead.major_id, null, "Ngành chưa khớp không được gán vào Lead.");
+  equal(majorLead.student_profiles?.high_school_name, "THPT A", "Trường THPT phải được lưu khi tạo Lead.");
+  equal(
+    (await prisma.lead_unmatched_field_values.findUnique({
+      where: { lead_id_field_key: { lead_id: majorLead.id, field_key: "majorId" } },
+    }))?.raw_value,
+    "Ngành chưa có",
+    "Ngành chưa khớp phải được lưu nguyên văn để hiển thị kèm *.",
+  );
+  const matchedMajor = await api(baseUrl, `/webhooks/${majorWebhook.payload.webhookKey}`, {
+    secret: majorWebhook.payload.secret,
+    method: "POST",
+    body: { name: "Major Lead", phone: majorPhone, major: "cong nghe thong tin", school: "THPT B" },
+  });
+  equal(matchedMajor.payload.data?.action, "updated", "Lead trùng phải được cập nhật.");
+  const updatedMajorLead = await prisma.leads.findUniqueOrThrow({
+    where: { id: majorLead.id },
+    select: { major_id: true, student_profiles: { select: { high_school_name: true } } },
+  });
+  equal(updatedMajorLead.major_id, major.id, "Tên ngành không dấu phải khớp với ngành của chương trình.");
+  equal(updatedMajorLead.student_profiles?.high_school_name, "THPT B", "Cập nhật Lead trùng phải ghi trường THPT.");
+  equal(
+    await prisma.lead_unmatched_field_values.count({ where: { lead_id: majorLead.id } }),
+    0,
+    "Giá trị khớp phải xóa dấu * cũ.",
   );
   await prisma.custom_fields.update({
     where: { id: customFields[4].id },

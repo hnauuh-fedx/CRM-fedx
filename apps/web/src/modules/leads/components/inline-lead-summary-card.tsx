@@ -28,6 +28,7 @@ import { toLeadFormOptions, toLeadFormValues } from "../lead-form.helpers";
 import { LeadAssigneeLines, LeadAssigneeSelects } from "./lead-assignee";
 import { CopyPhoneButton, LeadPhoneLines, nonStandardPhoneClass } from "./lead-phone";
 import type { LeadActionOptions, LeadDetail, LeadFormInput } from "../lead.types";
+import { getUnmatchedValue, UnmatchedValue } from "./lead-unmatched-values";
 
 type EditableField =
   | "fullName"
@@ -228,9 +229,15 @@ export function InlineLeadSummaryCard({
       setErrors((current) => ({ ...current, [field]: undefined }));
   };
 
-  const editableValue = (field: EditableField, label: string, value: string, children?: ReactNode) => (
-    <ReadonlyValue label={label} value={value} editable={canUpdate} onEdit={() => startEditingField(field)}>{children}</ReadonlyValue>
-  );
+  const editableValue = (field: EditableField, label: string, value: string, children?: ReactNode) => {
+    // An unmatched webhook value is shown with "*" until the user saves a valid value.
+    const unmatched = getUnmatchedValue(lead, field);
+    return (
+      <ReadonlyValue label={label} value={unmatched ? `${unmatched.rawValue}*` : value} editable={canUpdate} onEdit={() => startEditingField(field)}>
+        {unmatched ? <UnmatchedValue value={unmatched.rawValue} /> : children}
+      </ReadonlyValue>
+    );
+  };
   const secondaryPhones = draft.secondaryPhones ?? [];
 
   return (

@@ -13,6 +13,7 @@ import type {
   DashboardPipelineStage,
   PersonalReportDatasetDefinition,
 } from "@/modules/reports/report.types";
+import { isLegacyReportOperator, isReportConditionComplete } from "./report-filter-rows";
 
 export function DashboardKpiEditorDialog({ widget, copiedWidget, datasets, pipelineStages, accessToken, onCancel, onSave }: {
   widget: DashboardKpiWidgetInput;
@@ -160,7 +161,8 @@ function isValidDraft(
 
 function validConditions(widget: DashboardKpiWidgetInput, pipelineStages: DashboardPipelineStage[]) {
   return widget.conditions.every((condition) => {
-    if (condition.operator === "EQUALS" || condition.operator === "NOT_EQUALS") return Boolean(condition.value);
+    // Lead-list-style operators: the row only needs the values its operator asks for.
+    if (!isLegacyReportOperator(condition.operator)) return isReportConditionComplete(condition);
     if (["IS_NOT_EMPTY", "IS_EMPTY"].includes(condition.operator)) {
       return ["LEADS", "QUALIFIED_LEADS"].includes(widget.datasetKey) && ["ASSIGNEE", "SOURCE"].includes(condition.fieldKey);
     }

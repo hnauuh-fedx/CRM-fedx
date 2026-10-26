@@ -56,9 +56,15 @@ export type WebhookField = {
     | "date"
     | "datetime"
     | "email"
-    | "phone";
+    | "phone"
+    | "select"
+    | "multi_select"
+    | "province";
   requiredByCrm: boolean;
   group: "STANDARD" | "CUSTOM";
+  /** Lead form cluster the field belongs to. */
+  groupKey?: string;
+  groupLabel?: string;
   customFieldId?: string;
   options?: string[];
 };

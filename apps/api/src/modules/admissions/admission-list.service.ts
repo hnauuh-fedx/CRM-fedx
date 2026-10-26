@@ -111,7 +111,7 @@ export async function listAdmissionProfiles(user: AuthUser, query: AdmissionList
       registrationStation: profile.registration_station,
       decisionNumber: profile.decision_number,
       decisionSignedDate: profile.decision_signed_date?.toISOString() ?? null,
-      monthlyRevenue: profile.monthly_revenue == null ? null : String(profile.monthly_revenue),
+      monthlyRevenue: profile.monthly_revenue?.toISOString().slice(0, 10) ?? null,
       createdAt: profile.created_at?.toISOString() ?? null,
       student: profile.students ? { id: profile.students.id, studentCode: profile.students.student_code } : null,
       lead: profile.leads

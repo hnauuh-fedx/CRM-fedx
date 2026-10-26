@@ -256,6 +256,15 @@ function dashboardWhere(widget: DashboardKpiWidgetInput, institutionProgramId: s
     ${conditions.length ? Prisma.sql`AND ${Prisma.join(conditions, " AND ")}` : Prisma.empty}`;
 }
 
+/** Vietnamese wording of the Lead-list-style operators in KPI descriptions. */
+const typedOperatorLabels: Record<string, string> = {
+  CONTAINS: "chứa", NOT_CONTAINS: "không chứa", STARTS_WITH: "bắt đầu bằng", ENDS_WITH: "kết thúc bằng",
+  GT: ">", GTE: ">=", LT: "<", LTE: "<=", BETWEEN: "trong khoảng",
+  IS_TODAY: "hôm nay", IS_YESTERDAY: "hôm qua", IS_THIS_WEEK: "tuần này", IS_LAST_WEEK: "tuần trước",
+  IS_THIS_MONTH: "tháng này", IS_LAST_MONTH: "tháng trước", IS_QUARTER_1: "quý 1", IS_QUARTER_2: "quý 2",
+  IS_QUARTER_3: "quý 3", IS_QUARTER_4: "quý 4", IS_X_DAYS_AGO: "ngày trước", HAS_VALUE: "có giá trị", HAS_NO_VALUE: "không có giá trị",
+};
+
 function describeFilters(widget: DashboardKpiWidgetInput, fallback: string, stages: PipelineStageOption[]) {
   if (widget.conditions.length === 0) return fallback;
   const dataset = personalReportDatasetDefinitions[widget.datasetKey];
@@ -272,7 +281,11 @@ function describeFilters(widget: DashboardKpiWidgetInput, fallback: string, stag
         ? `${field.label} đến “${stage?.name ?? "giai đoạn đã chọn"}” trở về trước`
         : `${field.label} từ “${stage?.name ?? "giai đoạn đã chọn"}” trở đi`;
     }
-    return `${field.label} ${condition.operator === "NOT_EQUALS" ? "không bằng" : "bằng"} “${condition.value ?? ""}”`;
+    const label = typedOperatorLabels[condition.operator];
+    if (label === undefined) return `${field.label} ${condition.operator === "NOT_EQUALS" ? "không bằng" : "bằng"} “${condition.value ?? ""}”`;
+    if (condition.operator === "BETWEEN") return `${field.label} ${label} ${condition.value ?? ""} – ${condition.valueTo ?? ""}`;
+    if (condition.operator === "IS_X_DAYS_AGO") return `${field.label}: ${condition.numberValue ?? 0} ngày trước`;
+    return condition.value ? `${field.label} ${label} “${condition.value}”` : `${field.label}: ${label}`;
   }).filter(Boolean);
   return `Bộ lọc: ${descriptions.join("; ")}`;
 }

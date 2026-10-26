@@ -1,10 +1,12 @@
 import { Plus, Trash2 } from "lucide-react";
+import { getLeadFieldGroup, leadFieldGroupOrder } from "@admission-crm/shared/lead-field-groups";
 import { useFieldArray, type UseFormReturn } from "react-hook-form";
 import {
   CreateCustomerListFormValues,
   filterFields,
 } from "./customer-list-filter-model";
 
+import { GroupedFieldPicker, type GroupedFieldOption } from "@/components/shared/grouped-field-picker";
 import { Button } from "@/components/ui/button";
 import {
   Field,
@@ -46,6 +48,17 @@ const textOperators: Array<{
 const selectOperators = textOperators.filter(
   (item) => !["contains", "notContains"].includes(item.value),
 );
+const numberOperators: Array<{
+  value: CustomerListFilterOperator;
+  label: string;
+}> = [
+  { value: "equals", label: "Bằng" },
+  { value: "notEquals", label: "Không bằng" },
+  { value: "greaterThan", label: "Lớn hơn" },
+  { value: "lessThan", label: "Nhỏ hơn" },
+  { value: "isEmpty", label: "Chưa có dữ liệu" },
+  { value: "isNotEmpty", label: "Có dữ liệu" },
+];
 const dateOperators: Array<{
   value: CustomerListFilterOperator;
   label: string;
@@ -86,11 +99,11 @@ function defaultCondition(
 ): CustomerListFilterCondition {
   if (field === "createdAt")
     return { field, operator: "relative", relativeRange: "thisMonth" };
-  if (field === "dateOfBirth") return { field, operator: "on", value: "" };
   const type = filterFields.find((item) => item.value === field)?.type;
+  if (type === "date") return { field, operator: "on", value: "" };
   return {
     field,
-    operator: type === "select" ? "equals" : "contains",
+    operator: type === "select" || type === "number" ? "equals" : "contains",
     value: "",
   };
 }
@@ -98,6 +111,7 @@ function defaultCondition(
 function operatorOptions(field: CustomerListFilterField) {
   if (field === "createdAt") return createdAtOperators;
   const type = filterFields.find((item) => item.value === field)?.type;
+  if (type === "number") return numberOperators;
   return type === "date"
     ? dateOperators
     : type === "select"
@@ -129,13 +143,30 @@ function selectValueOptions(
       value: item.id,
       label: item.name,
     }));
+  // Lead form stores gender codes, not the Vietnamese labels.
   if (field === "gender")
     return [
-      { value: "Nam", label: "Nam" },
-      { value: "Nữ", label: "Nữ" },
-      { value: "Khác", label: "Khác" },
+      { value: "male", label: "Nam" },
+      { value: "female", label: "Nữ" },
+      { value: "other", label: "Khác" },
     ];
+  if (field === "admissionStatusId")
+    return (options?.admissionStatuses ?? []).map((item) => ({
+      value: item.id,
+      label: item.name,
+    }));
   return [];
+}
+
+/** Groups filter fields by the Lead form cluster they belong to, in Lead form order. */
+function toLeadFieldOptions(fields: Array<{ value: string; label: string }>): GroupedFieldOption[] {
+  return fields
+    .map((field, index) => {
+      const group = getLeadFieldGroup(field.value) ?? { id: "basic", label: "Thông tin cơ bản" };
+      return { option: { value: field.value, label: field.label, groupKey: group.id, groupLabel: group.label }, index };
+    })
+    .sort((left, right) => leadFieldGroupOrder(left.option.groupKey) - leadFieldGroupOrder(right.option.groupKey) || left.index - right.index)
+    .map(({ option }) => option);
 }
 
 function SelectField({
@@ -232,7 +263,7 @@ function ConditionValue({
     );
   return (
     <Input
-      type={type === "date" ? "date" : "text"}
+      type={type === "date" ? "date" : type === "number" ? "number" : "text"}
       aria-label="Giá trị lọc"
       placeholder="Nhập giá trị"
       {...form.register(`${prefix}.value`)}
@@ -255,7 +286,8 @@ export function CustomerListFilterBuilder({
   const values = form.watch("filters.conditions");
   const availableFields = auth.can("lead.sensitive.view")
     ? filterFields
-    : filterFields.filter((item) => !["phone", "email"].includes(item.value));
+    : filterFields.filter((item) => !item.sensitive);
+  const fieldOptions = toLeadFieldOptions(availableFields);
   return (
     <FieldSet className="rounded-lg border bg-muted/25 p-4">
       <FieldLegend>Bộ lọc tự động (không bắt buộc)</FieldLegend>
@@ -299,11 +331,11 @@ export function CustomerListFilterBuilder({
                 <FieldLabel htmlFor={`${prefix}-field`}>
                   Trường dữ liệu
                 </FieldLabel>
-                <SelectField
+                <GroupedFieldPicker
                   id={`${prefix}-field`}
                   value={condition.field}
                   placeholder="Chọn trường"
-                  options={availableFields}
+                  options={fieldOptions}
                   onChange={(value) =>
                     conditions.update(
                       index,

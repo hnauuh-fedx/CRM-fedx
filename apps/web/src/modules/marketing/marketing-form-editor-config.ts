@@ -1,5 +1,8 @@
 import type { UseFormReturn } from "react-hook-form";
+import { getLeadFieldGroup, leadFieldGroupOrder } from "@admission-crm/shared/lead-field-groups";
 import { normalizeMarketingFormOptions } from "@admission-crm/shared/marketing-form-config";
+import { marketingLeadFieldLabel, marketingLeadMappingFields } from "@admission-crm/shared/marketing-form-lead-fields";
+import type { GroupedFieldOption } from "@/components/shared/grouped-field-picker";
 import type {
   MarketingFormField,
   MarketingFormFieldType,
@@ -7,17 +10,25 @@ import type {
   MarketingFormLeadField,
 } from "./marketing-reference.types";
 
-export const leadFieldLabels: Record<MarketingFormLeadField, string> = {
-  full_name: "Họ và tên",
-  phone: "Số điện thoại",
-  email: "Email",
-  gender: "Giới tính",
-  date_of_birth: "Ngày sinh",
-  note: "Ghi chú",
-  source_id: "Nguồn lead",
-  institution_program_id: "Chương trình",
-  major_id: "Ngành đăng ký",
-};
+export const leadFieldLabels: Record<MarketingFormLeadField, string> = Object.fromEntries(
+  marketingLeadMappingFields.map((field) => [field, marketingLeadFieldLabel(field)]),
+);
+/** CRM targets for a question, grouped by Lead form cluster; the "none" choice stays on top without a heading. */
+export function marketingLeadFieldOptions(
+  targets: MarketingFormLeadField[],
+  none: { value: string; label: string },
+  labelPrefix = "",
+): GroupedFieldOption[] {
+  const grouped = targets
+    .map((target, index) => {
+      const group = getLeadFieldGroup(target) ?? { id: "basic", label: "Thông tin cơ bản" };
+      return { option: { value: target, label: `${labelPrefix}${marketingLeadFieldLabel(target)}`, groupKey: group.id, groupLabel: group.label }, index };
+    })
+    .sort((left, right) => leadFieldGroupOrder(left.option.groupKey) - leadFieldGroupOrder(right.option.groupKey) || left.index - right.index)
+    .map(({ option }) => option);
+  return [{ value: none.value, label: none.label, groupKey: "", groupLabel: "" }, ...grouped];
+}
+
 export const fieldTypeLabels: Record<MarketingFormFieldType, string> = {
   text: "Văn bản",
   textarea: "Nội dung dài",

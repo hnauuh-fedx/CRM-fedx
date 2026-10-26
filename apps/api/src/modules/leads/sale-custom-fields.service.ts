@@ -5,6 +5,7 @@ import { prisma } from "../../database/prisma";
 import type { AuthUser } from "../auth/auth.types";
 import { vietnamProvinceCodes } from "../custom-fields/vietnam-provinces";
 import { getLeadScopeWhere } from "./lead-list.service";
+import { clearResolvedUnmatchedValues } from "./lead-unmatched-values.service";
 import { getMarketingFormVisibility } from "../campaigns/marketing-form-scope";
 
 export type SaleCustomFieldEntityType = "SALE_ACTIVITY" | "SALE_REMINDER";
@@ -519,6 +520,14 @@ export async function saveSaleCustomFieldValues(
         },
       },
     });
+  }
+  if (entityType === "LEAD") {
+    // A stored value replaces the unmatched webhook value marked with "*".
+    await clearResolvedUnmatchedValues(
+      tx,
+      entityId,
+      prepared.filter((item) => item.value !== null).map((item) => `custom:${item.field.id}`),
+    );
   }
   return { ok: true as const, changedFieldIds };
 }

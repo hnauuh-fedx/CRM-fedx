@@ -1,3 +1,5 @@
+import { getLeadCustomFieldGroup, getLeadFieldGroup, leadFieldGroupOrder } from "@admission-crm/shared/lead-field-groups";
+import { leadFormFieldCatalog } from "@admission-crm/shared/lead-form-field-catalog";
 import { vietnamProvinces } from "@/lib/vietnam-provinces";
 import type { LeadCustomField, LeadCustomFieldDataType, LeadFilterOptions } from "./lead.types";
 
@@ -35,7 +37,9 @@ export type FilterConditionState = {
 export type FilterFieldDefinition = {
   key: string;
   label: string;
-  group: "Thông tin cơ bản" | "Tiến trình" | "Phân công" | "Trường tùy chỉnh";
+  /** Lead form cluster (Thông tin cơ bản, Học vấn và tốt nghiệp, ...). */
+  groupKey: string;
+  group: string;
   dataType: FilterDataType;
   options?: Array<{ value: string; label: string }>;
   /** Cho phép lọc theo số lượng giá trị (vd: lead có 2 số điện thoại / 2 nhân viên). */
@@ -69,34 +73,34 @@ export function getAvailableFields(
   options: LeadFilterOptions | undefined,
   canViewSensitiveLeadData: boolean,
 ): FilterFieldDefinition[] {
-  const system: FilterFieldDefinition[] = [
-    { key: "fullName", label: "Họ và tên", group: "Thông tin cơ bản", dataType: "text" },
+  const system: Array<Omit<FilterFieldDefinition, "group" | "groupKey">> = [
+    { key: "fullName", label: "Họ và tên", dataType: "text" },
     ...(canViewSensitiveLeadData
       ? [
-          { key: "phone", label: "Số điện thoại", group: "Thông tin cơ bản", dataType: "text", maxCount: 6 } as const,
-          { key: "email", label: "Email", group: "Thông tin cơ bản", dataType: "text" } as const,
+          { key: "phone", label: "Số điện thoại", dataType: "text", maxCount: 6 } as const,
+          { key: "email", label: "Email", dataType: "text" } as const,
         ]
       : []),
-    { key: "leadCode", label: "Mã lead", group: "Thông tin cơ bản", dataType: "text" },
-    { key: "dateOfBirth", label: "Ngày sinh", group: "Thông tin cơ bản", dataType: "date" },
-    { key: "createdAt", label: "Ngày tạo", group: "Thông tin cơ bản", dataType: "date" },
-    { key: "temperature", label: "Mức độ quan tâm", group: "Thông tin cơ bản", dataType: "text" },
-    { key: "gclid", label: "GCLID", group: "Thông tin cơ bản", dataType: "text" },
+    { key: "leadCode", label: "Mã lead", dataType: "text" },
+    { key: "dateOfBirth", label: "Ngày sinh", dataType: "date" },
+    { key: "createdAt", label: "Ngày tạo", dataType: "date" },
+    { key: "temperature", label: "Mức độ quan tâm", dataType: "text" },
+    { key: "gclid", label: "GCLID", dataType: "text" },
     {
-      key: "pipelineStageId", label: "Tiến trình", group: "Tiến trình", dataType: "enum",
+      key: "pipelineStageId", label: "Tiến trình", dataType: "enum",
       options: (options?.stages ?? []).map((stage) => ({ value: stage.id, label: stage.name })),
     },
-    { key: "status", label: "Trạng thái", group: "Tiến trình", dataType: "enum", options: statusOptions },
+    { key: "status", label: "Trạng thái", dataType: "enum", options: statusOptions },
     {
-      key: "sourceId", label: "Nguồn học viên", group: "Tiến trình", dataType: "enum",
+      key: "sourceId", label: "Nguồn học viên", dataType: "enum",
       options: (options?.sources ?? []).map((source) => ({ value: source.id, label: source.name })),
     },
     {
-      key: "majorId", label: "Ngành đăng ký", group: "Tiến trình", dataType: "enum",
+      key: "majorId", label: "Ngành đăng ký", dataType: "enum",
       options: (options?.majors ?? []).map((major) => ({ value: major.id, label: major.name })),
     },
     {
-      key: "assigneeId", label: "Nhân viên phụ trách", group: "Phân công", dataType: "enum", maxCount: 2,
+      key: "assigneeId", label: "Nhân viên phụ trách", dataType: "enum", maxCount: 2,
       options: (options?.assignees ?? []).map((assignee) => ({ value: assignee.id, label: assignee.fullName })),
     },
   ];
@@ -105,7 +109,8 @@ export function getAvailableFields(
     .map<FilterFieldDefinition>((field) => ({
       key: `cf:${field.id}`,
       label: field.name,
-      group: "Trường tùy chỉnh",
+      groupKey: getLeadCustomFieldGroup(field.group).id,
+      group: getLeadCustomFieldGroup(field.group).label,
       dataType: DATA_TYPE_MAP[field.dataType] ?? "text",
       options: field.dataType === "PROVINCE"
         ? vietnamProvinces.map((province) => ({ value: province.code, label: province.label }))
@@ -113,7 +118,37 @@ export function getAvailableFields(
           ?.filter((option) => option.isActive)
           .map((option) => ({ value: option.code, label: option.label })),
     }));
-  return [...system, ...custom];
+  // Every other Lead form field (profile, education, address, relatives, admission) from the shared catalog.
+  const legacyKeys = new Set(system.map((field) => field.key));
+  for (const group of leadFormFieldCatalog) {
+    for (const field of group.fields) {
+      if (legacyKeys.has(field.key) || field.key === "institutionProgramId") continue;
+      if ((field.isSensitive || field.storage.startsWith("addresses.")) && !canViewSensitiveLeadData) continue;
+      system.push({
+        key: field.key,
+        label: field.label,
+        dataType: field.dataType === "NUMBER" ? "number" : field.dataType === "DATE" ? "date" : field.dataType === "SELECT" ? "enum" : "text",
+        ...(field.dataType === "SELECT" ? { options: catalogOptions(field.key, options) } : {}),
+      });
+    }
+  }
+  const grouped = system.map<FilterFieldDefinition>((field) => {
+    const group = getLeadFieldGroup(field.key) ?? { id: "basic", label: "Thông tin cơ bản" };
+    return { ...field, groupKey: group.id, group: group.label };
+  });
+  // Custom fields join the Lead form cluster of their group, after that cluster's system fields.
+  return [...grouped, ...custom]
+    .map((field, index) => ({ field, index }))
+    .sort((left, right) => leadFieldGroupOrder(left.field.groupKey) - leadFieldGroupOrder(right.field.groupKey) || left.index - right.index)
+    .map(({ field }) => field);
+}
+
+const genderOptions = [{ value: "male", label: "Nam" }, { value: "female", label: "Nữ" }, { value: "other", label: "Khác" }];
+
+function catalogOptions(key: string, options: LeadFilterOptions | undefined) {
+  if (key === "gender") return genderOptions;
+  if (key === "admissionStatusId") return (options?.admissionStatuses ?? []).map((status) => ({ value: status.id, label: status.name }));
+  return [];
 }
 
 export function findFieldDefinition(

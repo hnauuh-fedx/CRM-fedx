@@ -35,7 +35,7 @@ const fieldLabels: Record<string, string> = {
   relative2FullName: "Họ tên người thân 2", relative2Relationship: "Quan hệ người thân 2", relative2Phone: "Điện thoại người thân 2", relative2Job: "Nghề nghiệp người thân 2", relative2Address: "Địa chỉ người thân 2",
   trainingCode: "Mã hệ đào tạo", classCode: "Mã lớp", subjectGroupCode: "Mã tổ hợp", subjectGroupName: "Tên tổ hợp",
   score1: "Điểm môn 1", score2: "Điểm môn 2", score3: "Điểm môn 3", admissionScore: "Điểm xét tuyển", enrollmentBatch: "Đợt nhập học",
-  registrationStation: "Trạm đăng ký", decisionNumber: "Số quyết định", decisionSignedDate: "Ngày ký quyết định", monthlyRevenue: "Doanh thu tháng", gclid: "GCLID", tags: "Thẻ",
+  registrationStation: "Trạm đăng ký", decisionNumber: "Số quyết định", decisionSignedDate: "Ngày ký quyết định", monthlyRevenue: "Doanh số tháng", gclid: "GCLID", tags: "Thẻ",
 };
 
 // Free text, contact details and personal information use the same permission as Lead details.

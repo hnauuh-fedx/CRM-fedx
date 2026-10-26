@@ -1,23 +1,26 @@
 import type { UseFormReturn } from "react-hook-form";
 import { resolveMarketingFormRedirect } from "@admission-crm/shared/marketing-form-embed";
+import { GroupedFieldPicker } from "@/components/shared/grouped-field-picker";
 import { Button } from "@/components/ui/button";
 import { Field, FieldDescription, FieldError, FieldGroup, FieldLabel } from "@/components/ui/field";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Select, SelectContent, SelectGroup, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { marketingLeadFieldOptions } from "./marketing-form-editor-config";
 import { MarketingFormSubmissionSettings } from "./marketing-form-submission-settings";
 import type { MarketingFormInput, MarketingFormLeadField } from "./marketing-reference.types";
 
-export function MarketingFormCrmPanel({ form, labels, targets }: { form: UseFormReturn<MarketingFormInput>; labels: Record<MarketingFormLeadField, string>; targets: MarketingFormLeadField[] }) {
+export function MarketingFormCrmPanel({ form, targets }: { form: UseFormReturn<MarketingFormInput>; targets: MarketingFormLeadField[] }) {
   const fields = form.watch("fields");
+  const targetOptions = marketingLeadFieldOptions(targets, { value: "survey", label: "Chỉ lưu câu trả lời khảo sát" }, "CRM: ");
   return <FieldGroup className="p-5"><p className="text-sm text-muted-foreground">Mỗi câu hỏi luôn giữ câu trả lời khảo sát. Chỉ chọn trường CRM nếu muốn ghi vào Lead theo chế độ xử lý đã lưu.</p>{fields.map((field, index) => {
     const error = form.formState.errors.fields?.[index]?.crmMappingField;
-    return <Field key={field.fieldKey} data-invalid={Boolean(error)}><FieldLabel htmlFor={`crm-target-${index}`}>{index + 1}. {field.label}</FieldLabel><Select value={field.crmMappingField ?? field.leadField ?? "survey"} onValueChange={value => {
+    return <Field key={field.fieldKey} data-invalid={Boolean(error)}><FieldLabel htmlFor={`crm-target-${index}`}>{index + 1}. {field.label}</FieldLabel><GroupedFieldPicker id={`crm-target-${index}`} value={field.crmMappingField ?? field.leadField ?? "survey"} options={targetOptions} aria-invalid={Boolean(error)} onChange={value => {
       const target = value === "survey" ? null : value as MarketingFormLeadField;
       form.setValue(`fields.${index}.crmMappingField`, target, { shouldDirty: true, shouldValidate: true });
       form.setValue(`fields.${index}.leadField`, target, { shouldDirty: true, shouldValidate: true });
-    }}><SelectTrigger id={`crm-target-${index}`} className="w-full" aria-invalid={Boolean(error)}><SelectValue /></SelectTrigger><SelectContent><SelectGroup><SelectItem value="survey">Chỉ lưu câu trả lời khảo sát</SelectItem>{targets.map(target => <SelectItem key={target} value={target}>CRM: {labels[target]}</SelectItem>)}</SelectGroup></SelectContent></Select><FieldError errors={[error]} /></Field>;
+    }} /><FieldError errors={[error]} /></Field>;
   })}</FieldGroup>;
 }
 

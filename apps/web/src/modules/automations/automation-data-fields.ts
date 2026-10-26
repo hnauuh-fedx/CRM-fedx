@@ -1,3 +1,5 @@
+import { getLeadCustomFieldGroup, leadFieldGroupOrder } from "@admission-crm/shared/lead-field-groups";
+
 import type {
   AutomationCustomDataField,
   AutomationDataField,
@@ -29,14 +31,18 @@ export function buildAutomationDataFields(
     label: field.label,
     description: field.description,
     dataType: field.dataType,
-    groupKey: `custom:${field.group.key}`,
-    groupLabel: `${field.group.label} (tùy chỉnh)`,
+    groupKey: getLeadCustomFieldGroup(field.group).id,
+    groupLabel: getLeadCustomFieldGroup(field.group).label,
     source: "custom" as const,
     isSensitive: field.isSensitive,
     options: readOptions(field.options),
   }));
 
-  return [...systemFields, ...configuredFields];
+  // Custom fields sit inside the Lead form cluster of their group, after that cluster's system fields.
+  return [...systemFields, ...configuredFields]
+    .map((field, index) => ({ field, index }))
+    .sort((left, right) => leadFieldGroupOrder(left.field.groupKey) - leadFieldGroupOrder(right.field.groupKey) || left.index - right.index)
+    .map(({ field }) => field);
 }
 
 export function normalizeAutomationFieldReference(reference?: string) {

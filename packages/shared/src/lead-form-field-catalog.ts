@@ -117,7 +117,7 @@ export const leadFormFieldCatalog: LeadSystemFieldGroup[] = [
       field("registrationStation", "Trạm đăng ký", "TEXT", "admission_profiles.registration_station"),
       field("decisionNumber", "Số quyết định", "TEXT", "admission_profiles.decision_number"),
       field("decisionSignedDate", "Ngày ký quyết định", "DATE", "admission_profiles.decision_signed_date"),
-      field("monthlyRevenue", "Doanh số tháng", "NUMBER", "admission_profiles.monthly_revenue"),
+      field("monthlyRevenue", "Doanh số tháng", "DATE", "admission_profiles.monthly_revenue"),
     ],
   },
   {

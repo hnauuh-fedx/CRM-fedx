@@ -30,6 +30,7 @@ import {
   getPersonalDashboardConfig,
   updatePersonalDashboardConfig,
 } from "./personal-dashboard.service";
+import { reportFilterOperators } from "./report-filter-conditions";
 
 export const reportsRouter = Router();
 const overviewQuerySchema = z.object({
@@ -59,8 +60,10 @@ const personalReportInputSchema = z.object({
   singleDisplay: z.enum(["TABLE", "LINE"]).optional(),
   conditions: z.array(z.object({
     fieldKey: z.string().min(1).max(80),
-    operator: z.enum(["EQUALS", "NOT_EQUALS", "GREATER_THAN_OR_EQUAL", "LESS_THAN_OR_EQUAL", "IS_NOT_EMPTY", "IS_EMPTY", "DATE_PRESET", "DATE_BETWEEN"]),
+    operator: z.enum(reportFilterOperators),
     value: z.string().max(255).optional(),
+    valueTo: z.string().max(255).optional(),
+    numberValue: z.number().int().min(0).max(3650).optional(),
     fromDate: z.iso.date().optional(),
     toDate: z.iso.date().optional(),
   })).max(5).optional(),
@@ -71,8 +74,10 @@ const idSchema = z.uuid();
 const paginationSchema = z.object({ page: z.coerce.number().int().positive().default(1), limit: z.coerce.number().int().min(1).max(50).default(20) });
 const dashboardFilterConditionSchema = z.object({
   fieldKey: z.string().min(1).max(80),
-  operator: z.enum(["EQUALS", "NOT_EQUALS", "GREATER_THAN_OR_EQUAL", "LESS_THAN_OR_EQUAL", "IS_NOT_EMPTY", "IS_EMPTY", "DATE_PRESET", "DATE_BETWEEN"]),
+  operator: z.enum(reportFilterOperators),
   value: z.string().max(255).optional(),
+  valueTo: z.string().max(255).optional(),
+  numberValue: z.number().int().min(0).max(3650).optional(),
   fromDate: z.iso.date().optional(),
   toDate: z.iso.date().optional(),
 });

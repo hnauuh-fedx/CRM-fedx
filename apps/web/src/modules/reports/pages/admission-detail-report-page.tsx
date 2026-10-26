@@ -7,7 +7,6 @@ import {
   GraduationCap,
   ReceiptText,
   TrendingUp,
-  Wallet,
 } from "lucide-react";
 import { BreakdownCard, MetricCard } from "@/components/shared/dashboard-cards";
 import { EmptyState } from "@/components/shared/data-states";
@@ -24,11 +23,6 @@ import {
 import type { AdmissionReportApplication } from "@/modules/reports/report.types";
 import { getAdmissionDetailReport } from "@/services/report.service";
 const integerFormatter = new Intl.NumberFormat("vi-VN");
-const currencyFormatter = new Intl.NumberFormat("vi-VN", {
-  style: "currency",
-  currency: "VND",
-  maximumFractionDigits: 0,
-});
 const dateFormatter = new Intl.DateTimeFormat("vi-VN");
 
 export function AdmissionDetailReportPage() {
@@ -85,13 +79,6 @@ export function AdmissionDetailReportPage() {
               label="Tỷ lệ chuyển đổi"
               value={`${reportQuery.data.summary.conversionRate}%`}
               icon={TrendingUp}
-            />
-            <MetricCard
-              label="Doanh thu dự kiến"
-              value={currencyFormatter.format(
-                reportQuery.data.summary.monthlyRevenue,
-              )}
-              icon={Wallet}
             />
             <MetricCard
               label="Tài liệu đã ghi nhận"
@@ -161,7 +148,7 @@ function RecentApplicationsTable({
                 { label: "Ngành" },
                 { label: "Trạng thái" },
                 { label: "Học phí" },
-                { label: "Doanh thu", className: "px-5" },
+                { label: "Doanh số tháng", className: "px-5" },
               ]}
               className="bg-muted/55 text-xs uppercase text-muted-foreground"
             />
@@ -187,7 +174,7 @@ function RecentApplicationsTable({
                     {formatStatus(application.tuitionStatus)}
                   </TableCell>
                   <TableCell className="px-3 tabular-nums">
-                    {currencyFormatter.format(application.monthlyRevenue)}
+                    {formatDate(application.monthlyRevenue) ?? "-"}
                   </TableCell>
                 </TableRow>
               ))}

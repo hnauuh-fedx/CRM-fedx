@@ -25,6 +25,7 @@ import type {
   LeadFormInput,
 } from "../lead.types";
 import { LeadForm } from "./lead-form";
+import { LeadUnmatchedValuesNotice, withUnmatchedValue } from "./lead-unmatched-values";
 import { useLeadSurfaceLayout } from "./use-lead-surface-layout";
 
 type Props = {
@@ -35,7 +36,16 @@ type Props = {
   canUpdate?: boolean;
   options?: LeadActionOptions;
 };
-export function LeadDetailLayout({
+export function LeadDetailLayout(props: Props) {
+  return (
+    <>
+      <LeadUnmatchedValuesNotice lead={props.lead} />
+      <ConfiguredLeadDetail {...props} />
+    </>
+  );
+}
+
+function ConfiguredLeadDetail({
   lead,
   enabled,
   children,
@@ -136,7 +146,7 @@ function LeadDetailFields({
         <div key={key} className="min-w-0" data-layout-field={key}>
           <dt className="text-sm text-muted-foreground">{labels.get(key)}</dt>
           <dd className="mt-1 whitespace-pre-wrap break-words text-sm font-medium">
-            {key === "phone" ? <LeadPhoneLines lead={lead} /> : key === "assigneeId" ? <LeadAssigneeLines lead={lead} /> : value(key)}
+            {key === "phone" ? <LeadPhoneLines lead={lead} /> : key === "assigneeId" ? <LeadAssigneeLines lead={lead} /> : withUnmatchedValue(lead, key, value(key))}
           </dd>
         </div>
       ))}

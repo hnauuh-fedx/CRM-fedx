@@ -1085,7 +1085,7 @@ function LeadAdmissionSection({
           label="Doanh số tháng"
           register={form.register}
           errors={form.formState.errors}
-          inputMode="decimal"
+          type="date"
         />
       </FieldGroup>
       <CustomFieldInputs

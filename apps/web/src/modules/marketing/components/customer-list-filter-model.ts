@@ -1,18 +1,22 @@
 import { z } from "zod";
+import { leadFormFieldCatalog } from "@admission-crm/shared/lead-form-field-catalog";
 import type {
   CustomerListFilterField,
   CustomerListFilterOperator,
   CustomerListRelativeRange,
 } from "../customer-list.types";
-export const filterFields: Array<{
+export type CustomerListFilterFieldDefinition = {
   value: CustomerListFilterField;
   label: string;
-  type: "text" | "select" | "date";
-}> = [
+  type: "text" | "select" | "date" | "number";
+  /** Needs `lead.sensitive.view`, as enforced by the API. */
+  sensitive?: boolean;
+};
+const legacyFilterFields: CustomerListFilterFieldDefinition[] = [
   { value: "fullName", label: "Họ và tên", type: "text" },
   { value: "leadCode", label: "Mã Lead", type: "text" },
-  { value: "phone", label: "Số điện thoại", type: "text" },
-  { value: "email", label: "Email", type: "text" },
+  { value: "phone", label: "Số điện thoại", type: "text", sensitive: true },
+  { value: "email", label: "Email", type: "text", sensitive: true },
   { value: "pipelineStageId", label: "Quy trình Telesale", type: "select" },
   { value: "sourceId", label: "Nguồn HV", type: "select" },
   { value: "assigneeId", label: "Nhân viên sale", type: "select" },
@@ -21,6 +25,20 @@ export const filterFields: Array<{
   { value: "majorId", label: "Ngành đăng ký", type: "select" },
   { value: "createdAt", label: "Ngày tạo", type: "date" },
 ];
+const legacyKeys = new Set(legacyFilterFields.map((field) => field.value));
+/** Every other Lead form field; tags are only filterable in the Lead list. */
+export const filterFields: CustomerListFilterFieldDefinition[] = [
+  ...legacyFilterFields,
+  ...leadFormFieldCatalog.flatMap((group) => group.fields)
+    .filter((field) => !legacyKeys.has(field.key) && !["institutionProgramId", "tags"].includes(field.key))
+    .map((field): CustomerListFilterFieldDefinition => ({
+      value: field.key,
+      label: field.label,
+      type: field.dataType === "NUMBER" ? "number" : field.dataType === "DATE" ? "date" : field.dataType === "SELECT" ? "select" : "text",
+      sensitive: Boolean(field.isSensitive) || field.storage.startsWith("addresses."),
+    })),
+];
+
 export const operatorValues: [
   CustomerListFilterOperator,
   ...CustomerListFilterOperator[],
@@ -36,6 +54,8 @@ export const operatorValues: [
   "after",
   "between",
   "relative",
+  "greaterThan",
+  "lessThan",
 ];
 export const relativeRangeValues: [
   CustomerListRelativeRange,

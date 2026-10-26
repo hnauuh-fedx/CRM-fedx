@@ -115,7 +115,7 @@ const feeQuerySchema = z.object({
 const feePaymentBodySchema = z.object({
   feeStatus: z.string().trim().max(100).optional(),
   tuitionStatus: z.string().trim().max(100).optional(),
-  monthlyRevenue: z.string().trim().max(30).optional(),
+  monthlyRevenue: z.union([z.iso.date(), z.literal("")]).optional(),
   paymentAmount: z.string().trim().max(30).optional(),
   paymentMethod: z.string().trim().max(100).optional(),
   paidAt: z.string().trim().max(30).optional(),
@@ -147,7 +147,7 @@ const profileBodySchema = z.object({
   registrationStation: z.string().trim().max(150).optional(),
   decisionNumber: z.string().trim().max(150).optional(),
   decisionSignedDate: z.string().trim().max(30).optional(),
-  monthlyRevenue: z.string().trim().max(30).optional(),
+  monthlyRevenue: z.union([z.iso.date(), z.literal("")]).optional(),
   feeStatus: z.string().trim().max(100).optional(),
   tuitionStatus: z.string().trim().max(100).optional(),
 }) satisfies z.ZodType<AdmissionProfileInput>;

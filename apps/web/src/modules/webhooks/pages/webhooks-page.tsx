@@ -19,6 +19,7 @@ import {
 import { useState } from "react";
 import { Controller, useFieldArray, useForm } from "react-hook-form";
 import { EmptyState } from "@/components/shared/data-states";
+import { GroupedFieldPicker, type GroupedFieldOption } from "@/components/shared/grouped-field-picker";
 import { ErrorState } from "@/components/shared/error-state";
 import { PageHeader } from "@/components/shared/page-header";
 import { TableLoadingState } from "@/components/shared/table-loading-state";
@@ -56,7 +57,6 @@ import {
   SelectContent,
   SelectGroup,
   SelectItem,
-  SelectLabel,
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
@@ -557,7 +557,8 @@ function WebhookDetails({
               <CopyButton value={url} label="Sao chép URL" />
             </div>
           </Field>
-          <FieldSet>
+          {/* A fieldset grows to its content by default; min-w-0 lets the table scroll inside the card. */}
+          <FieldSet className="min-w-0">
             <FieldLegend>Field mapping</FieldLegend>
             <div className="overflow-x-auto">
               <Table>
@@ -796,6 +797,31 @@ function WebhookDetails({
   );
 }
 
+const webhookFieldTypeLabels: Record<WebhookField["type"], string> = {
+  string: "Văn bản",
+  number: "Số",
+  boolean: "Đúng/Sai",
+  date: "Ngày",
+  datetime: "Ngày giờ",
+  email: "Email",
+  phone: "Số điện thoại",
+  select: "Chọn một",
+  multi_select: "Chọn nhiều",
+  province: "Tỉnh/Thành",
+};
+
+function toWebhookFieldOptions(fields: WebhookField[]): GroupedFieldOption[] {
+  return fields.map((field) => ({
+    value: field.key,
+    label: field.requiredByCrm ? `${field.label} *` : field.label,
+    groupKey: field.groupKey ?? field.group,
+    groupLabel: field.groupLabel ?? (field.group === "CUSTOM" ? "Trường tùy chỉnh" : "Trường hệ thống"),
+    description: webhookFieldTypeLabels[field.type] ?? field.type,
+    badge: field.group === "CUSTOM" ? "Tùy chỉnh" : undefined,
+    keywords: [field.key],
+  }));
+}
+
 type WebhookFormProps = {
   initialValue: WebhookInput;
   fields: WebhookField[];
@@ -821,8 +847,8 @@ function WebhookForm({
 }: WebhookFormProps) {
   const form = useForm<WebhookInput>({ defaultValues: initialValue });
   const mappings = useFieldArray({ control: form.control, name: "mappings" });
-  const standardFields = fields.filter((field) => field.group === "STANDARD");
   const customFields = fields.filter((field) => field.group === "CUSTOM");
+  const fieldOptions = toWebhookFieldOptions(fields);
   return (
     <form
       className="flex flex-col gap-6"
@@ -992,45 +1018,18 @@ function WebhookForm({
                 </FieldError>
               </Field>
               <Field>
-                <FieldLabel>Trường CRM</FieldLabel>
+                <FieldLabel htmlFor={`crm-field-${index}`}>Trường CRM</FieldLabel>
                 <Controller
                   control={form.control}
                   name={`mappings.${index}.crmField`}
                   render={({ field }) => (
-                    <Select value={field.value} onValueChange={field.onChange}>
-                      <SelectTrigger
-                        className="w-full"
-                        aria-label={`Trường CRM cho mapping ${index + 1}`}
-                      >
-                        <SelectValue />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectGroup>
-                          <SelectLabel>Trường hệ thống</SelectLabel>
-                          {standardFields.map((option) => (
-                            <SelectItem key={option.key} value={option.key}>
-                              {option.label} · {option.type}
-                            </SelectItem>
-                          ))}
-                        </SelectGroup>
-                        <SelectGroup>
-                          <SelectLabel>
-                            Trường tùy chỉnh ({customFields.length})
-                          </SelectLabel>
-                          {customFields.length === 0 ? (
-                            <p className="px-2 py-1.5 text-sm text-muted-foreground">
-                              Chưa có trường Lead tùy chỉnh đang dùng.
-                            </p>
-                          ) : (
-                            customFields.map((option) => (
-                              <SelectItem key={option.key} value={option.key}>
-                                {option.label} · {option.type}
-                              </SelectItem>
-                            ))
-                          )}
-                        </SelectGroup>
-                      </SelectContent>
-                    </Select>
+                    <GroupedFieldPicker
+                      id={`crm-field-${index}`}
+                      value={field.value}
+                      options={fieldOptions}
+                      onChange={field.onChange}
+                      aria-label={`Trường CRM cho mapping ${index + 1}`}
+                    />
                   )}
                 />
               </Field>

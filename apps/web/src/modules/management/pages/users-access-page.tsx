@@ -195,19 +195,19 @@ export function UsersAccessPage() {
                 <caption className="sr-only">Danh sách người dùng hệ thống</caption>
                 <TableHeader className="bg-muted/55">
                   <TableRow>
-                    <TableHead className="min-w-56 px-3">Người dùng</TableHead>
-                    <TableHead>Chương trình / vai trò</TableHead>
+                    <TableHead className="min-w-56 px-4">Người dùng</TableHead>
+                    <TableHead>Vai trò</TableHead>
                     <TableHead>Phòng ban</TableHead>
-                    <TableHead>Scope</TableHead>
+                    <TableHead>Phạm vi dữ liệu</TableHead>
                     <TableHead>Trạng thái</TableHead>
-                    <TableHead>Đăng nhập gần nhất</TableHead>
-                    <TableHead className="text-right">Thao tác</TableHead>
+                    <TableHead className="whitespace-nowrap">Đăng nhập gần nhất</TableHead>
+                    <TableHead className="px-4 text-right">Thao tác</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
                   {data.map((user) => (
                     <TableRow key={user.id}>
-                      <TableCell className="px-3">
+                      <TableCell className="px-4">
                         <div className="font-medium">{user.fullName}</div>
                         <div className="text-sm text-muted-foreground">
                           {user.email}
@@ -216,7 +216,7 @@ export function UsersAccessPage() {
                       </TableCell>
                       <TableCell>
                         <BadgeList
-                          values={user.roles.map((role) => role.name)}
+                          values={getProgramRoleNames(user, selectedProgramId)}
                           emptyText="Chưa gán vai trò"
                         />
                       </TableCell>
@@ -228,24 +228,23 @@ export function UsersAccessPage() {
                           emptyText="Chưa gán phòng ban"
                         />
                       </TableCell>
-                      <TableCell><BadgeList values={user.programAssignments.map((grant) => `${grant.institutionName} - ${grant.programName}: ${grant.roleName}`)} emptyText="Chưa gán vai trò" /></TableCell>
-                      <TableCell><BadgeList values={user.departments.map((department) => department.name)} emptyText="Chưa gán phòng ban" /></TableCell>
-                      <TableCell>{scopeLabels[user.accessScope]}</TableCell>
+                      <TableCell className="whitespace-nowrap text-sm">{scopeLabels[user.accessScope]}</TableCell>
                       <TableCell>
                         <Badge
                           variant={
                             user.status === "active" ? "secondary" : "outline"
                           }
+                          className="whitespace-nowrap"
                         >
                           {statusLabels[user.status]}
                         </Badge>
                       </TableCell>
-                      <TableCell>
+                      <TableCell className="whitespace-nowrap text-sm text-muted-foreground">
                         {user.lastLoginAt
                           ? dateFormatter.format(new Date(user.lastLoginAt))
                           : "Chưa đăng nhập"}
                       </TableCell>
-                      <TableCell className="text-right">
+                      <TableCell className="px-4 text-right">
                         <Button
                           type="button"
                           size="sm"
@@ -379,6 +378,13 @@ function FilterSelect({
       </Select>
     </Field>
   );
+}
+
+function getProgramRoleNames(user: ManagedUser, programId: string | null | undefined) {
+  const programRoles = user.programAssignments
+    .filter((grant) => grant.institutionProgramId === programId)
+    .map((grant) => grant.roleName);
+  return programRoles.length > 0 ? programRoles : user.roles.map((role) => role.name);
 }
 
 function BadgeList({

@@ -20,12 +20,16 @@ export function LeadFilterConditionValue({
   condition,
   fieldDef,
   onChange,
+  className,
 }: {
   condition: FilterConditionState;
-  fieldDef: FilterFieldDefinition;
+  fieldDef: Pick<FilterFieldDefinition, "label" | "dataType" | "options" | "maxCount">;
   onChange: (patch: Partial<FilterConditionState>) => void;
+  /** Overrides the compact width used in the Lead list filter row. */
+  className?: string;
 }) {
   const { operator, value, valueTo, numberValue } = condition;
+  const controlClassName = cn(valueClassName, className);
   if (!operatorNeedsValueInput(operator)) return null;
   const label = `Giá trị lọc cho ${fieldDef.label}`;
 
@@ -41,7 +45,7 @@ export function LeadFilterConditionValue({
         value={numberValue ?? ""}
         onChange={(event) => onChange({ numberValue: event.target.value === "" ? null : Math.max(0, Math.trunc(Number(event.target.value))) })}
         placeholder="Nhập số lượng"
-        className={valueClassName}
+        className={controlClassName}
       />
     );
   }
@@ -57,7 +61,7 @@ export function LeadFilterConditionValue({
         value={numberValue ?? ""}
         onChange={(event) => onChange({ numberValue: event.target.value === "" ? null : Math.trunc(Number(event.target.value)) })}
         placeholder="Nhập số ngày"
-        className={valueClassName}
+        className={controlClassName}
       />
     );
   }
@@ -66,7 +70,7 @@ export function LeadFilterConditionValue({
     if (operator === "BETWEEN") {
       return (
         <DateRangeFilter
-          className="w-full sm:w-64"
+          className={cn("w-full sm:w-64", className)}
           buttonClassName="h-9"
           placeholder="Từ ngày – đến ngày"
           fromDate={typeof value === "string" ? value : ""}
@@ -83,7 +87,7 @@ export function LeadFilterConditionValue({
             type="button"
             variant="outline"
             aria-label={label}
-            className={cn(valueClassName, "justify-start font-normal", !selected && "text-muted-foreground")}
+            className={cn(controlClassName, "justify-start font-normal", !selected && "text-muted-foreground")}
           >
             <CalendarIcon aria-hidden="true" />
             {selected ? format(selected, "dd/MM/yyyy") : "Chọn ngày"}
@@ -118,7 +122,7 @@ export function LeadFilterConditionValue({
       );
     }
     return (
-      <Input type="number" aria-label={label} placeholder="Nhập số" className={valueClassName}
+      <Input type="number" aria-label={label} placeholder="Nhập số" className={controlClassName}
         value={value === null || value === undefined ? "" : String(value)}
         onChange={(event) => onChange({ value: toNumber(event.target.value) })} />
     );
@@ -128,7 +132,7 @@ export function LeadFilterConditionValue({
     const options = fieldDef.options ?? [];
     return (
       <Select value={typeof value === "string" && value ? value : undefined} onValueChange={(next) => onChange({ value: next })}>
-        <SelectTrigger aria-label={label} className={valueClassName} disabled={options.length === 0}>
+        <SelectTrigger aria-label={label} className={controlClassName} disabled={options.length === 0}>
           <SelectValue placeholder={options.length === 0 ? "Không có dữ liệu" : "Chọn giá trị"} />
         </SelectTrigger>
         <SelectContent>
@@ -143,7 +147,7 @@ export function LeadFilterConditionValue({
   if (fieldDef.dataType === "boolean") {
     return (
       <Select value={value === true ? "true" : value === false ? "false" : undefined} onValueChange={(next) => onChange({ value: next === "true" })}>
-        <SelectTrigger aria-label={label} className={valueClassName}>
+        <SelectTrigger aria-label={label} className={controlClassName}>
           <SelectValue placeholder="Chọn giá trị" />
         </SelectTrigger>
         <SelectContent>
@@ -161,7 +165,7 @@ export function LeadFilterConditionValue({
       onChange={(event) => onChange({ value: event.target.value })}
       placeholder="Nhập giá trị"
       maxLength={500}
-      className={valueClassName}
+      className={controlClassName}
     />
   );
 }

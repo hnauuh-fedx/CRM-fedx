@@ -30,7 +30,7 @@ export const admissionProfileFormFieldCatalog: SystemFormFieldGroup[] = [
       field("classCode", "M\u00e3 l\u1edbp d\u1ef1 ki\u1ebfn", "TEXT", "admission_profiles.class_code"),
       field("enrollmentBatch", "\u0110\u1ee3t nh\u1eadp h\u1ecdc", "TEXT", "admission_profiles.enrollment_batch"),
       field("admissionScore", "\u0110i\u1ec3m x\u00e9t tuy\u1ec3n", "TEXT", "admission_profiles.admission_score"),
-      field("monthlyRevenue", "H\u1ecdc ph\u00ed d\u1ef1 ki\u1ebfn", "TEXT", "admission_profiles.monthly_revenue"),
+      field("monthlyRevenue", "Doanh s\u1ed1 th\u00e1ng", "DATE", "admission_profiles.monthly_revenue"),
       field("feeStatus", "Tr\u1ea1ng th\u00e1i ph\u00ed", "TEXT", "admission_profiles.fee_status"),
       field("tuitionStatus", "Tr\u1ea1ng th\u00e1i h\u1ecdc ph\u00ed", "TEXT", "admission_profiles.tuition_status"),
     ],

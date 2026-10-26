@@ -20,6 +20,7 @@ import {
 import { leadListPermissions } from "./lead-list.service";
 import { getInstitutionProgramScope } from "../institutions/institution-program-scope";
 import { getSaleCustomFieldDefinitions, getSaleCustomFields } from "./sale-custom-fields.service";
+import { customerLookupPermission, getCustomerLookupOptions, listCustomerLookup } from "./customer-lookup.service";
 
 const pagingSchema = {
   page: z.coerce.number().int().min(1).default(1),
@@ -32,6 +33,13 @@ const assignmentQuerySchema = z.object({
   status: z.enum(["assigned", "unassigned"]).default("assigned"),
   assigneeId: z.uuid().optional().or(z.literal("")).transform((value) => value || undefined),
   sourceId: z.uuid().optional().or(z.literal("")).transform((value) => value || undefined),
+});
+const customerLookupQuerySchema = z.object({
+  ...pagingSchema,
+  type: z.enum(["all", "candidates", "students"]).default("all"),
+  sourceId: z.uuid().optional().or(z.literal("")).transform((value) => value || undefined),
+  assigneeId: z.uuid().optional().or(z.literal("")).transform((value) => value || undefined),
+  sortBy: z.enum(["fullName", "createdAt", "updatedAt"]).default("createdAt"),
 });
 const activityQuerySchema = z.object({
   ...pagingSchema,
@@ -68,6 +76,27 @@ saleOverviewRouter.use(requireAuthentication);
 saleOverviewRouter.get("/options", requireAnyPermission(...leadListPermissions), async (request, response, next) => {
   try {
     response.json(await getSaleFilterOptions(request.authUser!, getInstitutionProgramScope(request)));
+  } catch (error) {
+    next(error);
+  }
+});
+
+saleOverviewRouter.get("/customer-lookup", requireAnyPermission(customerLookupPermission), async (request, response, next) => {
+  try {
+    const parsed = customerLookupQuerySchema.safeParse(request.query);
+    if (!parsed.success) {
+      response.status(400).json({ message: "Tham số tra cứu khách hàng không hợp lệ." });
+      return;
+    }
+    response.json(await listCustomerLookup(request.authUser!, { ...parsed.data, institutionProgramId: getInstitutionProgramScope(request) }));
+  } catch (error) {
+    next(error);
+  }
+});
+
+saleOverviewRouter.get("/customer-lookup/options", requireAnyPermission(customerLookupPermission), async (request, response, next) => {
+  try {
+    response.json(await getCustomerLookupOptions(getInstitutionProgramScope(request)));
   } catch (error) {
     next(error);
   }

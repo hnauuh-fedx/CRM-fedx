@@ -133,7 +133,7 @@ function toProfileData(input: AdmissionProfileInput, institutionProgramId: strin
     registration_station: emptyToNull(input.registrationStation),
     decision_number: emptyToNull(input.decisionNumber),
     decision_signed_date: toDate(input.decisionSignedDate),
-    monthly_revenue: toDecimalString(input.monthlyRevenue) ?? 0,
+    monthly_revenue: toDate(input.monthlyRevenue),
     fee_status: emptyToNull(input.feeStatus),
     tuition_status: emptyToNull(input.tuitionStatus),
     expires_at: toDate(input.expiresAt),

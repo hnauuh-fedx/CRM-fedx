@@ -2,7 +2,8 @@ import { useMemo } from "react";
 import { MoreHorizontal, Trash2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
-import { Select, SelectContent, SelectGroup, SelectItem, SelectLabel, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { GroupedFieldPicker, type GroupedFieldOption } from "@/components/shared/grouped-field-picker";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { cn } from "@/lib/utils";
 import { LeadFilterConditionValue } from "./lead-filter-condition-value";
 import type { FilterCombinator, FilterConditionState, FilterFieldDefinition, FilterOperator } from "@/modules/leads/filter-fields";
@@ -30,11 +31,12 @@ export function LeadFilterConditionRow({
   const fieldDef = findFieldDefinition(availableFields, condition.field);
   const operators: FilterOperator[] = getFieldOperators(fieldDef);
   const rowNumber = index + 1;
-  const groupedFields = useMemo(() => {
-    const groups = new Map<string, FilterFieldDefinition[]>();
-    for (const field of availableFields) groups.set(field.group, [...(groups.get(field.group) ?? []), field]);
-    return [...groups.entries()];
-  }, [availableFields]);
+  const fieldOptions = useMemo<GroupedFieldOption[]>(() => availableFields.map((field) => ({
+    value: field.key,
+    label: field.label,
+    groupKey: field.groupKey,
+    groupLabel: field.group,
+  })), [availableFields]);
 
   function changeField(fieldKey: string) {
     const nextField = findFieldDefinition(availableFields, fieldKey);
@@ -77,19 +79,15 @@ export function LeadFilterConditionRow({
         </Select>
       ) : null}
 
-      <Select value={condition.field ?? undefined} onValueChange={changeField}>
-        <SelectTrigger className="h-9 w-full bg-background sm:w-48" aria-label={`Trường lọc của điều kiện ${rowNumber}`}>
-          <SelectValue placeholder="Chọn trường lọc" />
-        </SelectTrigger>
-        <SelectContent>
-          {groupedFields.map(([group, fields]) => (
-            <SelectGroup key={group}>
-              <SelectLabel>{group}</SelectLabel>
-              {fields.map((field) => <SelectItem key={field.key} value={field.key}>{field.label}</SelectItem>)}
-            </SelectGroup>
-          ))}
-        </SelectContent>
-      </Select>
+      <GroupedFieldPicker
+        size="sm"
+        className="sm:w-48"
+        value={condition.field}
+        options={fieldOptions}
+        onChange={changeField}
+        placeholder="Chọn trường lọc"
+        aria-label={`Trường lọc của điều kiện ${rowNumber}`}
+      />
 
       <Select
         value={condition.operator ?? undefined}

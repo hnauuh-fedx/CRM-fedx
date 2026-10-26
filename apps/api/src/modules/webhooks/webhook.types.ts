@@ -1,3 +1,5 @@
+import { leadFormFieldCatalog, type LeadSystemField } from "@admission-crm/shared/lead-form-field-catalog";
+
 export const webhookTargetModules = ["LEAD"] as const;
 export const webhookStatuses = ["ACTIVE", "DISABLED"] as const;
 export const webhookDuplicatePolicies = [
@@ -10,94 +12,6 @@ export type WebhookTargetModule = (typeof webhookTargetModules)[number];
 export type WebhookStatus = (typeof webhookStatuses)[number];
 export type WebhookDuplicatePolicy = (typeof webhookDuplicatePolicies)[number];
 
-export const webhookFieldMetadata = [
-  {
-    key: "fullName",
-    label: "Họ và tên",
-    type: "string",
-    requiredByCrm: true,
-    group: "STANDARD",
-  },
-  {
-    key: "phone",
-    label: "Số điện thoại",
-    type: "phone",
-    requiredByCrm: true,
-    group: "STANDARD",
-  },
-  {
-    key: "email",
-    label: "Email",
-    type: "email",
-    requiredByCrm: false,
-    group: "STANDARD",
-  },
-  {
-    key: "source",
-    label: "Nguồn",
-    type: "string",
-    requiredByCrm: true,
-    group: "STANDARD",
-  },
-  {
-    key: "sourceGroupUrl",
-    label: "URL xác định nhóm nguồn",
-    type: "string",
-    requiredByCrm: false,
-    group: "STANDARD",
-  },
-  {
-    key: "note",
-    label: "Ghi chú",
-    type: "string",
-    requiredByCrm: false,
-    group: "STANDARD",
-  },
-  {
-    key: "companyName",
-    label: "Công ty",
-    type: "string",
-    requiredByCrm: false,
-    group: "STANDARD",
-  },
-  {
-    key: "dateOfBirth",
-    label: "Ngày sinh",
-    type: "date",
-    requiredByCrm: false,
-    group: "STANDARD",
-  },
-  {
-    key: "graduationYear",
-    label: "Năm tốt nghiệp",
-    type: "number",
-    requiredByCrm: false,
-    group: "STANDARD",
-  },
-  {
-    key: "monthlyRevenue",
-    label: "Doanh thu hàng tháng",
-    type: "number",
-    requiredByCrm: false,
-    group: "STANDARD",
-  },
-  {
-    key: "decisionSignedDate",
-    label: "Ngày ký quyết định",
-    type: "date",
-    requiredByCrm: false,
-    group: "STANDARD",
-  },
-  {
-    key: "gclid",
-    label: "Google Click ID",
-    type: "string",
-    requiredByCrm: false,
-    group: "STANDARD",
-  },
-] as const;
-
-export type WebhookCrmField = (typeof webhookFieldMetadata)[number]["key"];
 export type WebhookFieldType =
   | "string"
   | "number"
@@ -107,8 +21,64 @@ export type WebhookFieldType =
   | "email"
   | "phone"
   | "select"
-  | "multi_select";
+  | "multi_select"
+  | "province";
 
+export type WebhookSystemFieldMetadata = {
+  key: string;
+  label: string;
+  type: WebhookFieldType;
+  requiredByCrm: boolean;
+  group: "STANDARD";
+  groupKey: string;
+  groupLabel: string;
+};
+
+/** Source is resolved by name; program, pipeline stage and admission status need their own workflows. */
+const nonMappableLeadFields = new Set([
+  "sourceId",
+  "institutionProgramId",
+  "pipelineStageId",
+  "admissionStatusId",
+]);
+const requiredLeadFields = new Set(["fullName", "phone", "source"]);
+
+function toWebhookFieldType(field: LeadSystemField): WebhookFieldType {
+  if (field.key === "tags") return "string";
+  if (field.dataType === "NUMBER") return "number";
+  if (field.dataType === "DATE") return "date";
+  if (field.dataType === "EMAIL") return "email";
+  if (field.dataType === "PHONE") return "phone";
+  if (field.dataType === "SELECT") return "select";
+  return "string";
+}
+
+/** Every Lead form field a webhook may write, grouped in Lead form order. */
+export const webhookFieldMetadata: WebhookSystemFieldMetadata[] =
+  leadFormFieldCatalog.flatMap((group) => {
+    const toMetadata = (key: string, label: string, type: WebhookFieldType) => ({
+      key,
+      label,
+      type,
+      requiredByCrm: requiredLeadFields.has(key),
+      group: "STANDARD" as const,
+      groupKey: group.id,
+      groupLabel: group.label,
+    });
+    return group.fields.flatMap((field) => {
+      if (nonMappableLeadFields.has(field.key)) return [];
+      const metadata = toMetadata(field.key, field.label, toWebhookFieldType(field));
+      return field.key === "phone"
+        ? [
+            metadata,
+            toMetadata("source", "Nguồn", "string"),
+            toMetadata("sourceGroupUrl", "URL xác định nhóm nguồn", "string"),
+          ]
+        : [metadata];
+    });
+  });
+
+export type WebhookCrmField = string;
 export type WebhookMappingInput = {
   incomingKey: string;
   crmField: string;
@@ -144,6 +114,8 @@ export type WebhookProcessResult =
         record_id: string;
         request_id: string;
         action: "created" | "updated";
+        /** CRM fields whose values were stored with a "*" mark because they did not match. */
+        unmatched_fields?: string[];
       };
     }
   | {

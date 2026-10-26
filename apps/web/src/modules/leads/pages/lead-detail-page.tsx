@@ -18,7 +18,7 @@ import {
   Trash2,
   UserRound,
 } from "lucide-react";
-import { useEffect, useMemo, useState, type CSSProperties } from "react";
+import { useEffect, useMemo, useState, type CSSProperties, type ReactNode } from "react";
 import { Link, useLocation, useNavigate, useParams } from "react-router-dom";
 import { shouldOpenLeadInEditMode } from "../lead-detail-navigation";
 
@@ -61,6 +61,7 @@ import { LeadCustomFieldsCard } from "../components/lead-custom-fields-card";
 import { LeadForm } from "../components/lead-form";
 import { LeadOpenInitialization } from "../components/lead-open-initialization";
 import { useLeadWorkflowTransition } from "../components/transition-note-dialog";
+import { withUnmatchedValue } from "../components/lead-unmatched-values";
 import { toLeadFormOptions, toLeadFormValues } from "../lead-form.helpers";
 import type {
   LeadActionOptions,
@@ -859,16 +860,16 @@ export function LeadSummaryCard({
       <CardContent><dl className="grid gap-4 @sm:grid-cols-2">
         <DetailValue label="Họ và tên" value={lead.fullName} />
         <div><dt className="text-sm text-muted-foreground">Số điện thoại</dt><dd className="mt-1 text-sm font-medium"><LeadPhoneLines lead={lead} /></dd></div>
-        <DetailValue label="Email" value={lead.email ?? "Chưa cập nhật"} />
-        <DetailValue label="Ngày sinh" value={formatDate(lead.dateOfBirth)} />
+        <DetailValue label="Email" value={withUnmatchedValue(lead, "email", lead.email ?? "Chưa cập nhật")} />
+        <DetailValue label="Ngày sinh" value={withUnmatchedValue(lead, "dateOfBirth", formatDate(lead.dateOfBirth))} />
         <DetailValue label="Địa chỉ" value={lead.currentAddress ?? lead.specificAddress ?? "Chưa cập nhật"} />
         <DetailValue label="Nhóm nguồn" value={lead.origin?.name ?? "Chưa cập nhật"} />
         <DetailValue label="Nguồn học viên" value={lead.source?.name ?? "Chưa chọn"} />
         <DetailValue label="Tiến trình" value={lead.pipelineStage?.name ?? "Chưa cập nhật"} />
         <div><dt className="text-sm text-muted-foreground">Nhân viên phụ trách</dt><dd className="mt-1 text-sm font-medium"><LeadAssigneeLines lead={lead} /></dd></div>
-        <DetailValue label="Mức độ quan tâm" value={lead.temperature ?? "-"} />
+        <DetailValue label="Mức độ quan tâm" value={withUnmatchedValue(lead, "temperature", lead.temperature ?? "-")} />
         <DetailValue label="Chương trình" value={lead.institutionProgram ? `${lead.institutionProgram.name} · ${lead.institutionProgram.institutionName}` : "Chưa chọn"} />
-        <DetailValue label="Ngành đăng ký" value={lead.majorName ?? "Chưa chọn"} />
+        <DetailValue label="Ngành đăng ký" value={withUnmatchedValue(lead, "majorId", lead.majorName ?? "Chưa chọn")} />
         <DetailValue label="Ghi chú" value={lead.note ?? "-"} />
       </dl></CardContent>
     </Card>
@@ -1364,7 +1365,7 @@ function MutationError({ error }: { error: Error }) {
   );
 }
 
-function DetailValue({ label, value }: { label: string; value: string }) {
+function DetailValue({ label, value }: { label: string; value: ReactNode }) {
   return (
     <div>
       <dt className="text-sm text-muted-foreground">{label}</dt>

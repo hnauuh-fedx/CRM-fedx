@@ -77,7 +77,7 @@ export const leadFormSchema = z.object({
   registrationStation: optionalText(150),
   decisionNumber: optionalText(150),
   decisionSignedDate: z.string(),
-  monthlyRevenue: optionalDecimal,
+  monthlyRevenue: z.string(),
   gclid: optionalText(1000),
   tags: optionalText(1000),
 });

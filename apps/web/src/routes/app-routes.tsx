@@ -66,6 +66,11 @@ const LeadAssignmentsPage = lazy(() =>
     default: module.LeadAssignmentsPage,
   })),
 );
+const CustomerLookupPage = lazy(() =>
+  import("@/modules/sale/pages/customer-lookup-page").then((module) => ({
+    default: module.CustomerLookupPage,
+  })),
+);
 const SaleActivitiesPage = lazy(() =>
   import("@/modules/sale/pages/sale-activities-page").then((module) => ({
     default: module.SaleActivitiesPage,
@@ -287,6 +292,9 @@ export function AppRoutes() {
             </Route>
             <Route element={<ProtectedRoute anyPermissions={["institution_program.manage"]} />}>
               <Route path="/quan-ly/chuong-trinh" element={<InstitutionProgramsManagementPage />} />
+            </Route>
+            <Route element={<ProtectedRoute anyPermissions={["customer_lookup.view"]} />}>
+              <Route path="/sale/tra-cuu-khach-hang" element={<CustomerLookupPage />} />
             </Route>
             <Route
               element={

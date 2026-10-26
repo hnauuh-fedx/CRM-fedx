@@ -24,6 +24,7 @@ import {
   KeyRound,
   Tags,
   UserPlus,
+  UserRoundSearch,
   UsersRound,
   Workflow,
   Webhook,
@@ -98,6 +99,12 @@ const navigationSections: NavigationSection[] = [
         href: "/sale/students",
         icon: GraduationCap,
         permissions: ["student.view", "student.view_all"],
+      },
+      {
+        label: "Tra cứu khách hàng",
+        href: "/sale/tra-cuu-khach-hang",
+        icon: UserRoundSearch,
+        permissions: ["customer_lookup.view"],
       },
       {
         type: "group",

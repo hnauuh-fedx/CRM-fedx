@@ -53,6 +53,7 @@ import { LeadFilterPanel } from "../components/lead-filter-panel";
 import type { FilterConditionState } from "../filter-fields";
 import { decodeConditions, applyConditionsToParams } from "../filter-serialization";
 import { LeadOpenInitialization } from "../components/lead-open-initialization";
+import { BulkUpdateLeadsDialog } from "../components/bulk-update-leads-dialog";
 import { useLeadWorkflowTransition } from "../components/transition-note-dialog";
 import type {
   LeadActionOptions,
@@ -242,9 +243,11 @@ function validateLeadImportFile(file: File | null) {
 function LeadImportResultPanel({ result }: { result: LeadImportResult }) {
   return (
     <div className="grid min-w-0 gap-4 rounded-md border bg-muted/20 p-4">
-      <div className="grid gap-3 sm:grid-cols-3" role="status">
+      <div className="grid grid-cols-2 gap-3 sm:grid-cols-5" role="status">
         <ImportMetric label="Tổng dòng" value={result.totalRows} />
         <ImportMetric label="Đã import" value={result.importedRows} />
+        <ImportMetric label="Đã cập nhật" value={result.updatedRows} />
+        <ImportMetric label="Không thay đổi" value={result.unchangedRows} />
         <ImportMetric label="Lỗi" value={result.failedRows} />
       </div>
       {result.errors.length > 0 && <LeadImportErrorsTable errors={result.errors} />}
@@ -289,6 +292,7 @@ export function LeadsListPage({
   const canDelete = auth.can("lead.delete");
   const isSaleList = !enableCustomerListAssignment;
   const canAssignSale = isSaleList && (auth.can("lead.assign") || auth.can("lead.reassign"));
+  const canAddLeadNote = canUpdate || auth.can("lead_note.create");
   const [{ page, pageSize, editingLeadId, isEditDialogOpen }, setViewState] = useState<{
     page: number;
     pageSize: number;
@@ -327,6 +331,7 @@ export function LeadsListPage({
   const [assignmentOpen, setAssignmentOpen] = useState(false);
   const [saleAssignmentOpen, setSaleAssignmentOpen] = useState(false);
   const [bulkDeleteOpen, setBulkDeleteOpen] = useState(false);
+  const [bulkUpdateOpen, setBulkUpdateOpen] = useState(false);
   const primarySort = sorting[0] ?? { id: "createdAt", desc: true };
   const sortBy = sortableColumns.has(primarySort.id as LeadSortField)
     ? (primarySort.id as LeadSortField)
@@ -523,7 +528,8 @@ export function LeadsListPage({
         }
         selectedCount={Object.keys(rowSelection).length}
         onAssignToCustomerList={() => setAssignmentOpen(true)}
-        showSaleActions={isSaleList}
+        canBulkUpdate={canAddLeadNote}
+        onBulkUpdate={() => setBulkUpdateOpen(true)}
         canAssignSale={canAssignSale}
         onAssignSale={() => setSaleAssignmentOpen(true)}
         canDelete={canDelete}
@@ -556,6 +562,20 @@ export function LeadsListPage({
         open={bulkDeleteOpen}
         leadIds={Object.keys(rowSelection)}
         onOpenChange={setBulkDeleteOpen}
+        onSuccess={() => {
+          setRowSelection({});
+          queryClient.invalidateQueries({ queryKey: ["leads"] });
+          queryClient.invalidateQueries({ queryKey: ["sale"] });
+          queryClient.invalidateQueries({ queryKey: ["customer-lists"] });
+        }}
+      />
+      <BulkUpdateLeadsDialog
+        open={bulkUpdateOpen}
+        leadIds={Object.keys(rowSelection)}
+        stages={optionsQuery.data?.stages ?? []}
+        canUpdateInformation={canUpdate}
+        canAddNote={canAddLeadNote}
+        onOpenChange={setBulkUpdateOpen}
         onSuccess={() => {
           setRowSelection({});
           queryClient.invalidateQueries({ queryKey: ["leads"] });
@@ -1062,7 +1082,8 @@ type LeadResultsCardProps = {
   canAssignToCustomerList: boolean;
   selectedCount: number;
   onAssignToCustomerList: () => void;
-  showSaleActions: boolean;
+  canBulkUpdate: boolean;
+  onBulkUpdate: () => void;
   canAssignSale: boolean;
   onAssignSale: () => void;
   canDelete: boolean;
@@ -1075,7 +1096,8 @@ type LeadBulkActionsMenuProps = Pick<
   | "canAssignToCustomerList"
   | "selectedCount"
   | "onAssignToCustomerList"
-  | "showSaleActions"
+  | "canBulkUpdate"
+  | "onBulkUpdate"
   | "canAssignSale"
   | "onAssignSale"
   | "canDelete"
@@ -1087,7 +1109,8 @@ function LeadBulkActionsMenu({
   canAssignToCustomerList,
   selectedCount,
   onAssignToCustomerList,
-  showSaleActions,
+  canBulkUpdate,
+  onBulkUpdate,
   canAssignSale,
   onAssignSale,
   canDelete,
@@ -1129,15 +1152,17 @@ function LeadBulkActionsMenu({
               Xóa hàng loạt{selectionLabel}
             </DropdownMenuItem>
           )}
-          <DropdownMenuItem disabled>Cập nhật hàng loạt</DropdownMenuItem>
-          {showSaleActions && (
-            <DropdownMenuItem
-              disabled={hasNoSelection}
-              onSelect={onClearSelection}
-            >
-              Hủy chọn{selectionLabel}
+          {canBulkUpdate && (
+            <DropdownMenuItem disabled={hasNoSelection} onSelect={onBulkUpdate}>
+              Cập nhật hàng loạt{selectionLabel}
             </DropdownMenuItem>
           )}
+          <DropdownMenuItem
+            disabled={hasNoSelection}
+            onSelect={onClearSelection}
+          >
+            Hủy chọn{selectionLabel}
+          </DropdownMenuItem>
         </DropdownMenuGroup>
       </DropdownMenuContent>
     </DropdownMenu>
@@ -1160,7 +1185,8 @@ function LeadResultsCard({
   canAssignToCustomerList,
   selectedCount,
   onAssignToCustomerList,
-  showSaleActions,
+  canBulkUpdate,
+  onBulkUpdate,
   canAssignSale,
   onAssignSale,
   canDelete,
@@ -1183,7 +1209,8 @@ function LeadResultsCard({
             canAssignToCustomerList={canAssignToCustomerList}
             selectedCount={selectedCount}
             onAssignToCustomerList={onAssignToCustomerList}
-            showSaleActions={showSaleActions}
+            canBulkUpdate={canBulkUpdate}
+            onBulkUpdate={onBulkUpdate}
             canAssignSale={canAssignSale}
             onAssignSale={onAssignSale}
             canDelete={canDelete}
