@@ -167,6 +167,7 @@ model automation_reassignment_monitors {
   attempted_assignee_ids Json
   node_snapshot          Json
   policy_snapshot        Json
+  calendar_refresh_required Boolean @default(false)
   next_assignment_id     String?   @db.Uuid
   completion_reason      String?   @db.VarChar(100)
   last_error             String?
@@ -179,7 +180,48 @@ model automation_reassignment_monitors {
   @@index([status, reassignment_due_at, id], map: "idx_automation_reassignment_expiry_due")
   @@index([lead_id, status, id], map: "idx_automation_reassignment_lead_status")
   @@index([assignment_id], map: "idx_automation_reassignment_assignment")
+  @@index([calendar_refresh_required, status, id], map: "idx_reassignment_calendar_refresh")
+  @@index([assignee_id, institution_program_id, status], map: "idx_reassignment_assignee_program")
   @@index([rule_id, status, processed_at], map: "idx_automation_reassignment_rule_status_processed")
+}
+
+model sale_work_schedules {
+  id                     String @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  institution_program_id String @db.Uuid
+  name                   String @db.VarChar(255)
+  note                   String @default("")
+  is_active              Boolean @default(true)
+  calendar               Json
+  version                Int @default(1)
+  updated_by             String @db.Uuid
+  created_at             DateTime @default(now()) @db.Timestamp(6)
+  updated_at             DateTime @default(now()) @db.Timestamp(6)
+  members                sale_work_schedule_members[]
+
+  @@index([institution_program_id, is_active, updated_at, id], map: "idx_sale_work_schedule_list")
+}
+
+model sale_work_schedule_members {
+  schedule_id String @db.Uuid
+  user_id     String @db.Uuid
+  schedule    sale_work_schedules @relation(fields: [schedule_id], references: [id], onDelete: Cascade)
+  sale        users @relation(fields: [user_id], references: [id], onDelete: NoAction)
+
+  @@id([schedule_id, user_id])
+  @@index([user_id], map: "idx_sale_work_schedule_member_user")
+}
+
+model sale_work_calendar_periods {
+  id                     String @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  user_id                String @db.Uuid
+  institution_program_id String @db.Uuid
+  schedule_id            String @db.Uuid
+  schedule_version       Int
+  calendar               Json
+  effective_from         DateTime @db.Timestamp(6)
+  effective_to           DateTime? @db.Timestamp(6)
+
+  @@index([user_id, institution_program_id, effective_from], map: "idx_sale_work_calendar_history")
 }
 
 model automation_sla_dispatches {
@@ -1340,6 +1382,7 @@ model user_roles {
 }
 
 model users {
+  work_schedule_members sale_work_schedule_members[]
   id                                                   String                           @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
   email                                                String                           @unique @db.VarChar(255)
   password_hash                                        String
@@ -1418,6 +1461,7 @@ model webhooks {
   id                     String                    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
   institution_program_id String                    @db.Uuid
   name                   String                    @db.VarChar(255)
+  source_group           String?                   @db.VarChar(32)
   target_module          String                    @default("LEAD") @db.VarChar(50)
   webhook_key            String                    @unique @db.VarChar(100)
   secret_hash            String

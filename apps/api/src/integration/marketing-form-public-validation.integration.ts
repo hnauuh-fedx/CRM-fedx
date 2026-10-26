@@ -11,16 +11,23 @@ import { newMarketingFormSubmissionSettings } from "@admission-crm/shared/market
 async function run() {
   const publicKey = `validation-${randomUUID()}`;
   let formId: string | undefined;
+  let sourceId: string | undefined;
   let leadId: string | undefined;
   let surveyLeadId: string | undefined;
   let visibilityLeadId: string | undefined;
   try {
     const major = await prisma.majors.findFirst({ where: { institution_program_id: { not: null } }, select: { id: true, institution_program_id: true } });
     assert.ok(major, "Cần ngành mẫu để kiểm tra mapping form public.");
+    const configuredSource = await prisma.lead_sources.create({
+      data: { name: `[TEST] Public validation ${publicKey}`, institution_program_id: major.institution_program_id },
+      select: { id: true },
+    });
+    sourceId = configuredSource.id;
     const form = await prisma.marketing_forms.create({
       data: {
         name: "[TEST] Public form reference validation",
         public_key: publicKey,
+        source_id: configuredSource.id,
         status: "active",
         form_type: "lead_form",
         institution_program_id: major.institution_program_id,
@@ -127,7 +134,7 @@ async function run() {
       { fieldKey: "details", label: "Nội dung tư vấn", fieldType: "textarea" as const, crmMappingField: "note" as const, isRequired: true, validationRules: { questionDescription: "Hãy mô tả nhu cầu tư vấn.\nKhông ghi thông tin nhạy cảm.", visibility: { parentFieldKey: "kind", operator: "equals", value: "yes" } } },
       { fieldKey: "extra", label: "Thông tin thêm", fieldType: "text" as const, isRequired: true, validationRules: { visibility: { parentFieldKey: "details", operator: "is_not_empty" } } },
     ].map((field, sortOrder) => ({ ...field, isRequired: field.isRequired ?? false, sortOrder, isActive: true }));
-    const visibilityInput = { name: "[TEST] Visibility", status: "draft" as const, formType: "lead_form" as const, duplicateSettings: newMarketingFormSubmissionSettings("lead_form"), fields: visibilityFields };
+    const visibilityInput = { sourceId: configuredSource.id, name: "[TEST] Visibility", status: "draft" as const, formType: "lead_form" as const, duplicateSettings: newMarketingFormSubmissionSettings("lead_form"), fields: visibilityFields };
     await assert.rejects(() => updateMarketingForm(actor, form.id, { ...visibilityInput, fields: visibilityFields.map(field => field.fieldKey === "details" ? { ...field, validationRules: { ...field.validationRules, questionDescription: "a".repeat(1001) } } : field) }), MarketingFormConfigError, "Malformed descriptions cannot save, even in drafts.");
     await assert.rejects(() => updateMarketingForm(actor, form.id, { ...visibilityInput, fields: [{ ...visibilityFields[0], validationRules: { visibility: { parentFieldKey: "extra", operator: "is_not_empty" } } }, ...visibilityFields.slice(1), { fieldKey: "loop", label: "Loop", fieldType: "text", isRequired: false, isActive: true, sortOrder: 5, validationRules: { visibility: { parentFieldKey: "loop", operator: "is_empty" } } }] }), MarketingFormConfigError);
     assert.equal((await updateMarketingForm(actor, form.id, visibilityInput)).ok, true);
@@ -232,6 +239,7 @@ async function run() {
       await prisma.audit_logs.deleteMany({ where: { entity_type: "lead", entity_id: id } });
       await prisma.leads.delete({ where: { id } });
     }
+    if (sourceId) await prisma.lead_sources.delete({ where: { id: sourceId } });
     await prisma.$disconnect();
   }
 }

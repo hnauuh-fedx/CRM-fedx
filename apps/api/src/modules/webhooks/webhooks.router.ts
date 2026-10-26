@@ -1,3 +1,4 @@
+import { sourceGroupSettingSchema } from "@admission-crm/shared/source-group";
 import express, { Router, type ErrorRequestHandler } from "express";
 import { z } from "zod";
 
@@ -62,6 +63,7 @@ const mappingSchema = z.object({
 const webhookBodySchema = z
   .object({
     name: z.string().trim().min(2).max(255),
+    sourceGroup: sourceGroupSettingSchema,
     targetModule: z.enum(webhookTargetModules).default("LEAD"),
     status: z.enum(webhookStatuses).default("ACTIVE"),
     duplicatePolicy: z.enum(webhookDuplicatePolicies).default("CREATE_NEW"),

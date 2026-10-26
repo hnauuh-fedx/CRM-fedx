@@ -1,4 +1,5 @@
 import cors from "cors";
+import { saleWorkSchedulesRouter } from "./modules/sale-work-schedules/sale-work-schedule.router";
 import { displayLayoutsRouter } from "./modules/display-layouts/display-layout.router";
 import express, { type ErrorRequestHandler } from "express";
 import path from "node:path";
@@ -89,6 +90,7 @@ app.use("/api/students", studentsRouter);
 app.use("/api/system", systemRouter);
 app.use("/api/display-layouts", displayLayoutsRouter);
 app.use("/api/automations", automationsRouter);
+app.use("/api/sale-work-schedules", saleWorkSchedulesRouter);
 app.use("/api/utm-trackings", utmTrackingsRouter);
 app.use("/api/users", usersRouter);
 app.use("/api/custom-fields", customFieldsRouter);

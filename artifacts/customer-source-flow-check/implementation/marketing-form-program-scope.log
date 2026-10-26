@@ -1,0 +1,37 @@
+PASS: no-campaign form, scope CRUD/fields/options/submissions, duplicate scope, program locking and configured source.
+(node:35084) DeprecationWarning: Calling client.query() when the client is already executing a query is deprecated and will be removed in pg@9.0. Use async/await or an external async flow control mechanism instead.
+(Use `node --trace-deprecation ...` to show where the warning was created)
+PrismaClientKnownRequestError: 
+Invalid `prisma.institution_programs.deleteMany()` invocation in
+D:\Project Visual Studio Code\crm_website\admission-crm\apps\api\src\integration\marketing-form-program-scope.integration.ts:108:39
+
+  105 await prisma.leads.deleteMany({ where: { id: { in: leadIds } } });
+  106 await prisma.lead_sources.deleteMany({ where: { id: { in: sourceIds } } });
+  107 await prisma.majors.deleteMany({ where: { id: { in: majorIds } } });
+→ 108 await prisma.institution_programs.deleteMany(
+Foreign key constraint violated on the constraint: `lead_origins_institution_program_id_fkey`
+    at zr.handleRequestError (D:\Project Visual Studio Code\crm_website\admission-crm\node_modules\@prisma\client\src\runtime\RequestHandler.ts:237:13)
+    at zr.handleAndLogRequestError (D:\Project Visual Studio Code\crm_website\admission-crm\node_modules\@prisma\client\src\runtime\RequestHandler.ts:183:12)
+    at zr.request (D:\Project Visual Studio Code\crm_website\admission-crm\node_modules\@prisma\client\src\runtime\RequestHandler.ts:152:12)
+    at process.processTicksAndRejections (node:internal/process/task_queues:105:5)
+    at async a (D:\Project Visual Studio Code\crm_website\admission-crm\node_modules\@prisma\client\src\runtime\getPrismaClient.ts:963:24)
+    at async run (D:\Project Visual Studio Code\crm_website\admission-crm\apps\api\src\integration\marketing-form-program-scope.integration.ts:108:5) {
+  code: 'P2003',
+  meta: {
+    modelName: 'institution_programs',
+    driverAdapterError: DriverAdapterError: ForeignKeyConstraintViolation
+        at PrismaPgAdapter.onError (D:\Project Visual Studio Code\crm_website\admission-crm\node_modules\@prisma\adapter-pg\dist\index.js:678:11)
+        at PrismaPgAdapter.performIO (D:\Project Visual Studio Code\crm_website\admission-crm\node_modules\@prisma\adapter-pg\dist\index.js:673:12)
+        at process.processTicksAndRejections (node:internal/process/task_queues:105:5)
+        at async PrismaPgAdapter.executeRaw (D:\Project Visual Studio Code\crm_website\admission-crm\node_modules\@prisma\adapter-pg\dist\index.js:643:13)
+        at async e.interpretNode (D:\Project Visual Studio Code\crm_website\admission-crm\node_modules\@prisma\client-engine-runtime\src\interpreter\query-interpreter.ts:168:18)
+        at async e.interpretNode (D:\Project Visual Studio Code\crm_website\admission-crm\node_modules\@prisma\client-engine-runtime\src\interpreter\query-interpreter.ts:272:41)
+        at async e.run (D:\Project Visual Studio Code\crm_website\admission-crm\node_modules\@prisma\client-engine-runtime\src\interpreter\query-interpreter.ts:94:23)
+        at async e.execute (D:\Project Visual Studio Code\crm_website\admission-crm\node_modules\@prisma\client\src\runtime\core\engines\client\LocalExecutor.ts:81:12)
+        at async jt.request (D:\Project Visual Studio Code\crm_website\admission-crm\node_modules\@prisma\client\src\runtime\core\engines\client\ClientEngine.ts:504:22)
+        at async Object.singleLoader (D:\Project Visual Studio Code\crm_website\admission-crm\node_modules\@prisma\client\src\runtime\RequestHandler.ts:112:26) {
+      cause: [Object]
+    }
+  },
+  clientVersion: '7.8.0'
+}

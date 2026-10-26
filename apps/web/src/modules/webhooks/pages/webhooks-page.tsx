@@ -1,3 +1,4 @@
+import { SourceGroupField } from "@/modules/marketing/source-group-field";
 import { PageLoadingBoundary } from "@/components/shared/page-loading-state";
 import { useAsyncTask } from "@/hooks/use-async-task";
 import { StaticTableHeader } from "@/components/shared/static-table-header";
@@ -128,7 +129,7 @@ const defaultMappings = [
   {
     incomingKey: "utm_url",
     crmField: "sourceGroupUrl",
-    isRequired: true,
+    isRequired: false,
     defaultValue: null,
   },
 ];
@@ -137,6 +138,7 @@ const emptyWebhook: WebhookInput = {
   targetModule: "LEAD",
   status: "ACTIVE",
   duplicatePolicy: "UPDATE_EXISTING",
+  sourceGroup: null,
   mappings: defaultMappings,
 };
 const samplePayload = JSON.stringify(
@@ -870,6 +872,11 @@ function WebhookForm({
             />
           </Field>
         </div>
+        <Controller
+          control={form.control}
+          name="sourceGroup"
+          render={({ field }) => <SourceGroupField id="webhook-source-group" value={field.value} onChange={field.onChange} />}
+        />
         <Field>
           <FieldLabel>Xử lý dữ liệu trùng</FieldLabel>
           <Controller
@@ -1823,6 +1830,7 @@ function WebhookEditorContent({
                 targetModule: "LEAD",
                 status: editor.webhook.status,
                 duplicatePolicy: editor.webhook.duplicatePolicy,
+                sourceGroup: editor.webhook.sourceGroup ?? null,
                 mappings: editor.webhook.mappings.map(
                   ({ incomingKey, crmField, isRequired, defaultValue }) => ({
                     incomingKey,

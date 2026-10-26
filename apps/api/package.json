@@ -2,6 +2,8 @@
   "name": "@admission-crm/api",
   "private": true,
   "scripts": {
+    "test:work-schedules": "tsx --test src/modules/sale-work-schedules/*.test.ts",
+    "test:integration:work-schedules": "node scripts/test-manual-unassignment-isolated.cjs sale-work-schedules automation-reassignment manual-unassignment",
     "test:integration:automation-information-update": "node scripts/test-manual-unassignment-isolated.cjs automation-information-update",
     "test:integration:automation-information-live": "tsx src/integration/automation-information-live.integration.ts",
     "test:integration:manual-unassignment": "node scripts/test-manual-unassignment-isolated.cjs",

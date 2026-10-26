@@ -1,3 +1,4 @@
+import { sourceGroupSettingsSchema } from "@admission-crm/shared/source-group";
 import { randomBytes } from "node:crypto";
 import { newMarketingFormSubmissionSettings } from "@admission-crm/shared/marketing-form-submission-policy";
 import { normalizeMarketingFormOptions, type MarketingFormOptionInput } from "@admission-crm/shared/marketing-form-config";
@@ -134,6 +135,9 @@ async function uniqueSlug(base: string, existingId?: string) {
 }
 
 function toData(input: MarketingFormInput, slug: string | null) {
+  if (!sourceGroupSettingsSchema.safeParse(input.advancedSettings ?? {}).success) {
+    throw new MarketingFormConfigError([{ path: ["advancedSettings", "sourceGroup"], message: "Vui lòng chọn nhóm nguồn trong danh mục." }]);
+  }
   assertMarketingFormSubmissionPolicy(input.duplicateSettings);
   assertMarketingFormLayout(input.displaySettings, input.fields ?? defaultFieldsFromMappings(input));
   return {

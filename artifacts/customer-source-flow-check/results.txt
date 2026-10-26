@@ -1,0 +1,14 @@
+﻿Customer source flow verification - 2026-10-26
+
+PASS: 25 unit tests (marketing-form-config, marketing-form-submission-policy).
+PASS: customer-source-flow (final/customer-source-flow.log).
+PASS: inbound-webhooks (final/inbound-webhooks.log).
+PASS: inbound-webhooks-v2 (final/inbound-webhooks-v2.log).
+PASS: marketing-form-public-validation (validation/marketing-form-public-validation.log).
+PASS: marketing-form-submission-policy (final/marketing-form-submission-policy.log).
+PASS: marketing-form-program-scope (final/marketing-form-program-scope.log).
+PASS: marketing-form-automation-event (final/marketing-form-automation-event.log).
+
+Integration suites ran via apps/api/scripts/test-manual-unassignment-isolated.cjs.
+Temporary local databases were created and dropped by the runner.
+Earlier failure logs are retained for diagnosis; use the paths above for final results.

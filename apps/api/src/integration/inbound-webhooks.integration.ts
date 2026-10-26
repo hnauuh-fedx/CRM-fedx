@@ -141,7 +141,11 @@ async function createActor(
   await prisma.user_roles.create({
     data: { user_id: user.id, role_id: role.id },
   });
+  await prisma.user_program_roles.create({
+    data: { user_id: user.id, institution_program_id: programId, role_id: role.id },
+  });
   if (accessScope) {
+    await prisma.role_access_scopes.create({ data: { role_id: role.id, scope_code: accessScope } });
     await prisma.user_access_scopes.create({
       data: { user_id: user.id, scope: accessScope },
     });
@@ -493,6 +497,15 @@ async function main() {
   const webhookId = created.payload.id as string;
   const key = created.payload.webhookKey as string;
   const secret = created.payload.secret as string;
+  equal((await api(baseUrl, "/settings/webhooks", { token: managerToken, programId: programIds[0], method: "POST", body: { ...webhookInput, sourceGroup: "invented" } })).status, 400, "Unknown configured source group is rejected.");
+  const fixedGroup = await api(baseUrl, `/settings/webhooks/${webhookId}`, { token: managerToken, programId: programIds[0], method: "PATCH", body: { ...webhookInput, sourceGroup: "tiktok" } });
+  equal(fixedGroup.status, 200, "Fixed group can be saved.");
+  equal(fixedGroup.payload.sourceGroup, "tiktok", "Saved group is returned by API.");
+  equal((await prisma.webhooks.findUniqueOrThrow({ where: { id: webhookId } })).source_group, "tiktok", "Fixed group persists.");
+  const automatic = await api(baseUrl, `/settings/webhooks/${webhookId}`, { token: managerToken, programId: programIds[0], method: "PATCH", body: { ...webhookInput, sourceGroup: "auto" } });
+  equal(automatic.status, 200, "Automatic group can be restored.");
+  equal(automatic.payload.sourceGroup, null, "Automatic mode clears fixed configuration.");
+
 
   const forgedMapping = await api(baseUrl, "/settings/webhooks", {
     token: managerToken,

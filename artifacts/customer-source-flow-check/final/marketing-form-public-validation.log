@@ -1,0 +1,12 @@
+(node:37400) DeprecationWarning: Calling client.query() when the client is already executing a query is deprecated and will be removed in pg@9.0. Use async/await or an external async flow control mechanism instead.
+(Use `node --trace-deprecation ...` to show where the warning was created)
+AssertionError [ERR_ASSERTION]: Missing expected rejection (MarketingFormConfigError): Malformed descriptions cannot save, even in drafts.
+    at process.processTicksAndRejections (node:internal/process/task_queues:105:5)
+    at async run (D:\Project Visual Studio Code\crm_website\admission-crm\apps\api\src\integration\marketing-form-public-validation.integration.ts:136:5) {
+  generatedMessage: false,
+  code: 'ERR_ASSERTION',
+  actual: undefined,
+  expected: [class MarketingFormConfigError extends Error],
+  operator: 'rejects',
+  diff: 'simple'
+}

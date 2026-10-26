@@ -65,7 +65,7 @@ async function run() {
     assert.equal("leadId" in result.data, false);
     assert.equal(await prisma.marketing_form_submissions.count({ where: { marketing_form_id: form.id } }), 1);
     assert.equal(await prisma.audit_logs.count({ where: { entity_id: lead.id, action: "create_from_marketing_form" } }), 1);
-    assert.equal(await prisma.lead_activities.count({ where: { lead_id: lead.id } }), 1);
+    assert.equal(await prisma.lead_activities.count({ where: { lead_id: lead.id, type: "marketing_form_submitted" } }), 1);
     const actor = { id: creator.id, email: "fixture@example.com", fullName: "Fixture", avatarUrl: null, roles: [], departmentIds: [], institutionProgramIds: [programme.id], accessScope: "ALL" as const, permissions: ["campaign.view_all", "marketing_form.manage", "lead.view_all", "lead.sensitive.view"] };
     for (const formType of ["lead_form", "survey"] as const) {
       const created = await createMarketingForm(actor, { name: `[TEST G3] ${runId} defaults ${formType}`, status: "draft", formType }, programme.id);

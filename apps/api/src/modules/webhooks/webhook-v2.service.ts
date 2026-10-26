@@ -36,6 +36,7 @@ export type WebhookConfigSnapshot = {
   duplicatePolicy: WebhookDuplicatePolicy;
   actorId: string;
   webhookName?: string;
+  sourceGroup?: string | null;
   mappings: MappingSnapshot[];
   fields: FieldMetadata[];
 };
@@ -147,6 +148,7 @@ export async function ingestInboundWebhook(
     duplicatePolicy: webhook.duplicate_policy as WebhookDuplicatePolicy,
     actorId: webhook.created_by,
     webhookName: webhook.name,
+    sourceGroup: webhook.source_group,
     mappings: webhook.field_mappings,
     fields,
   };
@@ -295,7 +297,7 @@ export async function processInboundWebhookRequest(
     const payload = request.payload as JsonObject;
     let mapping;
     try {
-      mapping = await mapWebhookPayload(snapshot.institutionProgramId, payload, snapshot.mappings, snapshot.fields);
+      mapping = await mapWebhookPayload(snapshot.institutionProgramId, payload, snapshot.mappings, snapshot.fields, snapshot.webhookName?.trim() || "Webhook", snapshot.sourceGroup);
     } catch (error) {
       if (error instanceof ProcessFailure) throw processingErrorFromFailure(error);
       throw error;
@@ -323,9 +325,7 @@ export async function processInboundWebhookRequest(
       sourceOccurrence: mapping.originName ? {
         webhookId: request.webhook_id,
         requestId,
-        sourceName: mapping.sourceName && mapping.sourceName.toLocaleLowerCase("vi") !== mapping.originName?.toLocaleLowerCase("vi")
-          ? mapping.sourceName
-          : snapshot.webhookName ?? "Webhook",
+        sourceName: mapping.sourceName!,
         note: typeof mapping.mapped.note === "string" ? mapping.mapped.note : undefined,
         details: toJson(mapping.mapped),
         receivedAt: request.received_at,

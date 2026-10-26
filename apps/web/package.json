@@ -2,6 +2,7 @@
   "name": "@admission-crm/web",
   "private": true,
   "scripts": {
+    "test:work-schedules-browser": "node tests/sale-work-schedule.browser-smoke.mjs",
     "test:automation-information-browser": "node tests/automation-information.browser-smoke.mjs",
     "typecheck:automation": "tsc --noEmit -p tsconfig.automation-check.json",
     "test:page-loading-browser": "node tests/page-loading.browser-smoke.mjs",

@@ -1,3 +1,5 @@
+import { sourceGroupSettingsSchema } from "@admission-crm/shared/source-group";
+import { SourceGroupField } from "../source-group-field";
 import { PageLoadingState } from "@/components/shared/page-loading-state";
 import { PageLoadingBoundary } from "@/components/shared/page-loading-state";
 const pageSize = 20;
@@ -393,7 +395,7 @@ const formSchema = z
     successSettings: z.record(z.string(), z.unknown()).optional(),
     accessSettings: z.record(z.string(), z.unknown()).optional(),
     closeSettings: z.record(z.string(), z.unknown()).optional(),
-    advancedSettings: z.record(z.string(), z.unknown()).optional(),
+    advancedSettings: sourceGroupSettingsSchema.optional(),
     fields: z.array(fieldSchema).min(1, "Cần ít nhất một trường dữ liệu."),
     mappings: z.array(
       z.object({
@@ -4276,6 +4278,12 @@ function MarketingFormCrmFields({
         />
         <FieldError errors={[form.formState.errors.platform]} />
       </Field>
+      <SourceGroupField
+        id="marketing-form-source-group"
+        value={form.watch("advancedSettings")?.sourceGroup}
+        onChange={(value) => setSettingValue(form, "advancedSettings", "sourceGroup", value)}
+        error={form.formState.errors.advancedSettings?.sourceGroup?.message as string | undefined}
+      />
       <Field data-invalid={Boolean(form.formState.errors.formCode)}>
         <FieldLabel htmlFor="marketing-form-code">Mã biểu mẫu</FieldLabel>
         <Input

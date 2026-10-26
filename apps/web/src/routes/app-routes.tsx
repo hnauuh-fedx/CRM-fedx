@@ -232,6 +232,7 @@ const AuditLogsPage = lazy(() =>
     default: module.AuditLogsPage,
   })),
 );
+const SaleWorkSchedulesPage = lazy(() => import("@/modules/management/pages/sale-work-schedules-page").then(module => ({ default: module.SaleWorkSchedulesPage })));
 const AutomationRulesPage = lazy(() =>
   import("@/modules/automations/pages/automation-rules-page").then((module) => ({
     default: module.AutomationRulesPage,
@@ -414,6 +415,7 @@ export function AppRoutes() {
             </Route>
 
             <Route element={<ProtectedRoute anyPermissions={["automation.manage"]} />}>
+              <Route path="/management/sale-work-schedules" element={<SaleWorkSchedulesPage />} />
               <Route path="/automations" element={<AutomationRulesPage />} />
             </Route>
             <Route element={<ProtectedRoute anyPermissions={["automation.manage", "automation.view", "automation.view_logs", "automation.transfer_owner"]} />}>

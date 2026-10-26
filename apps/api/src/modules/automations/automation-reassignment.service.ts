@@ -1,4 +1,6 @@
 import { prisma } from "../../database/prisma";
+import { buildWorkingSchedule, getWorkPeriods, refreshWorkingMonitor } from "../sale-work-schedules/reassignment-work-calendar.service";
+import { lockWorkScheduleProgram } from "../sale-work-schedules/work-schedule-lock";
 import { Prisma } from "../../generated/prisma/client";
 import type { AutomationReassignmentPolicy } from "@admission-crm/shared/automation-reassignment-policy";
 import { getAuthUser } from "../auth/auth.service";
@@ -15,6 +17,7 @@ import { sendAutomationInternalEmail } from "./automation-internal-email.service
 import { buildReassignmentSchedule, planReassignmentCandidates, type ReassignmentStopReason } from "./automation-reassignment-state";
 
 type TransactionClient = Prisma.TransactionClient;
+class WorkScheduleDeferredError extends Error {}
 
 export type ReassignmentNodeSnapshot = {
   assignmentStrategy: AutomationAssignmentStrategy;
@@ -124,6 +127,7 @@ function parsePolicy(value: Prisma.JsonValue): AutomationReassignmentPolicy | nu
   const policy = value as Record<string, unknown>;
   if (
     policy.enabled !== true
+    || (policy.workingTimeOnly !== undefined && typeof policy.workingTimeOnly !== "boolean")
     || !["not_opened_since_assignment", "no_care_activity_since_assignment", "no_data_update_since_assignment"].includes(String(policy.interactionCriterion))
     || typeof policy.timeoutMinutes !== "number"
     || typeof policy.assignToAnotherSale !== "boolean"
@@ -180,7 +184,13 @@ function parseNodeSnapshot(value: Prisma.JsonValue): ReassignmentNodeSnapshot | 
 }
 
 export async function createReassignmentMonitor(tx: TransactionClient, input: CreateMonitorInput) {
-  const schedule = buildReassignmentSchedule(input.assignment.assignedAt, input.policy);
+  if (input.policy.workingTimeOnly && input.institutionProgramId) await lockWorkScheduleProgram(tx, input.institutionProgramId);
+  const periods = input.policy.workingTimeOnly && input.institutionProgramId ? await getWorkPeriods(tx, input.assignment.assigneeId, input.institutionProgramId, input.assignment.assignedAt) : [];
+  if (input.policy.workingTimeOnly && !periods.some(period => period.effectiveTo === null)) throw new Error("Sale chưa có lịch làm việc đang áp dụng trong chương trình này.");
+  const schedule = input.policy.workingTimeOnly
+    ? buildWorkingSchedule(input.assignment.assignedAt, input.policy, periods)
+    : buildReassignmentSchedule(input.assignment.assignedAt, input.policy);
+  if (!schedule.reassignmentDueAt) throw new Error("Sale chưa có lịch làm việc đang áp dụng trong chương trình này.");
   return tx.automation_reassignment_monitors.upsert({
     where: {
       rule_id_node_id_assignment_id: {
@@ -222,14 +232,18 @@ export async function processReassignmentWarning(
   now = new Date(),
   warningKind: "first" | "second" = "first",
 ) {
-  const target = await prisma.automation_reassignment_monitors.findUnique({ where: { id: monitorId }, select: { lead_id: true } });
+  const target = await prisma.automation_reassignment_monitors.findUnique({ where: { id: monitorId }, select: { lead_id: true, institution_program_id: true } });
   if (!target) return { ok: true as const, outcome: "inactive" as const };
   const result = await prisma.$transaction(async (tx) => {
     // Serialize warnings with manual unassignment/opening and assignment changes.
     await tx.$executeRaw(Prisma.sql`SELECT pg_advisory_xact_lock(hashtext(${`lead-assignment:${target.lead_id}`}))`);
+    if (target.institution_program_id) await lockWorkScheduleProgram(tx, target.institution_program_id);
     await lockMonitor(tx, monitorId);
-    const monitor = await tx.automation_reassignment_monitors.findUnique({ where: { id: monitorId } });
+    let monitor = await tx.automation_reassignment_monitors.findUnique({ where: { id: monitorId } });
     if (!monitor || !["pending", "warned"].includes(monitor.status)) return { ok: true as const, outcome: "inactive" as const };
+    const refreshed = await refreshWorkingMonitor(tx, monitor, now);
+    monitor = refreshed.monitor;
+    if (!refreshed.working) return { ok: true as const, outcome: "outside_working_hours" as const };
     const dueAt = warningKind === "second" ? monitor.second_warning_due_at : monitor.warning_due_at;
     const warnedAt = warningKind === "second" ? monitor.second_warned_at : monitor.warned_at;
     if (!dueAt || dueAt > now || warnedAt) return { ok: true as const, outcome: "not_due" as const };
@@ -343,10 +357,17 @@ async function completeStoppedMonitor(monitorId: string, reason: string, now: Da
 }
 
 export async function processReassignmentExpiry(monitorId: string, now = new Date()) {
+  const processingStartedAt = Date.now();
+  const processingNow = () => new Date(now.getTime() + Date.now() - processingStartedAt);
+  const target = await prisma.automation_reassignment_monitors.findUnique({ where: { id: monitorId }, select: { institution_program_id: true } });
   const claimed = await prisma.$transaction(async (tx) => {
+    if (target?.institution_program_id) await lockWorkScheduleProgram(tx, target.institution_program_id);
     await lockMonitor(tx, monitorId);
-    const monitor = await tx.automation_reassignment_monitors.findUnique({ where: { id: monitorId } });
+    let monitor = await tx.automation_reassignment_monitors.findUnique({ where: { id: monitorId } });
     if (!monitor || !["pending", "warned"].includes(monitor.status)) return null;
+    const refreshed = await refreshWorkingMonitor(tx, monitor, now);
+    monitor = refreshed.monitor;
+    if (!refreshed.working) return null;
     if (monitor.reassignment_due_at > now) return null;
     const assignment = await tx.lead_assignments.findUnique({
       where: { id: monitor.assignment_id },
@@ -419,6 +440,15 @@ export async function processReassignmentExpiry(monitorId: string, now = new Dat
     const mutation = await assignVisibleLead(actor, claimed.lead_id, {
       departmentId: nodeSnapshot.departmentId,
       resolveAssigneeId: async (tx) => {
+        if (claimed.policy.workingTimeOnly) {
+          if (!claimed.institution_program_id) throw new WorkScheduleDeferredError();
+          await lockWorkScheduleProgram(tx, claimed.institution_program_id);
+          const latest = await tx.automation_reassignment_monitors.findUnique({ where: { id: monitorId } });
+          if (!latest) throw new WorkScheduleDeferredError();
+          const currentTime = processingNow();
+          const refreshed = await refreshWorkingMonitor(tx, latest, currentTime);
+          if (!refreshed.working || refreshed.monitor.reassignment_due_at > currentTime) throw new WorkScheduleDeferredError();
+        }
         const assignment = await tx.lead_assignments.findUnique({
           where: { id: claimed.assignment_id },
           select: { is_main_owner: true, assigned_to: true, first_opened_at: true, assigned_at: true },
@@ -536,6 +566,14 @@ export async function processReassignmentExpiry(monitorId: string, now = new Dat
       return { ok: false as const, outcome: mutation.reason };
     }
   } catch (error) {
+    if (error instanceof WorkScheduleDeferredError) {
+      await prisma.$transaction(async tx => {
+        if (claimed.institution_program_id) await lockWorkScheduleProgram(tx, claimed.institution_program_id);
+        const pending = await tx.automation_reassignment_monitors.update({ where: { id: monitorId }, data: { status: claimed.warned_at ? "warned" : "pending", claimed_at: null } });
+        await refreshWorkingMonitor(tx, pending, processingNow());
+      });
+      return { ok: true as const, outcome: "work_schedule_changed" as const };
+    }
     if (error instanceof ReassignmentStoppedError) {
       await completeStoppedMonitor(monitorId, error.reason, now);
       return { ok: true as const, outcome: error.reason };

@@ -1,3 +1,4 @@
+import { MarketingFormConfigError } from "../modules/campaigns/marketing-form-config.validation";
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import { prisma } from "../database/prisma";
@@ -74,9 +75,15 @@ async function run() {
     assert.equal((await updateMarketingFormField(second, field.id, input.fields[0])).ok, false);
     assert.equal((await deleteMarketingFormField(second, field.id)).ok, false);
     assert.equal((await reorderMarketingFormFields(second, id, [field.id])).ok, false);
+    await assert.rejects(() => updateMarketingForm(first, id, { ...input, advancedSettings: { sourceGroup: "invented" } }), MarketingFormConfigError);
+    assert.ok((await updateMarketingForm(first, id, { ...input, advancedSettings: { sourceGroup: "tiktok", handlerUrl: "fixture" } })).ok);
+    const configured = await getMarketingFormById(first, id); assert.ok(configured.ok);
+    assert.equal((configured.data.advancedSettings as Record<string, unknown>).sourceGroup, "tiktok");
     const copied = await duplicateMarketingForm(first, id);
     assert.ok(copied.ok);
     formIds.push(copied.data.id);
+    const copiedConfig = await getMarketingFormById(first, copied.data.id); assert.ok(copiedConfig.ok);
+    assert.equal((copiedConfig.data.advancedSettings as Record<string, unknown>).sourceGroup, "tiktok");
     assert.equal((await prisma.marketing_forms.findUniqueOrThrow({ where: { id: copied.data.id } })).institution_program_id, programIds[0]);
 
     const phone = `096${Date.now().toString().slice(-7)}`;
@@ -105,6 +112,9 @@ async function run() {
     await prisma.leads.deleteMany({ where: { id: { in: leadIds } } });
     await prisma.lead_sources.deleteMany({ where: { id: { in: sourceIds } } });
     await prisma.majors.deleteMany({ where: { id: { in: majorIds } } });
+    const origins = await prisma.lead_origins.findMany({ where: { institution_program_id: { in: programIds } }, select: { id: true } });
+    await prisma.audit_logs.deleteMany({ where: { entity_type: "lead_origin", entity_id: { in: origins.map(origin => origin.id) } } });
+    await prisma.lead_origins.deleteMany({ where: { institution_program_id: { in: programIds } } });
     await prisma.institution_programs.deleteMany({ where: { id: { in: programIds } } });
     await prisma.$disconnect();
   }

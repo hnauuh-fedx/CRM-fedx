@@ -1,0 +1,13 @@
+AssertionError [ERR_ASSERTION]: Mapping mã ngành đúng phải tạo được Lead.
+
+false !== true
+
+    at run (D:\Project Visual Studio Code\crm_website\admission-crm\apps\api\src\integration\marketing-form-public-validation.integration.ts:53:12)
+    at process.processTicksAndRejections (node:internal/process/task_queues:105:5) {
+  generatedMessage: false,
+  code: 'ERR_ASSERTION',
+  actual: false,
+  expected: true,
+  operator: 'strictEqual',
+  diff: 'simple'
+}

@@ -1,3 +1,4 @@
+import type { SourceGroupCode } from "@admission-crm/shared/source-group";
 export type WebhookStatus = "ACTIVE" | "DISABLED";
 export type WebhookDuplicatePolicy =
   | "CREATE_NEW"
@@ -23,6 +24,7 @@ export type WebhookMapping = {
 };
 
 export type WebhookSummary = {
+  sourceGroup?: SourceGroupCode | null;
   id: string;
   name: string;
   targetModule: "LEAD";
@@ -39,6 +41,7 @@ export type WebhookDetail = WebhookSummary & { mappings: WebhookMapping[] };
 export type WebhookCreateResult = WebhookDetail & { secret: string };
 
 export type WebhookInput = {
+  sourceGroup?: SourceGroupCode | "auto" | null;
   name: string;
   targetModule: "LEAD";
   status: WebhookStatus;

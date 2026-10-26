@@ -1,3 +1,4 @@
+import { resolveSourceGroup } from "@admission-crm/shared/source-group";
 import { randomBytes, randomUUID } from "node:crypto";
 
 import { compare, hash } from "bcryptjs";
@@ -29,6 +30,7 @@ export type FieldMetadata = {
   options?: string[];
 };
 export type ProcessWebhookRecord = {
+  source_group?: string | null;
   id: string;
   name: string;
   institution_program_id: string;
@@ -73,6 +75,7 @@ function publicWebhookPath(key: string) {
 }
 
 function serializeWebhook(webhook: {
+  source_group?: string | null;
   id: string;
   name: string;
   target_module: string;
@@ -86,6 +89,7 @@ function serializeWebhook(webhook: {
   return {
     id: webhook.id,
     name: webhook.name,
+    sourceGroup: webhook.source_group ?? null,
     targetModule: webhook.target_module,
     webhookKey: webhook.webhook_key,
     webhookUrl: publicWebhookPath(webhook.webhook_key),
@@ -253,6 +257,7 @@ export async function createWebhook(
     const created = await tx.webhooks.create({
       data: {
         institution_program_id: programId,
+        source_group: input.sourceGroup === "auto" ? null : input.sourceGroup,
         name: input.name,
         target_module: input.targetModule,
         webhook_key: generateWebhookKey(),
@@ -282,6 +287,7 @@ export async function createWebhook(
         ip_address: ipAddress,
         new_data: {
           name: input.name,
+          sourceGroup: input.sourceGroup ?? null,
           targetModule: input.targetModule,
           status: input.status,
           duplicatePolicy: input.duplicatePolicy,
@@ -307,7 +313,7 @@ export async function updateWebhook(
 ) {
   const existing = await prisma.webhooks.findFirst({
     where: { id: webhookId, institution_program_id: programId },
-    select: { id: true, name: true, status: true, duplicate_policy: true },
+    select: { id: true, name: true, status: true, duplicate_policy: true, source_group: true },
   });
   if (!existing) return null;
   const webhook = await prisma.$transaction(async (tx) => {
@@ -317,6 +323,7 @@ export async function updateWebhook(
     const updated = await tx.webhooks.update({
       where: { id: webhookId },
       data: {
+        source_group: input.sourceGroup === "auto" ? null : input.sourceGroup,
         name: input.name,
         target_module: input.targetModule,
         status: input.status,
@@ -347,6 +354,7 @@ export async function updateWebhook(
           name: input.name,
           status: input.status,
           duplicatePolicy: input.duplicatePolicy,
+          sourceGroup: updated.source_group,
           mappings: input.mappings,
         },
       },
@@ -639,38 +647,6 @@ function convertFieldValue(value: unknown, metadata: FieldMetadata) {
   );
 }
 
-function formatSourceGroup(value: string) {
-  const normalized = value.trim().toLowerCase();
-  const knownGroups: Array<[RegExp, string]> = [
-    [/facebook|(^|[._-])fb([._-]|$)/, "Facebook"],
-    [/instagram/, "Instagram"],
-    [/google|googleads|googleadservices/, "Google"],
-    [/tiktok/, "TikTok"],
-    [/youtube|youtu\.be/, "YouTube"],
-    [/zalo/, "Zalo"],
-  ];
-  return knownGroups.find(([pattern]) => pattern.test(normalized))?.[1];
-}
-
-function humanizeSourceGroup(value: string) {
-  return formatSourceGroup(value) ?? value
-    .trim()
-    .replace(/[_-]+/g, " ")
-    .replace(/\b\p{L}/gu, (letter) => letter.toLocaleUpperCase("vi"));
-}
-
-function sourceGroupFromUrl(value: string) {
-  const trimmed = value.trim();
-  try {
-    const url = new URL(/^https?:\/\//i.test(trimmed) ? trimmed : `https://${trimmed}`);
-    const campaignSource = url.searchParams.get("utm_source") ?? url.searchParams.get("source");
-    if (campaignSource) return humanizeSourceGroup(campaignSource);
-    return formatSourceGroup(trimmed) ?? url.hostname.replace(/^www\./i, "");
-  } catch {
-    return formatSourceGroup(trimmed) ?? trimmed;
-  }
-}
-
 export async function mapWebhookPayload(
   programId: string,
   payload: JsonObject,
@@ -681,6 +657,8 @@ export async function mapWebhookPayload(
     default_value: string | null;
   }>,
   metadataOverride?: FieldMetadata[],
+  fallbackSourceName?: string,
+  configuredSourceGroup?: string | null,
 ) {
   const metadata = metadataOverride ?? await getAllowedFieldMetadata(programId);
   const metadataByKey = new Map(metadata.map((field) => [field.key, field]));
@@ -704,6 +682,11 @@ export async function mapWebhookPayload(
     )
       ? payload[mapping.incoming_key]
       : mapping.default_value;
+    // Only customer source has the non-empty fallback contract. Other fields
+    // retain their existing mapping and required-field semantics.
+    if (mapping.crm_field === "source" && (value == null || (typeof value === "string" && !value.trim()))) {
+      value = mapping.default_value?.trim() || fallbackSourceName?.trim();
+    }
     if (
       value === undefined ||
       value === null ||
@@ -725,6 +708,10 @@ export async function mapWebhookPayload(
       providedFields.add(mapping.crm_field as keyof LeadInput);
     }
   }
+  if (leadValues.source === undefined && fallbackSourceName?.trim()) {
+    leadValues.source = fallbackSourceName.trim();
+    mapped.source = leadValues.source;
+  }
   let sourceName: string | undefined;
   let sourceGroupUrl: string | undefined;
   let originName: string | undefined;
@@ -743,9 +730,12 @@ export async function mapWebhookPayload(
     delete leadValues.sourceGroupUrl;
   }
   if (sourceName) {
-    originName = sourceGroupFromUrl(sourceGroupUrl ?? sourceName);
-    if (originName.length > 150)
-      throw new ProcessFailure("INVALID_FIELD_VALUE", "Nhóm nguồn tối đa 150 ký tự.", 400, "sourceGroupUrl");
+    originName = resolveSourceGroup({
+      fixedGroup: configuredSourceGroup,
+      utmSource: payload.utm_source,
+      sourceUrl: sourceGroupUrl || payload.source_url || payload.utm_url,
+      referrer: payload.source_referrer || payload.referrer,
+    }).name;
     providedFields.add("originId");
   }
   return {
@@ -965,6 +955,9 @@ async function processWebhookRecord(
       webhook.institution_program_id,
       safePayload,
       webhook.field_mappings,
+      undefined,
+      webhook.name.trim() || "Webhook",
+      webhook.source_group,
     );
     mappedPayload = mapping.mapped;
     const actor = actorOverride ?? (await getAuthUser(webhook.created_by));
@@ -1009,9 +1002,7 @@ async function processWebhookRecord(
       sourceOccurrence: mapping.originName ? {
         webhookId: webhook.id,
         requestId,
-        sourceName: mapping.sourceName && mapping.sourceName.toLocaleLowerCase("vi") !== mapping.originName?.toLocaleLowerCase("vi")
-          ? mapping.sourceName
-          : webhook.name,
+        sourceName: mapping.sourceName!,
         note: typeof mapping.mapped.note === "string" ? mapping.mapped.note : undefined,
         details: toJson(mapping.mapped),
       } : undefined,

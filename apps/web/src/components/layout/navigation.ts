@@ -384,6 +384,12 @@ const navigationSections: NavigationSection[] = [
         permissions: ["automation.manage"],
       },
       {
+        label: "Thời gian làm việc của Sale",
+        href: "/management/sale-work-schedules",
+        icon: History,
+        permissions: ["automation.manage"],
+      },
+      {
         label: "Giám sát Automation",
         href: "/automations/monitoring",
         icon: Activity,

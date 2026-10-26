@@ -11,6 +11,7 @@ import { openSmokeBrowser } from "./browser-smoke-driver.mjs";
 
 const root = process.cwd(), formId = "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa", programA = "11111111-1111-4111-8111-111111111111";
 const authOnly = process.argv.includes("--auth-only");
+const sourceGroupOnly = process.argv.includes("--source-group-only");
 const surveyOnly = process.argv.includes("--survey-only");
 const confirmationOnly = process.argv.includes("--confirmation-only");
 const focusOnly = process.argv.includes("--focus-only");
@@ -94,6 +95,31 @@ try {
     await navigate(builderPath);
     await wait(`document.querySelector('[aria-label="Cấu hình câu hỏi 1"]')`);
     assert.ok(await evaluate("document.documentElement.scrollWidth<=innerWidth"), "Builder không tràn ngang.");
+    if (sourceGroupOnly) {
+      await button("Dữ liệu CRM"); await wait(`document.querySelector('#marketing-form-source-group')`);
+      assert.ok(await evaluate(`document.querySelector('#marketing-form-source-group').textContent.includes('Tự động')`));
+      await click('#marketing-form-source-group');
+      await wait(`document.activeElement.getAttribute('role')==='option'`);
+      await key('Home', 'Home', 0, 36); await wait(`document.activeElement.textContent.includes('Tự động')`);
+      await key('ArrowDown', 'ArrowDown', 0, 40); await wait(`document.activeElement.textContent.trim()==='Facebook'`);
+      await key('Enter', 'Enter', 0, 13);
+      await wait(`document.querySelector('#marketing-form-source-group').textContent.includes('Facebook')`);
+      assert.ok(await evaluate("document.documentElement.scrollWidth<=innerWidth"), "Source group field fits all screen widths.");
+      await button("Lưu cấu hình");
+      await wait(`document.body.textContent.includes('Đã lưu cấu hình Form & Survey thành công.')`);
+      assert.equal((await state()).input.advancedSettings.sourceGroup, 'facebook');
+      await navigate(builderPath); await wait(`document.querySelector('[aria-label="Cấu hình câu hỏi 1"]')`);
+      await button("Dữ liệu CRM"); await wait(`document.querySelector('#marketing-form-source-group').textContent.includes('Facebook')`);
+      await click('#marketing-form-source-group'); await wait(`document.activeElement.getAttribute('role')==='option'`);
+      await key('Home', 'Home', 0, 36); await wait(`document.activeElement.textContent.includes('Tự động')`);
+      await key('Enter', 'Enter', 0, 13);
+      await wait(`document.querySelector('#marketing-form-source-group').textContent.includes('Tự động')`);
+      await button("Lưu cấu hình"); await wait(`document.body.textContent.includes('Đã lưu cấu hình Form & Survey thành công.')`);
+      assert.equal((await state()).input.advancedSettings.sourceGroup, 'auto');
+      console.log(`PASS source group ${width}px: keyboard selection, save/reload, reset to automatic, no overflow.`);
+      continue;
+    }
+
     await click("#fixture-public"); await wait(`document.querySelector('input[name="gate"]')`);
     await click("#fixture-builder"); await wait(`document.querySelector('[aria-label="Cấu hình câu hỏi 1"]')`);
     await click('[aria-label="Cấu hình câu hỏi 1"]');

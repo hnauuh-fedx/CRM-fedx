@@ -1,4 +1,5 @@
 import { UnrecoverableError } from "bullmq";
+import { lockWorkScheduleProgram } from "../sale-work-schedules/work-schedule-lock";
 
 import { prisma } from "../../database/prisma";
 import { Prisma } from "../../generated/prisma/client";
@@ -172,17 +173,20 @@ async function executeAssignPoolAction(node: AutomationNode, context: Automation
     reuseCompletedAssignment: (tx) => assignmentCheckpoint(tx, nodeExecutionId, result),
     onPreserved: (tx, reason, assigneeId) => preserveAssignment(tx, context, node, nodeExecutionId, reason, assigneeId, result),
     manualUnassignmentEventId: context.manualUnassignmentEventId,
-    resolveAssigneeId: (tx) => resolveAutomationAssignee(tx, {
-      ruleId: context.ruleId,
-      nodeId: node.id,
-      candidateIds: assigneeIds ?? [],
-      departmentId,
-      institutionProgramId: context.institutionProgramId,
-      allowedDepartmentIds: actor.departmentIds,
-      allowAllCandidates: actor.accessScope === "ALL" && actor.permissions.includes("lead.view_all"),
-      strategy: assignmentStrategy,
-      assigneeWeights,
-    }),
+    resolveAssigneeId: async (tx) => {
+      if (reassignmentPolicy?.workingTimeOnly && context.institutionProgramId) await lockWorkScheduleProgram(tx, context.institutionProgramId);
+      return resolveAutomationAssignee(tx, {
+        ruleId: context.ruleId,
+        nodeId: node.id,
+        candidateIds: assigneeIds ?? [],
+        departmentId,
+        institutionProgramId: context.institutionProgramId,
+        allowedDepartmentIds: actor.departmentIds,
+        allowAllCandidates: actor.accessScope === "ALL" && actor.permissions.includes("lead.view_all"),
+        strategy: assignmentStrategy,
+        assigneeWeights,
+      });
+    },
   }, context.institutionProgramId, async (tx, assignment) => {
     await completeAssignmentAction(tx, context, node.id, nodeExecutionId, assignment.assignmentId, result);
     if (reassignmentPolicy?.enabled) {

@@ -1,3 +1,5 @@
+import { resolveSourceGroup } from "@admission-crm/shared/source-group";
+import { resolveLeadOrigin, recordLeadSourceOccurrence } from "../leads/lead-source-occurrence.service";
 import { createLeadCreationSnapshot } from "../leads/lead-creation-history";
 import { prisma } from "../../database/prisma";
 import { validateMarketingFormOther, isMarketingFormOtherAnswerValid } from "@admission-crm/shared/marketing-form-config";
@@ -238,6 +240,7 @@ export async function submitMarketingForm(input: PublicSubmissionInput) {
         campaign_id: true,
         institution_program_id: true,
         source_id: true,
+        advanced_settings: true,
         duplicate_settings: true,
         success_settings: true,
         close_settings: true,
@@ -421,6 +424,27 @@ export async function submitMarketingForm(input: PublicSubmissionInput) {
     const successRedirect = resolveMarketingFormRedirect(successSettings, env.WEB_ORIGIN);
     const success = async (submissionId: string) => {
       const submission = await tx.marketing_form_submissions.findUniqueOrThrow({ where: { id: submissionId }, select: { lead_id: true } });
+      if (submission.lead_id) {
+        const sourceName = form.name.trim() || "Biểu mẫu";
+        const attribution = resolveSourceGroup({ fixedGroup: asSettings(form.advanced_settings).sourceGroup, utmSource, sourceUrl: tracking.source_url, referrer: tracking.source_referrer });
+        const originName = attribution.name;
+        const context = {
+          institutionProgramId: programId,
+          actorId: form.created_by ?? form.campaigns?.created_by ?? null,
+          ipAddress: input.ipAddress,
+          originName,
+          sourceOccurrence: {
+            requestId: submissionId,
+            sourceName,
+            note: normalized.note,
+            details: { marketingFormId: form.id, channel: source, tracking, attribution },
+          },
+        };
+        const originId = await resolveLeadOrigin(tx, context);
+        await recordLeadSourceOccurrence(tx, context, submission.lead_id, originId);
+        // Linking another form preserves the Lead's existing primary origin.
+        await tx.leads.updateMany({ where: { id: submission.lead_id, origin_id: null }, data: { origin_id: originId } });
+      }
       const triggerType = policy?.submissionMode === "survey_only" || (!policy && formType === "survey") ? "survey_completed" : "form_submitted";
       automationEventId = await createMarketingFormAutomationEvent(tx, {
         triggerType,

@@ -1,0 +1,7 @@
+Datasource "db": PostgreSQL database "crm_manual_unassign_test_1792978770574", schema "public" at "localhost:5432"
+
+Your database is now in sync with your Prisma schema. Done in 841ms
+
+Loaded Prisma config from prisma.config.ts.
+
+Prisma schema loaded from prisma\schema.prisma.

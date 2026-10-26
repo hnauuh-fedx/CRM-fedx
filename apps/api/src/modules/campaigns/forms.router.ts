@@ -1,3 +1,4 @@
+import { sourceGroupSettingsSchema } from "@admission-crm/shared/source-group";
 import { Router, type NextFunction, type Request, type Response } from "express";
 import { z } from "zod";
 import { resolveMarketingFormRedirect } from "@admission-crm/shared/marketing-form-embed";
@@ -86,7 +87,7 @@ const formSchema = z.object({
   successSettings: settingsSchema,
   accessSettings: settingsSchema,
   closeSettings: settingsSchema,
-  advancedSettings: settingsSchema,
+  advancedSettings: sourceGroupSettingsSchema.optional(),
   fields: z.array(fieldSchema).max(100).optional(),
   mappings: z.array(z.object({
     sourceField: z.string().trim().min(1).max(150).regex(/^[A-Za-z0-9_.-]+$/),

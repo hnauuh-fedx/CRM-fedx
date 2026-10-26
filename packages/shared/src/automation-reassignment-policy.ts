@@ -1,4 +1,5 @@
 export type AutomationReassignmentPolicy = {
+  workingTimeOnly?: boolean;
   enabled: boolean;
   interactionCriterion:
     | "not_opened_since_assignment"

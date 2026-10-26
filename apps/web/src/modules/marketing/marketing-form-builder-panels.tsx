@@ -1,3 +1,4 @@
+import { SourceGroupField } from "./source-group-field";
 import type { UseFormReturn } from "react-hook-form";
 import { resolveMarketingFormRedirect } from "@admission-crm/shared/marketing-form-embed";
 import { Button } from "@/components/ui/button";
@@ -11,7 +12,11 @@ import type { MarketingFormInput, MarketingFormLeadField } from "./marketing-ref
 
 export function MarketingFormCrmPanel({ form, labels, targets }: { form: UseFormReturn<MarketingFormInput>; labels: Record<MarketingFormLeadField, string>; targets: MarketingFormLeadField[] }) {
   const fields = form.watch("fields");
-  return <FieldGroup className="p-5"><p className="text-sm text-muted-foreground">Mỗi câu hỏi luôn giữ câu trả lời khảo sát. Chỉ chọn trường CRM nếu muốn ghi vào Lead theo chế độ xử lý đã lưu.</p>{fields.map((field, index) => {
+  return <FieldGroup className="p-5">
+    <SourceGroupField id="marketing-form-source-group" value={form.watch("advancedSettings")?.sourceGroup}
+      onChange={sourceGroup => form.setValue("advancedSettings", { ...form.getValues("advancedSettings"), sourceGroup }, { shouldDirty: true, shouldValidate: true })}
+      error={form.formState.errors.advancedSettings?.sourceGroup?.message as string | undefined} />
+    <p className="text-sm text-muted-foreground">Mỗi câu hỏi luôn giữ câu trả lời khảo sát. Chỉ chọn trường CRM nếu muốn ghi vào Lead theo chế độ xử lý đã lưu.</p>{fields.map((field, index) => {
     const error = form.formState.errors.fields?.[index]?.crmMappingField;
     return <Field key={field.fieldKey} data-invalid={Boolean(error)}><FieldLabel htmlFor={`crm-target-${index}`}>{index + 1}. {field.label}</FieldLabel><Select value={field.crmMappingField ?? field.leadField ?? "survey"} onValueChange={value => {
       const target = value === "survey" ? null : value as MarketingFormLeadField;

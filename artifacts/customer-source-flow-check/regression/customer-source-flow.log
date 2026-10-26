@@ -1,0 +1,8 @@
+{"event":"inbound_webhook_processed","requestId":"78ec4dbb-e3f6-4a3d-a820-ca4e1a0c2ab8","webhookId":"277c5d2a-714d-41d8-a943-835375743dd4","institutionProgramId":"e87532d6-f42a-4ffc-a3fd-5619aac5e325","targetModule":"LEAD","action":"CREATED","status":"SUCCESS","processingTimeMs":104,"responseStatus":200}
+{"event":"inbound_webhook_queued","requestId":"5a72e241-d5c7-401d-a392-4d0d3d59b1da","queueJobId":"5a72e241-d5c7-401d-a392-4d0d3d59b1da","status":"QUEUED"}
+{"event":"inbound_webhook_processed","requestId":"5a72e241-d5c7-401d-a392-4d0d3d59b1da","webhookId":"277c5d2a-714d-41d8-a943-835375743dd4","institutionProgramId":"e87532d6-f42a-4ffc-a3fd-5619aac5e325","queueJobId":"webhook-request-5a72e241-d5c7-401d-a392-4d0d3d59b1da","attempt":1,"status":"SUCCEEDED","action":"CREATED","processingTimeMs":156}
+{"event":"inbound_webhook_queued","requestId":"4b3798d3-80b6-4bf9-956e-acbdd9087e4d","queueJobId":"4b3798d3-80b6-4bf9-956e-acbdd9087e4d","status":"QUEUED"}
+{"event":"inbound_webhook_processed","requestId":"4b3798d3-80b6-4bf9-956e-acbdd9087e4d","webhookId":"277c5d2a-714d-41d8-a943-835375743dd4","institutionProgramId":"e87532d6-f42a-4ffc-a3fd-5619aac5e325","queueJobId":"webhook-request-4b3798d3-80b6-4bf9-956e-acbdd9087e4d","attempt":1,"status":"SUCCEEDED","action":"UPDATED","processingTimeMs":31}
+PASS customer source: empty/default/fallback, legacy + queued webhook, snapshot/replay, duplicate, form history, scoped groups, independent student source.
+(node:2752) DeprecationWarning: Calling client.query() when the client is already executing a query is deprecated and will be removed in pg@9.0. Use async/await or an external async flow control mechanism instead.
+(Use `node --trace-deprecation ...` to show where the warning was created)

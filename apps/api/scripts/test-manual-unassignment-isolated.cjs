@@ -33,6 +33,10 @@ async function main() {
         await client.query('ALTER TABLE automation_node_executions DROP COLUMN assignment_result');
         await client.query(readFileSync('prisma/migrations/20261022090000_automation_assignment_conflict/migration.sql', 'utf8'));
       }
+      if (process.argv.includes('customer-source-flow')) {
+        await client.query('ALTER TABLE webhooks DROP COLUMN source_group');
+        await client.query(readFileSync('prisma/migrations/20261026100000_webhook_source_group/migration.sql', 'utf8'));
+      }
       // Verify the actual additive migration independently of db push.
       await client.query('ALTER TABLE leads DROP COLUMN manual_unassignment_event_id');
       await client.query(readFileSync('prisma/migrations/20261016130000_manual_unassignment_event/migration.sql', 'utf8'));
@@ -69,7 +73,7 @@ async function main() {
     if (selected.includes('lead-workflow')) run('seed-sale-access', '--import', ['tsx', 'src/database/seed-sale-access.ts']);
     const failures = [];
     for (const name of selected) {
-      if (!/^[a-z-]+$/.test(name)) throw new Error('Invalid test name');
+      if (!/^[a-z0-9-]+$/.test(name)) throw new Error('Invalid test name');
       try { run(name, '--import', ['tsx', `src/integration/${name}.integration.ts`]); }
       catch (error) { failures.push(error.message); }
     }

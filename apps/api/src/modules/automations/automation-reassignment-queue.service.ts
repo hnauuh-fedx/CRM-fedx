@@ -2,6 +2,7 @@ import { Queue, UnrecoverableError, Worker, type Job } from "bullmq";
 
 import { isRedisDisabled, redisConnection } from "../../config/redis";
 import { prisma } from "../../database/prisma";
+import { refreshChangedWorkCalendars } from "../sale-work-schedules/reassignment-work-calendar.service";
 import { processReassignmentExpiry, processReassignmentWarning } from "./automation-reassignment.service";
 
 export type ReassignmentJobData = {
@@ -30,7 +31,7 @@ export const automationReassignmentQueue = automationDisabled
 
 async function addJob(data: ReassignmentJobData, runAt: Date) {
   if (!automationReassignmentQueue) return false;
-  const jobId = `${data.monitorId}-${data.kind}`;
+  const jobId = `${data.monitorId}-${data.kind}-${runAt.getTime()}`;
   const existing = await automationReassignmentQueue.getJob(jobId);
   if (existing) {
     const state = await existing.getState();
@@ -72,9 +73,11 @@ export async function enqueueReassignmentMonitorJobs(monitorId: string) {
 }
 
 async function processJob(job: Job<ReassignmentJobData>) {
-  if (job.data.kind === "warning") return processReassignmentWarning(job.data.monitorId);
-  if (job.data.kind === "second_warning") return processReassignmentWarning(job.data.monitorId, new Date(), "second");
-  return processReassignmentExpiry(job.data.monitorId);
+  const result = job.data.kind === "warning" ? await processReassignmentWarning(job.data.monitorId)
+    : job.data.kind === "second_warning" ? await processReassignmentWarning(job.data.monitorId, new Date(), "second")
+    : await processReassignmentExpiry(job.data.monitorId);
+  await enqueueReassignmentMonitorJobs(job.data.monitorId);
+  return result;
 }
 
 const reassignmentWorker = shouldRunWorker
@@ -82,6 +85,7 @@ const reassignmentWorker = shouldRunWorker
   : null;
 
 export async function recoverDueReassignmentMonitors(now = new Date(), limit = 500) {
+  const calendarRefreshed = await refreshChangedWorkCalendars(limit, now);
   const staleBefore = new Date(now.getTime() - 5 * 60_000);
   const stale = await prisma.automation_reassignment_monitors.findMany({
     where: { status: "processing", claimed_at: { lte: staleBefore } },
@@ -108,13 +112,26 @@ export async function recoverDueReassignmentMonitors(now = new Date(), limit = 5
     take: limit,
   });
   for (const monitor of due) await enqueueReassignmentMonitorJobs(monitor.id);
-  return { recovered: stale.length, enqueued: due.length };
+  return { recovered: stale.length, enqueued: due.length, calendarRefreshed };
 }
 
 let recoveryTimer: NodeJS.Timeout | null = null;
 if (reassignmentWorker) {
-  const recover = () => void recoverDueReassignmentMonitors()
-    .catch((error) => console.error("Không thể phục hồi job chuyển Sale", error));
+  let recovering = false;
+  const recover = async () => {
+    if (recovering) return;
+    recovering = true;
+    try {
+      let result;
+      do {
+        result = await recoverDueReassignmentMonitors();
+      } while (result.calendarRefreshed === 500 && !reassignmentWorker.closing);
+    } catch (error) {
+      console.error("Không thể phục hồi job chuyển Sale", error);
+    } finally {
+      recovering = false;
+    }
+  };
   recover();
   recoveryTimer = setInterval(recover, 60_000);
   recoveryTimer.unref();

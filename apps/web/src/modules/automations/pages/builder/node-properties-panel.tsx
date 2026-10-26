@@ -739,6 +739,16 @@ function ReassignmentPolicyFields({
               Gửi cảnh báo cho nhân viên không tương tác
             </span>
           </label>
+          <FieldGroup>
+            <Field orientation="horizontal">
+              <Checkbox id="reassignment-working-time" checked={policy.workingTimeOnly === true} onCheckedChange={checked => patchPolicy({ workingTimeOnly: checked === true })} />
+              <FieldLabel htmlFor="reassignment-working-time">Chỉ tính trong giờ làm việc của Sale</FieldLabel>
+            </Field>
+            <FieldDescription>
+              Ngoài ca và ngày nghỉ không tính vào thời gian chờ hoặc cảnh báo. Sale cần có lịch trong mục Thời gian làm việc của Sale.
+              {policy.workingTimeOnly !== true ? " Hiện đang tính thời gian liên tục, kể cả ngoài giờ." : ""}
+            </FieldDescription>
+          </FieldGroup>
           <ReassignmentWarningFields
             policy={policy}
             patchPolicy={patchPolicy}

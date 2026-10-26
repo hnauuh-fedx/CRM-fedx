@@ -1,0 +1,41 @@
+{"event":"inbound_webhook_processed","requestId":"af8be8e9-10b5-4da1-8e37-05cd0d9dc090","webhookId":"cab6830e-a2ef-4629-8858-dc11ea76278a","institutionProgramId":"383245c3-83d7-4452-ac91-9eebbd47a2c8","targetModule":"LEAD","action":"CREATED","status":"SUCCESS","processingTimeMs":122,"responseStatus":200}
+PrismaClientValidationError: 
+Invalid `prisma.lead_source_occurrences.findUniqueOrThrow()` invocation in
+D:\Project Visual Studio Code\crm_website\admission-crm\apps\api\src\integration\customer-source-flow.integration.ts:58:67
+
+  55 const legacy = await testWebhook(actor, program.id, webhook.id, { name: "Legacy source fallback", phone: phone(), source: "" });
+  56 assert.ok(legacy.ok);
+  57 assert.ok(legacy.data.record_id); leads.push(legacy.data.record_id);
+→ 58 const legacyOccurrence = await prisma.lead_source_occurrences.findUniqueOrThrow({
+       where: {
+         request_id: undefined,
+     ?   id?: String,
+     ?   AND?: lead_source_occurrencesWhereInput | lead_source_occurrencesWhereInput[],
+     ?   OR?: lead_source_occurrencesWhereInput[],
+     ?   NOT?: lead_source_occurrencesWhereInput | lead_source_occurrencesWhereInput[],
+     ?   lead_id?: UuidFilter | String,
+     ?   origin_id?: UuidFilter | String,
+     ?   webhook_id?: UuidNullableFilter | String | Null,
+     ?   source_name?: StringFilter | String,
+     ?   note?: StringNullableFilter | String | Null,
+     ?   details?: JsonNullableFilter,
+     ?   received_at?: DateTimeFilter | DateTime,
+     ?   leads?: LeadsScalarRelationFilter | leadsWhereInput,
+     ?   lead_origins?: Lead_originsScalarRelationFilter | lead_originsWhereInput,
+     ?   webhooks?: WebhooksNullableScalarRelationFilter | webhooksWhereInput | Null
+       },
+       include: {
+         lead_origins: true
+       }
+     })
+
+Argument `where` of type lead_source_occurrencesWhereUniqueInput needs at least one of `id` or `request_id` arguments. Available options are marked with ?.
+    at throwValidationException (D:\Project Visual Studio Code\crm_website\admission-crm\node_modules\@prisma\client\src\runtime\core\errorRendering\throwValidationException.ts:46:9)
+    at zr.handleRequestError (D:\Project Visual Studio Code\crm_website\admission-crm\node_modules\@prisma\client\src\runtime\RequestHandler.ts:211:7)
+    at zr.handleAndLogRequestError (D:\Project Visual Studio Code\crm_website\admission-crm\node_modules\@prisma\client\src\runtime\RequestHandler.ts:183:12)
+    at zr.request (D:\Project Visual Studio Code\crm_website\admission-crm\node_modules\@prisma\client\src\runtime\RequestHandler.ts:152:12)
+    at process.processTicksAndRejections (node:internal/process/task_queues:105:5)
+    at async a (D:\Project Visual Studio Code\crm_website\admission-crm\node_modules\@prisma\client\src\runtime\getPrismaClient.ts:963:24)
+    at async run (D:\Project Visual Studio Code\crm_website\admission-crm\apps\api\src\integration\customer-source-flow.integration.ts:58:30) {
+  clientVersion: '7.8.0'
+}

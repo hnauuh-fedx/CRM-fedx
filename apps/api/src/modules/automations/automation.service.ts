@@ -526,6 +526,26 @@ async function validateRuleConfiguration(
   const normalizedGraphData = withAutomationTriggerType(graphData, triggerType);
   const graphValidation = validateAutomationGraph(normalizedGraphData);
   const issues = [...graphValidation.issues];
+  if (graphValidation.valid) {
+    for (const node of normalizedGraphData.nodes) {
+      if (node.type !== "action_assign_pool" || !node.data.reassignmentPolicy?.enabled || !node.data.reassignmentPolicy.workingTimeOnly) continue;
+      if (!institutionProgramId) {
+        issues.push({ code: "INVALID_NODE_CONFIG", nodeId: node.id, message: "Tính theo giờ làm việc yêu cầu rule thuộc một chương trình tuyển sinh." });
+        continue;
+      }
+      const missingCalendar = await prisma.users.count({ where: {
+        status: "active", deleted_at: null,
+        ...(node.data.assigneeIds?.length ? { id: { in: node.data.assigneeIds } } : {}),
+        ...(node.data.departmentId ? { user_departments: { some: { department_id: node.data.departmentId } } } : {}),
+        user_program_roles: {
+          some: { institution_program_id: institutionProgramId, roles: { role_permissions: { some: { permissions: { code: "lead.view_assigned" } } } } },
+          none: { institution_program_id: institutionProgramId, roles: { role_permissions: { some: { permissions: { code: { in: ["lead.view_all", "lead.view_department"] } } } } } },
+        },
+        work_schedule_members: { none: { schedule: { institution_program_id: institutionProgramId, is_active: true } } },
+      } });
+      if (missingCalendar) issues.push({ code: "INVALID_NODE_CONFIG", nodeId: node.id, message: `Có ${missingCalendar} Sale chưa có lịch làm việc đang áp dụng. Hãy cấu hình lịch trước khi bật rule.` });
+    }
+  }
   if (!AUTOMATION_TRIGGER_TYPES.includes(triggerType as typeof AUTOMATION_TRIGGER_TYPES[number])) {
     issues.unshift({
       code: "UNSUPPORTED_TRIGGER" as const,

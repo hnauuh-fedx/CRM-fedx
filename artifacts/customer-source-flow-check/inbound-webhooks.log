@@ -1,0 +1,14 @@
+AssertionError [ERR_ASSERTION]: Metadata webhook phải tải được.
+
+403 !== 200
+
+    at equal (D:\Project Visual Studio Code\crm_website\admission-crm\apps\api\src\integration\inbound-webhooks.integration.ts:26:10)
+    at main (D:\Project Visual Studio Code\crm_website\admission-crm\apps\api\src\integration\inbound-webhooks.integration.ts:427:3)
+    at process.processTicksAndRejections (node:internal/process/task_queues:105:5) {
+  generatedMessage: false,
+  code: 'ERR_ASSERTION',
+  actual: 403,
+  expected: 200,
+  operator: 'deepStrictEqual',
+  diff: 'simple'
+}

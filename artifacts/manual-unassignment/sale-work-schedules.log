@@ -1,0 +1,1 @@
+PASS: scoped lists/writes, optimistic versions, calendar conflicts/replacement, warnings, weekend, outside-hours interaction, concurrent expiry, late worker, schedule edits and missing calendar

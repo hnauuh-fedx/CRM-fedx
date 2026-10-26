@@ -302,6 +302,9 @@ export function validateRegisteredAutomationNode(node: AutomationNode): string[]
       missing(`Node chia Lead ${node.id} có chính sách chuyển sale không đúng cấu trúc.`);
     } else {
       const policy = rawPolicy as Record<string, unknown>;
+      if (policy.workingTimeOnly !== undefined && typeof policy.workingTimeOnly !== "boolean") {
+        missing(`Node chia Lead ${node.id} có cách tính giờ làm việc không hợp lệ.`);
+      }
       if (typeof policy.enabled !== "boolean") {
         missing(`Node chia Lead ${node.id} phải xác định trạng thái bật chính sách chuyển sale.`);
       } else if (policy.enabled) {
