@@ -2,6 +2,9 @@ import type { CSSProperties } from "react";
 import type { Column } from "@tanstack/react-table";
 import type { LeadListItem } from "../lead.types";
 
+// Checkbox and view-icon columns only need enough room to read as separate columns.
+const compactColumns = new Set(["select", "view"]);
+
 /**
  * Columns with a configured width keep it; other columns grow to their longest value.
  * `left` is the measured sticky offset because auto-sized pinned columns have no known size.
@@ -15,8 +18,8 @@ export function leadColumnStyle(
   const pinned = column.getIsPinned() === "left";
   const width = fixedWidth ? column.getSize() : undefined;
   return {
-    paddingLeft: column.id === "view" ? 8 : undefined,
-    paddingRight: column.id === "view" ? 8 : undefined,
+    paddingLeft: compactColumns.has(column.id) ? 6 : undefined,
+    paddingRight: compactColumns.has(column.id) ? 6 : undefined,
     width,
     minWidth: width,
     maxWidth: width,
@@ -26,12 +29,12 @@ export function leadColumnStyle(
   };
 }
 export function leadColumnClass(pinned: boolean, header: boolean, lastPinned = false) {
-  const divider = lastPinned ? " border-r" : "";
+  const divider = lastPinned ? " border-r-border" : "";
   if (header)
     return pinned
       ? `whitespace-nowrap bg-muted px-3 font-medium${divider}`
       : "whitespace-nowrap px-3 font-medium text-muted-foreground";
   return pinned
-    ? `whitespace-nowrap bg-card px-3 py-4 group-hover:bg-muted group-data-[state=selected]:bg-muted${divider}`
-    : "whitespace-nowrap px-3 py-4";
+    ? `whitespace-nowrap bg-card px-3 py-2 group-hover:bg-muted group-data-[state=selected]:bg-muted${divider}`
+    : "whitespace-nowrap px-3 py-2";
 }

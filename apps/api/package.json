@@ -22,6 +22,7 @@
     "seed:sensitive-permissions": "tsx src/database/seed-sensitive-permissions.ts",
     "test:integration:leads": "tsx src/integration/lead-workflow.integration.ts",
     "test:integration:lead-bulk-assignment": "tsx src/integration/lead-bulk-assignment.integration.ts",
+    "test:integration:lead-bulk-update": "tsx src/integration/lead-bulk-update.integration.ts",
     "test:integration:lead-bulk-delete": "tsx src/integration/lead-bulk-delete.integration.ts",
     "test:integration:lead-import": "tsx src/integration/lead-import-minimal.integration.ts",
     "test:integration:director-leads": "tsx src/integration/director-lead-crud.integration.ts",
@@ -45,6 +46,8 @@
     "test:integration:custom-fields": "tsx src/integration/custom-field-definition.integration.ts",
     "test:integration:lead-custom-fields": "tsx src/integration/lead-custom-fields.integration.ts",
     "test:integration:webhooks": "tsx src/integration/inbound-webhooks.integration.ts",
+    "test:webhook-field-matching": "tsx --test --test-force-exit src/modules/webhooks/webhook-field-matching.test.ts",
+    "test:lead-field-filter": "tsx --test --test-force-exit src/modules/leads/lead-field-filter.test.ts",
     "maintenance:webhook-logs": "tsx src/maintenance/cleanup-webhook-logs.ts",
     "maintenance:webhook-queue-recover": "tsx src/maintenance/recover-webhook-queue.ts",
     "maintenance:automation-retention": "tsx src/maintenance/cleanup-automation-executions.ts",
@@ -76,7 +79,8 @@
     "db:migrate:user-program-access": "tsx src/maintenance/migrate-user-program-roles.ts",
     "test:integration:report-program-scope": "tsx src/integration/personal-report-program-scope.integration.ts",
     "test:integration:automation-assignment-conflict": "node scripts/test-manual-unassignment-isolated.cjs automation-assignment-conflict",
-    "test:integration:automation-assignment-live": "tsx src/integration/automation-assignment-live.integration.ts"
+    "test:integration:automation-assignment-live": "tsx src/integration/automation-assignment-live.integration.ts",
+    "test:integration:customer-lookup": "tsx src/integration/customer-lookup.integration.ts"
   },
   "dependencies": {
     "@admission-crm/shared": "*",

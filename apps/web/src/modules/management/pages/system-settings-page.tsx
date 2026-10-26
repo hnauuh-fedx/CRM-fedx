@@ -476,7 +476,7 @@ function SettingsTable({
       <TableBody>
         {items.map((item) => (
           <TableRow key={item.id || item.key}>
-            <TableCell className="px-5 font-medium">{item.key}</TableCell>
+            <TableCell className="px-3 font-medium">{item.key}</TableCell>
             <TableCell>{item.type ?? "-"}</TableCell>
             <TableCell className="max-w-md truncate">
               {item.value ?? "-"}
@@ -525,7 +525,7 @@ function SlaTable({
       <TableBody>
         {items.map((item) => (
           <TableRow key={item.id}>
-            <TableCell className="px-5">
+            <TableCell className="px-3">
               <div className="font-medium">{item.name}</div>
               <div className="text-sm text-muted-foreground">
                 {item.action ?? "-"}
@@ -581,7 +581,7 @@ function ExportTable({
       <TableBody>
         {items.map((item) => (
           <TableRow key={item.id}>
-            <TableCell className="px-5 font-medium">{item.name}</TableCell>
+            <TableCell className="px-3 font-medium">{item.name}</TableCell>
             <TableCell>{item.reportType}</TableCell>
             <TableCell>
               <Badge variant={item.isActive ? "default" : "outline"}>

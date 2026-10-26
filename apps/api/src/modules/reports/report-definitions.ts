@@ -1,4 +1,6 @@
 import type { AuthUser } from "../auth/auth.types";
+import type { ReportFilterOperator, ReportFilterType } from "./report-filter-conditions";
+import { reportLeadFilterFields } from "./report-lead-fields";
 
 export type PersonalReportModule = "MARKETING" | "SALE" | "ADMISSION" | "STUDENT";
 export type PersonalReportChartType = "BAR" | "TABLE" | "KPI";
@@ -7,12 +9,26 @@ export type PersonalReportSingleDisplay = "TABLE" | "LINE";
 export type PersonalReportTimePreset = "LAST_7_DAYS" | "THIS_WEEK" | "LAST_WEEK" | "THIS_MONTH" | "LAST_MONTH" | "THIS_QUARTER" | "LAST_QUARTER" | "CUSTOM";
 export type PersonalReportDateGranularity = "DAY" | "WEEK" | "MONTH" | "QUARTER";
 export type PersonalReportDatasetKey = "LEADS" | "QUALIFIED_LEADS" | "STUDENTS";
-export type PersonalReportFilterOperator = "EQUALS" | "NOT_EQUALS" | "GREATER_THAN_OR_EQUAL" | "LESS_THAN_OR_EQUAL" | "IS_NOT_EMPTY" | "IS_EMPTY" | "DATE_PRESET" | "DATE_BETWEEN";
-export type PersonalReportFilterCondition = { fieldKey: string; operator: PersonalReportFilterOperator; value?: string; fromDate?: string; toDate?: string };
+export type PersonalReportFilterOperator = ReportFilterOperator;
+export type PersonalReportFilterCondition = {
+  fieldKey: string;
+  operator: PersonalReportFilterOperator;
+  value?: string;
+  /** Upper bound of BETWEEN (number or date). */
+  valueTo?: string;
+  /** Day count of IS_X_DAYS_AGO. */
+  numberValue?: number;
+  fromDate?: string;
+  toDate?: string;
+};
 
 type MetricDefinition = { key: string; label: string; format: "NUMBER" | "PERCENT" | "CURRENCY" };
 type BreakdownDefinition = { key: string; label: string };
-type DatasetField = { key: string; label: string; type: "CATEGORY" | "DATE"; allowedAsOutput: boolean; allowedAsFilter: boolean };
+type DatasetField = {
+  key: string; label: string; type: "CATEGORY" | "DATE"; allowedAsOutput: boolean; allowedAsFilter: boolean;
+  /** Operators and value input offered in report filters (same as the Lead list filter). */
+  filterType: ReportFilterType;
+};
 const dateGranularities = [{ key: "DAY", label: "Theo ngày" }, { key: "WEEK", label: "Theo tuần" }, { key: "MONTH", label: "Theo tháng" }, { key: "QUARTER", label: "Theo quý" }] as const;
 
 function dataset<TModule extends PersonalReportModule>(definition: {
@@ -34,30 +50,32 @@ export const personalReportDatasetDefinitions = {
     key: "LEADS", label: "Tổng data", module: "SALE", countMetricKey: "totalLeads", primaryDateField: "CREATED_DATE",
     measure: { key: "LEAD_COUNT", label: "Số lượng lead" },
     fields: [
-      { key: "SOURCE", label: "Nguồn khách hàng", type: "CATEGORY", allowedAsOutput: true, allowedAsFilter: true },
-      { key: "ASSIGNEE", label: "Nhân viên phụ trách", type: "CATEGORY", allowedAsOutput: true, allowedAsFilter: true },
-      { key: "PIPELINE_STAGE", label: "Giai đoạn pipeline", type: "CATEGORY", allowedAsOutput: true, allowedAsFilter: true },
-      { key: "CREATED_DATE", label: "Ngày tạo", type: "DATE", allowedAsOutput: true, allowedAsFilter: true },
+      { key: "SOURCE", label: "Nguồn khách hàng", type: "CATEGORY", allowedAsOutput: true, allowedAsFilter: true, filterType: "enum" },
+      { key: "ASSIGNEE", label: "Nhân viên phụ trách", type: "CATEGORY", allowedAsOutput: true, allowedAsFilter: true, filterType: "enum" },
+      { key: "PIPELINE_STAGE", label: "Giai đoạn pipeline", type: "CATEGORY", allowedAsOutput: true, allowedAsFilter: true, filterType: "enum" },
+      { key: "CREATED_DATE", label: "Ngày tạo", type: "DATE", allowedAsOutput: true, allowedAsFilter: true, filterType: "date" },
+      ...reportLeadFilterFields,
     ],
   }),
   QUALIFIED_LEADS: dataset({
     key: "QUALIFIED_LEADS", label: "Tổng data đúng đối tượng (L2)", module: "SALE", countMetricKey: "totalLeads", primaryDateField: "CREATED_DATE",
     measure: { key: "QUALIFIED_LEAD_COUNT", label: "Số lượng data đúng đối tượng" },
     fields: [
-      { key: "SOURCE", label: "Nguồn khách hàng", type: "CATEGORY", allowedAsOutput: true, allowedAsFilter: true },
-      { key: "ASSIGNEE", label: "Nhân viên phụ trách", type: "CATEGORY", allowedAsOutput: true, allowedAsFilter: true },
-      { key: "PIPELINE_STAGE", label: "Giai đoạn pipeline", type: "CATEGORY", allowedAsOutput: true, allowedAsFilter: true },
-      { key: "CREATED_DATE", label: "Ngày tạo", type: "DATE", allowedAsOutput: true, allowedAsFilter: true },
+      { key: "SOURCE", label: "Nguồn khách hàng", type: "CATEGORY", allowedAsOutput: true, allowedAsFilter: true, filterType: "enum" },
+      { key: "ASSIGNEE", label: "Nhân viên phụ trách", type: "CATEGORY", allowedAsOutput: true, allowedAsFilter: true, filterType: "enum" },
+      { key: "PIPELINE_STAGE", label: "Giai đoạn pipeline", type: "CATEGORY", allowedAsOutput: true, allowedAsFilter: true, filterType: "enum" },
+      { key: "CREATED_DATE", label: "Ngày tạo", type: "DATE", allowedAsOutput: true, allowedAsFilter: true, filterType: "date" },
+      ...reportLeadFilterFields,
     ],
   }),
   STUDENTS: dataset({
     key: "STUDENTS", label: "Sinh viên", module: "STUDENT", countMetricKey: "totalStudents", primaryDateField: "ENROLLED_DATE",
     measure: { key: "STUDENT_COUNT", label: "Số lượng sinh viên" },
     fields: [
-      { key: "STATUS", label: "Trạng thái sinh viên", type: "CATEGORY", allowedAsOutput: true, allowedAsFilter: true },
-      { key: "MAJOR", label: "Ngành", type: "CATEGORY", allowedAsOutput: true, allowedAsFilter: true },
-      { key: "CLASS", label: "Lớp", type: "CATEGORY", allowedAsOutput: true, allowedAsFilter: true },
-      { key: "ENROLLED_DATE", label: "Ngày nhập học", type: "DATE", allowedAsOutput: true, allowedAsFilter: true },
+      { key: "STATUS", label: "Trạng thái sinh viên", type: "CATEGORY", allowedAsOutput: true, allowedAsFilter: true, filterType: "enum" },
+      { key: "MAJOR", label: "Ngành", type: "CATEGORY", allowedAsOutput: true, allowedAsFilter: true, filterType: "enum" },
+      { key: "CLASS", label: "Lớp", type: "CATEGORY", allowedAsOutput: true, allowedAsFilter: true, filterType: "enum" },
+      { key: "ENROLLED_DATE", label: "Ngày nhập học", type: "DATE", allowedAsOutput: true, allowedAsFilter: true, filterType: "date" },
     ],
   }),
 } as const;
@@ -65,7 +83,7 @@ export const personalReportDatasetDefinitions = {
 export const personalReportDefinitions: Record<PersonalReportModule, { label: string; metrics: MetricDefinition[]; breakdowns: BreakdownDefinition[] }> = {
   MARKETING: { label: "Marketing", metrics: [{ key: "campaignCount", label: "Số chiến dịch", format: "NUMBER" }, { key: "trackingCount", label: "Lượt UTM", format: "NUMBER" }, { key: "leadCount", label: "Lead phát sinh", format: "NUMBER" }, { key: "applicationCount", label: "Hồ sơ tuyển sinh", format: "NUMBER" }, { key: "enrolledStudentCount", label: "Sinh viên nhập học", format: "NUMBER" }, { key: "leadToApplicationRate", label: "Tỷ lệ vào hồ sơ", format: "PERCENT" }], breakdowns: [{ key: "sourcePerformance", label: "Theo nguồn UTM" }, { key: "topCampaigns", label: "Theo chiến dịch" }] },
   SALE: { label: "Sale / Telesale", metrics: [{ key: "totalLeads", label: "Lead trong kỳ", format: "NUMBER" }, { key: "assignedLeads", label: "Lead đã phân công", format: "NUMBER" }, { key: "unassignedLeads", label: "Lead chưa phân công", format: "NUMBER" }, { key: "assignmentRate", label: "Tỷ lệ phân công", format: "PERCENT" }, { key: "activityCount", label: "Hoạt động chăm sóc", format: "NUMBER" }, { key: "pendingReminders", label: "Nhắc việc chờ xử lý", format: "NUMBER" }, { key: "overdueReminders", label: "Nhắc việc quá hạn", format: "NUMBER" }], breakdowns: [{ key: "pipelineBreakdown", label: "Theo giai đoạn pipeline" }] },
-  ADMISSION: { label: "Tuyển sinh", metrics: [{ key: "totalApplications", label: "Tổng hồ sơ", format: "NUMBER" }, { key: "enrolledStudentCount", label: "Sinh viên nhập học", format: "NUMBER" }, { key: "conversionRate", label: "Tỷ lệ nhập học", format: "PERCENT" }, { key: "monthlyRevenue", label: "Doanh thu tháng", format: "CURRENCY" }, { key: "documentCount", label: "Tài liệu hồ sơ", format: "NUMBER" }, { key: "pendingDocumentCount", label: "Tài liệu cần xử lý", format: "NUMBER" }], breakdowns: [{ key: "applicationsByStatus", label: "Theo trạng thái hồ sơ" }, { key: "applicationsByMajor", label: "Theo ngành" }, { key: "feeStatusBreakdown", label: "Theo trạng thái lệ phí" }, { key: "tuitionStatusBreakdown", label: "Theo trạng thái học phí" }] },
+  ADMISSION: { label: "Tuyển sinh", metrics: [{ key: "totalApplications", label: "Tổng hồ sơ", format: "NUMBER" }, { key: "enrolledStudentCount", label: "Sinh viên nhập học", format: "NUMBER" }, { key: "conversionRate", label: "Tỷ lệ nhập học", format: "PERCENT" }, { key: "documentCount", label: "Tài liệu hồ sơ", format: "NUMBER" }, { key: "pendingDocumentCount", label: "Tài liệu cần xử lý", format: "NUMBER" }], breakdowns: [{ key: "applicationsByStatus", label: "Theo trạng thái hồ sơ" }, { key: "applicationsByMajor", label: "Theo ngành" }, { key: "feeStatusBreakdown", label: "Theo trạng thái lệ phí" }, { key: "tuitionStatusBreakdown", label: "Theo trạng thái học phí" }] },
   STUDENT: { label: "Sinh viên", metrics: [{ key: "totalStudents", label: "Tổng sinh viên", format: "NUMBER" }, { key: "activeStudents", label: "Sinh viên đang học", format: "NUMBER" }, { key: "studentsWithClass", label: "Sinh viên đã xếp lớp", format: "NUMBER" }, { key: "classAssignmentRate", label: "Tỷ lệ xếp lớp", format: "PERCENT" }, { key: "serviceRequestCount", label: "Yêu cầu dịch vụ", format: "NUMBER" }, { key: "openServiceRequestCount", label: "Dịch vụ đang mở", format: "NUMBER" }], breakdowns: [{ key: "studentsByStatus", label: "Theo trạng thái sinh viên" }, { key: "studentsByMajor", label: "Theo ngành" }, { key: "studentsByClass", label: "Theo lớp" }, { key: "serviceTypes", label: "Theo loại dịch vụ" }] },
 };
 

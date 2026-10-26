@@ -7,7 +7,6 @@ import { env } from "../../config/env";
 import { prisma } from "../../database/prisma";
 import { getAuthUser } from "../auth/auth.service";
 import { applyInboundLeadMutation } from "../leads/lead-inbound.service";
-import type { LeadInput } from "../leads/lead.contracts";
 import { classifyWebhookError, WebhookProcessingError } from "./webhook-errors";
 import { incrementWebhookMetric, observeWebhookDuration } from "./webhook-metrics";
 import { enqueueInboundWebhookRequest } from "./webhook-queue.service";
@@ -16,6 +15,8 @@ import {
   getAllowedFieldMetadata,
   mapWebhookPayload,
   ProcessFailure,
+  toInboundLeadInput,
+  toInboundUnmatchedValues,
   toJson,
   type FieldMetadata,
   type JsonObject,
@@ -306,15 +307,7 @@ export async function processInboundWebhookRequest(
     if (!actor) throw new WebhookProcessingError("WEBHOOK_ACTOR_NOT_FOUND", "Không thể xác định người tạo webhook.", "BUSINESS", false);
     if (mapping.leadValues.phone === undefined) throw new WebhookProcessingError("MISSING_REQUIRED_FIELD", "Chưa có số điện thoại để nhận diện Lead trùng.", "VALIDATION", false);
     const missingCreateFields = [...mapping.missingRequiredIncoming, ...mapping.missingRequiredCrm];
-    const leadInput = {
-      ...mapping.leadValues,
-      ...(mapping.leadValues.graduationYear !== undefined ? { graduationYear: String(mapping.leadValues.graduationYear) } : {}),
-      ...(mapping.leadValues.monthlyRevenue !== undefined ? { monthlyRevenue: String(mapping.leadValues.monthlyRevenue) } : {}),
-      fullName: String(mapping.leadValues.fullName ?? ""),
-      phone: String(mapping.leadValues.phone),
-      sourceId: String(mapping.leadValues.sourceId ?? ""),
-      institutionProgramId: snapshot.institutionProgramId,
-    } as unknown as LeadInput;
+    const leadInput = toInboundLeadInput(mapping, snapshot.institutionProgramId);
     const result = await applyInboundLeadMutation({
       actor,
       institutionProgramId: snapshot.institutionProgramId,
@@ -332,6 +325,7 @@ export async function processInboundWebhookRequest(
       } : undefined,
       providedFields: mapping.providedFields,
       customFieldValues: mapping.customFieldValues,
+      unmatchedValues: toInboundUnmatchedValues(mapping, request.webhook_id, requestId),
       canCreate: missingCreateFields.length === 0,
       ipAddress: request.source_ip ?? undefined,
       beforeMutation: async (tx) => {

@@ -3,19 +3,23 @@ import { LEAD_PHONE_MAX_LENGTH, splitLeadPhones } from "@admission-crm/shared/le
 import * as XLSX from "xlsx";
 import { z } from "zod";
 import { prisma } from "../../database/prisma";
+import { patchAdmissionInformation } from "../admissions/admission-profile-write.service";
 import type { AuthUser } from "../auth/auth.types";
 import { createLeadInTransaction } from "./application/create-lead.use-case";
-import { canAssignLead, canCreateLead } from "./application/lead-authorization";
-import { getPipelineStageMarker } from "./domain/lead-lifecycle-status";
+import { canAssignLead, canCreateLead, canUpdateLead } from "./application/lead-authorization";
+import { findVisibleLeadForMutation, leadPhoneDuplicateWhere, recordStageChange } from "./application/lead-mutation-support";
+import { getPipelineStageMarker, isFailedLeadStatus } from "./domain/lead-lifecycle-status";
 import { InvalidLeadImportFileError, type LeadImportResult } from "./lead-import.service";
 
 export type BizflyRow = { row: number; values: Record<string, unknown> };
+type BizflyDatabase = Pick<typeof prisma, "institution_programs" | "lead_sources" | "leads" | "majors" | "pipeline_stages" | "users" | "$transaction">;
 const columns: Record<string, string> = {
   hovaten: "fullName", sodienthoai: "phone", nguonhv: "sourceName",
   nganhdangky: "majorName", quytrinhtelesalecap1: "stageName",
   nhanvien: "assigneeEmail", nhanvienphutrach: "assigneeEmail", nhanvienphu: "secondaryAssigneeEmail",
-  ghichu: "note", email: "email", ngaytao: "createdAt",
+  ghichu: "note", email: "email", ngaytao: "createdAt", doanhsothang: "monthlyRevenue",
 };
+const dayMs = 24 * 60 * 60 * 1000;
 
 export function normalizeBizflyKey(value: string) {
   return value.trim().toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "")
@@ -89,6 +93,33 @@ export function parseBizflyCreatedAt(value: unknown): Date | undefined {
   return date;
 }
 
+/** Parses a date-only Bizfly cell (dd/mm/yyyy, ISO date, Excel serial or Date) to YYYY-MM-DD. */
+export function parseBizflyDate(value: unknown, label: string): string | undefined {
+  if (!text(value)) return undefined;
+  const invalid = () => new Error(`${label} không hợp lệ. Vui lòng dùng định dạng ngày/tháng/năm, ví dụ 31/10/2026.`);
+  if (value instanceof Date) {
+    if (Number.isNaN(value.getTime())) throw invalid();
+    // Round to the nearest day so the worksheet timezone offset cannot shift the calendar date.
+    return new Date(Math.round(value.getTime() / dayMs) * dayMs).toISOString().slice(0, 10);
+  }
+  let parts: [number, number, number] | undefined;
+  if (typeof value === "number") {
+    const parsed = XLSX.SSF.parse_date_code(value);
+    if (parsed) parts = [parsed.y, parsed.m, parsed.d];
+  } else {
+    const source = text(value);
+    const local = source.match(/^(\d{1,2})[/-](\d{1,2})[/-](\d{4})$/);
+    const iso = source.match(/^(\d{4})-(\d{2})-(\d{2})$/);
+    if (local) parts = [+local[3], +local[2], +local[1]];
+    else if (iso) parts = [+iso[1], +iso[2], +iso[3]];
+  }
+  if (!parts) throw invalid();
+  const [y, m, d] = parts;
+  const date = new Date(Date.UTC(y, m - 1, d));
+  if (date.getUTCFullYear() !== y || date.getUTCMonth() !== m - 1 || date.getUTCDate() !== d) throw invalid();
+  return date.toISOString().slice(0, 10);
+}
+
 export function resolveBizflyStage(value: unknown, stages: Array<{ id: string; name: string }>) {
   const raw = text(value);
   if (!raw) return undefined;
@@ -111,7 +142,7 @@ function uniqueReference(items: Array<{ id: string; name: string }>, value: stri
 
 export async function importBizflyRows(
   user: AuthUser, rows: BizflyRow[], programId?: string, ipAddress?: string,
-  database: Pick<typeof prisma, "institution_programs" | "lead_sources" | "majors" | "pipeline_stages" | "users" | "$transaction"> = prisma,
+  database: BizflyDatabase = prisma,
 ): Promise<LeadImportResult> {
   if (!programId) throw new InvalidLeadImportFileError("Vui lòng chọn chương trình đang làm việc trước khi import Bizfly.");
   if (!canCreateLead(user) || !user.institutionProgramIds.includes(programId)) {
@@ -130,7 +161,7 @@ export async function importBizflyRows(
     }, select: { id: true, email: true } }),
   ]);
   const errors: LeadImportResult["errors"] = [];
-  let importedRows = 0;
+  let importedRows = 0, updatedRows = 0, unchangedRows = 0;
   for (const row of rows) {
     const v = row.values;
     const fullName = text(v.fullName);
@@ -141,6 +172,18 @@ export async function importBizflyRows(
       if (!phone) throw new Error("Vui lòng nhập số điện thoại.");
       if ([phone, ...secondaryPhones].some((item) => item.length > LEAD_PHONE_MAX_LENGTH)) {
         throw new Error(`Mỗi số điện thoại tối đa ${LEAD_PHONE_MAX_LENGTH} ký tự.`);
+      }
+      const monthlyRevenue = parseBizflyDate(v.monthlyRevenue, "Doanh số tháng");
+      const existing = await database.leads.findFirst({
+        where: { ...leadPhoneDuplicateWhere({ phone, secondaryPhones }), deleted_at: null, institution_program_id: programId },
+        select: { id: true },
+      });
+      if (existing) {
+        // Re-importing a known phone only refreshes the monthly revenue and stage; other columns keep their values.
+        const outcome = await updateExistingBizflyLead(database, user, existing.id, programId, v.stageName, monthlyRevenue, stages, ipAddress);
+        if (outcome === "updated") updatedRows++;
+        else unchangedRows++;
+        continue;
       }
       const email = text(v.email) || undefined;
       if (email && !z.email().max(255).safeParse(email).success) throw new Error("Email không hợp lệ.");
@@ -185,8 +228,8 @@ export async function importBizflyRows(
           majorId = major.id;
         }
         const result = await createLeadInTransaction(tx, user, {
-          fullName, phone, secondaryPhones, sourceId, institutionProgramId: programId, majorId, pipelineStageId, assigneeId, secondaryAssigneeId, note, email,
-        }, { ipAddress, importInitialization: { createdAt, lifecycleStatus } });
+          fullName, phone, secondaryPhones, sourceId, institutionProgramId: programId, majorId, pipelineStageId, assigneeId, secondaryAssigneeId, note, email, monthlyRevenue,
+        },{ ipAddress, importInitialization: { createdAt, lifecycleStatus } });
         if (!result.ok) {
           const messages: Record<string, string> = {
             phone_already_exists: "Số điện thoại đã tồn tại trong chương trình này.",
@@ -207,5 +250,47 @@ export async function importBizflyRows(
         message: error instanceof Error ? error.message : "Không thể import dòng lead này." });
     }
   }
-  return { totalRows: rows.length, importedRows, failedRows: errors.length, errors };
+  return { totalRows: rows.length, importedRows, updatedRows, unchangedRows, failedRows: errors.length, errors };
+}
+
+async function updateExistingBizflyLead(
+  database: BizflyDatabase, user: AuthUser, leadId: string, programId: string, stageName: unknown,
+  monthlyRevenue: string | undefined, stages: Array<{ id: string; name: string }>, ipAddress?: string,
+) {
+  if (!canUpdateLead(user)) throw new Error("Số điện thoại đã tồn tại và bạn không có quyền cập nhật lead.");
+  // Marking a lead Fail needs the dedicated status flow, so a Fail cell does not change an existing lead.
+  const stageId = normalizeBizflyKey(text(stageName)) === "fail" ? undefined : resolveBizflyStage(stageName, stages);
+  return database.$transaction(async (tx) => {
+    const lead = await findVisibleLeadForMutation(user, leadId, programId, tx);
+    if (!lead) throw new Error("Số điện thoại đã tồn tại nhưng lead nằm ngoài phạm vi bạn được cập nhật.");
+    const revenueChange = monthlyRevenue
+      ? (await patchAdmissionInformation(tx, leadId, programId, { monthlyRevenue: new Date(`${monthlyRevenue}T00:00:00.000Z`) })).monthlyRevenue
+      : undefined;
+    const stage = stageId && stageId !== lead.pipeline_stage_id && !isFailedLeadStatus(lead.status)
+      ? stages.find((item) => item.id === stageId)
+      : undefined;
+    if (!revenueChange && !stage) return "unchanged" as const;
+
+    await tx.leads.update({
+      where: { id: leadId },
+      data: { ...(stage ? { pipeline_stage_id: stage.id } : {}), updated_at: new Date() },
+    });
+    if (stage) {
+      await recordStageChange(tx, user, leadId, lead.pipeline_stage_id, stage, { includeStageNameInAudit: true, ipAddress });
+    }
+    if (revenueChange) {
+      const isoDate = (value: unknown) => value instanceof Date ? value.toISOString().slice(0, 10) : null;
+      await tx.lead_activities.create({
+        data: { lead_id: leadId, user_id: user.id, type: "lead_updated", content: "Cập nhật Doanh số tháng từ file import Bizfly." },
+      });
+      await tx.audit_logs.create({
+        data: {
+          user_id: user.id, entity_type: "lead", entity_id: leadId, action: "import_update", ip_address: ipAddress,
+          old_data: { monthlyRevenue: isoDate(revenueChange.before) },
+          new_data: { monthlyRevenue: isoDate(revenueChange.after) },
+        },
+      });
+    }
+    return "updated" as const;
+  });
 }

@@ -249,9 +249,6 @@ export function CustomFieldsManagementPage({
   const [search, setSearch] = useState("");
   const [fieldSourceFilter, setFieldSourceFilter] =
     useState<FieldSourceFilter>(allFilterValue);
-  const [programFilter, setProgramFilter] = useState(
-    selectedProgramId ?? allFilterValue,
-  );
   const [successMessage, setSuccessMessage] = useState("");
 
   const canCreate = auth.can(
@@ -296,19 +293,15 @@ export function CustomFieldsManagementPage({
     ),
   });
 
-  const programById = useMemo(
-    () => new Map(programs.map((program) => [program.id, program])),
-    [programs],
-  );
   const visibleCustomFields = useMemo(
     () =>
       filterVisibleCustomFields({
         search,
         fieldSourceFilter,
         fields: query.data,
-        programFilter,
+        programId: selectedProgramId,
       }),
-    [fieldSourceFilter, programFilter, query.data, search],
+    [fieldSourceFilter, query.data, search, selectedProgramId],
   );
 
   const visibleGroups = useMemo(
@@ -479,9 +472,6 @@ export function CustomFieldsManagementPage({
         setSearch={setSearch}
         fieldSourceFilter={fieldSourceFilter}
         setFieldSourceFilter={setFieldSourceFilter}
-        programFilter={programFilter}
-        setProgramFilter={setProgramFilter}
-        programs={programs}
       />
 
       <CustomFieldStructure
@@ -495,7 +485,6 @@ export function CustomFieldsManagementPage({
         systemRequirementsQuery={systemRequirementsQuery}
         canUpdate={canUpdate}
         systemRequirementMutation={systemRequirementMutation}
-        programById={programById}
         canEditSensitive={canEditSensitive}
         setDialog={setDialog}
         canArchive={canArchive}
@@ -1437,23 +1426,20 @@ function buildVisibleCustomFieldGroups({
 
 function filterVisibleCustomFields({
   fieldSourceFilter,
-  programFilter,
+  programId,
   fields,
   search,
 }: {
   fieldSourceFilter: FieldSourceFilter;
-  programFilter: string;
+  /** Working program from the top bar; fields scoped to other programs are hidden. */
+  programId: string | null | undefined;
   fields: CustomFieldDefinition[] | undefined;
   search: string;
 }) {
   const keyword = search.trim().toLocaleLowerCase("vi");
   if (fieldSourceFilter === "system") return [];
   return (fields ?? []).filter((field) => {
-    if (
-      programFilter !== allFilterValue &&
-      field.scopeType === "PROGRAM" &&
-      field.programId !== programFilter
-    )
+    if (field.scopeType === "PROGRAM" && field.programId !== programId)
       return false;
     if (!keyword) return true;
     return (
@@ -1465,10 +1451,6 @@ function filterVisibleCustomFields({
 
 type DefinedCustomFieldRowProps = {
   field: CustomFieldDefinition;
-  program:
-    | import("@/modules/institutions/institution-program-context").InstitutionProgramOption
-    | null
-    | undefined;
   canUpdate: boolean;
   canEditSensitive: boolean;
   setDialog: import("react").Dispatch<
@@ -1485,7 +1467,6 @@ type DefinedCustomFieldRowProps = {
 
 function DefinedCustomFieldRow({
   field,
-  program,
   canUpdate,
   canEditSensitive,
   setDialog,
@@ -1518,20 +1499,6 @@ function DefinedCustomFieldRow({
       </TableCell>
       <TableCell>
         <code className="text-xs text-muted-foreground">{field.fieldKey}</code>
-      </TableCell>
-      <TableCell>
-        {field.scopeType === "GLOBAL" ? (
-          <Badge variant="secondary">Toàn hệ thống</Badge>
-        ) : (
-          <div className="flex min-w-48 flex-col items-start gap-1">
-            <Badge variant="outline">Theo chương trình</Badge>
-            <span className="text-xs text-muted-foreground">
-              {program
-                ? `${program.institutionName} - ${program.name}`
-                : "Chương trình không còn khả dụng"}
-            </span>
-          </div>
-        )}
       </TableCell>
       <TableCell>
         <DefinedFieldBadges field={field} />
@@ -1591,9 +1558,6 @@ function SystemCustomFieldRow({
       <TableCell>{dataTypeLabels[item.dataType]}</TableCell>
       <TableCell>
         <code className="text-xs text-muted-foreground">{item.key}</code>
-      </TableCell>
-      <TableCell>
-        <Badge variant="secondary">Toàn hệ thống</Badge>
       </TableCell>
       <TableCell>
         {canConfigureSystemRequirements ? (
@@ -1668,10 +1632,6 @@ type CustomFieldStructureProps = {
     { fieldKey: string; isRequired: boolean },
     unknown
   >;
-  programById: Map<
-    string,
-    import("@/modules/institutions/institution-program-context").InstitutionProgramOption
-  >;
   canEditSensitive: boolean;
   setDialog: import("react").Dispatch<
     import("react").SetStateAction<DialogState>
@@ -1696,7 +1656,6 @@ function CustomFieldStructure({
   systemRequirementsQuery,
   canUpdate,
   systemRequirementMutation,
-  programById,
   canEditSensitive,
   setDialog,
   canArchive,
@@ -1773,7 +1732,6 @@ function CustomFieldStructure({
                         { label: "Trường dữ liệu" },
                         { label: "Kiểu" },
                         { label: "Mã trường" },
-                        { label: "Phạm vi chương trình" },
                         { label: "Cấu hình" },
                         { label: "Trạng thái" },
                         { label: "Thao tác", className: "text-right" },
@@ -1794,14 +1752,10 @@ function CustomFieldStructure({
                         />
                       ))}
                       {group.customFields.map((field) => {
-                        const program = field.programId
-                          ? programById.get(field.programId)
-                          : null;
                         return (
                           <DefinedCustomFieldRow
                             key={field.id}
                             field={field}
-                            program={program}
                             canUpdate={canUpdate}
                             canEditSensitive={canEditSensitive}
                             setDialog={setDialog}
@@ -2058,11 +2012,6 @@ type CustomFieldFiltersProps = {
   setFieldSourceFilter: import("react").Dispatch<
     import("react").SetStateAction<FieldSourceFilter>
   >;
-  programFilter: string;
-  setProgramFilter: import("react").Dispatch<
-    import("react").SetStateAction<string>
-  >;
-  programs: import("@/modules/institutions/institution-program-context").InstitutionProgramOption[];
 };
 
 function CustomFieldFilters({
@@ -2070,9 +2019,6 @@ function CustomFieldFilters({
   setSearch,
   fieldSourceFilter,
   setFieldSourceFilter,
-  programFilter,
-  setProgramFilter,
-  programs,
 }: CustomFieldFiltersProps) {
   return (
     <Card>
@@ -2083,7 +2029,7 @@ function CustomFieldFilters({
         </CardDescription>
       </CardHeader>
       <CardContent>
-        <FieldGroup className="grid gap-4 md:grid-cols-[minmax(0,1fr)_14rem_18rem]">
+        <FieldGroup className="grid gap-4 md:grid-cols-[minmax(0,1fr)_14rem]">
           <Field>
             <FieldLabel htmlFor="custom-field-search">Tìm kiếm</FieldLabel>
             <div className="relative">
@@ -2116,30 +2062,6 @@ function CustomFieldFilters({
                   <SelectItem value={allFilterValue}>Tất cả</SelectItem>
                   <SelectItem value="system">Trường hệ thống</SelectItem>
                   <SelectItem value="custom">Trường tùy chỉnh</SelectItem>
-                </SelectGroup>
-              </SelectContent>
-            </Select>
-          </Field>
-          <Field>
-            <FieldLabel>Chương trình</FieldLabel>
-            <Select
-              value={programFilter}
-              onValueChange={setProgramFilter}
-              disabled={fieldSourceFilter === "system"}
-            >
-              <SelectTrigger className="w-full">
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectGroup>
-                  <SelectItem value={allFilterValue}>
-                    Tất cả chương trình
-                  </SelectItem>
-                  {programs.map((program) => (
-                    <SelectItem key={program.id} value={program.id}>
-                      {program.institutionName} - {program.name}
-                    </SelectItem>
-                  ))}
                 </SelectGroup>
               </SelectContent>
             </Select>
@@ -2343,7 +2265,7 @@ function CustomFieldDefinitionFields({
           <SelectContent>
             <SelectGroup>
               <SelectItem value="GLOBAL">Toàn hệ thống</SelectItem>
-              <SelectItem value="PROGRAM">Theo chương trình</SelectItem>
+              <SelectItem value="PROGRAM">Chương trình hiện tại</SelectItem>
             </SelectGroup>
           </SelectContent>
         </Select>

@@ -274,7 +274,6 @@ export async function getAdmissionDetailReport(user: AuthUser, query: ReportDate
   const [
     totalApplications,
     enrolledStudentCount,
-    totalRevenue,
     documentCount,
     pendingDocumentCount,
     statusGroups,
@@ -285,7 +284,6 @@ export async function getAdmissionDetailReport(user: AuthUser, query: ReportDate
   ] = await prisma.$transaction([
     prisma.leads.count({ where: applicationLeadWhere }),
     prisma.admission_profiles.count({ where: { AND: [admissionWhere, { students: { is: enrolledStudentWhere } }] } }),
-    prisma.admission_profiles.aggregate({ where: admissionWhere, _sum: { monthly_revenue: true } }),
     prisma.admission_documents.count({
       where: { leads: { is: scopedLeadWhere }, ...dateWhereObject("uploaded_at", query) },
     }),
@@ -362,7 +360,6 @@ export async function getAdmissionDetailReport(user: AuthUser, query: ReportDate
       totalApplications,
       enrolledStudentCount,
       conversionRate: totalApplications > 0 ? Number(((enrolledStudentCount / totalApplications) * 100).toFixed(1)) : 0,
-      monthlyRevenue: Number(totalRevenue._sum.monthly_revenue ?? 0),
       documentCount,
       pendingDocumentCount,
     },
@@ -403,7 +400,7 @@ export async function getAdmissionDetailReport(user: AuthUser, query: ReportDate
       applicationReceivedDate: application.application_received_date?.toISOString() ?? null,
       feeStatus: application.fee_status,
       tuitionStatus: application.tuition_status,
-      monthlyRevenue: Number(application.monthly_revenue ?? 0),
+      monthlyRevenue: application.monthly_revenue?.toISOString().slice(0, 10) ?? null,
     })),
   };
 }

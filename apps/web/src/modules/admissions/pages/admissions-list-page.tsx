@@ -1070,7 +1070,8 @@ function AdmissionProfileDetails({
       />
       <TextInput
         id="admission-form-revenue"
-        label="Học phí dự kiến"
+        label="Doanh số tháng"
+        type="date"
         value={form.monthlyRevenue ?? ""}
         onChange={(value) => setValue("monthlyRevenue", value)}
       />

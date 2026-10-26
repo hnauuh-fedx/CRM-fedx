@@ -28,9 +28,9 @@ try {
   await wait("document.querySelector('textarea')");
   await click('button[data-automation-field-picker]');
   await fill('input[aria-label="Tìm trường dữ liệu"]', "Người thân 2");
-  await wait("document.querySelectorAll('[data-slot=popover-content] button').length===5");
+  await wait("document.querySelectorAll('[data-slot=popover-content] [role=option]').length===5");
   await fill('input[aria-label="Tìm trường dữ liệu"]', "Quy trình Telesale");
-  await wait("Boolean(document.querySelector('[data-slot=popover-content] button[aria-disabled=true]'))");
+  await wait("Boolean(document.querySelector('[data-slot=popover-content] [role=option][aria-disabled=true]'))");
   await browser.key("Escape", "Escape");
   await wait("!document.querySelector('[data-slot=popover-content]')");
   await delay(250);

@@ -739,7 +739,7 @@ function PipelineResults({
               <TableBody>
                 {data.map((pipeline) => (
                   <TableRow key={pipeline.id} className="align-top">
-                    <TableCell className="px-5">
+                    <TableCell className="px-3">
                       <div className="font-medium">{pipeline.name}</div>
                       <div className="mt-1 flex flex-wrap gap-1.5">
                         {pipeline.module && (

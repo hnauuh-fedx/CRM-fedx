@@ -118,7 +118,7 @@ function StaffPerformanceTable({ staff, title }: StaffPerformanceTableProps) {
             <TableBody>
               {staff.map((item) => (
                 <TableRow key={item.id ?? item.name}>
-                  <TableCell className="px-5 font-medium">
+                  <TableCell className="px-3 font-medium">
                     {item.name}
                   </TableCell>
                   <TableCell className="tabular-nums">
@@ -130,7 +130,7 @@ function StaffPerformanceTable({ staff, title }: StaffPerformanceTableProps) {
                   <TableCell className="tabular-nums">
                     {integerFormatter.format(item.enrolledStudentCount)}
                   </TableCell>
-                  <TableCell className="px-5 tabular-nums">
+                  <TableCell className="px-3 tabular-nums">
                     {item.conversionRate}%
                   </TableCell>
                 </TableRow>

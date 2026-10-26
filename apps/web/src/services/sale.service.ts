@@ -4,6 +4,10 @@ import type {
   AssignmentFilters,
   AssignmentStatus,
   AssignmentListResponse,
+  CustomerLookupFilters,
+  CustomerLookupOptions,
+  CustomerLookupResponse,
+  CustomerLookupSortBy,
   ReminderFilters,
   ReminderListResponse,
   SaleFilterOptions,
@@ -30,6 +34,17 @@ export function getSaleFilterOptions(accessToken: string) {
 
 export function getLeadAssignments(params: ListParams<AssignmentFilters> & { status: AssignmentStatus }, accessToken: string) {
   return apiRequest<AssignmentListResponse>(`/sale/assignments?${toQuery(params)}`, {}, accessToken);
+}
+
+export function getCustomerLookup(
+  params: ListParams<CustomerLookupFilters> & { sortBy: CustomerLookupSortBy },
+  accessToken: string,
+) {
+  return apiRequest<CustomerLookupResponse>(`/sale/customer-lookup?${toQuery(params)}`, {}, accessToken);
+}
+
+export function getCustomerLookupOptions(accessToken: string) {
+  return apiRequest<CustomerLookupOptions>("/sale/customer-lookup/options", {}, accessToken);
 }
 
 export function getLeadActivities(params: ListParams<ActivityFilters>, accessToken: string) {

@@ -30,8 +30,8 @@ try {
     await delay(250);
     await click(`button[data-automation-field-picker]:nth-of-type(1)`);
     await fill('input[aria-label="Tìm trường dữ liệu"]', label);
-    await wait(`Array.from(document.querySelectorAll('[data-slot=popover-content] button')).some(e=>e.textContent.includes(${JSON.stringify(label)}))`);
-    await evaluate(`Array.from(document.querySelectorAll('[data-slot=popover-content] button')).find(e=>e.textContent.includes(${JSON.stringify(label)})).setAttribute('data-choice','target')`);
+    await wait(`Array.from(document.querySelectorAll('[data-slot=popover-content] [role=option]')).some(e=>e.textContent.includes(${JSON.stringify(label)}))`);
+    await evaluate(`Array.from(document.querySelectorAll('[data-slot=popover-content] [role=option]')).find(e=>e.textContent.includes(${JSON.stringify(label)})).setAttribute('data-choice','target')`);
     await click('[data-choice=target]');
     await wait("!document.querySelector('[data-slot=popover-content]')");
     await delay(250);
@@ -42,8 +42,8 @@ try {
   assert.equal((await output())[0].value, "Nguyễn Văn An");
   await click('button[data-automation-field-picker]');
   await fill('input[aria-label="Tìm trường dữ liệu"]', "Quy trình Telesale");
-  await wait("Boolean(document.querySelector('[data-slot=popover-content] button[aria-disabled=true]'))");
-  await click('[data-slot=popover-content] button[aria-disabled=true]');
+  await wait("Boolean(document.querySelector('[data-slot=popover-content] [role=option][aria-disabled=true]'))");
+  await click('[data-slot=popover-content] [role=option][aria-disabled=true]');
   assert.equal((await output())[0].field, "system:fullName");
   assert.ok(await evaluate("document.body.textContent.includes('Dùng node Cập nhật Pipeline')"));
   await browser.key("Escape", "Escape");
@@ -68,10 +68,10 @@ try {
   await click('[data-picker=second]');
   await delay(250);
   await fill('input[aria-label="Tìm trường dữ liệu"]', "Điểm");
-  await wait("document.body.textContent.includes('Không có trường dữ liệu phù hợp')");
+  await wait("document.body.textContent.includes('Không tìm thấy trường phù hợp')");
   await fill('input[aria-label="Tìm trường dữ liệu"]', "Đồng ý");
-  await wait("Array.from(document.querySelectorAll('[data-slot=popover-content] button')).some(e=>e.textContent.includes('Đồng ý'))");
-  await evaluate("Array.from(document.querySelectorAll('[data-slot=popover-content] button')).find(e=>e.textContent.includes('Đồng ý')).setAttribute('data-choice','target')");
+  await wait("Array.from(document.querySelectorAll('[data-slot=popover-content] [role=option]')).some(e=>e.textContent.includes('Đồng ý'))");
+  await evaluate("Array.from(document.querySelectorAll('[data-slot=popover-content] [role=option]')).find(e=>e.textContent.includes('Đồng ý')).setAttribute('data-choice','target')");
   await click('[data-choice=target]');
   await wait("!document.querySelector('[data-slot=popover-content]')");
   await delay(250);

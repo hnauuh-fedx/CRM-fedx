@@ -23,7 +23,7 @@ export function LeadDisplayLayoutStatus({
 }) {
   if (!enabled) return null;
   return (
-    <div className="flex flex-wrap items-center gap-2 text-sm text-muted-foreground">
+    <div className="-my-1 flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
       <LayoutStatus query={query} />
       {query.data?.personalized && <span>Đang dùng tùy chỉnh cá nhân.</span>}
       {query.data?.personalizationStale && (

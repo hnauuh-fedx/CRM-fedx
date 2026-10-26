@@ -54,7 +54,8 @@ export function LeadListTable({
   }, [pinnedKey]);
 
   function openLeadWithKeyboard(event: KeyboardEvent<HTMLTableRowElement>, leadId: string) {
-    if (event.key === "Enter" || event.key === " ") {
+    if (event.target !== event.currentTarget) return;
+    if (event.key === "Enter") {
       event.preventDefault();
       onEditLead(leadId);
     }
@@ -107,7 +108,7 @@ export function LeadListTable({
                       {canSort ? (
                         <button
                           type="button"
-                          className="inline-flex min-h-11 items-center gap-2 rounded-md focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
+                          className="inline-flex min-h-9 items-center gap-1.5 rounded-md focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
                           onClick={header.column.getToggleSortingHandler()}
                           aria-label={`Sắp xếp theo ${String(header.column.columnDef.header)}`}
                         >
@@ -136,8 +137,8 @@ export function LeadListTable({
                 data-state={row.getIsSelected() ? "selected" : undefined}
                 className="group cursor-pointer focus-visible:bg-muted/50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring"
                 tabIndex={0}
-                aria-label={`Mở chi tiết ${row.original.fullName}`}
-                onClick={() => onEditLead(row.original.id)}
+                aria-label={`${row.original.fullName} — nhấn Enter hoặc nhấp đúp để mở chi tiết`}
+                onDoubleClick={() => onEditLead(row.original.id)}
                 onKeyDown={(event) => openLeadWithKeyboard(event, row.original.id)}
               >
                 {row.getVisibleCells().map((cell) => (

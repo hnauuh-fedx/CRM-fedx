@@ -39,6 +39,7 @@ import { getSystemFieldRequirements } from "../custom-fields/system-field-requir
 import { getVisibleTransitionNoteOptions } from "./transition-note.service";
 import { transitionNoteTargetSchema } from "./transition-note.schema";
 import { initializeLeadOnOpen } from "./application/open-lead.use-case";
+import { bulkUpdateLeads, getBulkUpdateFieldOptions } from "./application/bulk-update-leads.use-case";
 
 const leadListQuerySchema = z.object({
   audience: z.enum(["candidates", "students", "all"]).default("candidates"),
@@ -151,7 +152,7 @@ const leadBodySchema = z.object({
   registrationStation: optionalText(150),
   decisionNumber: optionalText(150),
   decisionSignedDate: optionalDate,
-  monthlyRevenue: optionalDecimal,
+  monthlyRevenue: optionalDate,
   gclid: optionalText(1000),
   tags: z.string().trim().max(1000).optional(),
 }).superRefine((input, context) => {
@@ -203,10 +204,18 @@ const bulkAssignmentBodySchema = z.object({
 const bulkDeleteBodySchema = z.object({
   leadIds: z.array(z.uuid()).min(1).max(100).transform((leadIds) => [...new Set(leadIds)]),
 });
+const bulkUpdateLeadIdsSchema = z.array(z.uuid()).min(1).max(100).transform((leadIds) => [...new Set(leadIds)]);
+const bulkUpdateBodySchema = z.discriminatedUnion("field", [
+  z.object({ leadIds: bulkUpdateLeadIdsSchema, field: z.literal("pipelineStageId"), value: z.uuid() }),
+  z.object({ leadIds: bulkUpdateLeadIdsSchema, field: z.literal("sourceId"), value: z.uuid() }),
+  z.object({ leadIds: bulkUpdateLeadIdsSchema, field: z.literal("originId"), value: z.uuid() }),
+  z.object({ leadIds: bulkUpdateLeadIdsSchema, field: z.literal("monthlyRevenue"), value: z.iso.date() }),
+  z.object({ leadIds: bulkUpdateLeadIdsSchema, field: z.literal("note"), value: noteBodySchema.shape.content }),
+]);
 const customFieldValuesSchema = z.object({ values: z.array(z.object({ fieldId: z.uuid(), value: z.unknown().nullable() })).min(1).max(100) });
 
 export const leadsRouter = Router();
-leadsRouter.use(["/bulk-assign", "/bulk-delete"], requireAuthentication, async (request, response, next) => {
+leadsRouter.use(["/bulk-assign", "/bulk-delete", "/bulk-update"], requireAuthentication, async (request, response, next) => {
   try {
     const ids = z.array(z.uuid()).min(1).max(100).safeParse(request.body?.leadIds);
     if (!ids.success) { next(); return; }
@@ -401,6 +410,49 @@ leadsRouter.post(
             ? "Có lead không tồn tại hoặc nằm ngoài phạm vi truy cập. Không có lead nào được phân công."
             : "Nhân viên sale không hoạt động hoặc nằm ngoài phạm vi phân công của bạn.",
         });
+        return;
+      }
+      response.json(result.data);
+    } catch (error) {
+      next(error);
+    }
+  },
+);
+
+leadsRouter.get(
+  "/bulk-update/options",
+  requireAuthentication,
+  requireAnyPermission("lead_note.create", ...leadUpdatePermissions),
+  async (request, response, next) => {
+    try {
+      response.json(await getBulkUpdateFieldOptions(request.authUser!, getInstitutionProgramScope(request)));
+    } catch (error) {
+      next(error);
+    }
+  },
+);
+
+leadsRouter.post(
+  "/bulk-update",
+  requireAuthentication,
+  requireAnyPermission("lead_note.create", ...leadUpdatePermissions),
+  async (request, response, next) => {
+    try {
+      const parsed = bulkUpdateBodySchema.safeParse(request.body);
+      if (!parsed.success) {
+        response.status(400).json({ message: "Thông tin cập nhật hàng loạt không hợp lệ." });
+        return;
+      }
+      const { leadIds, ...update } = parsed.data;
+      const result = await bulkUpdateLeads(request.authUser!, leadIds, update, getInstitutionProgramScope(request), request.ip);
+      if (!result.ok) {
+        const failure = {
+          permission_denied: [403, "Bạn không có quyền cập nhật trường này."],
+          lead_not_found: [404, "Có lead không tồn tại hoặc nằm ngoài phạm vi truy cập. Không có lead nào được cập nhật."],
+          stage_not_found: [400, "Tiến trình đã chọn không tồn tại."],
+        } as const;
+        const [status, message] = failure[result.reason];
+        response.status(status).json({ message });
         return;
       }
       response.json(result.data);

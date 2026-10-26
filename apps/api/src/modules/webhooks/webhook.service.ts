@@ -3,6 +3,13 @@ import { randomBytes, randomUUID } from "node:crypto";
 
 import { compare, hash } from "bcryptjs";
 
+import {
+  getLeadCustomFieldGroup,
+  leadFieldGroupOrder,
+  normalizeVietnameseText,
+} from "@admission-crm/shared/lead-field-groups";
+import { vietnamProvinces } from "@admission-crm/shared/vietnam-provinces";
+
 import { Prisma } from "../../generated/prisma/client";
 import { prisma } from "../../database/prisma";
 import type { AuthUser } from "../auth/auth.types";
@@ -10,6 +17,11 @@ import { getAuthUser } from "../auth/auth.service";
 import { applyInboundLeadMutation } from "../leads/lead-inbound.service";
 import type { LeadInput } from "../leads/lead.contracts";
 import { getLeadScopeWhere } from "../leads/lead-list.service";
+import {
+  toUnmatchedRawValue,
+  type InboundUnmatchedValues,
+  type UnmatchedFieldValue,
+} from "../leads/lead-unmatched-values.service";
 import {
   webhookFieldMetadata,
   type WebhookDuplicatePolicy,
@@ -26,8 +38,13 @@ export type FieldMetadata = {
   type: WebhookFieldType;
   requiredByCrm: boolean;
   group: "STANDARD" | "CUSTOM";
+  /** Lead form cluster; absent in request snapshots stored before grouping existed. */
+  groupKey?: string;
+  groupLabel?: string;
   customFieldId?: string;
   options?: string[];
+  /** Option labels, so incoming values can match either the code or the label. */
+  choices?: Array<{ code: string; label: string }>;
 };
 export type ProcessWebhookRecord = {
   source_group?: string | null;
@@ -60,6 +77,7 @@ const supportedCustomFieldTypes = new Set([
   "BOOLEAN",
   "EMAIL",
   "PHONE",
+  "PROVINCE",
 ]);
 
 function generateWebhookKey() {
@@ -145,6 +163,7 @@ function toWebhookFieldType(fieldType: string): WebhookFieldType {
   if (fieldType === "PHONE") return "phone";
   if (fieldType === "SELECT") return "select";
   if (fieldType === "MULTI_SELECT") return "multi_select";
+  if (fieldType === "PROVINCE") return "province";
   return "string";
 }
 
@@ -171,22 +190,43 @@ export async function getAllowedFieldMetadata(
       { id: "asc" },
     ],
   });
-  return [
-    ...webhookFieldMetadata.map((field) => ({ ...field }) as FieldMetadata),
-    ...customFields.map((field) => ({
+  const custom = customFields.map((field): FieldMetadata => {
+    const group = getLeadCustomFieldGroup({
+      key: field.custom_field_groups.group_key,
+      label: field.custom_field_groups.group_label,
+    });
+    const choices = field.field_type === "PROVINCE"
+      ? vietnamProvinces.map((province) => ({ code: province.code, label: province.label }))
+      : ((field.options ?? []) as Array<{ code?: unknown; label?: unknown; isActive?: unknown }>)
+          .filter((option) => option.isActive && typeof option.code === "string")
+          .map((option) => ({
+            code: option.code as string,
+            label: typeof option.label === "string" ? option.label : (option.code as string),
+          }));
+    return {
       key: `custom:${field.id}`,
       label: field.field_label,
       type: toWebhookFieldType(field.field_type),
       requiredByCrm: field.is_required ?? false,
-      group: "CUSTOM" as const,
+      group: "CUSTOM",
+      groupKey: group.id,
+      groupLabel: group.label,
       customFieldId: field.id,
-      options: (
-        (field.options ?? []) as Array<{ code?: unknown; isActive?: unknown }>
-      )
-        .filter((option) => option.isActive && typeof option.code === "string")
-        .map((option) => option.code as string),
-    })),
+      options: choices.map((choice) => choice.code),
+      choices,
+    };
+  });
+  const fields: FieldMetadata[] = [
+    ...webhookFieldMetadata.map((field) => ({ ...field })),
+    ...custom,
   ];
+  // Stable sort keeps system fields before custom fields inside each Lead form cluster.
+  return fields
+    .map((field, index) => ({ field, index }))
+    .sort((left, right) =>
+      leadFieldGroupOrder(left.field.groupKey ?? "") - leadFieldGroupOrder(right.field.groupKey ?? "")
+      || left.index - right.index)
+    .map(({ field }) => field);
 }
 
 export async function getWebhookFieldMetadata(programId: string) {
@@ -572,79 +612,150 @@ export class ProcessFailure extends Error {
   }
 }
 
-function convertFieldValue(value: unknown, metadata: FieldMetadata) {
-  if (metadata.type === "string") {
-    if (["string", "number", "boolean"].includes(typeof value))
-      return String(value).trim();
-    throw new ProcessFailure(
-      "INVALID_FIELD_VALUE",
-      `Giá trị của '${metadata.label}' không hợp lệ.`,
-      400,
-      metadata.key,
-    );
+type ResolvedFieldValue = {
+  matched: boolean;
+  value?: unknown;
+  /** Raw text kept with a "*" mark when the value (or part of a multi-select) does not match. */
+  unmatchedRaw?: string;
+};
+type MajorReference = { id: string; name: string; code: string | null };
+type ReferenceLookups = { majors: () => Promise<MajorReference[]> };
+
+/** These decide whether a Lead can be identified or created, so they are never stored as unmatched. */
+const strictFieldKeys = new Set(["fullName", "phone", "source", "sourceGroupUrl"]);
+const genderAliases: Record<string, string> = {
+  nam: "male", male: "male", m: "male", trai: "male",
+  nu: "female", female: "female", f: "female", gai: "female",
+  khac: "other", other: "other",
+};
+const provincePrefix = /^(tinh|thanh pho|tp\.?)\s+/;
+
+function matched(value: unknown): ResolvedFieldValue {
+  return { matched: true, value };
+}
+
+function unmatched(value: unknown): ResolvedFieldValue {
+  return { matched: false, unmatchedRaw: toUnmatchedRawValue(value) };
+}
+
+/** Matches an option by exact code first, then by code or label ignoring case and Vietnamese diacritics. */
+function matchChoice(raw: string, choices: Array<{ code: string; label: string }>, normalize = normalizeVietnameseText) {
+  const exact = choices.find((choice) => choice.code === raw);
+  if (exact) return exact.code;
+  const target = normalize(raw);
+  const matches = choices.filter(
+    (choice) => normalize(choice.code) === target || normalize(choice.label) === target,
+  );
+  return matches.length === 1 ? matches[0].code : undefined;
+}
+
+function metadataChoices(metadata: FieldMetadata) {
+  return metadata.choices ?? (metadata.options ?? []).map((code) => ({ code, label: code }));
+}
+
+function parseDateText(text: string) {
+  const vietnamese = /^(\d{1,2})[/.-](\d{1,2})[/.-](\d{4})$/.exec(text);
+  const iso = vietnamese
+    ? `${vietnamese[3]}-${vietnamese[2].padStart(2, "0")}-${vietnamese[1].padStart(2, "0")}`
+    : text;
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(iso)) return undefined;
+  const date = new Date(`${iso}T00:00:00.000Z`);
+  return !Number.isNaN(date.getTime()) && date.toISOString().slice(0, 10) === iso ? iso : undefined;
+}
+
+function parseListValue(value: unknown) {
+  if (Array.isArray(value)) return value;
+  if (typeof value !== "string") return [value];
+  try {
+    const parsed: unknown = JSON.parse(value);
+    if (Array.isArray(parsed)) return parsed;
+  } catch {
+    // Plain comma-separated text.
   }
+  return value.split(",").map((item) => item.trim()).filter(Boolean);
+}
+
+async function resolveFieldValue(
+  value: unknown,
+  metadata: FieldMetadata,
+  lookups: ReferenceLookups,
+): Promise<ResolvedFieldValue> {
+  const isScalar = ["string", "number", "boolean"].includes(typeof value);
+  const text = isScalar ? String(value).trim() : "";
+  if (metadata.type === "string") return isScalar ? matched(text) : unmatched(value);
+  if (!isScalar && metadata.type !== "multi_select") return unmatched(value);
   if (metadata.type === "number") {
-    const converted =
-      typeof value === "number" ? value : Number(String(value).trim());
-    if (Number.isFinite(converted)) return converted;
+    const converted = typeof value === "number" ? value : Number(text);
+    return text && Number.isFinite(converted) ? matched(converted) : unmatched(value);
   }
   if (metadata.type === "boolean") {
-    if (typeof value === "boolean") return value;
-    const normalized = String(value).trim().toLowerCase();
-    if (["true", "1", "yes"].includes(normalized)) return true;
-    if (["false", "0", "no"].includes(normalized)) return false;
+    if (typeof value === "boolean") return matched(value);
+    const normalized = normalizeVietnameseText(text);
+    if (["true", "1", "yes", "co"].includes(normalized)) return matched(true);
+    if (["false", "0", "no", "khong"].includes(normalized)) return matched(false);
+    return unmatched(value);
   }
   if (metadata.type === "email") {
-    const converted = String(value).trim();
-    if (/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(converted)) return converted;
+    return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(text) ? matched(text.toLowerCase()) : unmatched(value);
   }
   if (metadata.type === "phone") {
-    const converted = String(value).replace(/[\s().-]/g, "");
-    if (/^\d{10}$/.test(converted)) return converted;
+    const converted = text.replace(/[\s().-]/g, "");
+    return /^\d{10}$/.test(converted) ? matched(converted) : unmatched(value);
   }
   if (metadata.type === "date") {
-    const converted = String(value).trim();
-    if (/^\d{4}-\d{2}-\d{2}$/.test(converted)) {
-      const date = new Date(`${converted}T00:00:00.000Z`);
-      if (!Number.isNaN(date.getTime()) && date.toISOString().slice(0, 10) === converted) return converted;
-    }
+    const converted = parseDateText(text);
+    return converted ? matched(converted) : unmatched(value);
   }
   if (metadata.type === "datetime") {
-    const converted = String(value).trim();
-    const date = new Date(converted);
-    if (/^\d{4}-\d{2}-\d{2}T/.test(converted) && !Number.isNaN(date.getTime())) return date.toISOString();
+    const date = new Date(text);
+    if (/^\d{4}-\d{2}-\d{2}T/.test(text) && !Number.isNaN(date.getTime())) return matched(date.toISOString());
+    const day = parseDateText(text);
+    return day ? matched(new Date(`${day}T00:00:00.000Z`).toISOString()) : unmatched(value);
+  }
+  if (metadata.type === "province") {
+    const stripPrefix = (input: string) => normalizeVietnameseText(input).replace(provincePrefix, "");
+    const code = matchChoice(text, metadataChoices(metadata), stripPrefix);
+    return code ? matched(code) : unmatched(value);
   }
   if (metadata.type === "select") {
-    const converted = String(value).trim();
-    if (metadata.options?.includes(converted)) return converted;
+    if (metadata.key === "gender") {
+      const gender = genderAliases[normalizeVietnameseText(text)];
+      return gender ? matched(gender) : unmatched(value);
+    }
+    if (metadata.key === "majorId") {
+      const majors = await lookups.majors();
+      const majorId = matchChoice(
+        text,
+        majors.flatMap((major) => [
+          { code: major.id, label: major.name },
+          ...(major.code ? [{ code: major.id, label: major.code }] : []),
+        ]),
+      ) ?? majors.find((major) => major.id === text)?.id;
+      return majorId ? matched(majorId) : unmatched(value);
+    }
+    const code = matchChoice(text, metadataChoices(metadata));
+    return code ? matched(code) : unmatched(value);
   }
   if (metadata.type === "multi_select") {
-    let converted = value;
-    if (typeof value === "string") {
-      try {
-        converted = JSON.parse(value);
-      } catch {
-        converted = value
-          .split(",")
-          .map((item) => item.trim())
-          .filter(Boolean);
+    const items = parseListValue(value);
+    const codes: string[] = [];
+    const rejected: unknown[] = [];
+    for (const item of items) {
+      const code = ["string", "number"].includes(typeof item)
+        ? matchChoice(String(item).trim(), metadataChoices(metadata))
+        : undefined;
+      if (code) {
+        if (!codes.includes(code)) codes.push(code);
+      } else {
+        rejected.push(item);
       }
     }
-    if (
-      Array.isArray(converted) &&
-      converted.every(
-        (item) => typeof item === "string" && metadata.options?.includes(item),
-      ) &&
-      new Set(converted).size === converted.length
-    )
-      return converted;
+    if (!codes.length) return unmatched(value);
+    return rejected.length
+      ? { matched: true, value: codes, unmatchedRaw: toUnmatchedRawValue(rejected) }
+      : matched(codes);
   }
-  throw new ProcessFailure(
-    "INVALID_FIELD_VALUE",
-    `Giá trị của '${metadata.label}' không hợp lệ.`,
-    400,
-    metadata.key,
-  );
+  return unmatched(value);
 }
 
 export async function mapWebhookPayload(
@@ -667,6 +778,16 @@ export async function mapWebhookPayload(
   const customFieldValues: Array<{ fieldId: string; value: unknown }> = [];
   const providedFields = new Set<keyof LeadInput>();
   const missingRequiredIncoming: string[] = [];
+  const unmatchedValues: UnmatchedFieldValue[] = [];
+  const resolvedFieldKeys: string[] = [];
+  let majors: MajorReference[] | undefined;
+  const lookups: ReferenceLookups = {
+    majors: async () => (majors ??= await prisma.majors.findMany({
+      where: { OR: [{ institution_program_id: programId }, { institution_program_id: null }] },
+      select: { id: true, name: true, code: true },
+      orderBy: [{ name: "asc" }, { id: "asc" }],
+    })),
+  };
   for (const mapping of mappings) {
     const metadata = metadataByKey.get(mapping.crm_field);
     if (!metadata)
@@ -696,8 +817,29 @@ export async function mapWebhookPayload(
         missingRequiredIncoming.push(mapping.incoming_key);
       continue;
     }
-    const converted = convertFieldValue(value, metadata);
+    const resolved = await resolveFieldValue(value, metadata, lookups);
+    if (resolved.unmatchedRaw !== undefined) {
+      if (strictFieldKeys.has(metadata.key))
+        throw new ProcessFailure(
+          "INVALID_FIELD_VALUE",
+          `Giá trị của '${metadata.label}' không hợp lệ.`,
+          400,
+          metadata.key,
+        );
+      unmatchedValues.push({
+        fieldKey: mapping.crm_field,
+        label: metadata.label,
+        rawValue: resolved.unmatchedRaw,
+      });
+    }
+    if (!resolved.matched) {
+      // Still received: the Lead keeps the raw value marked with "*" instead of rejecting the request.
+      mapped[mapping.crm_field] = `${resolved.unmatchedRaw}*`;
+      continue;
+    }
+    const converted = resolved.value;
     mapped[mapping.crm_field] = converted;
+    resolvedFieldKeys.push(mapping.crm_field);
     if (metadata.customFieldId) {
       customFieldValues.push({
         fieldId: metadata.customFieldId,
@@ -747,9 +889,43 @@ export async function mapWebhookPayload(
     customFieldValues,
     providedFields,
     missingRequiredIncoming,
+    unmatchedValues,
+    resolvedFieldKeys,
     missingRequiredCrm: metadata
       .filter((field) => field.requiredByCrm && !Object.prototype.hasOwnProperty.call(mapped, field.key))
       .map((field) => field.label),
+  };
+}
+
+export type WebhookPayloadMapping = Awaited<ReturnType<typeof mapWebhookPayload>>;
+
+/** Lead writers take string inputs, so typed webhook values are serialized back. */
+export function toInboundLeadInput(mapping: WebhookPayloadMapping, programId: string) {
+  const values = Object.fromEntries(
+    Object.entries(mapping.leadValues).map(([key, value]) => [
+      key,
+      typeof value === "string" ? value : Array.isArray(value) ? value.join(", ") : String(value),
+    ]),
+  );
+  return {
+    ...values,
+    fullName: String(mapping.leadValues.fullName ?? ""),
+    phone: String(mapping.leadValues.phone),
+    sourceId: String(mapping.leadValues.sourceId ?? ""),
+    institutionProgramId: programId,
+  } as unknown as LeadInput;
+}
+
+export function toInboundUnmatchedValues(
+  mapping: WebhookPayloadMapping,
+  webhookId: string,
+  requestId: string,
+): InboundUnmatchedValues {
+  return {
+    values: mapping.unmatchedValues,
+    resolvedFieldKeys: mapping.resolvedFieldKeys,
+    webhookId,
+    requestId,
   };
 }
 
@@ -976,22 +1152,7 @@ async function processWebhookRecord(
       );
     }
     const missingCreateFields = [...mapping.missingRequiredIncoming, ...mapping.missingRequiredCrm];
-    const normalizedLeadValues = {
-      ...mapping.leadValues,
-      ...(mapping.leadValues.graduationYear !== undefined
-        ? { graduationYear: String(mapping.leadValues.graduationYear) }
-        : {}),
-      ...(mapping.leadValues.monthlyRevenue !== undefined
-        ? { monthlyRevenue: String(mapping.leadValues.monthlyRevenue) }
-        : {}),
-    };
-    const leadInput = {
-      ...normalizedLeadValues,
-      fullName: String(mapping.leadValues.fullName ?? ""),
-      phone: String(mapping.leadValues.phone),
-      sourceId: String(mapping.leadValues.sourceId ?? ""),
-      institutionProgramId: webhook.institution_program_id,
-    } as unknown as LeadInput;
+    const leadInput = toInboundLeadInput(mapping, webhook.institution_program_id);
     const result = await applyInboundLeadMutation({
       actor,
       institutionProgramId: webhook.institution_program_id,
@@ -1008,6 +1169,7 @@ async function processWebhookRecord(
       } : undefined,
       providedFields: mapping.providedFields,
       customFieldValues: mapping.customFieldValues,
+      unmatchedValues: toInboundUnmatchedValues(mapping, webhook.id, requestId),
       canCreate: missingCreateFields.length === 0,
       ipAddress,
       enforceActorScope: trustedTest,
@@ -1110,6 +1272,9 @@ async function processWebhookRecord(
         record_id: result.recordId,
         request_id: requestId,
         action: result.action === "CREATED" ? "created" : "updated",
+        ...(mapping.unmatchedValues.length
+          ? { unmatched_fields: mapping.unmatchedValues.map((item) => item.fieldKey) }
+          : {}),
       },
     };
   } catch (error) {

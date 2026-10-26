@@ -581,7 +581,7 @@ function InstitutionProgramResults({
               <TableBody>
                 {data.map((program) => (
                   <TableRow key={program.id}>
-                    <TableCell className="px-5">
+                    <TableCell className="px-3">
                       <div className="font-medium">{program.name}</div>
                       <div className="text-sm text-muted-foreground">
                         {program.code}

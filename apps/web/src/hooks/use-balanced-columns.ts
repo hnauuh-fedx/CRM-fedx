@@ -26,5 +26,5 @@ export function useBalancedColumns<T extends HTMLElement>(count: number, minItem
   }, [count, minItemWidth, gap]);
 
   const style: CSSProperties = { gridTemplateColumns: `repeat(${columns}, minmax(0, 1fr))` };
-  return { ref, style };
+  return { ref, style, columns };
 }

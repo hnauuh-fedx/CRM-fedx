@@ -763,7 +763,7 @@ function AdmissionDocumentResults({
                   <TableHead
                     key={column.key}
                     scope="col"
-                    className="px-5 font-medium text-muted-foreground"
+                    className="px-3 font-medium text-muted-foreground"
                   >
                     {column.sortable ? (
                       <button
@@ -795,7 +795,7 @@ function AdmissionDocumentResults({
                 ))}
                 <TableHead
                   scope="col"
-                  className="px-5 text-right font-medium text-muted-foreground"
+                  className="px-3 text-right font-medium text-muted-foreground"
                 >
                   Thao tác
                 </TableHead>
@@ -804,19 +804,19 @@ function AdmissionDocumentResults({
             <TableBody>
               {documents.map((document) => (
                 <TableRow key={document.id}>
-                  <TableCell className="px-5 py-4">
+                  <TableCell className="px-3 py-2">
                     {document.admissionCode ?? "-"}
                   </TableCell>
-                  <TableCell className="px-5 py-4 font-medium">
+                  <TableCell className="px-3 py-2 font-medium">
                     {document.candidateName ?? "-"}
                   </TableCell>
-                  <TableCell className="px-5 py-4">
+                  <TableCell className="px-3 py-2">
                     {document.documentType}
                   </TableCell>
-                  <TableCell className="px-5 py-4">
+                  <TableCell className="px-3 py-2">
                     <DocumentStatusBadge status={document.status} />
                   </TableCell>
-                  <TableCell className="px-5 py-4">
+                  <TableCell className="px-3 py-2">
                     {document.fileUrl ? (
                       <a
                         className="text-primary underline-offset-4 hover:underline"
@@ -830,10 +830,10 @@ function AdmissionDocumentResults({
                       (document.fileName ?? "-")
                     )}
                   </TableCell>
-                  <TableCell className="px-5 py-4">
+                  <TableCell className="px-3 py-2">
                     {formatDate(document.uploadedAt)}
                   </TableCell>
-                  <TableCell className="px-5 py-4">
+                  <TableCell className="px-3 py-2">
                     <DocumentActions
                       document={document}
                       canApprove={canApprove}

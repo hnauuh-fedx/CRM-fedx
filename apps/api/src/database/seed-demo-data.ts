@@ -573,13 +573,13 @@ async function seedAdmissionAndStudents(principals: Awaited<ReturnType<typeof se
 
   const profileOne = await prisma.admission_profiles.upsert({
     where: { lead_id: leads[2].id },
-    update: { admission_code: "DEMO-HS-001", institution_program_id: institutionPrograms[0].id, major_id: major.id, admission_status_id: submitted.id, training_type: "Chính quy", fee_status: "paid", tuition_status: "pending", monthly_revenue: 12500000 },
-    create: { id: ids.profiles[0], lead_id: leads[2].id, admission_code: "DEMO-HS-001", institution_program_id: institutionPrograms[0].id, major_id: major.id, admission_status_id: submitted.id, training_type: "Chính quy", fee_status: "paid", tuition_status: "pending", monthly_revenue: 12500000, application_received_date: days(-10), created_at: days(-10) },
+    update: { admission_code: "DEMO-HS-001", institution_program_id: institutionPrograms[0].id, major_id: major.id, admission_status_id: submitted.id, training_type: "Chính quy", fee_status: "paid", tuition_status: "pending" },
+    create: { id: ids.profiles[0], lead_id: leads[2].id, admission_code: "DEMO-HS-001", institution_program_id: institutionPrograms[0].id, major_id: major.id, admission_status_id: submitted.id, training_type: "Chính quy", fee_status: "paid", tuition_status: "pending", application_received_date: days(-10), created_at: days(-10) },
   });
   const profileTwo = await prisma.admission_profiles.upsert({
     where: { lead_id: leads[3].id },
-    update: { admission_code: "DEMO-HS-002", institution_program_id: institutionPrograms[0].id, major_id: major.id, admission_status_id: enrolled.id, training_type: "Chính quy", fee_status: "paid", tuition_status: "paid", monthly_revenue: 14500000 },
-    create: { id: ids.profiles[1], lead_id: leads[3].id, admission_code: "DEMO-HS-002", institution_program_id: institutionPrograms[0].id, major_id: major.id, admission_status_id: enrolled.id, training_type: "Chính quy", fee_status: "paid", tuition_status: "paid", monthly_revenue: 14500000, application_received_date: days(-32), created_at: days(-32) },
+    update: { admission_code: "DEMO-HS-002", institution_program_id: institutionPrograms[0].id, major_id: major.id, admission_status_id: enrolled.id, training_type: "Chính quy", fee_status: "paid", tuition_status: "paid" },
+    create: { id: ids.profiles[1], lead_id: leads[3].id, admission_code: "DEMO-HS-002", institution_program_id: institutionPrograms[0].id, major_id: major.id, admission_status_id: enrolled.id, training_type: "Chính quy", fee_status: "paid", tuition_status: "paid", application_received_date: days(-32), created_at: days(-32) },
   });
   await prisma.student_profiles.upsert({ where: { lead_id: leads[3].id }, update: { high_school_name: "THPT Trà Vinh", graduation_year: 2026, nationality: "Việt Nam" }, create: { lead_id: leads[3].id, high_school_name: "THPT Trà Vinh", graduation_year: 2026, nationality: "Việt Nam" } });
 

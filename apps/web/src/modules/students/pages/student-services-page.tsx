@@ -476,20 +476,20 @@ function StudentServiceResults({
             <caption className="sr-only">Dịch vụ sinh viên</caption>
             <TableHeader className="bg-muted/55 text-xs uppercase tracking-wide text-muted-foreground">
               <TableRow className="hover:bg-muted/55">
-                <TableHead className="px-5">Sinh viên</TableHead>
-                <TableHead className="px-5">Lớp</TableHead>
-                <TableHead className="px-5">Loại dịch vụ</TableHead>
-                <TableHead className="px-5">Nội dung</TableHead>
-                <TableHead className="px-5">Trạng thái</TableHead>
-                <TableHead className="px-5">Người xử lý</TableHead>
-                <TableHead className="px-5">Ngày ghi nhận</TableHead>
-                {canUpdate && <TableHead className="px-5">Thao tác</TableHead>}
+                <TableHead className="px-3">Sinh viên</TableHead>
+                <TableHead className="px-3">Lớp</TableHead>
+                <TableHead className="px-3">Loại dịch vụ</TableHead>
+                <TableHead className="px-3">Nội dung</TableHead>
+                <TableHead className="px-3">Trạng thái</TableHead>
+                <TableHead className="px-3">Người xử lý</TableHead>
+                <TableHead className="px-3">Ngày ghi nhận</TableHead>
+                {canUpdate && <TableHead className="px-3">Thao tác</TableHead>}
               </TableRow>
             </TableHeader>
             <TableBody>
               {records.map((record) => (
                 <TableRow key={record.id}>
-                  <TableCell className="px-5 py-4">
+                  <TableCell className="px-3 py-2">
                     <span className="font-medium">
                       {record.studentName ?? "-"}
                     </span>
@@ -498,28 +498,28 @@ function StudentServiceResults({
                       {record.studentCode ?? "-"}
                     </span>
                   </TableCell>
-                  <TableCell className="px-5 py-4">
+                  <TableCell className="px-3 py-2">
                     {record.className ?? "-"}
                   </TableCell>
-                  <TableCell className="px-5 py-4">
+                  <TableCell className="px-3 py-2">
                     {record.type ?? "-"}
                   </TableCell>
-                  <TableCell className="max-w-80 px-5 py-4">
+                  <TableCell className="max-w-80 px-3 py-2">
                     {record.content ?? "-"}
                   </TableCell>
-                  <TableCell className="px-5 py-4">
+                  <TableCell className="px-3 py-2">
                     <Badge variant="secondary">
                       {displayStatus(record.status)}
                     </Badge>
                   </TableCell>
-                  <TableCell className="px-5 py-4">
+                  <TableCell className="px-3 py-2">
                     {record.handledBy ?? "Chưa phân công"}
                   </TableCell>
-                  <TableCell className="px-5 py-4">
+                  <TableCell className="px-3 py-2">
                     {formatDate(record.createdAt)}
                   </TableCell>
                   {canUpdate && (
-                    <TableCell className="px-5 py-4">
+                    <TableCell className="px-3 py-2">
                       <Button
                         type="button"
                         variant="outline"

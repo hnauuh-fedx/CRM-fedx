@@ -40,7 +40,7 @@ export function LeadImportErrorsTable({ errors }: { errors: LeadImportError[] })
           {table.getHeaderGroups().map((group) => (
             <TableRow key={group.id}>
               {group.headers.map((header) => (
-                <TableHead key={header.id} className="px-4">
+                <TableHead key={header.id} className="px-3">
                   {flexRender(header.column.columnDef.header, header.getContext())}
                 </TableHead>
               ))}
@@ -51,7 +51,7 @@ export function LeadImportErrorsTable({ errors }: { errors: LeadImportError[] })
           {table.getRowModel().rows.map((row) => (
             <TableRow key={row.id}>
               {row.getVisibleCells().map((cell) => (
-                <TableCell key={cell.id} className="px-4 whitespace-normal wrap-anywhere">
+                <TableCell key={cell.id} className="px-3 whitespace-normal wrap-anywhere">
                   {flexRender(cell.column.columnDef.cell, cell.getContext())}
                 </TableCell>
               ))}

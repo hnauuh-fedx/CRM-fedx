@@ -37,7 +37,6 @@ export function informationFieldRules(key: string): Record<string, unknown> {
   if (key === "graduationYear") return { integer: true, min: 0, max: 2100 };
   if (key === "leadScore") return { integer: true, min: 0, max: 2147483647 };
   if (["score1", "score2", "score3", "admissionScore"].includes(key)) return { min: 0, max: 999.99, decimalPlaces: 2 };
-  if (key === "monthlyRevenue") return { min: 0, max: 9999999999999.99, decimalPlaces: 2 };
   if (key === "secondaryPhones") return { phone: true, maxItems: 5, maxLength: 30 };
   if (key === "tags") return { maxItems: 20, maxLength: 100 };
   if (["cccd", "phone"].includes(key)) return { maxLength: 30 };

@@ -191,7 +191,7 @@ export function BusinessRecordsPage<TSort extends string>({
   const displayColumns = useMemo(() => columns, [columns]);
 
   return (
-    <div className="mx-auto flex max-w-7xl flex-col gap-6">
+    <div className="mx-auto flex max-w-7xl flex-col gap-4">
       <PageHeader
         eyebrow={eyebrow}
         title={title}
@@ -199,21 +199,21 @@ export function BusinessRecordsPage<TSort extends string>({
         description={description}
       />
 
-      <Card className="gap-4 border-border/70 py-5 shadow-xs">
-        <CardHeader className="gap-1 px-5">
+      <Card className="gap-3 border-border/70 py-4 shadow-xs">
+        <CardHeader className="gap-0.5 px-4">
           <CardTitle>Bộ lọc dữ liệu</CardTitle>
           <CardDescription>
             Tìm kiếm và lọc dữ liệu theo tiêu chí nghiệp vụ.
           </CardDescription>
         </CardHeader>
-        <CardContent className="px-5">
+        <CardContent className="px-4">
           <form
             onSubmit={(event) => {
               event.preventDefault();
               dispatch({ type: "applyFilters" });
             }}
           >
-            <FieldGroup className="grid gap-4 lg:grid-cols-[minmax(240px,2fr)_repeat(2,minmax(180px,1fr))_auto]">
+            <FieldGroup className="grid gap-3 lg:grid-cols-[minmax(240px,2fr)_repeat(2,minmax(180px,1fr))_auto]">
               <Field className="gap-2">
                 <FieldLabel htmlFor={`${queryKey}-search`}>Tìm kiếm</FieldLabel>
                 <div className="relative">
@@ -260,7 +260,7 @@ export function BusinessRecordsPage<TSort extends string>({
       </Card>
 
       <Card className="gap-0 overflow-hidden border-border/70 py-0 shadow-xs">
-        <CardHeader className="gap-1 border-b py-5">
+        <CardHeader className="gap-0.5 border-b px-4 py-3 [.border-b]:pb-3">
           <CardTitle>{recordsLabel}</CardTitle>
           <CardDescription>
             {pagination
@@ -288,7 +288,7 @@ export function BusinessRecordsPage<TSort extends string>({
                     <TableHead
                       key={column.key}
                       scope="col"
-                      className="px-5 font-medium text-muted-foreground"
+                      className="px-3 font-medium text-muted-foreground"
                     >
                       {column.sortable ? (
                         <button

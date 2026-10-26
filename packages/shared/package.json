@@ -16,6 +16,8 @@
     "./automation-assignment": "./src/automation-assignment.ts",
     "./automation-reassignment-policy": "./src/automation-reassignment-policy.ts",
     "./lead-form-field-catalog": "./src/lead-form-field-catalog.ts",
+    "./lead-field-groups": "./src/lead-field-groups.ts",
+    "./marketing-form-lead-fields": "./src/marketing-form-lead-fields.ts",
     "./display-layout": "./src/display-layout.ts",
     "./access-scope": "./src/access-scope.ts",
     "./lead-phone": "./src/lead-phone.ts",

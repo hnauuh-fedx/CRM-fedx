@@ -14,6 +14,8 @@ import { validateMarketingFormVisibility, resolveMarketingFormVisibleKeys, strip
 import { marketingFormTrackingKeys, resolveMarketingFormRedirect, sanitizeMarketingFormTracking } from "@admission-crm/shared/marketing-form-embed";
 import { env } from "../../config/env";
 import { createMarketingFormAutomationEvent, dispatchMarketingFormAutomationEvent } from "../automations/marketing-form-automation-event.service";
+import { getMarketingLeadField, marketingLeadFieldLabel, marketingLeadMappingFields } from "@admission-crm/shared/marketing-form-lead-fields";
+import { findEmptyLeadFields, parseLeadFieldText, writeLeadFieldValues } from "../leads/lead-field-values";
 
 type PublicSubmissionInput = {
   publicKey: string;
@@ -25,17 +27,7 @@ type PublicSubmissionInput = {
   idempotencyKey?: string;
 };
 
-const leadFields = new Set([
-  "full_name",
-  "phone",
-  "email",
-  "gender",
-  "date_of_birth",
-  "note",
-  "source_id",
-  "institution_program_id",
-  "major_id",
-]);
+const leadFields = new Set<string>(marketingLeadMappingFields);
 
 function asText(value: unknown) {
   if (value === null || value === undefined) return "";
@@ -372,6 +364,30 @@ export async function submitMarketingForm(input: PublicSubmissionInput) {
       if (!exists) validationErrors.push(`${label} không tồn tại hoặc không thuộc chương trình của biểu mẫu.`);
     }
 
+    // Other Lead form fields must fit their stored type before anything is written.
+    const extendedValues: Record<string, unknown> = {};
+    for (const [key, text] of Object.entries(normalized)) {
+      const extended = getMarketingLeadField(key);
+      if (!extended) continue;
+      const parsed = parseLeadFieldText(key, text);
+      if (parsed === undefined) {
+        const label = form.marketing_form_fields.find((item) => (item.crm_mapping_field ?? item.lead_field) === key)?.label ?? marketingLeadFieldLabel(key);
+        validationErrors.push(`${label} không đúng định dạng ${extended.dataType === "DATE" ? "ngày" : "số"}.`);
+      } else {
+        extendedValues[key] = parsed;
+      }
+    }
+    // A relative record needs a name; answers about an unnamed relative stay in the submission only.
+    for (const index of [1, 2]) {
+      if (extendedValues[`relative${index}FullName`]) continue;
+      for (const key of Object.keys(extendedValues)) if (key.startsWith(`relative${index}`)) delete extendedValues[key];
+    }
+    /** Existing Leads only receive values for fields that are still empty. */
+    const fillEmptyLeadFields = async (leadId: string) => {
+      const emptyKeys = await findEmptyLeadFields(tx, leadId, Object.keys(extendedValues));
+      return writeLeadFieldValues(tx, leadId, programId, Object.fromEntries(emptyKeys.map((key) => [key, extendedValues[key]])));
+    };
+
     const utmSource = asText(payload.utm_source);
     const utmMedium = asText(payload.utm_medium);
     const utmCampaign = asText(payload.utm_campaign);
@@ -503,12 +519,13 @@ export async function submitMarketingForm(input: PublicSubmissionInput) {
           else data[field] = value;
         }
       }
-      const changed = Object.keys(data).length > 0;
-      if (changed) await tx.leads.update({ where: { id: existingLead.id }, data: { ...data, updated_at: new Date() } });
+      if (Object.keys(data).length > 0) await tx.leads.update({ where: { id: existingLead.id }, data: { ...data, updated_at: new Date() } });
+      const extendedChanges = policy.submissionMode === "upsert_lead" ? await fillEmptyLeadFields(existingLead.id) : {};
+      const changed = Object.keys(data).length > 0 || Object.keys(extendedChanges).length > 0;
       const submission = await createSubmission(changed ? "updated" : "linked", undefined, existingLead.id);
       const actorId = form.created_by ?? form.campaigns?.created_by ?? null;
       await tx.lead_activities.create({ data: { lead_id: existingLead.id, user_id: actorId, type: "marketing_form_submitted", content: `${changed ? "Bổ sung" : "Liên kết"} phản hồi từ biểu mẫu ${form.name}.`, metadata: { marketingFormId: form.id, submissionId: submission.id } } });
-      await tx.audit_logs.create({ data: { user_id: actorId, entity_type: "lead", entity_id: existingLead.id, action: changed ? "update_from_marketing_form" : "link_marketing_form_submission", new_data: { marketingFormId: form.id, submissionId: submission.id, changedFields: Object.keys(data) } } });
+      await tx.audit_logs.create({ data: { user_id: actorId, entity_type: "lead", entity_id: existingLead.id, action: changed ? "update_from_marketing_form" : "link_marketing_form_submission", new_data: { marketingFormId: form.id, submissionId: submission.id, changedFields: [...Object.keys(data), ...Object.keys(extendedChanges)] } } });
       return success(submission.id);
     }
 
@@ -547,6 +564,7 @@ export async function submitMarketingForm(input: PublicSubmissionInput) {
           updated_at: new Date(),
         },
       });
+      await fillEmptyLeadFields(existingLead.id);
       await tx.lead_activities.create({
         data: {
           lead_id: existingLead.id,
@@ -595,6 +613,7 @@ export async function submitMarketingForm(input: PublicSubmissionInput) {
       },
       select: { id: true },
     });
+    if (Object.keys(extendedValues).length) await writeLeadFieldValues(tx, lead.id, programId, extendedValues);
     if (ownerId) {
       await tx.lead_assignments.create({
         data: {

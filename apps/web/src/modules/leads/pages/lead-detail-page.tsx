@@ -18,8 +18,9 @@ import {
   Trash2,
   UserRound,
 } from "lucide-react";
-import { useMemo, useState, type CSSProperties } from "react";
-import { Link, useNavigate, useParams } from "react-router-dom";
+import { useEffect, useMemo, useState, type CSSProperties, type ReactNode } from "react";
+import { Link, useLocation, useNavigate, useParams } from "react-router-dom";
+import { shouldOpenLeadInEditMode } from "../lead-detail-navigation";
 
 import { PageHeader } from "@/components/shared/page-header";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
@@ -27,7 +28,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Empty, EmptyContent, EmptyDescription, EmptyHeader, EmptyTitle } from "@/components/ui/empty";
-import { Field, FieldDescription, FieldGroup, FieldLabel } from "@/components/ui/field";
+import { Field, FieldGroup, FieldLabel } from "@/components/ui/field";
 import { Input } from "@/components/ui/input";
 import {
   Select,
@@ -60,6 +61,7 @@ import { LeadCustomFieldsCard } from "../components/lead-custom-fields-card";
 import { LeadForm } from "../components/lead-form";
 import { LeadOpenInitialization } from "../components/lead-open-initialization";
 import { useLeadWorkflowTransition } from "../components/transition-note-dialog";
+import { withUnmatchedValue } from "../components/lead-unmatched-values";
 import { toLeadFormOptions, toLeadFormValues } from "../lead-form.helpers";
 import type {
   LeadActionOptions,
@@ -182,7 +184,16 @@ export function LeadDetailPage({
     enabled: canAct,
   });
   const transition = useLeadWorkflowTransition(leadQuery.data?.data);
-  const [isEditing, setIsEditing] = useState(false);
+  const location = useLocation();
+  const navigate = useNavigate();
+  const [openedForEdit] = useState(() => shouldOpenLeadInEditMode(location.state));
+  const [isEditing, setIsEditing] = useState(openedForEdit);
+
+  // Opened from the eye icon / "Mở trang chi tiết": the edit form starts open; drop the router
+  // state so a reload or back navigation returns to the normal read-only view.
+  useEffect(() => {
+    if (openedForEdit) navigate(".", { replace: true, state: null });
+  }, [openedForEdit, navigate]);
 
   if (leadQuery.isLoading) return <PageLoadingState variant="detail" label="Đang tải chi tiết lead" />;
   if (leadQuery.isError || !leadQuery.data) {
@@ -212,8 +223,8 @@ export function LeadDetailPage({
   const options = optionsQuery.data;
 
   return (
-    <div className="mx-auto flex max-w-400 flex-col gap-6">
-      <Button asChild variant="ghost" size="sm" className="mr-auto -ml-3">
+    <div className="mx-auto flex max-w-400 flex-col gap-4">
+      <Button asChild variant="ghost" size="sm" className="-my-1 mr-auto -ml-3">
         <Link to={listPath}>
           <ArrowLeft aria-hidden="true" />
           {listLabel}
@@ -222,7 +233,7 @@ export function LeadDetailPage({
       <PageHeader
         eyebrow={eyebrow}
         title={lead.fullName}
-        description={`${lead.leadCode ?? "Chưa có mã lead"} · Tạo ngày ${formatDate(lead.createdAt)}`}
+        meta={`${lead.leadCode ?? "Chưa có mã lead"} · Tạo lúc ${formatDateTime(lead.createdAt)}`}
         actions={
           <div className="flex flex-wrap items-center gap-2">
             <Badge variant="secondary">{getLeadWorkflowLabel(lead)}</Badge>
@@ -275,7 +286,7 @@ export function LeadDetailPage({
         </Card>
       )}
 
-      <div className="grid items-start gap-6 xl:grid-cols-[minmax(320px,0.82fr)_minmax(0,1.48fr)]">
+      <div className="grid items-start gap-4 xl:grid-cols-[minmax(320px,0.82fr)_minmax(0,1.48fr)]">
         <LeadDetailSidebar
           lead={lead}
           canUpdate={canUpdate}
@@ -341,14 +352,14 @@ export function PipelineProgressCard({
       className="shrink-0 overflow-hidden border-border/70 shadow-xs"
       aria-busy={isChanging || isLoading}
     >
-      <CardHeader>
-        <CardTitle>Tiến trình</CardTitle>
-        <CardDescription>
+      <CardHeader className="gap-1">
+        <CardTitle className="text-base">Tiến trình</CardTitle>
+        <CardDescription className="text-xs">
           {pipelineName ? `${pipelineName} · ` : ""}Chọn bước xử lý cho lead.
           Mỗi thay đổi sẽ được lưu vào lịch sử hệ thống.
         </CardDescription>
       </CardHeader>
-      <CardContent className="flex flex-col gap-4">
+      <CardContent className="flex flex-col gap-3">
         {isLoading && visibleStages.length === 0 ? (
           <div
             className="grid gap-2 sm:grid-cols-2 lg:grid-cols-3"
@@ -422,24 +433,22 @@ export function PipelineProgressCard({
             })}
           </ol>
         )}
-        {visibleStages.length > 0 && (
-          <p
-            className="text-sm text-muted-foreground"
-            role={isChanging ? "status" : undefined}
-          >
-            {isChanging
-              ? "Đang cập nhật tiến trình..."
-              : lead.pipelineStage
-                ? `Tiến trình hiện tại: ${lead.pipelineStage.name}`
-                : "Chưa chọn tiến trình hiện tại."}
+        {isChanging && (
+          <p className="text-xs text-muted-foreground" role="status">
+            Đang cập nhật tiến trình...
           </p>
         )}
-        <StudentMembershipAction lead={lead} />
-        <LeadLifecycleStatusField
-          lead={lead}
-          onStatusChange={onStatusChange}
-          isChanging={isChanging}
-        />
+        {/* Lifecycle status pinned left under the stage bar, convert action pinned right. */}
+        <div className="flex flex-wrap items-end justify-between gap-x-6 gap-y-3">
+          <LeadLifecycleStatusField
+            lead={lead}
+            onStatusChange={onStatusChange}
+            isChanging={isChanging}
+          />
+          <div className="ml-auto">
+            <StudentMembershipAction lead={lead} />
+          </div>
+        </div>
       </CardContent>
     </Card>
   );
@@ -463,35 +472,59 @@ function LeadLifecycleStatusField({
     lead.lifecycleStatus.value === "FAIL"
       ? lead.lifecycleStatus.label
       : `Fail${currentMarker ? ` | ${currentMarker}` : ""}`;
-  const description =
-    lead.lifecycleStatus.value === "FAIL"
-      ? `${lead.lifecycleStatus.label} · Lead đang được tách khỏi pipeline; chuyển về Active để khôi phục tiến trình cũ.`
-      : lead.pipelineStage
-        ? "Khi chuyển sang Fail, tiến trình hiện tại sẽ được lưu để có thể khôi phục sau."
-        : "Hãy chọn tiến trình trước khi chuyển lead sang Fail.";
+  const isFailed = lead.lifecycleStatus.value === "FAIL";
+  const canChange = Boolean(onStatusChange) && !isChanging;
+  const failBlocked = !isFailed && !lead.pipelineStage;
+  const labelId = `lead-status-${lead.id}`;
 
   return (
-    <Field className="gap-2 border-t pt-4">
-      <FieldLabel htmlFor={`lead-status-${lead.id}`}>Trạng thái</FieldLabel>
-      <FieldDescription id={`lead-status-description-${lead.id}`}>{description}</FieldDescription>
-      <Select
-        value={lead.lifecycleStatus.value}
-        disabled={!onStatusChange || isChanging || (lead.lifecycleStatus.value === "ACTIVE" && !lead.pipelineStage)}
-        onValueChange={(value) => onStatusChange?.(value as "ACTIVE" | "FAIL")}
-      >
-        <SelectTrigger id={`lead-status-${lead.id}`} className="w-full sm:max-w-80" aria-label="Trạng thái lead" aria-describedby={`lead-status-description-${lead.id}`}>
-          <SelectValue />
-        </SelectTrigger>
-        <SelectContent>
-          <SelectGroup>
-            <SelectItem value="ACTIVE">Active</SelectItem>
-            <SelectItem value="FAIL">{failedStatusLabel}</SelectItem>
-          </SelectGroup>
-        </SelectContent>
-      </Select>
-    </Field>
+    <div className="flex flex-col gap-2.5">
+      <span id={labelId} className="text-base leading-none font-semibold">
+        Trạng thái
+      </span>
+      <div role="group" aria-labelledby={labelId} className="flex gap-2">
+        <button
+          type="button"
+          aria-pressed={!isFailed}
+          disabled={!canChange}
+          onClick={() => {
+            if (isFailed) onStatusChange?.("ACTIVE");
+          }}
+          className={cn(
+            lifecycleButtonClassName,
+            "border-emerald-600 text-emerald-700 dark:border-emerald-500 dark:text-emerald-400",
+            isFailed
+              ? "bg-background hover:bg-emerald-50 dark:hover:bg-emerald-500/10"
+              : "bg-emerald-100 ring-2 ring-emerald-600 ring-inset dark:bg-emerald-500/25 dark:ring-emerald-500",
+          )}
+        >
+          Active
+        </button>
+        <button
+          type="button"
+          aria-pressed={isFailed}
+          disabled={!canChange || failBlocked}
+          title={failBlocked ? "Hãy chọn tiến trình trước khi chuyển sang Fail" : undefined}
+          onClick={() => {
+            if (!isFailed) onStatusChange?.("FAIL");
+          }}
+          className={cn(
+            lifecycleButtonClassName,
+            "border-red-600 dark:border-red-500",
+            isFailed
+              ? "bg-red-600 text-white dark:bg-red-600"
+              : "bg-background text-red-600 hover:bg-red-50 dark:text-red-400 dark:hover:bg-red-500/10",
+          )}
+        >
+          {failedStatusLabel}
+        </button>
+      </div>
+    </div>
   );
 }
+
+const lifecycleButtonClassName =
+  "inline-flex h-12 min-w-32 items-center justify-center rounded-lg border px-5 text-base font-semibold transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50 aria-pressed:disabled:opacity-100";
 
 type ActivityTab = "activities" | "notes" | "changes" | "files" | "surveys";
 
@@ -622,7 +655,7 @@ export function ActivityWorkspace({
 
 function ActivityPanel({ lead }: { lead: LeadDetail }) {
   return (
-    <div className="flex flex-col gap-6">
+    <div className="flex flex-col gap-4">
       <TimelineCard lead={lead} embedded />
       <HistoryCard lead={lead} embedded />
     </div>
@@ -827,16 +860,16 @@ export function LeadSummaryCard({
       <CardContent><dl className="grid gap-4 @sm:grid-cols-2">
         <DetailValue label="Họ và tên" value={lead.fullName} />
         <div><dt className="text-sm text-muted-foreground">Số điện thoại</dt><dd className="mt-1 text-sm font-medium"><LeadPhoneLines lead={lead} /></dd></div>
-        <DetailValue label="Email" value={lead.email ?? "Chưa cập nhật"} />
-        <DetailValue label="Ngày sinh" value={formatDate(lead.dateOfBirth)} />
+        <DetailValue label="Email" value={withUnmatchedValue(lead, "email", lead.email ?? "Chưa cập nhật")} />
+        <DetailValue label="Ngày sinh" value={withUnmatchedValue(lead, "dateOfBirth", formatDate(lead.dateOfBirth))} />
         <DetailValue label="Địa chỉ" value={lead.currentAddress ?? lead.specificAddress ?? "Chưa cập nhật"} />
         <DetailValue label="Nhóm nguồn" value={lead.origin?.name ?? "Chưa cập nhật"} />
         <DetailValue label="Nguồn học viên" value={lead.source?.name ?? "Chưa chọn"} />
         <DetailValue label="Tiến trình" value={lead.pipelineStage?.name ?? "Chưa cập nhật"} />
         <div><dt className="text-sm text-muted-foreground">Nhân viên phụ trách</dt><dd className="mt-1 text-sm font-medium"><LeadAssigneeLines lead={lead} /></dd></div>
-        <DetailValue label="Mức độ quan tâm" value={lead.temperature ?? "-"} />
+        <DetailValue label="Mức độ quan tâm" value={withUnmatchedValue(lead, "temperature", lead.temperature ?? "-")} />
         <DetailValue label="Chương trình" value={lead.institutionProgram ? `${lead.institutionProgram.name} · ${lead.institutionProgram.institutionName}` : "Chưa chọn"} />
-        <DetailValue label="Ngành đăng ký" value={lead.majorName ?? "Chưa chọn"} />
+        <DetailValue label="Ngành đăng ký" value={withUnmatchedValue(lead, "majorId", lead.majorName ?? "Chưa chọn")} />
         <DetailValue label="Ghi chú" value={lead.note ?? "-"} />
       </dl></CardContent>
     </Card>
@@ -895,6 +928,7 @@ function EditLeadForm({
         submitLabel="Lưu thay đổi"
         isPending={mutation.isPending}
         onSubmit={(input) => mutation.mutate(input)}
+        hideProgress
       />
     </div>
   );
@@ -1331,7 +1365,7 @@ function MutationError({ error }: { error: Error }) {
   );
 }
 
-function DetailValue({ label, value }: { label: string; value: string }) {
+function DetailValue({ label, value }: { label: string; value: ReactNode }) {
   return (
     <div>
       <dt className="text-sm text-muted-foreground">{label}</dt>
@@ -1373,7 +1407,7 @@ function LeadDetailSidebar({
   listPath,
 }: LeadDetailSidebarProps) {
   return (
-    <aside className="flex min-w-0 flex-col gap-6">
+    <aside className="flex min-w-0 flex-col gap-4">
       <LeadDetailLayout lead={lead} enabled={listPath === "/sale/leads"} canUpdate={canUpdate} onEdit={() => setIsEditing(true)}>
       <LeadSummaryCard
         lead={lead}

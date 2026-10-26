@@ -121,6 +121,7 @@ export type LeadFilterOptions = {
     count: number;
   }>;
   majors: Array<{ id: string; name: string }>;
+  admissionStatuses?: Array<{ id: string; name: string }>;
   totalLeads: number;
   failedLeads: number;
   customFields?: LeadCustomField[];
@@ -144,7 +145,17 @@ export type DuplicateLeadResponse = {
   pagination: { page: number; limit: number; total: number; totalPages: number };
 };
 
+/** Raw webhook value that did not match CRM data; shown with "*" until a user saves a valid value. */
+export type LeadUnmatchedFieldValue = {
+  /** Lead field key (`majorId`) or `custom:<fieldId>`. */
+  fieldKey: string;
+  label: string;
+  rawValue: string;
+  receivedAt: string;
+};
+
 export type LeadDetail = LeadListItem & {
+  unmatchedFieldValues?: LeadUnmatchedFieldValue[];
   sourceOccurrences: Array<{
     id: string;
     sourceGroup: { id: string; name: string };
@@ -351,6 +362,24 @@ export type LeadActionOptions = {
   systemFieldRequirements: Record<string, boolean>;
 };
 
+export type LeadBulkUpdateField = "pipelineStageId" | "sourceId" | "originId" | "monthlyRevenue" | "note";
+
+export type LeadBulkUpdateFieldOption = {
+  options: Array<{ id: string; name: string }>;
+  readOnlyReason: string | null;
+};
+
+export type LeadBulkUpdateOptions = Record<"sourceId" | "originId" | "monthlyRevenue", LeadBulkUpdateFieldOption>;
+
+export type LeadBulkUpdateResult = {
+  field: LeadBulkUpdateField;
+  totalCount: number;
+  updatedCount: number;
+  unchangedCount: number;
+  failedCount: number;
+  failures: Array<{ leadId: string; fullName: string; leadCode: string | null; message: string }>;
+};
+
 export type LeadImportError = {
   row: number;
   fullName: string | null;
@@ -361,6 +390,8 @@ export type LeadImportError = {
 export type LeadImportResult = {
   totalRows: number;
   importedRows: number;
+  updatedRows: number;
+  unchangedRows: number;
   failedRows: number;
   errors: LeadImportError[];
 };

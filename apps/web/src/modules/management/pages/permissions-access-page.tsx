@@ -905,7 +905,7 @@ function PermissionResults({
               <TableBody>
                 {data.map((permission) => (
                   <TableRow key={permission.id}>
-                    <TableCell className="px-5">
+                    <TableCell className="px-3">
                       <div className="font-medium">{permission.name}</div>
                       <div className="text-sm text-muted-foreground">
                         {permission.code}

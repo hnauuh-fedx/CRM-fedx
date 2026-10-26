@@ -17,7 +17,7 @@ export async function patchAdmissionInformation(tx: TransactionClient, leadId: s
   const data: Record<string, unknown> = {};
   for (const [key, column] of provided) {
     const rawBefore = (profile as Record<string, unknown> | null)?.[column] ?? null;
-    const before = ["score1", "score2", "score3", "admissionScore", "monthlyRevenue"].includes(key) && rawBefore !== null ? Number(rawBefore) : rawBefore;
+    const before = ["score1", "score2", "score3", "admissionScore"].includes(key) && rawBefore !== null ? Number(rawBefore) : rawBefore;
     const after = values[key];
     if (JSON.stringify(before) === JSON.stringify(after)) continue;
     changes[key] = { before, after };
@@ -124,7 +124,7 @@ export async function saveAdmissionProfile(tx: TransactionClient, leadId: string
     registration_station: emptyToNull(input.registrationStation),
     decision_number: emptyToNull(input.decisionNumber),
     decision_signed_date: input.decisionSignedDate ? new Date(input.decisionSignedDate) : null,
-    monthly_revenue: input.monthlyRevenue ?? 0,
+    monthly_revenue: input.monthlyRevenue ? new Date(input.monthlyRevenue) : null,
     updated_at: new Date(),
   };
   await tx.admission_profiles.upsert({

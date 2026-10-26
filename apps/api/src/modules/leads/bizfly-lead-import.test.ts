@@ -90,6 +90,7 @@ test("Bizfly persists program, assignee, timestamp and new major without assignm
     lead_assignments: { create: noAssignment }, notifications: { create: noAssignment },
   };
   const database = {
+    leads: { findFirst: async () => null },
     institution_programs: { findFirst: async () => ({ id: "program" }) },
     lead_sources: { findMany: async () => [{ id: "source", name: "Nguồn A", institution_program_id: "program" }] },
     majors: { findMany: async () => [] },
@@ -168,6 +169,89 @@ test("Bizfly persists program, assignee, timestamp and new major without assignm
     assert.match(secondary.errors[0].message, /Không tìm thấy nhân viên phụ có email/);
     assert.match(secondary.errors[1].message, /tối đa 2 email/);
     assert.ok(!activities.includes("lead_secondary_assigned"));
+});
+
+test("Bizfly reads Doanh số tháng as a date-only value", async () => {
+  const { parseBizflyDate, readBizflyRows } = await importer;
+  assert.equal(parseBizflyDate("31/10/2026", "Doanh số tháng"), "2026-10-31");
+  assert.equal(parseBizflyDate("1-2-2026", "Doanh số tháng"), "2026-02-01");
+  assert.equal(parseBizflyDate("2026-10-31", "Doanh số tháng"), "2026-10-31");
+  assert.equal(parseBizflyDate(new Date("2026-10-30T17:00:00.000Z"), "Doanh số tháng"), "2026-10-31");
+  assert.equal(parseBizflyDate(new Date("2026-10-31T00:00:00.000Z"), "Doanh số tháng"), "2026-10-31");
+  assert.equal(parseBizflyDate(46326, "Doanh số tháng"), "2026-10-31");
+  assert.equal(parseBizflyDate(" ", "Doanh số tháng"), undefined);
+  assert.throws(() => parseBizflyDate("31/11/2026", "Doanh số tháng"), /Doanh số tháng không hợp lệ/);
+  assert.throws(() => parseBizflyDate("10/2026", "Doanh số tháng"), /Doanh số tháng không hợp lệ/);
+  const rows = readBizflyRows(workbook([["Họ và tên", "Số điện thoại", "Nguồn HV", "Doanh số tháng"], ["Lead", "0901234567", "Facebook", "31/10/2026"]]));
+  assert.equal(rows?.[0].values.monthlyRevenue, "31/10/2026");
+});
+
+test("Bizfly re-import of a known phone updates only monthly revenue and stage, with history", async () => {
+  const { importBizflyRows } = await importer;
+  const actor: AuthUser = { id: "actor", email: "actor@test.vn", fullName: "Actor", avatarUrl: null,
+    roles: [], permissions: ["lead.create", "lead.update_all", "lead.view_all"], departmentIds: [],
+    institutionProgramIds: ["program"], accessScope: "ALL" };
+  let profile: { institution_program_id: string; monthly_revenue: Date | null } | null = null;
+  let lead = { id: "lead", status: "NEW", pipeline_stage_id: "stage-0", assigned_to: null, secondary_assigned_to: null };
+  const leadUpdates: Array<Record<string, unknown>> = [], activities: string[] = [], audits: string[] = [], histories: unknown[] = [];
+  const tx = {
+    leads: {
+      findFirst: async () => lead,
+      update: async ({ data }: { data: Record<string, unknown> }) => {
+        leadUpdates.push(data);
+        if (typeof data.pipeline_stage_id === "string") lead = { ...lead, pipeline_stage_id: data.pipeline_stage_id };
+      },
+      create: async () => { throw new Error("Known phone must not create a lead"); },
+    },
+    admission_profiles: {
+      findUnique: async () => profile,
+      upsert: async ({ create, update }: { create: { monthly_revenue: Date }; update: { monthly_revenue: Date } }) => {
+        profile = { institution_program_id: "program", monthly_revenue: (profile ? update : create).monthly_revenue };
+      },
+    },
+    students: { updateMany: async () => ({ count: 0 }) },
+    lead_status_histories: { create: async ({ data }: { data: unknown }) => { histories.push(data); } },
+    lead_activities: { create: async ({ data }: { data: { type: string } }) => { activities.push(data.type); } },
+    audit_logs: { create: async ({ data }: { data: { action: string } }) => { audits.push(data.action); } },
+  };
+  const database = {
+    leads: { findFirst: async () => ({ id: "lead" }) },
+    institution_programs: { findFirst: async () => ({ id: "program" }) },
+    lead_sources: { findMany: async () => [] },
+    majors: { findMany: async () => [] },
+    pipeline_stages: { findMany: async () => [{ id: "stage-0", name: "L0" }, { id: "stage-5", name: "L5" }] },
+    users: { findMany: async () => [] },
+    $transaction: async (callback: (client: unknown) => Promise<unknown>) => callback(tx),
+  } as unknown as typeof prisma;
+  // Unknown source/assignee columns are ignored for a known phone.
+  const values = { fullName: "Nguyễn Văn A", phone: "0901234567", sourceName: "Nguồn cũ", assigneeEmail: "old@test.vn",
+    stageName: "Tiến trình (L8)", monthlyRevenue: "31/10/2026" };
+
+  const first = await importBizflyRows(actor, [{ row: 3, values }], "program", undefined, database);
+  assert.deepEqual(first.errors, []);
+  assert.deepEqual([first.importedRows, first.updatedRows, first.unchangedRows], [0, 1, 0]);
+  assert.equal(profile!.monthly_revenue?.toISOString(), "2026-10-31T00:00:00.000Z");
+  assert.equal(lead.pipeline_stage_id, "stage-5");
+  assert.equal(histories.length, 1);
+  assert.ok(activities.includes("pipeline_stage_changed") && activities.includes("lead_updated"));
+  assert.ok(audits.includes("pipeline_stage_changed") && audits.includes("import_update"));
+
+  const again = await importBizflyRows(actor, [{ row: 3, values }], "program", undefined, database);
+  assert.deepEqual([again.updatedRows, again.unchangedRows, again.failedRows], [0, 1, 0]);
+  assert.equal(leadUpdates.length, 1);
+
+  const failedLead = { ...values, stageName: "L0", monthlyRevenue: "30/11/2026" };
+  lead = { ...lead, status: "FAIL:6f1c2a3b-4d5e-4f60-8a71-92b3c4d5e6f7" };
+  const failed = await importBizflyRows(actor, [{ row: 4, values: failedLead }], "program", undefined, database);
+  assert.equal(failed.updatedRows, 1);
+  assert.equal(lead.pipeline_stage_id, "stage-5");
+  assert.equal(profile!.monthly_revenue?.toISOString(), "2026-11-30T00:00:00.000Z");
+
+  const denied = await importBizflyRows({ ...actor, permissions: ["lead.create", "lead.view_all"] }, [{ row: 5, values }], "program", undefined, database);
+  assert.equal(denied.failedRows, 1);
+  assert.match(denied.errors[0].message, /không có quyền cập nhật/);
+  const badDate = await importBizflyRows(actor, [{ row: 6, values: { ...values, monthlyRevenue: "10/2026" } }], "program", undefined, database);
+  assert.match(badDate.errors[0].message, /Doanh số tháng không hợp lệ/);
 });
 
 test("Bizfly phone cells split on | and keep non-standard numbers for review", async () => {

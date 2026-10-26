@@ -170,16 +170,8 @@ export type MarketingFormMapping = {
   isRequired: boolean;
   transformRule?: Record<string, unknown> | null;
 };
-export type MarketingFormLeadField =
-  | "full_name"
-  | "phone"
-  | "email"
-  | "gender"
-  | "date_of_birth"
-  | "note"
-  | "source_id"
-  | "institution_program_id"
-  | "major_id";
+/** Legacy snake_case Lead column or a camelCase Lead form field key (see shared marketing-form-lead-fields). */
+export type MarketingFormLeadField = string;
 export type MarketingFormSettings = Record<string, unknown>;
 export type MarketingFormInput = {
   name: string;

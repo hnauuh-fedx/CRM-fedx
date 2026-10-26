@@ -42,3 +42,14 @@ test("replacement and appended conditions receive fresh identities without chang
     next.rows[0].id,
   );
 });
+
+test("typed conditions are complete once their operator's values are filled", async () => {
+  const { isReportConditionComplete } = await import("../src/modules/reports/components/report-filter-rows");
+  assert.equal(isReportConditionComplete({ fieldKey: "CREATED_DATE", operator: "IS_THIS_MONTH" }), true);
+  assert.equal(isReportConditionComplete({ fieldKey: "LEAD:highSchoolName", operator: "CONTAINS", value: " " }), false);
+  assert.equal(isReportConditionComplete({ fieldKey: "LEAD:graduationYear", operator: "BETWEEN", value: "2020" }), false);
+  assert.equal(isReportConditionComplete({ fieldKey: "LEAD:graduationYear", operator: "BETWEEN", value: "2020", valueTo: "2025" }), true);
+  assert.equal(isReportConditionComplete({ fieldKey: "CREATED_DATE", operator: "IS_X_DAYS_AGO", numberValue: 3 }), true);
+  assert.equal(isReportConditionComplete({ fieldKey: "CREATED_DATE", operator: "DATE_BETWEEN", fromDate: "2026-02-01", toDate: "2026-01-01" }), false);
+  assert.equal(isReportConditionComplete({ fieldKey: "SOURCE", operator: "HAS_NO_VALUE" }), true);
+});

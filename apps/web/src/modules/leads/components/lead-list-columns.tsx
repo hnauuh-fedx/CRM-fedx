@@ -12,6 +12,7 @@ import { type ColumnDef } from "@tanstack/react-table";
 import { Eye } from "lucide-react";
 import { useMemo } from "react";
 import { Link } from "react-router-dom";
+import { openLeadInEditModeState } from "../lead-detail-navigation";
 const dateFormatter = new Intl.DateTimeFormat("vi-VN", {
   day: "2-digit",
   month: "2-digit",
@@ -42,9 +43,9 @@ export function useLeadListColumns(detailBasePath: string) {
     () => [
       {
         id: "select",
-        size: 48,
-        minSize: 48,
-        maxSize: 48,
+        size: 30,
+        minSize: 30,
+        maxSize: 30,
         header: ({ table }) => (
           <Checkbox
             checked={
@@ -72,19 +73,20 @@ export function useLeadListColumns(detailBasePath: string) {
       },
       {
         id: "view",
-        size: 56,
-        minSize: 56,
-        maxSize: 56,
+        size: 40,
+        minSize: 40,
+        maxSize: 40,
         header: () => <span className="sr-only">Xem chi tiết</span>,
         cell: ({ row }) => (
           <Button
             asChild
             variant="ghost"
-            size="icon"
-            className="size-9 shrink-0"
+            size="icon-sm"
+            className="size-7 shrink-0"
           >
             <Link
               to={`${detailBasePath}/${row.original.id}`}
+              state={openLeadInEditModeState}
               aria-label={`Xem chi tiết ${row.original.fullName}`}
               onClick={(event) => event.stopPropagation()}
               onKeyDown={(event) => event.stopPropagation()}
@@ -196,7 +198,9 @@ function LeadWorkflowCell({ lead }: { lead: LeadListItem }) {
   const stageColor = lead.pipelineStage?.color ? normalizeHexColor(lead.pipelineStage.color, "") : "";
   const isFailed = lead.lifecycleStatus.value === "FAIL";
   return (
-    <div className="flex min-w-48 max-w-72 flex-col items-start gap-1.5">
+    // min-h fits the badge plus one note line, so rows without a note keep the same height
+    // and the badge sits centred in them.
+    <div className="flex min-h-12 min-w-48 max-w-72 flex-col items-start justify-center gap-1.5">
       <Badge
         variant={isFailed ? "destructive" : "secondary"}
         style={!isFailed && stageColor ? { backgroundColor: stageColor, borderColor: stageColor, color: getReadableTextColor(stageColor) } : undefined}

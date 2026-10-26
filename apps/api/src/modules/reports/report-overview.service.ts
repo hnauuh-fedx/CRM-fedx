@@ -16,14 +16,12 @@ export async function getOverviewReport(institutionProgramId?: string) {
     totalLeads,
     totalApplications,
     totalStudents,
-    revenue,
     applicationStatusGroups,
     majorGroups,
   ] = await prisma.$transaction([
     prisma.leads.count({ where: leadWhere }),
     prisma.leads.count({ where: applicationLeadWhere }),
     prisma.students.count({ where: studentWhere }),
-    prisma.admission_profiles.aggregate({ where: admissionWhere, _sum: { monthly_revenue: true } }),
     prisma.admission_profiles.groupBy({
       by: ["admission_status_id"],
       where: admissionWhere,
@@ -68,7 +66,6 @@ export async function getOverviewReport(institutionProgramId?: string) {
       totalApplications,
       totalStudents,
       conversionRate: totalLeads === 0 ? 0 : Number(((totalStudents / totalLeads) * 100).toFixed(1)),
-      monthlyRevenue: Number(revenue._sum.monthly_revenue?.toString() ?? 0),
     },
     applicationsByStatus: applicationStatusGroups.map((group) => ({
       id: group.admission_status_id,

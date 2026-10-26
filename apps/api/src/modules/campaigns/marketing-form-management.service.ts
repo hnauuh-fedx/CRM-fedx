@@ -2,6 +2,7 @@ import { sourceGroupSettingsSchema } from "@admission-crm/shared/source-group";
 import { randomBytes } from "node:crypto";
 import { newMarketingFormSubmissionSettings } from "@admission-crm/shared/marketing-form-submission-policy";
 import { normalizeMarketingFormOptions, type MarketingFormOptionInput } from "@admission-crm/shared/marketing-form-config";
+import { getMarketingLeadField, marketingLeadFieldLabel, marketingLeadMappingFields } from "@admission-crm/shared/marketing-form-lead-fields";
 
 import { prisma } from "../../database/prisma";
 import { Prisma } from "../../generated/prisma/client";
@@ -9,17 +10,7 @@ import { getCampaignVisibilityWhere } from "./campaign-list.service";
 import { getMarketingFormVisibility, type MarketingFormViewer } from "./marketing-form-scope";
 import { assertPublishableMarketingForm, assertMarketingFormSubmissionPolicy, assertMarketingFormLayout, MarketingFormConfigError } from "./marketing-form-config.validation";
 
-export const supportedLeadMappingFields = [
-  "full_name",
-  "phone",
-  "email",
-  "gender",
-  "date_of_birth",
-  "note",
-  "source_id",
-  "institution_program_id",
-  "major_id",
-] as const;
+export const supportedLeadMappingFields = marketingLeadMappingFields;
 
 export const supportedMarketingFormFieldTypes = [
   "text",
@@ -168,18 +159,7 @@ function toData(input: MarketingFormInput, slug: string | null) {
 }
 
 function mappingLabel(leadField: typeof supportedLeadMappingFields[number]) {
-  const labels: Record<typeof supportedLeadMappingFields[number], string> = {
-    full_name: "Họ và tên",
-    phone: "Số điện thoại",
-    email: "Email",
-    gender: "Giới tính",
-    date_of_birth: "Ngày sinh",
-    note: "Ghi chú",
-    source_id: "Nguồn lead",
-    institution_program_id: "Chương trình",
-    major_id: "Ngành đăng ký",
-  };
-  return labels[leadField];
+  return marketingLeadFieldLabel(leadField);
 }
 
 function fieldTypeFromLeadField(leadField: typeof supportedLeadMappingFields[number]): MarketingFormFieldInput["fieldType"] {
@@ -188,6 +168,11 @@ function fieldTypeFromLeadField(leadField: typeof supportedLeadMappingFields[num
   if (leadField === "date_of_birth") return "date";
   if (leadField === "note") return "textarea";
   if (leadField === "source_id" || leadField === "institution_program_id" || leadField === "major_id") return "select";
+  const extended = getMarketingLeadField(leadField);
+  if (extended?.dataType === "DATE") return "date";
+  if (extended?.dataType === "NUMBER") return "number";
+  if (extended?.dataType === "PHONE") return "phone";
+  if (extended?.dataType === "TEXTAREA") return "textarea";
   return "text";
 }
 

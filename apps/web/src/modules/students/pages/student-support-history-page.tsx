@@ -412,10 +412,10 @@ function StudentSupportResults({
             <TableBody>
               {records.map((record) => (
                 <TableRow key={record.id}>
-                  <TableCell className="px-5 py-4">
+                  <TableCell className="px-3 py-2">
                     {formatDateTime(record.createdAt)}
                   </TableCell>
-                  <TableCell className="px-5 py-4">
+                  <TableCell className="px-3 py-2">
                     <span className="font-medium">
                       {record.studentName ?? "-"}
                     </span>
@@ -424,24 +424,24 @@ function StudentSupportResults({
                       {record.studentCode ?? "-"}
                     </span>
                   </TableCell>
-                  <TableCell className="px-5 py-4">
+                  <TableCell className="px-3 py-2">
                     {record.className ?? "-"}
                   </TableCell>
-                  <TableCell className="px-5 py-4">
+                  <TableCell className="px-3 py-2">
                     {record.type ?? "-"}
                   </TableCell>
-                  <TableCell className="px-5 py-4">
+                  <TableCell className="px-3 py-2">
                     <Badge variant="secondary">
                       {displayStatus(record.status)}
                     </Badge>
                   </TableCell>
-                  <TableCell className="max-w-96 px-5 py-4">
+                  <TableCell className="max-w-96 px-3 py-2">
                     {record.content ?? "-"}
                   </TableCell>
-                  <TableCell className="px-5 py-4">
+                  <TableCell className="px-3 py-2">
                     {record.handledBy ?? "Chưa phân công"}
                   </TableCell>
-                  <TableCell className="px-5 py-4">
+                  <TableCell className="px-3 py-2">
                     <Button
                       type="button"
                       variant="outline"

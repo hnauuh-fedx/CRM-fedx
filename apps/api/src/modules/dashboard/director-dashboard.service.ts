@@ -36,7 +36,6 @@ export async function getDirectorDashboard(
     totalLeads,
     totalApplications,
     enrolledStudents,
-    revenue,
     sources,
     stageGroups,
     departmentGroups,
@@ -50,7 +49,6 @@ export async function getDirectorDashboard(
     prisma.leads.count({ where: activeLeadWhere }),
     prisma.leads.count({ where: applicationLeadWhere }),
     prisma.students.count({ where: studentWhere }),
-    prisma.admission_profiles.aggregate({ where: admissionWhere, _sum: { monthly_revenue: true } }),
     prisma.lead_sources.findMany({
       select: {
         id: true,
@@ -210,7 +208,6 @@ export async function getDirectorDashboard(
       leadToApplicationRate: totalLeads === 0 ? 0 : Number(((totalApplications / totalLeads) * 100).toFixed(1)),
       applicationToStudentRate: totalApplications === 0 ? 0 : Number(((enrolledStudents / totalApplications) * 100).toFixed(1)),
       conversionRate: totalLeads === 0 ? 0 : Number(((enrolledStudents / totalLeads) * 100).toFixed(1)),
-      monthlyRevenue: Number(revenue._sum.monthly_revenue?.toString() ?? 0),
     },
     filterOptions: {
       majors: majorOptions,

@@ -1,20 +1,31 @@
 import type { Prisma } from "../../generated/prisma/client";
 import { prisma } from "../../database/prisma";
+import { leadFieldFilterDefinitions, leadFieldWhere } from "../leads/lead-field-filter";
 
-export const customerListFilterFields = [
+const legacyFilterFields = [
   "fullName", "leadCode", "phone", "email", "pipelineStageId", "sourceId",
   "assigneeId", "gender", "dateOfBirth", "majorId", "createdAt",
 ] as const;
+type LegacyFilterField = typeof legacyFilterFields[number];
+/** Every other Lead form field; tags live in a polymorphic table and stay in the Lead list filter only. */
+const catalogFilterFields = leadFieldFilterDefinitions.filter(
+  (field) => field.kind !== "list" && !(legacyFilterFields as readonly string[]).includes(field.key),
+);
+const catalogFilterByKey = new Map(catalogFilterFields.map((field) => [field.key, field]));
+export const customerListFilterFields = [
+  ...legacyFilterFields,
+  ...catalogFilterFields.map((field) => field.key),
+] as [string, ...string[]];
 export const customerListFilterOperators = [
   "contains", "notContains", "equals", "notEquals", "isEmpty", "isNotEmpty",
-  "on", "before", "after", "between", "relative",
+  "on", "before", "after", "between", "relative", "greaterThan", "lessThan",
 ] as const;
 export const customerListRelativeRanges = [
   "today", "yesterday", "thisWeek", "lastWeek", "last7Days", "last30Days",
   "thisMonth", "lastMonth", "thisQuarter", "lastQuarter", "thisYear", "lastYear",
 ] as const;
 
-export type CustomerListFilterField = typeof customerListFilterFields[number];
+export type CustomerListFilterField = string;
 export type CustomerListFilterOperator = typeof customerListFilterOperators[number];
 export type CustomerListRelativeRange = typeof customerListRelativeRanges[number];
 export type CustomerListFilterCondition = {
@@ -30,7 +41,7 @@ export type CustomerListFilterConfig = {
   conditions: CustomerListFilterCondition[];
 };
 
-const fieldLabels: Record<CustomerListFilterField, string> = {
+const fieldLabels: Record<LegacyFilterField, string> = {
   fullName: "Họ và tên",
   leadCode: "Mã Lead",
   phone: "Số điện thoại",
@@ -47,6 +58,7 @@ const operatorLabels: Record<CustomerListFilterOperator, string> = {
   contains: "có chứa", notContains: "không chứa", equals: "bằng", notEquals: "không bằng",
   isEmpty: "chưa có dữ liệu", isNotEmpty: "có dữ liệu", on: "vào ngày", before: "trước ngày",
   after: "sau ngày", between: "trong khoảng", relative: "trong",
+  greaterThan: "lớn hơn", lessThan: "nhỏ hơn",
 };
 const relativeLabels: Record<CustomerListRelativeRange, string> = {
   today: "hôm nay", yesterday: "hôm qua", thisWeek: "tuần này", lastWeek: "tuần trước",
@@ -58,7 +70,28 @@ const relativeLabels: Record<CustomerListRelativeRange, string> = {
 const textFields = new Set<CustomerListFilterField>(["fullName", "leadCode", "phone", "email"]);
 const selectFields = new Set<CustomerListFilterField>(["pipelineStageId", "sourceId", "assigneeId", "gender", "majorId"]);
 const dateFields = new Set<CustomerListFilterField>(["dateOfBirth", "createdAt"]);
+const operatorsByKind: Record<string, CustomerListFilterOperator[]> = {
+  text: ["contains", "notContains", "equals", "notEquals", "isEmpty", "isNotEmpty"],
+  select: ["equals", "notEquals", "isEmpty", "isNotEmpty"],
+  number: ["equals", "notEquals", "greaterThan", "lessThan", "isEmpty", "isNotEmpty"],
+  date: ["on", "before", "after", "between", "isEmpty", "isNotEmpty"],
+};
+
+export function customerListFieldLabel(field: CustomerListFilterField) {
+  return fieldLabels[field as LegacyFilterField] ?? catalogFilterByKey.get(field)?.label ?? field;
+}
+
+/** Sensitive Lead form fields need `lead.sensitive.view` to be used in a list filter. */
+export function isSensitiveCustomerListField(field: CustomerListFilterField) {
+  return field === "phone" || field === "email" || Boolean(catalogFilterByKey.get(field)?.isSensitive);
+}
 const emptyOperators = new Set<CustomerListFilterOperator>(["isEmpty", "isNotEmpty"]);
+
+const uuidPattern = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+function isIsoDate(value: unknown) {
+  return typeof value === "string" && /^\d{4}-\d{2}-\d{2}$/.test(value);
+}
 
 function isObject(value: unknown): value is Record<string, unknown> {
   return Boolean(value) && typeof value === "object" && !Array.isArray(value);
@@ -70,6 +103,17 @@ export function isCustomerListFilterCondition(value: unknown): value is Customer
     || !customerListFilterOperators.includes(value.operator as CustomerListFilterOperator)) return false;
   const field = value.field as CustomerListFilterField;
   const operator = value.operator as CustomerListFilterOperator;
+  const catalogField = catalogFilterByKey.get(field);
+  if (catalogField) {
+    if (!operatorsByKind[catalogField.kind]?.includes(operator)) return false;
+    if (emptyOperators.has(operator)) return true;
+    if (operator === "between") return isIsoDate(value.from) && isIsoDate(value.to) && String(value.from) <= String(value.to);
+    if (catalogField.kind === "date") return isIsoDate(value.value);
+    if (catalogField.kind === "number") return typeof value.value === "string" && value.value.trim() !== "" && Number.isFinite(Number(value.value));
+    // Reference fields store ids; gender stores a fixed code.
+    if (catalogField.kind === "select" && catalogField.key !== "gender") return typeof value.value === "string" && uuidPattern.test(value.value);
+    return typeof value.value === "string" && value.value.length > 0;
+  }
   if (textFields.has(field) && !["contains", "notContains", "equals", "notEquals", "isEmpty", "isNotEmpty"].includes(operator)) return false;
   if (selectFields.has(field) && !["equals", "notEquals", "isEmpty", "isNotEmpty"].includes(operator)) return false;
   if (field === "dateOfBirth" && !["on", "before", "after", "between", "isEmpty", "isNotEmpty"].includes(operator)) return false;
@@ -169,7 +213,37 @@ function dateWhere(column: "date_of_birth" | "created_at", condition: CustomerLi
   return { [column]: { gte: parse(condition.value!), lt: parse(condition.value!, true) } };
 }
 
+/** Local calendar day, as expected by the shared date-only Lead field filter. */
+function localDay(value: string, offset = 0) {
+  const [year, month, day] = value.split("-").map(Number);
+  return new Date(year, month - 1, day + offset);
+}
+
+function catalogConditionWhere(key: string, kind: string, condition: CustomerListFilterCondition): Prisma.leadsWhereInput {
+  const value = condition.value ?? "";
+  if (condition.operator === "isEmpty" || condition.operator === "isNotEmpty") {
+    return leadFieldWhere(key, { type: "hasValue" }, condition.operator === "isEmpty");
+  }
+  if (kind === "date") {
+    if (condition.operator === "between") return leadFieldWhere(key, { type: "range", gte: localDay(condition.from!), lt: localDay(condition.to!, 1) });
+    if (condition.operator === "before") return leadFieldWhere(key, { type: "range", lt: localDay(value) });
+    if (condition.operator === "after") return leadFieldWhere(key, { type: "range", gte: localDay(value, 1) });
+    return leadFieldWhere(key, { type: "range", gte: localDay(value), lt: localDay(value, 1) });
+  }
+  const negate = condition.operator === "notEquals" || condition.operator === "notContains";
+  if (kind === "number") {
+    if (condition.operator === "greaterThan") return leadFieldWhere(key, { type: "range", gt: Number(value) });
+    if (condition.operator === "lessThan") return leadFieldWhere(key, { type: "range", lt: Number(value) });
+    return leadFieldWhere(key, { type: "equals", value: Number(value) }, negate);
+  }
+  if (kind === "select") return leadFieldWhere(key, { type: "equals", value }, negate);
+  const mode = condition.operator === "contains" || condition.operator === "notContains" ? "contains" : "equals";
+  return leadFieldWhere(key, { type: "text", mode, value }, negate);
+}
+
 function conditionWhere(condition: CustomerListFilterCondition, now: Date): Prisma.leadsWhereInput {
+  const catalogField = catalogFilterByKey.get(condition.field);
+  if (catalogField) return catalogConditionWhere(catalogField.key, catalogField.kind, condition);
   const textColumns = { fullName: "full_name", leadCode: "lead_code", phone: "phone", email: "email" } as const;
   if (condition.field in textColumns) return textWhere(textColumns[condition.field as keyof typeof textColumns], condition);
   if (condition.field === "dateOfBirth") return dateWhere("date_of_birth", condition, now);
@@ -201,23 +275,28 @@ export async function describeCustomerListFilters(config: CustomerListFilterConf
   const sourceIds = config.conditions.filter((item) => item.field === "sourceId" && item.value).map((item) => item.value!);
   const assigneeIds = config.conditions.filter((item) => item.field === "assigneeId" && item.value).map((item) => item.value!);
   const majorIds = config.conditions.filter((item) => item.field === "majorId" && item.value).map((item) => item.value!);
-  const [stages, sources, assignees, majors] = await Promise.all([
+  const admissionStatusIds = config.conditions.filter((item) => item.field === "admissionStatusId" && item.value).map((item) => item.value!);
+  const [stages, sources, assignees, majors, admissionStatuses] = await Promise.all([
     prisma.pipeline_stages.findMany({ where: { id: { in: stageIds } }, select: { id: true, name: true } }),
     prisma.lead_sources.findMany({ where: { id: { in: sourceIds } }, select: { id: true, name: true } }),
     prisma.users.findMany({ where: { id: { in: assigneeIds } }, select: { id: true, full_name: true } }),
     prisma.majors.findMany({ where: { id: { in: majorIds } }, select: { id: true, name: true } }),
+    prisma.admission_statuses.findMany({ where: { id: { in: admissionStatusIds } }, select: { id: true, name: true } }),
   ]);
   const labels = new Map<string, string>([
     ...stages.map((item) => [item.id, item.name] as const), ...sources.map((item) => [item.id, item.name] as const),
     ...assignees.map((item) => [item.id, item.full_name] as const), ...majors.map((item) => [item.id, item.name] as const),
+    ...admissionStatuses.map((item) => [item.id, item.name] as const),
+    ["male", "Nam"], ["female", "Nữ"], ["other", "Khác"],
   ]);
   const descriptions = config.conditions.map((condition) => {
-    const prefix = `${fieldLabels[condition.field]} ${operatorLabels[condition.operator]}`;
+    const prefix = `${customerListFieldLabel(condition.field)} ${operatorLabels[condition.operator]}`;
     if (emptyOperators.has(condition.operator)) return prefix;
     if (condition.operator === "relative") return `${prefix} ${relativeLabels[condition.relativeRange!]}`;
     if (condition.operator === "between") return `${prefix} ${formatDate(condition.from!)} – ${formatDate(condition.to!)}`;
     const rawValue = condition.value ?? "";
-    const value = dateFields.has(condition.field) ? formatDate(rawValue) : labels.get(rawValue) ?? rawValue;
+    const isDate = dateFields.has(condition.field) || catalogFilterByKey.get(condition.field)?.kind === "date";
+    const value = isDate ? formatDate(rawValue) : labels.get(rawValue) ?? rawValue;
     return `${prefix} “${value}”`;
   });
   return descriptions.join(config.combinator === "OR" ? " HOẶC " : " VÀ ");

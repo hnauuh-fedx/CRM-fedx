@@ -158,7 +158,7 @@ function RecentStudentsTable({
             <TableBody>
               {students.map((student) => (
                 <TableRow key={student.id}>
-                  <TableCell className="px-5">
+                  <TableCell className="px-3">
                     <p className="font-medium">{student.leadName}</p>
                     <p className="text-sm text-muted-foreground">
                       {student.studentCode}
@@ -169,7 +169,7 @@ function RecentStudentsTable({
                   </TableCell>
                   <TableCell>{student.className ?? "-"}</TableCell>
                   <TableCell>{formatStatus(student.status)}</TableCell>
-                  <TableCell className="px-5">
+                  <TableCell className="px-3">
                     {formatDate(student.enrolledAt) ?? "-"}
                   </TableCell>
                 </TableRow>
