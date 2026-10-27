@@ -465,6 +465,25 @@ export function getNavigationItems(permissions: string[]) {
   return getNavigationSections(permissions).flatMap((section) => section.items);
 }
 
+/** Reuse menu labels for browser titles, including configuration tabs in the query string. */
+export function getNavigationPageLabel(pathname: string, search = ""): string | undefined {
+  const params = new URLSearchParams(search);
+  for (const section of navigationSections) {
+    for (const item of section.items) {
+      const links = isNavigationGroup(item) ? item.children : [item];
+      for (const link of links) {
+        const [path, query] = link.href.split("?");
+        if (pathname !== path) continue;
+        const expectedParams = new URLSearchParams(query);
+        if (Array.from(expectedParams).every(([key, value]) => params.get(key) === value)) {
+          return link.label;
+        }
+      }
+    }
+  }
+  return undefined;
+}
+
 export function getActiveNavigationSection(pathname: string, sections: NavigationSection[]) {
   return sections.find((section) => section.items.some((item) => isNavigationItemActive(pathname, item))) ?? sections[0];
 }

@@ -922,7 +922,7 @@ export async function startAutomationBulkRun(user: AuthUser, ruleId: string, fil
         entity_type: "automation_rule",
         entity_id: rule.id,
         action: "bulk_run_started",
-        new_data: { bulkJobId: job.id, customerListId: filter.customerListId, total: preview.total },
+        new_data: JSON.parse(JSON.stringify({ bulkJobId: job.id, customerListId: filter.customerListId, target: filter, total: preview.total })),
       },
     });
     return job;

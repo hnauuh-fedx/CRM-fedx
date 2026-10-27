@@ -1,5 +1,5 @@
 import { describeLeadCreation, recordObject } from "./lead-creation-history";
-import { leadCreationActions, loadLeadCreationHistory } from "./lead-creation-history.service";
+import { leadCreationActions, loadLeadCreationHistory, resolveLeadCreationNames } from "./lead-creation-history.service";
 import { isEnrolledStudent, studentMembershipWhere } from "../students/student-membership";
 import type { Prisma } from "../../generated/prisma/client";
 import type { AuthUser } from "../auth/auth.types";
@@ -113,9 +113,9 @@ export function getLeadScopeWhere(
   return assignedScope;
 }
 
-export async function listLeads(
+export async function buildLeadListWhere(
   user: AuthUser,
-  query: LeadListQuery,
+  query: Omit<LeadListQuery, "page" | "limit" | "sortBy" | "sortOrder">,
   additionalWhere?: Prisma.leadsWhereInput,
 ) {
   const canViewSensitive = canViewSensitiveLeadData(user);
@@ -168,6 +168,12 @@ export async function listLeads(
       ...(additionalWhere ? [additionalWhere] : []),
     ],
   };
+  return where;
+}
+
+export async function listLeads(user: AuthUser, query: LeadListQuery, additionalWhere?: Prisma.leadsWhereInput) {
+  const canViewSensitive = canViewSensitiveLeadData(user);
+  const where = await buildLeadListWhere(user, query, additionalWhere);
   const orderBy = query.sortBy === "pipelineStage"
     ? { pipeline_stages: { position: query.sortOrder } }
     : { [leadSortFields[query.sortBy]]: query.sortOrder };
@@ -743,7 +749,11 @@ export async function getLeadDetail(user: AuthUser, leadId: string, institutionP
     return null;
   }
   const creationHistory = await loadLeadCreationHistory(leadId);
-  const creationDisplay = describeLeadCreation(creationHistory.creation, canViewSensitive);
+  const [creation, ...activityCreations] = await resolveLeadCreationNames([
+    creationHistory.creation,
+    ...lead.lead_activities.map((activity) => recordObject(activity.metadata).creation),
+  ], lead.institution_programs?.id ?? null);
+  const creationDisplay = describeLeadCreation(creation, canViewSensitive);
   const failedStageId = getFailedLeadStageId(lead.status);
   const [relatedFiles, relatedTags, recentChanges] = await prisma.$transaction([
     prisma.file_relations.findMany({
@@ -948,11 +958,11 @@ export async function getLeadDetail(user: AuthUser, leadId: string, institutionP
       createdAt: note.created_at?.toISOString() ?? null,
       author: note.users ? { id: note.users.id, fullName: note.users.full_name } : null,
     })),
-    activities: lead.lead_activities.map((activity) => {
+    activities: lead.lead_activities.map((activity, index) => {
       const metadata = recordObject(activity.metadata);
       const isCreation = activity.type === "lead_created" || Boolean(recordObject(metadata.creation).channel) ||
         (activity.type === "marketing_form_submitted" && activity.content?.startsWith("Lead được tạo"));
-      const display = recordObject(metadata.creation).channel ? describeLeadCreation(metadata.creation, canViewSensitive) : creationDisplay;
+      const display = recordObject(metadata.creation).channel ? describeLeadCreation(activityCreations[index], canViewSensitive) : creationDisplay;
       return {
         id: activity.id,
         type: activity.type,

@@ -1,5 +1,7 @@
 import { Router } from "express";
 import { z } from "zod";
+import { automationBulkFilterSchema } from "./automation-bulk-filter";
+import { LeadFilterError } from "../leads/lead-filter.service";
 
 import { requireAnyPermission, requireAuthentication } from "../../middlewares/auth.middleware";
 import { leadListPermissions } from "../leads/lead-list.service";
@@ -118,9 +120,7 @@ const testRunSchema = z.object({
   leadId: z.string().uuid(),
 });
 
-const bulkRunSchema = z.object({
-  customerListId: z.string().uuid(),
-});
+const bulkRunSchema = automationBulkFilterSchema;
 
 const entityIdSchema = z.string().uuid();
 
@@ -625,12 +625,13 @@ automationsRouter.post(
         response.status(404).json({
           message: result.reason === "rule_not_found"
             ? "Không tìm thấy automation rule."
-            : "Không tìm thấy danh sách khách hàng trong phạm vi truy cập của rule.",
+            : "Không tìm thấy tập lead trong phạm vi truy cập của rule.",
         });
         return;
       }
       response.json(result.data);
     } catch (error) {
+      if (error instanceof LeadFilterError) { response.status(error.status).json({ message: error.message }); return; }
       next(error);
     }
   },
@@ -649,10 +650,12 @@ automationsRouter.post(
         response.status(400).json({ message: "Dữ liệu chạy automation hàng loạt không hợp lệ." });
         return;
       }
-      const result = await startAutomationBulkRun(request.authUser!, parsedId.data, parsedBody.data);
+      const parsedRequestId = z.uuid().optional().safeParse(request.get("Idempotency-Key"));
+      if (!parsedRequestId.success) { response.status(400).json({ message: "Mã yêu cầu chạy lại không hợp lệ." }); return; }
+      const result = await startAutomationBulkRun(request.authUser!, parsedId.data, parsedBody.data, parsedRequestId.data);
       if (!result.ok) {
         if (result.reason === "rule_not_found" || result.reason === "filter_not_found") {
-          response.status(404).json({ message: "Không tìm thấy rule hoặc danh sách khách hàng trong phạm vi truy cập." });
+          response.status(404).json({ message: "Không tìm thấy rule hoặc tập lead trong phạm vi truy cập." });
           return;
         }
         if (result.reason === "queue_unavailable") {
@@ -661,7 +664,7 @@ automationsRouter.post(
         }
         response.status(422).json({
           message: result.reason === "empty_filter"
-            ? "Danh sách khách hàng không có Lead phù hợp."
+            ? "Không có lead phù hợp trong phạm vi đã chọn."
             : "Rule chưa hợp lệ để chạy hàng loạt.",
           validation: "validation" in result ? result.validation : undefined,
         });
@@ -669,6 +672,7 @@ automationsRouter.post(
       }
       response.status(202).json(result.data);
     } catch (error) {
+      if (error instanceof LeadFilterError) { response.status(error.status).json({ message: error.message }); return; }
       next(error);
     }
   },

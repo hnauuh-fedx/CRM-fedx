@@ -20,4 +20,5 @@ export type AutomationReassignmentPolicy = {
   secondWarningContent?: string;
   secondWarningEmailEnabled?: boolean;
   notifyOnRemoval: boolean;
+  removalContent?: string;
 };

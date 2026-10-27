@@ -13,6 +13,11 @@ import type {
   AutomationRuleVersion,
 } from "@/modules/automations/automation.types";
 import { apiRequest } from "./api";
+import type { LeadListFilters } from "@/modules/leads/lead.types";
+
+export type LeadAutomationTarget =
+  | { target: "selected"; leadIds: string[]; audience: "candidates" | "students" | "all"; customerListId?: string }
+  | { target: "filtered"; filters: LeadListFilters & { audience: "candidates" | "students" | "all"; filterConditions?: string }; customerListId?: string };
 
 export type AutomationListParams = {
   page?: number;
@@ -90,17 +95,18 @@ export function runAutomationTest(id: string, leadId: string, accessToken: strin
   }, accessToken);
 }
 
-export function previewAutomationBulkRun(id: string, customerListId: string, accessToken: string) {
+export function previewAutomationBulkRun(id: string, target: string | LeadAutomationTarget, accessToken: string) {
   return apiRequest<AutomationBulkPreview>(`/automations/${id}/bulk-preview`, {
     method: "POST",
-    body: JSON.stringify({ customerListId }),
+    body: JSON.stringify(typeof target === "string" ? { customerListId: target } : target),
   }, accessToken);
 }
 
-export function startAutomationBulkRun(id: string, customerListId: string, accessToken: string) {
+export function startAutomationBulkRun(id: string, target: string | LeadAutomationTarget, accessToken: string, requestId?: string) {
   return apiRequest<AutomationBulkJob>(`/automations/${id}/bulk-run`, {
     method: "POST",
-    body: JSON.stringify({ customerListId }),
+    ...(requestId ? { headers: { "Idempotency-Key": requestId } } : {}),
+    body: JSON.stringify(typeof target === "string" ? { customerListId: target } : target),
   }, accessToken);
 }
 

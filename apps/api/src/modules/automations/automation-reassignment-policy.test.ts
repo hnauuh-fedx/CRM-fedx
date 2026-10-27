@@ -43,6 +43,19 @@ test("accepts a valid active reassignment policy", () => {
   assert.deepEqual(issues, []);
 });
 
+test("accepts custom removal content and empty content for the default notification", () => {
+  for (const removalContent of ["Lead đã được thu hồi. Vui lòng liên hệ quản lý.", "", " ", "a".repeat(5000)]) {
+    assert.deepEqual(validateRegisteredAutomationNode(node({ ...validPolicy, removalContent })), []);
+  }
+});
+
+test("rejects malformed or oversized removal content", () => {
+  for (const removalContent of [123, null, {}, "a".repeat(5001)]) {
+    const malformed = node({ ...validPolicy, removalContent: removalContent as string });
+    assert.ok(validateRegisteredAutomationNode(malformed).some((issue) => issue.includes("nội dung thông báo khi thu hồi")));
+  }
+});
+
 test("rejects invalid timeout and retry limits", () => {
   const issues = validateRegisteredAutomationNode(node({
     ...validPolicy,

@@ -98,3 +98,59 @@ test("creation values are a snapshot and readable reference names replace IDs", 
   assert.match(display.description, /Tiến trình: Chờ tư vấn/);
   assert.doesNotMatch(display.description, /Tên sau khi sửa|source-uuid|stage-uuid/);
 });
+
+test("legacy reference IDs are resolved in batches without changing the saved snapshot", async () => {
+  const { resolveLeadCreationNames } = await import("./lead-creation-history.service.js");
+  const { describeLeadCreation } = await import("./lead-creation-history.js");
+  const sourceId = "00000000-0000-4000-8000-000000000001";
+  const assigneeId = "00000000-0000-4000-8000-000000000002";
+  const programId = "00000000-0000-4000-8000-000000000003";
+  const creation = { channel: "unknown", initialValues: { sourceId, assigneeId, secondaryAssigneeId: assigneeId, phone: "0901234567" } };
+  let sourceQueries = 0;
+  let userQueries = 0;
+  const database: any = {
+    lead_sources: { findMany: async (query: any) => {
+      sourceQueries++;
+      assert.deepEqual(query.where, { id: { in: [sourceId] }, institution_program_id: programId });
+      assert.deepEqual(query.select, { id: true, name: true });
+      return [{ id: sourceId, name: "Facebook tuyển sinh" }];
+    } },
+    users: { findMany: async (query: any) => {
+      userQueries++;
+      assert.deepEqual(query.where.id.in, [assigneeId]);
+      assert.equal(query.where.user_program_roles.some.institution_program_id, programId);
+      assert.deepEqual(query.select, { id: true, full_name: true });
+      return [{ id: assigneeId, full_name: "Nguyễn Văn An" }];
+    } },
+  };
+  const resolved = await resolveLeadCreationNames([creation, creation], programId, database);
+  assert.equal(sourceQueries, 1);
+  assert.equal(userQueries, 1);
+  for (const item of resolved) {
+    const display = describeLeadCreation(item, false).description;
+    assert.match(display, /Nguồn học viên: Facebook tuyển sinh/);
+    assert.match(display, /Nhân viên phụ trách: Nguyễn Văn An/);
+    assert.match(display, /Nhân viên phụ trách phụ: Nguyễn Văn An/);
+    assert.doesNotMatch(display, /00000000|\(mã\)|0901234567/);
+  }
+  assert.equal("sourceName" in creation.initialValues, false);
+});
+
+test("recorded reference names take precedence and do not need another lookup", async () => {
+  const { resolveLeadCreationNames } = await import("./lead-creation-history.service.js");
+  const creation = { initialValues: { sourceId: "00000000-0000-4000-8000-000000000001", sourceName: "Nguồn lúc tạo" } };
+  const [resolved] = await resolveLeadCreationNames([creation], null, {} as any);
+  assert.equal(resolved.initialValues.sourceName, "Nguồn lúc tạo");
+});
+
+test("missing references and technical tracking IDs never appear as codes in the summary", async () => {
+  const { describeLeadCreation } = await import("./lead-creation-history.js");
+  const { resolveLeadCreationNames } = await import("./lead-creation-history.service.js");
+  const id = "00000000-0000-4000-8000-000000000001";
+  const creation = { channel: "webhook", webhookId: id, formId: id, requestId: id, initialValues: { sourceId: id, assigneeId: "not-a-valid-uuid" } };
+  const [resolved] = await resolveLeadCreationNames([creation], null, { lead_sources: { findMany: async () => [] } } as any);
+  const display = describeLeadCreation(resolved, true).description;
+  assert.match(display, /Nguồn học viên: Không còn thông tin/);
+  assert.match(display, /Nhân viên phụ trách: Không còn thông tin/);
+  assert.doesNotMatch(display, /00000000|not-a-valid-uuid|\(mã\)|Mã yêu cầu/);
+});

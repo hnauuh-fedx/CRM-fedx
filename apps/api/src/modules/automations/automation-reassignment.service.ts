@@ -138,6 +138,8 @@ function parsePolicy(value: Prisma.JsonValue): AutomationReassignmentPolicy | nu
     || typeof policy.warningEnabled !== "boolean"
     || (policy.secondWarningEnabled !== undefined && typeof policy.secondWarningEnabled !== "boolean")
     || typeof policy.notifyOnRemoval !== "boolean"
+    || (policy.removalContent !== undefined
+      && (typeof policy.removalContent !== "string" || policy.removalContent.length > 5000))
   ) return null;
   if (policy.warningEnabled && (
     typeof policy.warningBeforeMinutes !== "number"
@@ -536,7 +538,8 @@ export async function processReassignmentExpiry(monitorId: string, now = new Dat
           data: {
             user_id: claimed.assignee_id,
             title: "Lead đã được chuyển cho nhân viên khác",
-            content: `Lead đã được thu hồi do bạn ${getCriterionDescription(claimed.policy.interactionCriterion)} trong thời hạn cấu hình.`,
+            content: claimed.policy.removalContent?.trim()
+              || `Lead đã được thu hồi do bạn ${getCriterionDescription(claimed.policy.interactionCriterion)} trong thời hạn cấu hình.`,
             type: "automation_reassignment_removed",
           },
         });

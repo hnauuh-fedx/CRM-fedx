@@ -53,9 +53,9 @@ export function NodePalette({ definitions, onAdd }: {
                     className="h-auto min-h-11 cursor-grab justify-start px-3 py-2.5 text-left active:cursor-grabbing"
                   >
                       <Icon aria-hidden="true" />
-                      <span className="min-w-0">
+                      <span className="min-w-0 flex-1 whitespace-normal wrap-break-word">
                         <span className="block text-xs font-medium">{node.label}</span>
-                        <span className="block truncate text-xs font-normal leading-tight text-muted-foreground">
+                        <span className="block text-xs font-normal leading-tight text-muted-foreground">
                           {node.description}
                         </span>
                       </span>

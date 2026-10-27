@@ -766,6 +766,23 @@ function ReassignmentPolicyFields({
               Gửi thông báo khi nhân viên bị loại khỏi bản ghi
             </span>
           </label>
+          {policy.notifyOnRemoval ? (
+            <Field className="pl-7">
+              <FieldLabel htmlFor="removal-content">Nội dung thông báo khi thu hồi</FieldLabel>
+              <Textarea
+                id="removal-content"
+                rows={4}
+                maxLength={5000}
+                value={policy.removalContent ?? ""}
+                placeholder="Nhập nội dung thông báo gửi cho sale khi thu hồi bản ghi"
+                aria-describedby="removal-content-description"
+                onChange={(event) => patchPolicy({ removalContent: event.target.value })}
+              />
+              <FieldDescription id="removal-content-description">
+                Gửi cho sale vừa bị thu hồi bản ghi. Để trống để dùng nội dung mặc định của hệ thống. Tối đa 5.000 ký tự.
+              </FieldDescription>
+            </Field>
+          ) : null}
         </fieldset>
       ) : (
         <p className="text-xs text-muted-foreground">

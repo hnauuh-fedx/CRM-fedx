@@ -1,7 +1,50 @@
 import { prisma } from "../../database/prisma";
-import { recordObject } from "./lead-creation-history";
+import { leadCreationReferenceNames, recordObject } from "./lead-creation-history";
 
 export const leadCreationActions = ["create", "create_from_marketing_form", "create_from_meta", "create_from_zalo"];
+
+// Only resolve references from an already-authorized Lead's historical snapshots.
+// Batch across the audit and activities, preserving names captured at creation time.
+export async function resolveLeadCreationNames(creations: unknown[], institutionProgramId: string | null, database = prisma) {
+  const values = creations.map((creation) => recordObject(recordObject(creation).initialValues));
+  const resolvedNames = new Map<string, Map<string, string>>();
+  const uuid = /^[0-9a-f]{8}-(?:[0-9a-f]{4}-){3}[0-9a-f]{12}$/i;
+  const hasName = (value: unknown) => typeof value === "string" && value.trim().length > 0;
+  const load = async (keys: string[], lookup: (ids: string[]) => Promise<Array<{ id: string; name: string }>>) => {
+    const ids = [...new Set(values.flatMap((value) => keys.flatMap((key) => {
+      const id = value[key];
+      return !hasName(value[leadCreationReferenceNames[key]]) && typeof id === "string" && uuid.test(id) ? [id] : [];
+    })))];
+    if (!ids.length) return;
+    const names = new Map((await lookup(ids)).map((row) => [row.id, row.name]));
+    for (const key of keys) resolvedNames.set(key, names);
+  };
+  await Promise.all([
+    load(["sourceId"], (ids) => database.lead_sources.findMany({ where: { id: { in: ids }, institution_program_id: institutionProgramId }, select: { id: true, name: true } })),
+    load(["originId"], (ids) => institutionProgramId ? database.lead_origins.findMany({ where: { id: { in: ids }, institution_program_id: institutionProgramId }, select: { id: true, name: true } }) : Promise.resolve([])),
+    load(["institutionProgramId"], (ids) => database.institution_programs.findMany({ where: { id: { in: ids.filter((id) => id === institutionProgramId) } }, select: { id: true, name: true } })),
+    load(["majorId"], (ids) => database.majors.findMany({ where: { id: { in: ids }, institution_program_id: institutionProgramId }, select: { id: true, name: true } })),
+    load(["pipelineStageId"], (ids) => database.pipeline_stages.findMany({ where: { id: { in: ids } }, select: { id: true, name: true } })),
+    load(["admissionStatusId"], (ids) => database.admission_statuses.findMany({ where: { id: { in: ids } }, select: { id: true, name: true } })),
+    load(["assigneeId", "secondaryAssigneeId"], async (ids) => {
+      const users = await database.users.findMany({
+        where: { id: { in: ids }, ...(institutionProgramId ? { user_program_roles: { some: { institution_program_id: institutionProgramId } } } : {}) },
+        select: { id: true, full_name: true },
+      });
+      return users.map((user) => ({ id: user.id, name: user.full_name }));
+    }),
+  ]);
+  return creations.map((creation, index) => {
+    const initialValues = { ...values[index] };
+    for (const [idKey, nameKey] of Object.entries(leadCreationReferenceNames)) {
+      if (hasName(initialValues[nameKey])) continue;
+      const id = initialValues[idKey];
+      const name = typeof id === "string" ? resolvedNames.get(idKey)?.get(id) : undefined;
+      if (name) initialValues[nameKey] = name;
+    }
+    return { ...recordObject(creation), initialValues };
+  });
+}
 
 // Call only after the scoped Lead lookup succeeds. Never return raw request payloads or secrets.
 export async function loadLeadCreationHistory(leadId: string, database = prisma) {

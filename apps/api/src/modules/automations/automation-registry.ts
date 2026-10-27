@@ -364,6 +364,10 @@ export function validateRegisteredAutomationNode(node: AutomationNode): string[]
         if (typeof policy.notifyOnRemoval !== "boolean") {
           missing(`Node chia Lead ${node.id} phải xác định có thông báo khi thu hồi hay không.`);
         }
+        if (policy.removalContent !== undefined
+          && (typeof policy.removalContent !== "string" || policy.removalContent.length > 5000)) {
+          missing(`Node chia Lead ${node.id} phải có nội dung thông báo khi thu hồi là văn bản tối đa 5.000 ký tự.`);
+        }
       }
     }
   }

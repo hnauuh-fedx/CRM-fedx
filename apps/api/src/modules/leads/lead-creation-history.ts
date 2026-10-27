@@ -19,10 +19,8 @@ export function createLeadCreationSnapshot(input: LeadInput & { sourceName?: str
 
 const fieldLabels: Record<string, string> = {
   sourceName: "Nguồn học viên", source: "Nguồn nhận từ API", pipelineStageName: "Tiến trình", assigneeName: "Nhân viên phụ trách", secondaryAssigneeName: "Nhân viên phụ trách phụ",
+  originName: "Nguồn tiếp cận", institutionProgramName: "Chương trình", majorName: "Ngành", admissionStatusName: "Trạng thái tuyển sinh",
   fullName: "Họ và tên", phone: "Số điện thoại", secondaryPhones: "Số điện thoại phụ", email: "Email",
-  sourceId: "Nguồn học viên (mã)", originId: "Nguồn tiếp cận (mã)", institutionProgramId: "Chương trình (mã)",
-  majorId: "Ngành (mã)", assigneeId: "Nhân viên phụ trách (mã)", secondaryAssigneeId: "Nhân viên phụ trách phụ (mã)",
-  pipelineStageId: "Tiến trình (mã)", admissionStatusId: "Trạng thái tuyển sinh (mã)",
   gender: "Giới tính", dateOfBirth: "Ngày sinh", note: "Ghi chú", noteContent: "Nội dung ghi chú",
   temperature: "Mức độ quan tâm", birthPlace: "Nơi sinh", cccd: "CCCD", cccdIssueDate: "Ngày cấp CCCD", cccdIssuePlace: "Nơi cấp CCCD",
   nationality: "Quốc tịch", ethnicity: "Dân tộc", religion: "Tôn giáo", graduationYear: "Năm tốt nghiệp",
@@ -39,7 +37,12 @@ const fieldLabels: Record<string, string> = {
 };
 
 // Free text, contact details and personal information use the same permission as Lead details.
-const publicFields = new Set(["sourceName", "source", "pipelineStageName", "assigneeName", "secondaryAssigneeName", "fullName", "sourceId", "originId", "institutionProgramId", "majorId", "assigneeId", "secondaryAssigneeId", "pipelineStageId", "admissionStatusId", "temperature"]);
+const publicFields = new Set(["sourceName", "source", "pipelineStageName", "assigneeName", "secondaryAssigneeName", "originName", "institutionProgramName", "majorName", "admissionStatusName", "fullName", "temperature"]);
+
+export const leadCreationReferenceNames: Record<string, string> = {
+  sourceId: "sourceName", originId: "originName", institutionProgramId: "institutionProgramName", majorId: "majorName",
+  assigneeId: "assigneeName", secondaryAssigneeId: "secondaryAssigneeName", pipelineStageId: "pipelineStageName", admissionStatusId: "admissionStatusName",
+};
 
 export function describeLeadCreation(creation: unknown, canViewSensitive: boolean, fallbackActor?: string | null) {
   const data = recordObject(creation);
@@ -47,19 +50,20 @@ export function describeLeadCreation(creation: unknown, canViewSensitive: boolea
   const actorLabel = data.channel === "public_form" ? "Biểu mẫu hệ thống" : automated ? "API / Webhook" : String(data.creatorName || fallbackActor || "Không còn thông tin người tạo");
   const name = (value: unknown) => typeof value === "string" && value.trim() ? value.trim() : null;
   let title = data.channel === "public_form"
-    ? `Tạo lead từ biểu mẫu ${name(data.formName) ?? name(data.formId) ?? "không còn thông tin tên"}.`
+    ? `Tạo lead từ biểu mẫu ${name(data.formName) ?? "không còn thông tin tên"}.`
     : automated
-      ? `API đã đổ dữ liệu tạo lead${data.channel === "webhook" ? ` qua webhook ${name(data.webhookName) ?? name(data.webhookId) ?? "không còn thông tin tên"}` : ""}${data.formId ? `; biểu mẫu ${name(data.formName) ?? name(data.formId)}` : ""}.`
+      ? `API đã đổ dữ liệu tạo lead${data.channel === "webhook" ? ` qua webhook ${name(data.webhookName) ?? "không còn thông tin tên"}` : ""}${data.formId ? `; biểu mẫu ${name(data.formName) ?? "không còn thông tin tên"}` : ""}.`
       : data.channel === "import" ? `${actorLabel} nhập lead từ tệp.` : `${actorLabel} tạo lead mới thủ công.`;
   if (data.channel === "unknown") title = `Ghi nhận tạo lead. Tài khoản ghi nhận: ${actorLabel}. Bản ghi cũ chưa lưu hình thức tạo.`;
   if (data.channel === "api" && name(data.webhookName)) title = `API đã đổ dữ liệu tạo lead từ ${data.webhookName}.`;
-  if (data.channel === "webhook" && data.formId && !data.webhookId && !data.webhookName) title = `API đã đổ dữ liệu tạo lead qua webhook của biểu mẫu ${name(data.formName) ?? data.formId}.`;
-  if (name(data.requestId)) title += ` Mã yêu cầu: ${data.requestId}.`;
+  if (data.channel === "webhook" && data.formId && !data.webhookId && !data.webhookName) title = `API đã đổ dữ liệu tạo lead qua webhook của biểu mẫu ${name(data.formName) ?? "không còn thông tin tên"}.`;
   const values = recordObject(data.initialValues);
+  const displayValues = { ...values };
+  for (const [idKey, nameKey] of Object.entries(leadCreationReferenceNames)) {
+    if (values[idKey] && !name(values[nameKey])) displayValues[nameKey] = "Không còn thông tin";
+  }
   const details = Object.entries(fieldLabels).flatMap(([key, label]) => {
-    const value = values[key];
-    const referenceName = { sourceId: "sourceName", pipelineStageId: "pipelineStageName", assigneeId: "assigneeName", secondaryAssigneeId: "secondaryAssigneeName" }[key];
-    if (referenceName && values[referenceName]) return [];
+    const value = displayValues[key];
     if ((!canViewSensitive && !publicFields.has(key)) || value === undefined || value === null || value === "" || (Array.isArray(value) && !value.length)) return [];
     if (typeof value !== "string" && typeof value !== "number" && !Array.isArray(value)) return [];
     return [`${label}: ${Array.isArray(value) ? value.filter(v => typeof v === "string").join(", ") : value}`];

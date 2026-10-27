@@ -54,6 +54,8 @@ import type { FilterConditionState } from "../filter-fields";
 import { decodeConditions, applyConditionsToParams } from "../filter-serialization";
 import { LeadOpenInitialization } from "../components/lead-open-initialization";
 import { BulkUpdateLeadsDialog } from "../components/bulk-update-leads-dialog";
+import { RerunLeadRuleDialog } from "../components/rerun-lead-rule-dialog";
+import { serializeConditions } from "../filter-serialization";
 import { useLeadWorkflowTransition } from "../components/transition-note-dialog";
 import type {
   LeadActionOptions,
@@ -332,6 +334,7 @@ export function LeadsListPage({
   const [saleAssignmentOpen, setSaleAssignmentOpen] = useState(false);
   const [bulkDeleteOpen, setBulkDeleteOpen] = useState(false);
   const [bulkUpdateOpen, setBulkUpdateOpen] = useState(false);
+  const [rerunRuleOpen, setRerunRuleOpen] = useState(false);
   const primarySort = sorting[0] ?? { id: "createdAt", desc: true };
   const sortBy = sortableColumns.has(primarySort.id as LeadSortField)
     ? (primarySort.id as LeadSortField)
@@ -535,7 +538,21 @@ export function LeadsListPage({
         canDelete={canDelete}
         onDelete={() => setBulkDeleteOpen(true)}
         onClearSelection={() => setRowSelection({})}
+        onRerunRule={auth.can("automation.manage") ? () => setRerunRuleOpen(true) : undefined}
       />
+      {rerunRuleOpen && auth.can("automation.manage") && <RerunLeadRuleDialog
+        filteredCount={!leadsQuery.isFetching && !leadsQuery.isError ? pagination?.total : undefined}
+        leadIds={Object.entries(rowSelection).filter(([, selected]) => selected).map(([id]) => id)}
+        filters={{ ...filters, filterConditions: serializeConditions(filterConditions) }}
+        audience={customerListId ? "all" : audience}
+        customerListId={customerListId}
+        accessToken={auth.accessToken!}
+        onClose={() => {
+          setRerunRuleOpen(false);
+          queryClient.invalidateQueries({ queryKey: ["leads"] });
+          queryClient.invalidateQueries({ queryKey: ["customer-lists"] });
+        }}
+      />}
       <AssignToCustomerListDialog
         open={assignmentOpen}
         leadIds={Object.keys(rowSelection)}
@@ -1089,6 +1106,7 @@ type LeadResultsCardProps = {
   canDelete: boolean;
   onDelete: () => void;
   onClearSelection: () => void;
+  onRerunRule?: () => void;
 };
 
 type LeadBulkActionsMenuProps = Pick<
@@ -1103,6 +1121,7 @@ type LeadBulkActionsMenuProps = Pick<
   | "canDelete"
   | "onDelete"
   | "onClearSelection"
+  | "onRerunRule"
 >;
 
 function LeadBulkActionsMenu({
@@ -1116,6 +1135,7 @@ function LeadBulkActionsMenu({
   canDelete,
   onDelete,
   onClearSelection,
+  onRerunRule,
 }: LeadBulkActionsMenuProps) {
   const selectionLabel = selectedCount > 0 ? ` (${selectedCount})` : "";
   const hasNoSelection = selectedCount === 0;
@@ -1130,6 +1150,7 @@ function LeadBulkActionsMenu({
       </DropdownMenuTrigger>
       <DropdownMenuContent align="end" className="w-52">
         <DropdownMenuGroup>
+          {onRerunRule && <DropdownMenuItem onSelect={onRerunRule}>Chạy lại rule</DropdownMenuItem>}
           {canAssignSale && (
             <DropdownMenuItem disabled={hasNoSelection} onSelect={onAssignSale}>
               Gán sale{selectionLabel}
@@ -1192,6 +1213,7 @@ function LeadResultsCard({
   canDelete,
   onDelete,
   onClearSelection,
+  onRerunRule,
 }: LeadResultsCardProps) {
   const { isLoading: isDataLoading, isError, isFetching, errorMessage } = queryState;
   const isLoading = isDataLoading || isLayoutLoading;
@@ -1216,6 +1238,7 @@ function LeadResultsCard({
             canDelete={canDelete}
             onDelete={onDelete}
             onClearSelection={onClearSelection}
+            onRerunRule={onRerunRule}
           />
         </CardAction>
       </CardHeader>

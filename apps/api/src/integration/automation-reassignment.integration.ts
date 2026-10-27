@@ -217,11 +217,40 @@ async function main() {
   assert.ok(successor, "Assignment mới phải có monitor kế tiếp.");
   assert.equal(successor.reassignment_count, 1);
   assert.equal(await prisma.notifications.count({ where: { user_id: firstSale.id, type: "automation_reassignment_removed" } }), 1);
+  const legacyRemoval = await prisma.notifications.findFirstOrThrow({
+    where: { user_id: firstSale.id, type: "automation_reassignment_removed" },
+    select: { content: true },
+  });
+  assert.equal(legacyRemoval.content, "Lead đã được thu hồi do bạn không mở bản ghi trong thời hạn cấu hình.");
   assert.equal(await prisma.lead_activities.count({ where: { lead_id: active.lead.id, type: "automation_reassignment" } }), 1);
   assert.equal(await prisma.audit_logs.count({ where: { entity_type: "automation_reassignment_monitor", entity_id: active.monitor.id, action: "sale_reassigned" } }), 1);
 
   await processReassignmentExpiry(active.monitor.id);
   assert.equal(await prisma.lead_assignments.count({ where: { lead_id: active.lead.id } }), 2, "Chạy lại job không được tạo assignment trùng.");
+
+  for (const [suffix, removalContent, notifyOnRemoval] of [
+    ["custom-removal", "Lead đã được thu hồi.\nVui lòng liên hệ quản lý để được hỗ trợ.", true],
+    ["blank-removal", "   ", true],
+    ["disabled-removal", "Không gửi nội dung này.", false],
+  ] as const) {
+    const removal = await createLeadWithMonitor(suffix, undefined, { ...policy, removalContent, notifyOnRemoval });
+    const before = await prisma.notifications.findMany({
+      where: { user_id: firstSale.id, type: "automation_reassignment_removed" },
+      select: { id: true },
+    });
+    assert.equal((await processReassignmentExpiry(removal.monitor.id)).outcome, "reassigned");
+    const notifications = await prisma.notifications.findMany({
+      where: { user_id: firstSale.id, type: "automation_reassignment_removed", id: { notIn: before.map((item) => item.id) } },
+      select: { content: true },
+    });
+    assert.equal(notifications.length, notifyOnRemoval ? 1 : 0);
+    if (notifyOnRemoval) {
+      assert.equal(notifications[0].content, removalContent.trim() || legacyRemoval.content);
+    }
+    const savedMonitor = await prisma.automation_reassignment_monitors.findUniqueOrThrow({ where: { id: removal.monitor.id } });
+    const nextMonitor = await prisma.automation_reassignment_monitors.findFirstOrThrow({ where: { assignment_id: savedMonitor.next_assignment_id! } });
+    assert.equal((nextMonitor.policy_snapshot as unknown as AutomationReassignmentPolicy).removalContent, removalContent);
+  }
 
   const warning = await createLeadWithMonitor(
     "warning",

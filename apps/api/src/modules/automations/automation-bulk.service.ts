@@ -8,15 +8,23 @@ import {
   normalizeCustomerListFilterConfig,
   type CustomerListFilterConfig,
 } from "../customer-lists/customer-list-filter";
-import { getLeadScopeWhere } from "../leads/lead-list.service";
+import { buildLeadListWhere, getLeadScopeWhere } from "../leads/lead-list.service";
+import { leadAutomationTargetSchema, type LeadAutomationTarget } from "./automation-bulk-filter";
+import { LeadFilterError } from "../leads/lead-filter.service";
 import { startAutomationExecution } from "./automation-engine.service";
 import type { AutomationGraphData } from "./automation.types";
 
-export type AutomationBulkFilter = { customerListId: string };
-export type AutomationBulkTargetSnapshot = {
+export type AutomationBulkFilter = { customerListId: string } | LeadAutomationTarget;
+type CustomerListTargetSnapshot = {
   customerListId: string;
   institutionProgramId: string;
   filterConfig: CustomerListFilterConfig;
+};
+export type AutomationBulkTargetSnapshot = CustomerListTargetSnapshot | {
+  kind: "lead_list";
+  institutionProgramId: string | null;
+  leadTarget: LeadAutomationTarget;
+  customerList?: CustomerListTargetSnapshot;
 };
 
 export async function listAccessibleAutomationCustomerLists(user: AuthUser, institutionProgramId?: string) {
@@ -121,7 +129,8 @@ export async function executeAutomationBulkLead(jobId: string, leadId: string) {
       id: leadId,
       deleted_at: null,
       ...(context.rule.institution_program_id ? { institution_program_id: context.rule.institution_program_id } : {}),
-      ...getLeadScopeWhere(context.actor),
+      ...getLeadScopeWhere(context.actor, context.targetSnapshot.institutionProgramId ?? undefined),
+      ...(context.targetSnapshot.institutionProgramId ? { institution_program_id: context.targetSnapshot.institutionProgramId } : {}),
     },
     select: { id: true, institution_program_id: true },
   });
@@ -154,17 +163,34 @@ async function loadBulkContext(jobId: string) {
   const triggerType = typeof payload.triggerType === "string" ? payload.triggerType : "";
   const graphData = isRecord(payload.graphData) ? payload.graphData as unknown as AutomationGraphData : null;
   const institutionProgramId = typeof payload.institutionProgramId === "string" ? payload.institutionProgramId : null;
-  const actor = await getAuthUser(job.requested_by, institutionProgramId ?? undefined);
+  const target = isRecord(payload.targetSnapshot) ? payload.targetSnapshot : null;
+  const actorProgramId = target?.kind === "lead_list" && typeof target.institutionProgramId === "string" ? target.institutionProgramId : institutionProgramId;
+  const actor = await getAuthUser(job.requested_by, actorProgramId ?? undefined);
   if (!actor?.permissions.includes("automation.manage")) return null;
   const snapshotAt = typeof payload.snapshotAt === "string" ? new Date(payload.snapshotAt) : null;
-  const target = isRecord(payload.targetSnapshot) ? payload.targetSnapshot : null;
+  if (target?.kind === "lead_list") {
+    const parsed = leadAutomationTargetSchema.safeParse(target.leadTarget);
+    if (!parsed.success || !version || !triggerType || !graphData || !snapshotAt || Number.isNaN(snapshotAt.getTime())) return null;
+    const audience = parsed.data.target === "selected" ? parsed.data.audience : parsed.data.filters.audience;
+    if (audience === "students" && !actor.permissions.some((permission) => ["student.view", "student.view_all"].includes(permission))) return null;
+    const targetProgramId = typeof target.institutionProgramId === "string" ? target.institutionProgramId : null;
+    if (institutionProgramId && institutionProgramId !== targetProgramId) return null;
+    if (actor.workingInstitutionProgramId && actor.workingInstitutionProgramId !== targetProgramId) return null;
+    const savedList = isRecord(target.customerList) ? target.customerList : null;
+    if (parsed.data.customerListId && (!savedList || savedList.customerListId !== parsed.data.customerListId || savedList.institutionProgramId !== targetProgramId)) return null;
+    const targetSnapshot: AutomationBulkTargetSnapshot = {
+      kind: "lead_list", institutionProgramId: targetProgramId, leadTarget: parsed.data,
+      ...(savedList ? { customerList: { customerListId: String(savedList.customerListId), institutionProgramId: String(savedList.institutionProgramId), filterConfig: normalizeCustomerListFilterConfig(savedList.filterConfig as Prisma.JsonValue) } } : {}),
+    };
+    return { actor, rule: { id: job.rule_id, version, trigger_type: triggerType, graph_data: graphData, institution_program_id: institutionProgramId }, filter: parsed.data, snapshotAt, targetSnapshot };
+  }
   const targetCustomerListId = typeof target?.customerListId === "string" ? target.customerListId : "";
   const targetProgramId = typeof target?.institutionProgramId === "string" ? target.institutionProgramId : "";
   if (
     !customerListId || !version || !triggerType || !graphData || !snapshotAt
     || Number.isNaN(snapshotAt.getTime()) || targetCustomerListId !== customerListId || !targetProgramId
   ) return null;
-  const targetSnapshot: AutomationBulkTargetSnapshot = {
+  const targetSnapshot: CustomerListTargetSnapshot = {
     customerListId: targetCustomerListId,
     institutionProgramId: targetProgramId,
     filterConfig: normalizeCustomerListFilterConfig(target?.filterConfig as Prisma.JsonValue | undefined),
@@ -185,6 +211,8 @@ async function resolveBulkLeadWhere(
   snapshotAt?: Date,
   targetSnapshot?: AutomationBulkTargetSnapshot,
 ) {
+  if ("target" in filter) return resolveLeadListBulkWhere(user, institutionProgramId, filter, snapshotAt, targetSnapshot);
+  if (targetSnapshot && "kind" in targetSnapshot) return null;
   const target = targetSnapshot ?? await loadBulkTargetSnapshot(user, institutionProgramId, filter);
   if (!target || target.customerListId !== filter.customerListId) return null;
   const dynamic = customerListDynamicWhere(target.filterConfig, snapshotAt);
@@ -212,8 +240,8 @@ async function resolveBulkLeadWhere(
 async function loadBulkTargetSnapshot(
   user: AuthUser,
   institutionProgramId: string | null,
-  filter: AutomationBulkFilter,
-): Promise<AutomationBulkTargetSnapshot | null> {
+  filter: { customerListId: string },
+): Promise<CustomerListTargetSnapshot | null> {
   const list = await prisma.customer_lists.findFirst({
     where: {
       id: filter.customerListId,
@@ -229,6 +257,33 @@ async function loadBulkTargetSnapshot(
     institutionProgramId: list.institution_program_id,
     filterConfig: normalizeCustomerListFilterConfig(list.filter_config),
   };
+}
+
+async function resolveLeadListBulkWhere(user: AuthUser, ruleProgramId: string | null, filter: LeadAutomationTarget, snapshotAt?: Date, saved?: AutomationBulkTargetSnapshot) {
+  const audience = filter.target === "selected" ? filter.audience : filter.filters.audience;
+  if (audience === "students" && !user.permissions.some((permission) => ["student.view", "student.view_all"].includes(permission))) {
+    throw new LeadFilterError(403, "Bạn chưa được cấp quyền xem học viên.");
+  }
+  const programId = ruleProgramId ?? user.workingInstitutionProgramId ?? null;
+  if (user.workingInstitutionProgramId && ruleProgramId && ruleProgramId !== user.workingInstitutionProgramId) return null;
+  if (saved && (!("kind" in saved) || saved.institutionProgramId !== programId)) return null;
+  const customerList = saved && "kind" in saved ? saved.customerList : filter.customerListId
+    ? await loadBulkTargetSnapshot(user, programId, { customerListId: filter.customerListId }) : undefined;
+  if (filter.customerListId && !customerList) return null;
+  const targetSnapshot: AutomationBulkTargetSnapshot = saved ?? {
+    kind: "lead_list", institutionProgramId: programId, leadTarget: filter,
+    ...(customerList ? { customerList } : {}),
+  };
+  const dynamic = customerList ? customerListDynamicWhere(customerList.filterConfig, snapshotAt) : null;
+  const where = await buildLeadListWhere(user, {
+    ...(filter.target === "filtered" ? filter.filters : { audience: filter.audience }),
+    institutionProgramId: programId ?? undefined,
+  }, { AND: [
+    ...(filter.target === "selected" ? [{ id: { in: filter.leadIds } }] : []),
+    ...(snapshotAt ? [{ created_at: { lte: snapshotAt } }] : []),
+    ...(customerList ? [{ OR: [...(dynamic ? [dynamic] : []), { customer_list_members: { some: { customer_list_id: customerList.customerListId } } }] }] : []),
+  ] });
+  return { where, institutionProgramId: programId, targetSnapshot };
 }
 
 function canViewEveryCustomerList(user: AuthUser) {

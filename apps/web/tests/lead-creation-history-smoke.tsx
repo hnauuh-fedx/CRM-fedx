@@ -7,7 +7,7 @@ import type { LeadDetail } from "../src/modules/leads/lead.types";
 import { describeLeadCreation } from "../../api/src/modules/leads/lead-creation-history";
 import "../src/index.css";
 
-const description = describeLeadCreation({ channel: "webhook", webhookName: "Facebook tuyển sinh tháng 10", requestId: "12345678-abcd-1234-abcd-123456789012", initialValues: { fullName: "Nguyễn Văn An", phone: "0901234567", email: "nguyenvanan@example.vn", note: "Đăng ký tư vấn tuyển sinh", sourceId: "12345678-abcd-1234-abcd-123456789012" } }, true);
+const description = describeLeadCreation({ channel: "webhook", webhookName: "Facebook tuyển sinh tháng 10", requestId: "12345678-abcd-1234-abcd-123456789012", initialValues: { fullName: "Nguyễn Văn An", phone: "0901234567", email: "nguyenvanan@example.vn", note: "Đăng ký tư vấn tuyển sinh", sourceId: "12345678-abcd-1234-abcd-123456789012", sourceName: "Facebook", assigneeId: "12345678-abcd-1234-abcd-123456789013", assigneeName: "Trần Thị Mai" } }, true);
 const lead = {
   id: "fixture", notes: [], files: [], assignments: [], stageHistory: [],
   activities: [{ id: "created", type: "lead_created", content: description.description, actorLabel: description.actorLabel, actor: { id: "director", fullName: "Giám đốc" }, createdAt: "2026-10-22T02:00:00Z" }],

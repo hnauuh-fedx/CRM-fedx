@@ -37,6 +37,9 @@ try {
       const content = await evaluate("document.querySelector('[role=tabpanel][data-state=active]').textContent");
       assert.ok(content.includes('API đã đổ dữ liệu tạo lead qua webhook Facebook tuyển sinh tháng 10'));
       assert.ok(content.includes('Họ và tên: Nguyễn Văn An'));
+      assert.ok(content.includes('Nguồn học viên: Facebook'));
+      assert.ok(content.includes('Nhân viên phụ trách: Trần Thị Mai'));
+      assert.ok(!content.includes('12345678-abcd') && !content.includes('(mã)'));
       assert.ok(content.includes('Số điện thoại: 0901234567'));
       assert.ok(!content.includes('Giám đốc'));
       assert.ok(await evaluate('document.documentElement.scrollWidth <= innerWidth'), 'No overflow at '+width);
