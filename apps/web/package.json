@@ -2,6 +2,7 @@
   "name": "@admission-crm/web",
   "private": true,
   "scripts": {
+    "test:system-preferences-browser": "node tests/system-preferences.browser.mjs",
     "test:lead-rule-rerun-browser": "node tests/lead-rule-rerun.browser.mjs",
     "test:work-schedules-browser": "node tests/sale-work-schedule.browser-smoke.mjs",
     "test:automation-information-browser": "node tests/automation-information.browser-smoke.mjs",

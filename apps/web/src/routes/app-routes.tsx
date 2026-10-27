@@ -34,7 +34,7 @@ const PipelinesAccessPage = lazy(() =>
   })),
 );
 const SystemSettingsPage = lazy(() =>
-  import("@/modules/management/pages/system-settings-page").then((module) => ({
+  import("@/modules/management/pages/system-preferences-page").then((module) => ({
     default: module.SystemSettingsPage,
   })),
 );

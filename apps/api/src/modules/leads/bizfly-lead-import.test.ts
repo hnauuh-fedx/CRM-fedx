@@ -73,6 +73,8 @@ test("Bizfly persists program, assignee, timestamp and new major without assignm
   const activities: string[] = [], audits: string[] = [];
   const noAssignment = async () => { throw new Error("Unexpected assignment side effect"); };
   const tx = {
+    $queryRaw: async () => [],
+    system_settings: { findUnique: async () => null },
     leads: { findFirst: async () => null, create: async ({ data }: { data: Record<string, unknown> }) => { leadWrites.push(data); return { id: "lead" }; } },
     lead_sources: { findUnique: async () => ({ id: "source", institution_program_id: "program" }) },
     institution_programs: { findUnique: async () => ({ id: "program" }) },
@@ -195,6 +197,8 @@ test("Bizfly re-import of a known phone updates only monthly revenue and stage, 
   let lead = { id: "lead", status: "NEW", pipeline_stage_id: "stage-0", assigned_to: null, secondary_assigned_to: null };
   const leadUpdates: Array<Record<string, unknown>> = [], activities: string[] = [], audits: string[] = [], histories: unknown[] = [];
   const tx = {
+    $queryRaw: async () => [],
+    system_settings: { findUnique: async () => null },
     leads: {
       findFirst: async () => lead,
       update: async ({ data }: { data: Record<string, unknown> }) => {

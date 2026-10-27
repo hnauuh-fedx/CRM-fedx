@@ -1,0 +1,13 @@
+AssertionError [ERR_ASSERTION]: Expected values to be strictly equal:
+
+403 !== 201
+
+    at verifyLeadWorkflow (D:\Project Visual Studio Code\crm_website\admission-crm\apps\api\src\integration\lead-workflow.integration.ts:224:10)
+    at process.processTicksAndRejections (node:internal/process/task_queues:105:5) {
+  generatedMessage: true,
+  code: 'ERR_ASSERTION',
+  actual: 403,
+  expected: 201,
+  operator: 'strictEqual',
+  diff: 'simple'
+}

@@ -22,7 +22,7 @@ const templatesSchema = z.object({ templates: z.array(z.object({
   isActive: z.boolean(),
 })).max(100, "Mỗi trạng thái có tối đa 100 mẫu ghi chú.") });
 
-export function TransitionNoteSettings() {
+export function TransitionNoteSettings({ management = false }: { management?: boolean }) {
   const auth = useAuth();
   const [open, setOpen] = useState(false);
   const [target, setTarget] = useState("FAIL");
@@ -31,11 +31,11 @@ export function TransitionNoteSettings() {
   const [saved, setSaved] = useState(false);
   const query = useQuery({
     queryKey: ["transition-note-configuration"],
-    queryFn: () => getTransitionNoteConfiguration(auth.accessToken!),
+    queryFn: () => getTransitionNoteConfiguration(auth.accessToken!, management),
     enabled: open && Boolean(auth.accessToken),
   });
   const configuration = query.data?.find((item) => item.target === target);
-  const canEdit = auth.can(customFieldPermission("LEAD", "update")) && auth.can(customFieldPermission("LEAD", "manage_options"));
+  const canEdit = management ? auth.can("system.manage") : auth.can(customFieldPermission("LEAD", "update")) && auth.can(customFieldPermission("LEAD", "manage_options"));
 
   return <Dialog open={open} onOpenChange={(value) => {
     if (isSaving) return;
@@ -58,16 +58,17 @@ export function TransitionNoteSettings() {
           {hasDraft && <FieldDescription>Lưu hoặc hủy thay đổi trước khi chuyển sang trạng thái khác.</FieldDescription>}
         </Field>
         {saved && <p role="status" className="text-sm text-muted-foreground">Đã lưu cấu hình ghi chú.</p>}
-        {configuration && <TransitionNoteTemplateForm key={target} configuration={configuration} accessToken={auth.accessToken!} canEdit={canEdit} onDraftChange={setHasDraft} onSavingChange={setIsSaving} onSaved={() => setSaved(true)} />}
+        {configuration && <TransitionNoteTemplateForm key={target} configuration={configuration} accessToken={auth.accessToken!} canEdit={canEdit} management={management} onDraftChange={setHasDraft} onSavingChange={setIsSaving} onSaved={() => setSaved(true)} />}
       </>}
     </DialogContent>
   </Dialog>;
 }
 
-function TransitionNoteTemplateForm({ configuration, accessToken, canEdit, onDraftChange, onSavingChange, onSaved }: {
+function TransitionNoteTemplateForm({ configuration, accessToken, canEdit, management, onDraftChange, onSavingChange, onSaved }: {
   configuration: TransitionNoteConfiguration;
   accessToken: string;
   canEdit: boolean;
+  management: boolean;
   onDraftChange: (dirty: boolean) => void;
   onSavingChange: (saving: boolean) => void;
   onSaved: () => void;
@@ -76,7 +77,7 @@ function TransitionNoteTemplateForm({ configuration, accessToken, canEdit, onDra
   const form = useForm<{ templates: TransitionNoteTemplate[] }>({ defaultValues: { templates: configuration.templates } });
   const array = useFieldArray({ control: form.control, name: "templates", keyName: "rowId" });
   const mutation = useMutation({
-    mutationFn: (templates: TransitionNoteTemplate[]) => setTransitionNoteTemplates(configuration.target, templates, accessToken),
+    mutationFn: (templates: TransitionNoteTemplate[]) => setTransitionNoteTemplates(configuration.target, templates, accessToken, management, configuration.revision),
     onSuccess: async (templates) => {
       form.reset({ templates });
       onDraftChange(false);
@@ -121,7 +122,7 @@ function TransitionNoteTemplateForm({ configuration, accessToken, canEdit, onDra
       </FieldGroup>)}
     </FieldGroup>
     <FieldError errors={[form.formState.errors.templates]} />
-    {canEdit && <Button type="button" variant="outline" className="self-start" disabled={disabled || array.fields.length >= 100} onClick={() => { array.append({ id: crypto.randomUUID(), content: "", isActive: true }); markDirty(); }}><Plus data-icon="inline-start" />Thêm mẫu ghi chú</Button>}
+    {canEdit && <div className="flex flex-wrap gap-2"><Button type="button" variant="outline" disabled={disabled || array.fields.length >= 100} onClick={() => { array.append({ id: crypto.randomUUID(), content: "", isActive: true }); markDirty(); }}><Plus data-icon="inline-start" />Thêm mẫu ghi chú</Button><Button type="button" variant="outline" disabled={disabled || array.fields.length > 0} onClick={() => { array.replace((configuration.target === "FAIL" ? ["Sai đối tượng", "Không có nhu cầu", "Thông tin liên hệ không hợp lệ"] : ["Đã liên hệ, đang tư vấn", "Hẹn gọi lại", "Đã gửi thông tin chương trình"]).map(content => ({ id: crypto.randomUUID(), content, isActive: true }))); markDirty(); }}>Dùng mẫu gợi ý</Button></div>}
     <DialogFooter>
       {canEdit ? <>
         <Button type="button" variant="outline" disabled={mutation.isPending} onClick={() => { form.reset({ templates: configuration.templates }); onDraftChange(false); mutation.reset(); }}>Hủy thay đổi</Button>

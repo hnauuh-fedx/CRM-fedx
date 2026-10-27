@@ -2,6 +2,8 @@
   "name": "@admission-crm/api",
   "private": true,
   "scripts": {
+    "test:system-preferences": "tsx --test src/modules/system/system-preferences.test.ts",
+    "test:integration:system-preferences": "node scripts/test-manual-unassignment-isolated.cjs system-preferences",
     "test:integration:lead-rule-rerun": "node scripts/test-manual-unassignment-isolated.cjs automation-lead-rerun",
     "test:work-schedules": "tsx --test src/modules/sale-work-schedules/*.test.ts",
     "test:integration:work-schedules": "node scripts/test-manual-unassignment-isolated.cjs sale-work-schedules automation-reassignment manual-unassignment",

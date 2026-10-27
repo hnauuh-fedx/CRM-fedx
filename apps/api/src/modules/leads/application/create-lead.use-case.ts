@@ -9,6 +9,10 @@ import { triggerAutomation } from "../../automations/automation-engine.service";
 import { saveLeadAttributionAndTags } from "../../campaigns/lead-attribution.service";
 import { saveCandidateProfile } from "../../students/candidate-profile.service";
 import type { AuthUser } from "../../auth/auth.types";
+import { getPreference } from "../../system/system-preferences.service";
+import { scheduleFirstContactSla } from "../first-contact-sla.service";
+import { assertRequiredLeadInput } from "../lead-required-fields";
+import { lockLeadPhones } from "../lead-phone-lock";
 import type { LeadInput } from "../domain/lead-input";
 import { createFailedLeadStatus } from "../domain/lead-lifecycle-status";
 import {
@@ -53,6 +57,8 @@ async function persistLeadInTransaction(
   if (!options.skipAuthorization && (input.assigneeId || input.secondaryAssigneeId) && !canAssignLead(actor)) {
     return { ok: false as const, reason: "assignment_forbidden" as const };
   }
+  await assertRequiredLeadInput(tx, input);
+  await lockLeadPhones(tx, input.institutionProgramId, input.phone, input.secondaryPhones);
   if (!options.allowDuplicate) {
     const duplicate = await tx.leads.findFirst({
       where: {
@@ -189,7 +195,7 @@ async function persistLeadInTransaction(
         content: `Phân công lead cho ${assignee.full_name}.`,
       },
     });
-    await tx.notifications.create({
+    if ((await getPreference(input.institutionProgramId, "notifications", tx)).assignment) await tx.notifications.create({
       data: {
         user_id: assignee.id,
         title: "Bạn được phân công lead mới",
@@ -212,6 +218,7 @@ async function persistLeadInTransaction(
   }
 
   // Imports initialize historical data silently, matching the main assignee behavior.
+  if (assignee && !options.importInitialization) await scheduleFirstContactSla(tx, lead.id);
   if (secondaryAssignee && !options.importInitialization) {
     await recordSecondaryAssignment(
       tx,

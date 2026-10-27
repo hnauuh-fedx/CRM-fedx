@@ -4,6 +4,8 @@ import { enrolledStudentWhere } from "../students/student-membership";
 import { Router, type RequestHandler } from "express";
 import multer from "multer";
 import { z } from "zod";
+import * as XLSX from "xlsx";
+import { getPreference } from "../system/system-preferences.service";
 import { LEAD_PHONE_MAX_LENGTH } from "@admission-crm/shared/lead-phone";
 
 import {
@@ -215,6 +217,31 @@ const bulkUpdateBodySchema = z.discriminatedUnion("field", [
 const customFieldValuesSchema = z.object({ values: z.array(z.object({ fieldId: z.uuid(), value: z.unknown().nullable() })).min(1).max(100) });
 
 export const leadsRouter = Router();
+
+leadsRouter.get("/export", requireAuthentication, requireAnyPermission("lead.export_all", "lead.export"), async (request, response, next) => {
+  try {
+    const parsed = leadListQuerySchema.safeParse(request.query);
+    const programId = getInstitutionProgramScope(request);
+    if (!parsed.success || !programId) { response.status(400).json({ message: "Bộ lọc hoặc chương trình xuất dữ liệu không hợp lệ." }); return; }
+    const config = await getPreference(programId, "exports");
+    const sensitive = canCheckSensitiveDuplicates(request.authUser!);
+    const columns = config.columns.filter(column => sensitive || !["phone", "email"].includes(column));
+    if (!columns.length) { response.status(403).json({ message: "Bạn không có quyền xuất các cột đã chọn." }); return; }
+    const page = await listLeads(request.authUser!, { ...parsed.data, institutionProgramId: programId, filterConditions: parsed.data.filters });
+    const labels = { leadCode: "Mã lead", fullName: "Họ và tên", phone: "Số điện thoại", email: "Email", createdAt: "Ngày tạo" };
+    const rows = page.data.map(lead => Object.fromEntries(columns.map(column => {
+      const raw = String(lead[column] ?? "");
+      return [labels[column], /^[=+@\-\t\r\n]/.test(raw) ? `'${raw}` : raw];
+    })));
+    const sheet = XLSX.utils.json_to_sheet(rows, { header: columns.map(column => labels[column]) });
+    const workbook = XLSX.utils.book_new(); XLSX.utils.book_append_sheet(workbook, sheet, "Lead");
+    const buffer = XLSX.write(workbook, { type: "buffer", bookType: config.format });
+    await prisma.audit_logs.create({ data: { user_id: request.authUser!.id, entity_type: "lead_export", action: "export", ip_address: request.ip, new_data: { institutionProgramId: programId, page: parsed.data.page, count: rows.length, columns, format: config.format } } });
+    response.setHeader("Content-Type", config.format === "csv" ? "text/csv; charset=utf-8" : "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet");
+    response.setHeader("Content-Disposition", `attachment; filename="leads-page-${parsed.data.page}.${config.format}"`);
+    response.send(buffer);
+  } catch (error) { next(error); }
+});
 leadsRouter.use(["/bulk-assign", "/bulk-delete", "/bulk-update"], requireAuthentication, async (request, response, next) => {
   try {
     const ids = z.array(z.uuid()).min(1).max(100).safeParse(request.body?.leadIds);
@@ -566,7 +593,7 @@ leadsRouter.get(
 );
 
 leadsRouter.post(
-  "/import",
+  ["/import", "/import/preview"],
   requireAuthentication,
   requireAnyPermission("lead.create"),
   uploadLeadImport,
@@ -593,6 +620,7 @@ leadsRouter.post(
           request.file.buffer,
           request.header("x-institution-program-id") ? getInstitutionProgramScope(request) : undefined,
           request.ip,
+          { preview: request.path.endsWith("/preview") },
         ),
       );
     } catch (error) {

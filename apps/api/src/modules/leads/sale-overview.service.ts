@@ -1,4 +1,5 @@
 import { prisma } from "../../database/prisma";
+import { getPreference } from "../system/system-preferences.service";
 import { ACTIVE_LEAD_STATUS } from "./domain/lead-lifecycle-status";
 import type { AuthUser } from "../auth/auth.types";
 import { getLeadScopeWhere } from "./lead-list.service";
@@ -462,6 +463,12 @@ export async function listReminders(user: AuthUser, query: ReminderListQuery) {
   };
 }
 
+async function reminderOverlapWarning(tx: TransactionClient, user: AuthUser, programId: string | null | undefined, remindAt: string, excludeId?: string) {
+  if (!(await getPreference(programId, "reminders", tx)).warnOverlap) return undefined;
+  const existing = await tx.reminders.findFirst({ where: { user_id: user.id, status: "pending", remind_at: new Date(remindAt), ...(excludeId ? { id: { not: excludeId } } : {}), leads: { is: { deleted_at: null, ...getLeadScopeWhere(user, programId ?? undefined), institution_program_id: programId ?? null } } }, select: { id: true } });
+  return existing ? "Đã lưu nhắc việc. Bạn có nhắc việc khác chưa hoàn tất tại cùng thời điểm trong chương trình này." : undefined;
+}
+
 export async function createReminder(
   user: AuthUser,
   input: ReminderInput,
@@ -478,6 +485,7 @@ export async function createReminder(
   }
   try {
     return await prisma.$transaction(async (tx) => {
+    const overlapWarning = await reminderOverlapWarning(tx, user, lead.institution_program_id, input.remindAt);
     const reminder = await tx.reminders.create({
       data: {
         lead_id: lead.id,
@@ -504,7 +512,7 @@ export async function createReminder(
       const customFieldsResult = await saveSaleCustomFieldValues(tx, user, "SALE_REMINDER", reminder.id, lead.institution_program_id, input.customFieldValues ?? [], ip);
       if (!customFieldsResult.ok) throw customFieldError(customFieldsResult.reason);
       await transactionEffect?.(tx);
-      return { ok: true as const, data: reminder };
+      return { ok: true as const, data: { ...reminder, overlapWarning } };
     });
   } catch (error) {
     const reason = customFieldErrorReason(error);
@@ -529,6 +537,7 @@ export async function updateReminder(user: AuthUser, reminderId: string, input: 
   const timeChanged = reminder.remind_at.getTime() !== nextRemindAt.getTime();
   try {
     return await prisma.$transaction(async (tx) => {
+    const overlapWarning = await reminderOverlapWarning(tx, user, reminder.leads?.institution_program_id, input.remindAt, reminderId);
     await tx.reminders.update({
       where: { id: reminderId },
       data: {
@@ -553,7 +562,7 @@ export async function updateReminder(user: AuthUser, reminderId: string, input: 
     });
       const customFieldsResult = await saveSaleCustomFieldValues(tx, user, "SALE_REMINDER", reminderId, reminder.leads?.institution_program_id ?? null, input.customFieldValues ?? [], ip);
       if (!customFieldsResult.ok) throw customFieldError(customFieldsResult.reason);
-      return { ok: true as const, data: { id: reminderId } };
+      return { ok: true as const, data: { id: reminderId, overlapWarning } };
     });
   } catch (error) {
     const reason = customFieldErrorReason(error);

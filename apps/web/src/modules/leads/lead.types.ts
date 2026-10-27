@@ -392,6 +392,7 @@ export type LeadImportError = {
 };
 
 export type LeadImportResult = {
+  preview?: boolean;
   totalRows: number;
   importedRows: number;
   updatedRows: number;

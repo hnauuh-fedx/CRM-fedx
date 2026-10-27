@@ -15,7 +15,7 @@ import type {
   DuplicateLeadField,
   DuplicateLeadResponse,
 } from "@/modules/leads/lead.types";
-import { apiFormRequest, apiRequest } from "./api";
+import { apiDownload, apiFormRequest, apiRequest } from "./api";
 import type { FilterConditionState } from "@/modules/leads/filter-fields";
 import { serializeConditions } from "@/modules/leads/filter-serialization";
 
@@ -28,7 +28,7 @@ type LeadListParams = {
   filterConditions?: FilterConditionState[];
 } & LeadListFilters;
 
-export function getLeads(params: LeadListParams, accessToken: string) {
+function leadListQuery(params: LeadListParams) {
   const query = new URLSearchParams({
     audience: params.audience ?? "candidates",
     page: String(params.page),
@@ -47,7 +47,15 @@ export function getLeads(params: LeadListParams, accessToken: string) {
   const filters = serializeConditions(params.filterConditions ?? []);
   if (filters) query.set("filters", filters);
 
-  return apiRequest<LeadListResponse>(`/leads?${query.toString()}`, {}, accessToken);
+  return query.toString();
+}
+
+export function getLeads(params: LeadListParams, accessToken: string) {
+  return apiRequest<LeadListResponse>(`/leads?${leadListQuery(params)}`, {}, accessToken);
+}
+
+export function exportLeadPage(params: LeadListParams, accessToken: string) {
+  return apiDownload(`/leads/export?${leadListQuery(params)}`, accessToken);
 }
 
 export function getLeadFilterOptions(accessToken: string, audience: "candidates" | "students" | "all" = "candidates") {
@@ -84,10 +92,10 @@ export function createLead(input: LeadFormInput, accessToken: string) {
   return apiRequest<{ id: string }>("/leads", { method: "POST", headers, body: JSON.stringify(input) }, accessToken);
 }
 
-export function importLeads(file: File, accessToken: string) {
+export function importLeads(file: File, accessToken: string, preview = false) {
   const formData = new FormData();
   formData.append("file", file);
-  return apiFormRequest<LeadImportResult>("/leads/import", formData, accessToken);
+  return apiFormRequest<LeadImportResult>(preview ? "/leads/import/preview" : "/leads/import", formData, accessToken);
 }
 
 export function updateLead(leadId: string, input: LeadFormInput, accessToken: string) {

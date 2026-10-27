@@ -2,6 +2,7 @@ import cors from "cors";
 import { saleWorkSchedulesRouter } from "./modules/sale-work-schedules/sale-work-schedule.router";
 import { displayLayoutsRouter } from "./modules/display-layouts/display-layout.router";
 import express, { type ErrorRequestHandler } from "express";
+import { LeadRequiredFieldsError } from "./modules/leads/lead-required-fields";
 import path from "node:path";
 
 import { env } from "./config/env";
@@ -102,6 +103,7 @@ app.use("/api/integrations/meta", metaRouter);
 app.use("/api/integrations/tiktok", tiktokRouter);
 
 const errorHandler: ErrorRequestHandler = (error, _request, response, _next) => {
+  if (error instanceof LeadRequiredFieldsError) { response.status(400).json({ message: error.message }); return; }
   if (error instanceof MarketingFormConfigError) {
     response.status(400).json({ message: error.message, issues: error.issues });
     return;

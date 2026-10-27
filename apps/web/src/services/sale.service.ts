@@ -83,7 +83,7 @@ export function createSaleReminder(
   input: { leadId: string; title: string; content?: string; remindAt: string; customFieldValues?: Record<string, LeadCustomFieldValue> },
   accessToken: string,
 ) {
-  return apiRequest<{ id: string }>("/sale/reminders", { method: "POST", body: JSON.stringify(input) }, accessToken);
+  return apiRequest<{ id: string; overlapWarning?: string }>("/sale/reminders", { method: "POST", body: JSON.stringify(input) }, accessToken);
 }
 
 export function updateSaleReminder(
@@ -91,7 +91,7 @@ export function updateSaleReminder(
   input: { title: string; content?: string; remindAt: string; customFieldValues?: Record<string, LeadCustomFieldValue> },
   accessToken: string,
 ) {
-  return apiRequest<{ id: string }>(`/sale/reminders/${reminderId}`, { method: "PATCH", body: JSON.stringify(input) }, accessToken);
+  return apiRequest<{ id: string; overlapWarning?: string }>(`/sale/reminders/${reminderId}`, { method: "PATCH", body: JSON.stringify(input) }, accessToken);
 }
 
 export function getSaleReminderCustomFieldDefinitions(leadId: string | undefined, accessToken: string) {

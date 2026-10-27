@@ -41,9 +41,10 @@ import {
 } from "@/components/ui/select";
 import { Spinner } from "@/components/ui/spinner";
 import { useAuth } from "@/modules/auth/auth-context";
+import { useInstitutionProgram } from "@/modules/institutions/institution-program-context";
 import { ApiError } from "@/services/api";
 import { addLeadsToCustomerList, createCustomerList, getCustomerListLeads, getCustomerLists } from "@/services/customer-list.service";
-import { assignLeads, deleteLeads, getLead, getLeadActionOptions, getLeadFilterOptions, getLeads, importLeads } from "@/services/lead.service";
+import { assignLeads, deleteLeads, exportLeadPage, getLead, getLeadActionOptions, getLeadFilterOptions, getLeads, importLeads } from "@/services/lead.service";
 import { LeadProgressSelector, progressOptionClassName } from "../components/lead-form";
 import { openLeadInEditModeState, openLeadSearchParam } from "../lead-detail-navigation";
 import { AccessDeniedDialog } from "@/components/shared/access-denied-dialog";
@@ -107,12 +108,14 @@ function LeadImportDialog({
   result,
   onReset,
   onImport,
+  onPreview,
 }: {
   isPending: boolean;
   error: Error | null;
   result?: LeadImportResult;
   onReset: () => void;
   onImport: (file: File) => void;
+  onPreview: (file: File) => void;
 }) {
   const [file, setFile] = useState<File | null>(null);
   const [fileError, setFileError] = useState<string | null>(null);
@@ -145,7 +148,7 @@ function LeadImportDialog({
           className="grid gap-4"
           onSubmit={(event) => {
             event.preventDefault();
-            if (file) onImport(file);
+            if (file) { if (result?.preview) onImport(file); else onPreview(file); }
           }}
         >
           <div className="grid gap-3 rounded-lg border bg-muted/20 p-4 text-sm">
@@ -203,6 +206,7 @@ function LeadImportDialog({
                 const validationMessage = validateLeadImportFile(selectedFile);
                 setFileError(validationMessage);
                 setFile(validationMessage ? null : selectedFile);
+                onReset();
               }}
             />
             <p id="lead-import-help" className="text-sm text-muted-foreground">
@@ -222,11 +226,12 @@ function LeadImportDialog({
                 : "Không thể import lead. Vui lòng kiểm tra file và thử lại."}
             </p>
           )}
+          {result?.preview && <p role="status" className="text-sm text-muted-foreground">Đây là kết quả dự kiến; dữ liệu chưa được lưu. Khi xác nhận, hệ thống kiểm tra lại quyền và dữ liệu hiện tại.</p>}
           {result && <LeadImportResultPanel result={result} />}
           <div className="flex justify-end gap-2">
             <Button type="submit" disabled={!file || isPending}>
               <FileSpreadsheet data-icon="inline-start" aria-hidden="true" />
-              {isPending ? "Đang import..." : "Import lead"}
+              {isPending ? "Đang xử lý…" : result?.preview ? "Xác nhận nhập dữ liệu" : "Xem trước dữ liệu"}
             </Button>
           </div>
         </form>
@@ -248,8 +253,8 @@ function LeadImportResultPanel({ result }: { result: LeadImportResult }) {
     <div className="grid min-w-0 gap-4 rounded-md border bg-muted/20 p-4">
       <div className="grid grid-cols-2 gap-3 sm:grid-cols-5" role="status">
         <ImportMetric label="Tổng dòng" value={result.totalRows} />
-        <ImportMetric label="Đã import" value={result.importedRows} />
-        <ImportMetric label="Đã cập nhật" value={result.updatedRows} />
+        <ImportMetric label={result.preview ? "Sẽ tạo mới" : "Đã import"} value={result.importedRows} />
+        <ImportMetric label={result.preview ? "Sẽ cập nhật" : "Đã cập nhật"} value={result.updatedRows} />
         <ImportMetric label="Không thay đổi" value={result.unchangedRows} />
         <ImportMetric label="Lỗi" value={result.failedRows} />
       </div>
@@ -289,6 +294,7 @@ export function LeadsListPage({
   showLeadCreationActions = true,
 }: LeadsListPageProps = {}) {
   const auth = useAuth();
+  const { selectedProgramId } = useInstitutionProgram();
   const queryClient = useQueryClient();
   const canCreate = showLeadCreationActions && auth.can("lead.create");
   const canUpdate = ["lead.update_all", "lead.update_department", "lead.update_assigned"].some(auth.can);
@@ -385,6 +391,8 @@ export function LeadsListPage({
       queryClient.invalidateQueries({ queryKey: ["sale"] });
     },
   });
+  const previewImportMutation = useMutation({ mutationFn: (file: File) => importLeads(file, auth.accessToken!, true) });
+  const exportMutation = useMutation({ mutationFn: () => exportLeadPage({ audience, page, limit: pageSize, sortBy, sortOrder, ...filters, filterConditions }, auth.accessToken!) });
   const data = leadsQuery.data?.data ?? emptyLeads;
   const pagination = leadsQuery.data?.pagination;
 
@@ -420,13 +428,16 @@ export function LeadsListPage({
         actions={
             <div className="flex flex-wrap items-center gap-2">
               <EditLeadDisplayLayoutButton layout={displayLayout.data} screen={layoutScreen} />
+              {!customerListId && (auth.can("lead.export_all") || auth.can("lead.export")) && <Button variant="outline" disabled={exportMutation.isPending} onClick={() => exportMutation.mutate()}>{exportMutation.isPending ? "Đang xuất…" : "Xuất trang hiện tại"}</Button>}
               {canCreate && <>
               <LeadImportDialog
-                isPending={importMutation.isPending}
-                error={importMutation.error}
-                result={importMutation.data}
-                onReset={() => importMutation.reset()}
+                key={selectedProgramId}
+                isPending={importMutation.isPending || previewImportMutation.isPending}
+                error={importMutation.error ?? previewImportMutation.error}
+                result={importMutation.data ?? previewImportMutation.data}
+                onReset={() => { importMutation.reset(); previewImportMutation.reset(); }}
                 onImport={(file) => importMutation.mutate(file)}
+                onPreview={(file) => previewImportMutation.mutate(file)}
               />
               <CreateLeadDialog
                 actionOptionsQuery={actionOptionsQuery}
@@ -436,7 +447,7 @@ export function LeadsListPage({
             </div>
         }
       />
-
+      {exportMutation.isError && <p role="alert" className="text-sm text-destructive">{exportMutation.error.message}</p>}
       <Card className="gap-3 border-border/70 py-4 shadow-xs">
         <CardHeader className="gap-0.5 px-4">
           <CardTitle className="text-base">Tiến trình</CardTitle>

@@ -7,6 +7,7 @@ import { SaleCustomFieldInputs } from "./sale-custom-field-inputs";
 import { SaleLeadField } from "./sale-lead-field";
 
 import { Button } from "@/components/ui/button";
+import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import {
   Dialog,
   DialogContent,
@@ -133,8 +134,8 @@ export function ReminderDialog({
         ? updateSaleReminder(reminder.id, input, accessToken)
         : createSaleReminder({ leadId: values.leadId, ...input }, accessToken);
     },
-    onSuccess: () => {
-      setOpen(false);
+    onSuccess: (result) => {
+      if (!result.overlapWarning) setOpen(false);
       queryClient.invalidateQueries({ queryKey: ["sale", "reminders"] });
       queryClient.invalidateQueries({ queryKey: ["leads"] });
     },
@@ -267,10 +268,11 @@ export function ReminderDialog({
           <Button
             className="self-end"
             type="submit"
-            disabled={mutation.isPending}
+            disabled={mutation.isPending || Boolean(mutation.data?.overlapWarning)}
           >
             {mutation.isPending ? "Đang lưu…" : "Lưu nhắc việc"}
           </Button>
+          {mutation.data?.overlapWarning && <Alert><AlertTitle>Nhắc việc trùng thời điểm</AlertTitle><AlertDescription>{mutation.data.overlapWarning}<Button type="button" variant="outline" onClick={() => setOpen(false)}>Đã hiểu</Button></AlertDescription></Alert>}
         </form>
       </DialogContent>
     </Dialog>

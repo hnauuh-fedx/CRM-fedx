@@ -9,6 +9,9 @@ import {
   saveAdmissionProfile,
 } from "../../admissions/admission-profile-write.service";
 import type { AuthUser } from "../../auth/auth.types";
+import { getPreference } from "../../system/system-preferences.service";
+import { scheduleFirstContactSla } from "../first-contact-sla.service";
+import { assertRequiredLeadInput, assertStoredLeadRequirements } from "../lead-required-fields";
 import { triggerAutomation } from "../../automations/automation-engine.service";
 import { patchLeadAttribution, saveLeadAttributionAndTags } from "../../campaigns/lead-attribution.service";
 import { patchCandidateInformation, saveCandidateProfile } from "../../students/candidate-profile.service";
@@ -143,6 +146,7 @@ export async function updateLeadFromInboundInTransaction(
     ipAddress,
   );
   if (!customResult.ok) return customResult;
+  await assertStoredLeadRequirements(tx, leadId);
 
   await tx.lead_activities.create({
     data: {
@@ -197,6 +201,7 @@ export async function updateLead(
     if (!existing) {
       return { ok: false as const, reason: "lead_not_found" as const };
     }
+    await assertRequiredLeadInput(tx, input);
     const duplicate = await tx.leads.findFirst({
       where: {
         ...leadPhoneDuplicateWhere(input),
@@ -365,7 +370,8 @@ export async function updateLead(
             content: `Phân công lead cho ${nextAssignee.full_name}.`,
           },
         });
-        await tx.notifications.create({
+        await scheduleFirstContactSla(tx, leadId);
+        if ((await getPreference(input.institutionProgramId ?? institutionProgramId, "notifications", tx)).assignment) await tx.notifications.create({
           data: {
             user_id: nextAssignee.id,
             title: "Bạn được phân công lead mới",

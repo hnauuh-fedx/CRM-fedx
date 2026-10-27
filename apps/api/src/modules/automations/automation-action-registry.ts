@@ -2,6 +2,7 @@ import { UnrecoverableError } from "bullmq";
 import { lockWorkScheduleProgram } from "../sale-work-schedules/work-schedule-lock";
 
 import { prisma } from "../../database/prisma";
+import { getPreference } from "../system/system-preferences.service";
 import { Prisma } from "../../generated/prisma/client";
 import { updateLeadInformationInTransaction } from "../leads/lead-information-update.service";
 import { getAuthUser } from "../auth/auth.service";
@@ -79,6 +80,22 @@ export async function executeRegisteredAutomationNode(
 ): Promise<AutomationActionResult> {
   if (node.type === "trigger") throw new UnrecoverableError("Node khởi động không được thực thi như một action.");
   if (context.marketingFormSubmissionId) await requireActor(context);
+  let skipAssignment = false;
+  if (["action_assign", "action_assign_pool"].includes(node.type)) {
+    const config = await getPreference(context.institutionProgramId, "assignment");
+    skipAssignment = !config.enabled;
+    if (!skipAssignment && context.leadId) {
+      const creation = await prisma.lead_activities.findFirst({ where: { lead_id: context.leadId, type: "lead_created" }, orderBy: [{ created_at: "asc" }, { id: "asc" }], select: { metadata: true } });
+      const channel = (creation?.metadata as { creation?: { channel?: string } } | null)?.creation?.channel;
+      if (channel && ["manual", "import", "public_form", "api", "webhook"].includes(channel)) skipAssignment = !config.sources.includes(channel as typeof config.sources[number]);
+    }
+  }
+  if (skipAssignment) {
+    const result = { nextSourceHandle: "default", delayMinutes: 0, noChange: true };
+    await requireActor(context);
+    await markActionCompleted(prisma, nodeExecutionId, result);
+    return result;
+  }
   const executor: AutomationActionExecutor | undefined = executors[node.type];
   if (!executor) throw new UnrecoverableError(`Loại node không được hỗ trợ: ${String(node.type)}`);
   return executor(node, context, nodeExecutionId);

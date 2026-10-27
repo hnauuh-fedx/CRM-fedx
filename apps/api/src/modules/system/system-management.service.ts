@@ -1,6 +1,8 @@
 import { prisma } from "../../database/prisma";
 import { Prisma } from "../../generated/prisma/client";
 import type { AuthUser } from "../auth/auth.types";
+import { isStructuredSetting, isTechnicalSetting } from "@admission-crm/shared/system-preferences";
+import { InstitutionProgramScopeError } from "../institutions/institution-program-scope";
 
 export type SettingInput = { key: string; value?: string; type?: string };
 export type SlaRuleInput = { name: string; module?: string; durationMinutes: number; action?: string; isActive: boolean };
@@ -77,8 +79,8 @@ export async function getSystemManagementDashboard() {
   ]);
 
   return {
-    settings: settings.map(serializeSetting),
-    notificationRules: settings.filter((setting) => setting.key.startsWith("notification.")).map(serializeSetting),
+    settings: settings.filter(setting => !isTechnicalSetting(setting.key, setting.type)).map(serializeSetting),
+    notificationRules: settings.filter((setting) => setting.key.startsWith("notification.") && !isTechnicalSetting(setting.key, setting.type)).map(serializeSetting),
     slaRules: slaRules.map(serializeSla),
     exportSettings: reportConfigs.map(serializeReportConfig),
     health,
@@ -87,7 +89,9 @@ export async function getSystemManagementDashboard() {
 
 export async function upsertSystemSetting(actor: AuthUser, input: SettingInput, ipAddress?: string) {
   const key = input.key.trim();
+  if (isTechnicalSetting(key, input.type) || isStructuredSetting(key)) throw new InstitutionProgramScopeError(400, "Sử dụng giao diện nghiệp vụ tương ứng để sửa cấu hình này.");
   const existing = await prisma.system_settings.findUnique({ where: { key }, select: { id: true, key: true, value: true, type: true } });
+  if (existing && isTechnicalSetting(existing.key, existing.type)) throw new InstitutionProgramScopeError(400, "Cấu hình kỹ thuật không được sửa tại đây.");
   const setting = await prisma.$transaction(async (tx) => {
     const saved = await tx.system_settings.upsert({
       where: { key },
@@ -114,6 +118,7 @@ export async function upsertSystemSetting(actor: AuthUser, input: SettingInput, 
 export async function deleteSystemSetting(actor: AuthUser, id: string, ipAddress?: string) {
   const existing = await prisma.system_settings.findUnique({ where: { id }, select: { id: true, key: true, value: true, type: true } });
   if (!existing) return { ok: false as const, reason: "setting_not_found" as const };
+  if (isTechnicalSetting(existing.key, existing.type) || isStructuredSetting(existing.key)) throw new InstitutionProgramScopeError(400, "Không thể xóa cấu hình kỹ thuật hoặc cấu hình nghiệp vụ từ bảng nâng cao.");
   await prisma.$transaction([
     prisma.system_settings.delete({ where: { id } }),
     prisma.audit_logs.create({ data: { user_id: actor.id, entity_type: "system_setting", entity_id: id, action: "delete", ip_address: ipAddress, old_data: existing } }),

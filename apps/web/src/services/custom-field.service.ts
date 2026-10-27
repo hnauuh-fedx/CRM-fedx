@@ -13,13 +13,13 @@ import { apiRequest } from "./api";
 import type { LeadCustomFieldsResponse, LeadCustomFieldValue } from "@/modules/leads/lead.types";
 import type { TransitionNoteConfiguration, TransitionNoteTemplate } from "@/modules/leads/transition-note.types";
 
-export function getTransitionNoteConfiguration(accessToken: string) {
-  return apiRequest<TransitionNoteConfiguration[]>("/custom-fields/system/LEAD/note-templates", {}, accessToken);
+export function getTransitionNoteConfiguration(accessToken: string, management = false) {
+  return apiRequest<TransitionNoteConfiguration[]>(management ? "/system/note-templates" : "/custom-fields/system/LEAD/note-templates", {}, accessToken);
 }
 
-export function setTransitionNoteTemplates(target: string, templates: TransitionNoteTemplate[], accessToken: string) {
-  return apiRequest<TransitionNoteTemplate[]>(`/custom-fields/system/LEAD/note-templates/${target}`, {
-    method: "PUT", body: JSON.stringify({ templates }),
+export function setTransitionNoteTemplates(target: string, templates: TransitionNoteTemplate[], accessToken: string, management = false, revision?: string) {
+  return apiRequest<TransitionNoteTemplate[]>(management ? `/system/note-templates/${target}` : `/custom-fields/system/LEAD/note-templates/${target}`, {
+    method: "PUT", body: JSON.stringify({ templates, revision }),
   }, accessToken);
 }
 

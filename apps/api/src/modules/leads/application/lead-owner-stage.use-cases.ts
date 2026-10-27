@@ -1,6 +1,8 @@
 import { prisma } from "../../../database/prisma";
 import { Prisma } from "../../../generated/prisma/client";
 import type { AuthUser } from "../../auth/auth.types";
+import { getPreference } from "../../system/system-preferences.service";
+import { scheduleFirstContactSla } from "../first-contact-sla.service";
 import { getLeadScopeWhere } from "../lead-list.service";
 import {
   ACTIVE_LEAD_STATUS,
@@ -427,7 +429,8 @@ export async function assignVisibleLead(
         content: `Phân công lead cho ${assignee.full_name}.`,
       },
     });
-    await tx.notifications.create({
+    await scheduleFirstContactSla(tx, leadId);
+    if ((await getPreference(lead.institution_program_id, "notifications", tx)).assignment) await tx.notifications.create({
       data: {
         user_id: assignee.id,
         title: "Bạn được phân công lead mới",
@@ -484,6 +487,7 @@ async function findVisibleLead(
       status: true,
       assigned_to: true,
       manual_unassignment_event_id: true,
+      institution_program_id: true,
     },
   });
 }

@@ -2,6 +2,7 @@ import { app } from "./app";
 import { env } from "./config/env";
 import { prisma } from "./database/prisma";
 import { processReminderNotifications } from "./modules/leads/reminder-notification.service";
+import { processFirstContactSla } from "./modules/leads/first-contact-sla.service";
 import { redisCommandConnection } from "./config/redis";
 import { getWebhookQueueAdapter } from "./modules/webhooks/webhook-queue.service";
 import { closeAutomationEngine } from "./modules/automations/automation-engine.service";
@@ -12,11 +13,17 @@ const server = app.listen(env.PORT, () => {
   console.log(`Admission CRM API listening on http://localhost:${env.PORT}`);
 });
 
+let processingReminders = false;
 async function runReminderNotificationProcessor() {
+  if (processingReminders) return;
+  processingReminders = true;
   try {
     await processReminderNotifications();
+    await processFirstContactSla();
   } catch (error) {
     console.error("Reminder notification processor failed.", error);
+  } finally {
+    processingReminders = false;
   }
 }
 

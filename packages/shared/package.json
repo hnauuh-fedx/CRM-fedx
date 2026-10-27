@@ -3,6 +3,7 @@
   "private": true,
   "type": "module",
   "exports": {
+    "./system-preferences": "./src/system-preferences.ts",
     "./source-group": "./src/source-group.ts",
     "./sale-work-schedule": "./src/sale-work-schedule.ts",
     "./vietnam-provinces": "./src/vietnam-provinces.ts",

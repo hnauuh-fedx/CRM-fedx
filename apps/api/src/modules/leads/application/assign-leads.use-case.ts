@@ -1,6 +1,8 @@
 import { prisma } from "../../../database/prisma";
 import { Prisma } from "../../../generated/prisma/client";
 import type { AuthUser } from "../../auth/auth.types";
+import { getPreference } from "../../system/system-preferences.service";
+import { scheduleFirstContactSla } from "../first-contact-sla.service";
 import { triggerAutomation } from "../../automations/automation-engine.service";
 import { getLeadScopeWhere } from "../lead-list.service";
 import { canAssignLead, isAssigneeInScope } from "./lead-authorization";
@@ -35,7 +37,7 @@ export async function assignLeads(
           ? { institution_program_id: institutionProgramId }
           : {}),
       },
-      select: { id: true, full_name: true, assigned_to: true },
+      select: { id: true, full_name: true, assigned_to: true, institution_program_id: true },
     });
     if (leads.length !== uniqueLeadIds.length) {
       return { ok: false as const, reason: "lead_not_found" as const };
@@ -83,8 +85,15 @@ export async function assignLeads(
         content: `Phân công lead cho ${assignee.full_name}.`,
       })),
     });
+    const notificationPrograms = new Map<string | null, boolean>();
+    const slaPrograms = new Set<string | null>();
+    for (const programId of new Set(leads.map(lead => lead.institution_program_id))) {
+      notificationPrograms.set(programId, (await getPreference(programId, "notifications", tx)).assignment);
+      if ((await getPreference(programId, "sla", tx)).enabled) slaPrograms.add(programId);
+    }
+    for (const lead of leads) if (slaPrograms.has(lead.institution_program_id)) await scheduleFirstContactSla(tx, lead.id);
     await tx.notifications.createMany({
-      data: leads.map((lead) => ({
+      data: leads.filter(lead => notificationPrograms.get(lead.institution_program_id)).map((lead) => ({
         user_id: assignee.id,
         title: "Bạn được phân công lead mới",
         content: `Lead ${lead.full_name} đã được phân công cho bạn.`,

@@ -30,10 +30,10 @@ customFieldsRouter.get("/system/LEAD/note-templates", requireCustomFieldPermissi
 customFieldsRouter.put("/system/LEAD/note-templates/:target", requireCustomFieldPermission("update"), requireCustomFieldPermission("manage_options"), async (req, res, next) => {
   try {
     const target = transitionNoteTargetSchema.safeParse(req.params.target);
-    const body = z.object({ templates: transitionNoteTemplatesSchema }).safeParse(req.body);
+    const body = z.object({ templates: transitionNoteTemplatesSchema, revision: z.string().regex(/^[a-f0-9]{64}$/).optional() }).safeParse(req.body);
     if (!target.success || !body.success) return res.status(400).json({ message: "Cấu hình mẫu ghi chú không hợp lệ.", issues: body.success ? undefined : body.error.issues });
-    const result = await setTransitionNoteTemplates(req.authUser!, target.data, body.data.templates, req.ip);
-    if (!result.ok) return res.status(404).json({ message: "Không tìm thấy tiến trình cần cấu hình." });
+    const result = await setTransitionNoteTemplates(req.authUser!, target.data, body.data.templates, req.ip, body.data.revision);
+    if (!result.ok) return res.status(result.reason === "conflict" ? 409 : 404).json({ message: result.reason === "conflict" ? "Mẫu ghi chú đã thay đổi. Đóng và mở lại để tải bản mới." : "Không tìm thấy tiến trình cần cấu hình." });
     res.json(result.data);
   } catch (error) { next(error); }
 });

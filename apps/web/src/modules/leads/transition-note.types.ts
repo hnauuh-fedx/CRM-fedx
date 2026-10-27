@@ -5,6 +5,7 @@ export type TransitionNoteTemplate = {
 };
 
 export type TransitionNoteConfiguration = {
+  revision?: string;
   target: string;
   label: string;
   pipelineName: string | null;

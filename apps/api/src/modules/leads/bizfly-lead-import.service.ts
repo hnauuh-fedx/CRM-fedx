@@ -10,6 +10,7 @@ import { canAssignLead, canCreateLead, canUpdateLead } from "./application/lead-
 import { findVisibleLeadForMutation, leadPhoneDuplicateWhere, recordStageChange } from "./application/lead-mutation-support";
 import { getPipelineStageMarker, isFailedLeadStatus } from "./domain/lead-lifecycle-status";
 import { InvalidLeadImportFileError, type LeadImportResult } from "./lead-import.service";
+import { importTransaction } from "./import-transaction";
 
 export type BizflyRow = { row: number; values: Record<string, unknown> };
 type BizflyDatabase = Pick<typeof prisma, "institution_programs" | "lead_sources" | "leads" | "majors" | "pipeline_stages" | "users" | "$transaction">;
@@ -143,6 +144,7 @@ function uniqueReference(items: Array<{ id: string; name: string }>, value: stri
 export async function importBizflyRows(
   user: AuthUser, rows: BizflyRow[], programId?: string, ipAddress?: string,
   database: BizflyDatabase = prisma,
+  options: { preview?: boolean; duplicatePolicy?: "legacy" | "skip" | "reject" } = {},
 ): Promise<LeadImportResult> {
   if (!programId) throw new InvalidLeadImportFileError("Vui lòng chọn chương trình đang làm việc trước khi import Bizfly.");
   if (!canCreateLead(user) || !user.institutionProgramIds.includes(programId)) {
@@ -162,6 +164,7 @@ export async function importBizflyRows(
   ]);
   const errors: LeadImportResult["errors"] = [];
   let importedRows = 0, updatedRows = 0, unchangedRows = 0;
+  const processedPhones = new Set<string>();
   for (const row of rows) {
     const v = row.values;
     const fullName = text(v.fullName);
@@ -174,15 +177,21 @@ export async function importBizflyRows(
         throw new Error(`Mỗi số điện thoại tối đa ${LEAD_PHONE_MAX_LENGTH} ký tự.`);
       }
       const monthlyRevenue = parseBizflyDate(v.monthlyRevenue, "Doanh số tháng");
+      if ([phone, ...secondaryPhones].some(item => processedPhones.has(item))) {
+        throw new Error("Số điện thoại lặp trong file nhập. Hãy gộp các dòng trùng trước khi nhập.");
+      }
       const existing = await database.leads.findFirst({
         where: { ...leadPhoneDuplicateWhere({ phone, secondaryPhones }), deleted_at: null, institution_program_id: programId },
         select: { id: true },
       });
       if (existing) {
+        if (options.duplicatePolicy === "skip") { unchangedRows++; [phone, ...secondaryPhones].forEach(item => processedPhones.add(item)); continue; }
+        if (options.duplicatePolicy === "reject") throw new Error("Số điện thoại đã tồn tại trong chương trình này.");
         // Re-importing a known phone only refreshes the monthly revenue and stage; other columns keep their values.
-        const outcome = await updateExistingBizflyLead(database, user, existing.id, programId, v.stageName, monthlyRevenue, stages, ipAddress);
+        const outcome = await updateExistingBizflyLead(database, user, existing.id, programId, v.stageName, monthlyRevenue, stages, ipAddress, options.preview);
         if (outcome === "updated") updatedRows++;
         else unchangedRows++;
+        [phone, ...secondaryPhones].forEach(item => processedPhones.add(item));
         continue;
       }
       const email = text(v.email) || undefined;
@@ -217,7 +226,7 @@ export async function importBizflyRows(
       const secondaryAssigneeId = resolveAssignee(secondaryAssigneeEmail, "nhân viên phụ");
       const createdAt = parseBizflyCreatedAt(v.createdAt);
       const note = text(v.note) || undefined;
-      const importedMajorId = await database.$transaction(async (tx) => {
+      const importedMajorId = await importTransaction(database, async (tx) => {
         let majorId = existingMajorId;
         if (majorName && !majorId) {
           const code = `BIZFLY-${createHash("sha256").update(normalizeBizflyKey(majorName)).digest("hex").slice(0, 32)}`;
@@ -241,26 +250,28 @@ export async function importBizflyRows(
           throw new Error(messages[result.reason] ?? "Nguồn, ngành hoặc tiến trình không còn hợp lệ.");
         }
         return majorId;
-      });
-      if (majorName && !existingMajorId && importedMajorId) majors.push({ id: importedMajorId, name: majorName });
+      }, options.preview);
+      if (!options.preview && majorName && !existingMajorId && importedMajorId) majors.push({ id: importedMajorId, name: majorName });
       importedRows++;
+      [phone, ...secondaryPhones].forEach(item => processedPhones.add(item));
     } catch (error) {
       // Each row is atomic: a rejected lead must not leave a newly created major behind.
       errors.push({ row: row.row, fullName: fullName || null, phone: text(v.phone) || null,
         message: error instanceof Error ? error.message : "Không thể import dòng lead này." });
     }
   }
-  return { totalRows: rows.length, importedRows, updatedRows, unchangedRows, failedRows: errors.length, errors };
+  return { totalRows: rows.length, importedRows, updatedRows, unchangedRows, failedRows: errors.length, errors, ...(options.preview ? { preview: true } : {}) };
 }
 
 async function updateExistingBizflyLead(
   database: BizflyDatabase, user: AuthUser, leadId: string, programId: string, stageName: unknown,
   monthlyRevenue: string | undefined, stages: Array<{ id: string; name: string }>, ipAddress?: string,
+  preview = false,
 ) {
   if (!canUpdateLead(user)) throw new Error("Số điện thoại đã tồn tại và bạn không có quyền cập nhật lead.");
   // Marking a lead Fail needs the dedicated status flow, so a Fail cell does not change an existing lead.
   const stageId = normalizeBizflyKey(text(stageName)) === "fail" ? undefined : resolveBizflyStage(stageName, stages);
-  return database.$transaction(async (tx) => {
+  return importTransaction(database, async (tx) => {
     const lead = await findVisibleLeadForMutation(user, leadId, programId, tx);
     if (!lead) throw new Error("Số điện thoại đã tồn tại nhưng lead nằm ngoài phạm vi bạn được cập nhật.");
     const revenueChange = monthlyRevenue
@@ -292,5 +303,5 @@ async function updateExistingBizflyLead(
       });
     }
     return "updated" as const;
-  });
+  }, preview);
 }

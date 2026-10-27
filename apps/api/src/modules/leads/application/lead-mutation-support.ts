@@ -1,4 +1,6 @@
 import type { AuthUser } from "../../auth/auth.types";
+import { getPreference } from "../../system/system-preferences.service";
+import { assertStoredLeadRequirements } from "../lead-required-fields";
 import { prisma } from "../../../database/prisma";
 import type { Prisma } from "../../../generated/prisma/client";
 import type { LeadInput } from "../domain/lead-input";
@@ -184,7 +186,8 @@ export async function recordSecondaryAssignment(
       new_data: { secondaryAssigneeId: assignee?.id ?? null },
     },
   });
-  if (assignee && options.notify !== false) {
+  const notificationLead = assignee && options.notify !== false ? await tx.leads.findUnique({ where: { id: lead.id }, select: { institution_program_id: true } }) : null;
+  if (assignee && options.notify !== false && (await getPreference(notificationLead?.institution_program_id, "notifications", tx)).assignment) {
     await tx.notifications.create({
       data: {
         user_id: assignee.id,
@@ -226,6 +229,7 @@ export async function recordStageChange(
   } = {},
 ) {
   const toStageId = toStage?.id ?? null;
+  if (fromStageId && toStageId && fromStageId !== toStageId) await assertStoredLeadRequirements(tx, leadId);
   await tx.lead_status_histories.create({
     data: {
       lead_id: leadId,

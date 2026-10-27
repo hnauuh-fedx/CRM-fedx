@@ -2,6 +2,10 @@ import * as XLSX from "xlsx";
 
 import type { AuthUser } from "../auth/auth.types";
 import { createLead } from "./application/create-lead.use-case";
+import { createLeadInTransaction } from "./application/create-lead.use-case";
+import { importTransaction } from "./import-transaction";
+import { getPreference } from "../system/system-preferences.service";
+import { leadPhoneDuplicateWhere } from "./application/lead-mutation-support";
 import type { LeadInput } from "./domain/lead-input";
 import { prisma } from "../../database/prisma";
 import { readBizflyRows, importBizflyRows } from "./bizfly-lead-import.service";
@@ -16,6 +20,7 @@ export type LeadImportError = {
 };
 
 export type LeadImportResult = {
+  preview?: boolean;
   totalRows: number;
   importedRows: number;
   /** Existing leads (same phone in the program) whose imported values changed. */
@@ -139,14 +144,18 @@ export async function importLeadsFromWorkbook(
   file: Buffer,
   scopedInstitutionProgramId?: string,
   ipAddress?: string,
+  options: { preview?: boolean } = {},
 ): Promise<LeadImportResult> {
+  const intake = await getPreference(scopedInstitutionProgramId, "intake");
   const bizflyRows = readBizflyRows(file);
-  if (bizflyRows) return importBizflyRows(user, bizflyRows, scopedInstitutionProgramId, ipAddress);
+  if (bizflyRows) return importBizflyRows(user, bizflyRows, scopedInstitutionProgramId, ipAddress, prisma, { preview: options.preview, duplicatePolicy: intake.bizflyDuplicate });
   const { headers, rows } = readRows(file);
   validateRequiredHeaders(headers, Boolean(scopedInstitutionProgramId));
   const referenceMaps = await getReferenceMaps(scopedInstitutionProgramId);
   const errors: LeadImportError[] = [];
   let importedRows = 0;
+  let unchangedRows = 0;
+  const previewPhones = new Set<string>();
 
   for (const [index, row] of rows.entries()) {
     const rowNumber = index + 2;
@@ -157,7 +166,22 @@ export async function importLeadsFromWorkbook(
       continue;
     }
 
-    const result = await createLead(user, normalized.input, ipAddress, { channel: "import" });
+    if (!normalized.input.institutionProgramId || !user.institutionProgramIds.includes(normalized.input.institutionProgramId)) {
+      errors.push({ row: rowNumber, fullName: normalized.input.fullName, phone: normalized.input.phone, message: "Bạn không có quyền nhập lead vào chương trình này." });
+      continue;
+    }
+    const rowIntake = normalized.input.institutionProgramId === scopedInstitutionProgramId ? intake : await getPreference(normalized.input.institutionProgramId, "intake");
+    const phoneKey = `${normalized.input.institutionProgramId}:${normalized.input.phone}`;
+    const duplicate = await prisma.leads.findFirst({ where: { ...leadPhoneDuplicateWhere(normalized.input), institution_program_id: normalized.input.institutionProgramId, deleted_at: null }, select: { id: true } });
+    if ((duplicate || previewPhones.has(phoneKey)) && rowIntake.excelDuplicate === "skip") { unchangedRows++; continue; }
+    if (previewPhones.has(phoneKey)) {
+      errors.push({ row: rowNumber, fullName: normalized.input.fullName, phone: normalized.input.phone, message: "Số điện thoại lặp trong file nhập." });
+      continue;
+    }
+    try {
+    const result = options.preview
+      ? await importTransaction(prisma, tx => createLeadInTransaction(tx, user, normalized.input, { ipAddress, creationSource: { channel: "import" } }), true)
+      : await createLead(user, normalized.input, ipAddress, { channel: "import" });
     if (!result.ok) {
       errors.push({
         row: rowNumber,
@@ -168,13 +192,18 @@ export async function importLeadsFromWorkbook(
       continue;
     }
     importedRows += 1;
+    if (options.preview) previewPhones.add(phoneKey);
+    } catch (error) {
+      errors.push({ row: rowNumber, fullName: normalized.input.fullName, phone: normalized.input.phone, message: error instanceof Error ? error.message : "Không thể nhập dòng dữ liệu này." });
+    }
   }
 
   return {
     totalRows: rows.length,
     importedRows,
     updatedRows: 0,
-    unchangedRows: 0,
+    unchangedRows,
+    preview: options.preview ?? false,
     failedRows: errors.length,
     errors,
   };
@@ -195,7 +224,8 @@ function readRows(file: Buffer) {
   const rows = XLSX.utils.sheet_to_json<ImportRow>(worksheet, { defval: "" });
   if (headers.length === 0) throw new InvalidLeadImportFileError("File Excel chưa có hàng tiêu đề.");
   if (rows.length === 0) throw new InvalidLeadImportFileError("File Excel chưa có dòng dữ liệu lead.");
-  return { headers, rows: rows.slice(0, maxRows) };
+  if (rows.length > maxRows) throw new InvalidLeadImportFileError(`File chỉ hỗ trợ tối đa ${maxRows} dòng mỗi lần nhập.`);
+  return { headers, rows };
 }
 
 function validateRequiredHeaders(headers: string[], hasScopedInstitutionProgram: boolean) {

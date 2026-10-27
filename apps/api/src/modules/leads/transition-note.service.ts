@@ -1,4 +1,5 @@
 import { prisma } from "../../database/prisma";
+import { preferenceRevision } from "../system/system-preferences.service";
 import type { Prisma } from "../../generated/prisma/client";
 import type { AuthUser } from "../auth/auth.types";
 import { getLeadScopeWhere } from "./lead-list.service";
@@ -29,18 +30,21 @@ export async function getTransitionNoteConfiguration() {
       label: stage.name,
       pipelineName: stage.pipelines?.name ?? null,
       templates: parseTransitionNoteTemplates(byKey.get(transitionNoteSettingKey(stage.id))),
+      revision: preferenceRevision(byKey.get(transitionNoteSettingKey(stage.id))),
     })),
-    { target: "FAIL", label: "Fail", pipelineName: null, templates: parseTransitionNoteTemplates(byKey.get(transitionNoteSettingKey("FAIL"))) },
+    { target: "FAIL", label: "Fail", pipelineName: null, templates: parseTransitionNoteTemplates(byKey.get(transitionNoteSettingKey("FAIL"))), revision: preferenceRevision(byKey.get(transitionNoteSettingKey("FAIL"))) },
   ];
 }
 
-export async function setTransitionNoteTemplates(actor: AuthUser, target: string, templates: TransitionNoteTemplate[], ipAddress?: string) {
+export async function setTransitionNoteTemplates(actor: AuthUser, target: string, templates: TransitionNoteTemplate[], ipAddress?: string, revision?: string) {
   return prisma.$transaction(async (tx) => {
     if (target !== "FAIL" && !await tx.pipeline_stages.findUnique({ where: { id: target }, select: { id: true } })) {
       return { ok: false as const, reason: "stage_not_found" as const };
     }
     const key = transitionNoteSettingKey(target);
+    await tx.$queryRaw`SELECT pg_advisory_xact_lock(hashtextextended(${key}, 0)) IS NULL AS locked`;
     const previous = await tx.system_settings.findUnique({ where: { key }, select: { value: true } });
+    if (revision && revision !== preferenceRevision(previous?.value)) return { ok: false as const, reason: "conflict" as const };
     await tx.system_settings.upsert({
       where: { key },
       create: { key, value: JSON.stringify(templates), type: "json" },

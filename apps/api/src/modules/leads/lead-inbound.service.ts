@@ -2,6 +2,10 @@ import { resolveLeadOrigin, recordLeadSourceOccurrence, type LeadSourceOccurrenc
 import type { LeadCreationSource } from "./lead-creation-history";
 import { prisma } from "../../database/prisma";
 import type { AuthUser } from "../auth/auth.types";
+import { getPreference } from "../system/system-preferences.service";
+import { selectInboundFields } from "@admission-crm/shared/system-preferences";
+import { lockLeadPhones } from "./lead-phone-lock";
+import { leadPhoneDuplicateWhere } from "./application/lead-mutation-support";
 import { getLeadScopeWhere } from "./lead-list.service";
 import { saveSaleCustomFieldValues } from "./sale-custom-fields.service";
 import {
@@ -79,6 +83,11 @@ export async function applyInboundLeadMutation(
 ): Promise<MutationResult> {
   let result: MutationResult;
   let resolvedLeadInput = input.leadInput;
+  const intake = await getPreference(input.institutionProgramId, "intake");
+  const providedFields = selectInboundFields(input.providedFields, input.leadInput, intake.blankValues === "preserve");
+  const customFieldValues = intake.blankValues === "preserve"
+    ? input.customFieldValues.filter(item => item.value !== null && item.value !== undefined && item.value !== "")
+    : input.customFieldValues;
   try {
     result = await prisma.$transaction(async (tx) => {
       if (input.beforeMutation && !(await input.beforeMutation(tx))) {
@@ -88,13 +97,12 @@ export async function applyInboundLeadMutation(
           reason: "superseded" as const,
         };
       }
-      const lockKey = `inbound-lead:${input.institutionProgramId}:${input.leadInput.phone.trim()}`;
-      await tx.$queryRaw`SELECT pg_advisory_xact_lock(hashtextextended(${lockKey}, 0)) IS NULL AS locked`;
+      await lockLeadPhones(tx, input.institutionProgramId, input.leadInput.phone, input.leadInput.secondaryPhones);
 
       const duplicate = await tx.leads.findFirst({
               where: {
                 institution_program_id: input.institutionProgramId,
-                phone: input.leadInput.phone.trim(),
+                ...leadPhoneDuplicateWhere(input.leadInput),
                 deleted_at: null,
               },
               orderBy: [{ created_at: "asc" }, { id: "asc" }],
@@ -132,7 +140,7 @@ export async function applyInboundLeadMutation(
         leadInput = { ...input.leadInput, originId };
         resolvedLeadInput = leadInput;
       }
-      if (duplicate && input.duplicatePolicy === "REJECT") {
+      if (duplicate && (intake.inboundDuplicate === "reject" || input.duplicatePolicy === "REJECT")) {
         await recordLeadSourceOccurrence(tx, { ...input, actorId: input.actor.id, originName: input.originName ?? "" }, duplicate.id, originId);
         return {
           ok: false as const,
@@ -148,8 +156,8 @@ export async function applyInboundLeadMutation(
           duplicate.id,
           input.institutionProgramId,
           leadInput,
-          input.providedFields,
-          input.customFieldValues,
+          providedFields,
+          customFieldValues,
           input.ipAddress,
         );
         if (!updated.ok)
