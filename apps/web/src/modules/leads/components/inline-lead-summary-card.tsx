@@ -37,6 +37,7 @@ type EditableField =
   | "dateOfBirth"
   | "currentAddress"
   | "sourceId"
+  | "pipelineStageId"
   | "assigneeId"
   | "temperature"
   | "majorId"
@@ -132,14 +133,23 @@ function InlineField({
   );
 }
 
+export type InlineLeadStageControl = {
+  stages: Array<{ id: string; name: string }>;
+  onChange: (stageId: string) => void;
+  isPending: boolean;
+};
+
 export function InlineLeadSummaryCard({
   lead,
   options,
   canUpdate,
+  stageControl,
 }: {
   lead: LeadDetail;
   options?: LeadActionOptions;
   canUpdate: boolean;
+  /** Stage changes go through the workflow transition so the note prompt and progress bar stay in sync. */
+  stageControl?: InlineLeadStageControl;
 }) {
   const auth = useAuth();
   const queryClient = useQueryClient();
@@ -215,7 +225,8 @@ export function InlineLeadSummaryCard({
     const nextErrors = validateDraft(draft);
     setErrors(nextErrors);
     if (Object.keys(nextErrors).length > 0) return;
-    mutation.mutate(draft);
+    // The stage is saved by its own transition, so never send a stale stage from the draft.
+    mutation.mutate({ ...draft, pipelineStageId: lead.pipelineStage?.id ?? "" });
   };
 
   const isEditing = (field: EditableField) =>
@@ -239,6 +250,16 @@ export function InlineLeadSummaryCard({
     );
   };
   const secondaryPhones = draft.secondaryPhones ?? [];
+  const canChangeStage =
+    canUpdate && Boolean(stageControl) && lead.lifecycleStatus.value === "ACTIVE";
+  const changeStage = (stageId: string) => {
+    setEditingFields((current) => {
+      const next = new Set(current);
+      next.delete("pipelineStageId");
+      return next;
+    });
+    if (stageId !== lead.pipelineStage?.id) stageControl?.onChange(stageId);
+  };
 
   return (
     <Card className="@container border-border/70 shadow-xs">
@@ -349,7 +370,41 @@ export function InlineLeadSummaryCard({
             </InlineField>
           ) : editableValue("sourceId", "Nguồn học viên", lead.source?.name ?? "Chưa chọn")}
 
-          <ReadonlyValue label="Tiến trình" value={lead.pipelineStage?.name ?? "Chưa cập nhật"} />
+          <div className="flex flex-col gap-2">
+            {canChangeStage && isEditing("pipelineStageId") ? (
+              <InlineField id="inline-lead-pipeline-stage" label="Quy trình Telesale">
+                <Select
+                  value={lead.pipelineStage?.id}
+                  onValueChange={changeStage}
+                  disabled={stageControl?.isPending}
+                >
+                  <SelectTrigger id="inline-lead-pipeline-stage" className="w-full" autoFocus={lastOpenedField === "pipelineStageId"}>
+                    <SelectValue placeholder="Chọn quy trình telesale" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectGroup>
+                      {stageControl?.stages.map((stage) => (
+                        <SelectItem key={stage.id} value={stage.id}>{stage.name}</SelectItem>
+                      ))}
+                    </SelectGroup>
+                  </SelectContent>
+                </Select>
+              </InlineField>
+            ) : (
+              <ReadonlyValue
+                label="Quy trình Telesale"
+                value={stageControl?.isPending ? "Đang cập nhật…" : lead.pipelineStage?.name ?? "Chưa cập nhật"}
+                editable={canChangeStage && !stageControl?.isPending}
+                onEdit={() => startEditingField("pipelineStageId")}
+              />
+            )}
+            {lead.pipelineStageNote && (
+              <p className="rounded-md border bg-muted/40 px-3 py-2 text-sm whitespace-pre-line">
+                <span className="sr-only">Ghi chú tiến trình: </span>
+                {lead.pipelineStageNote}
+              </p>
+            )}
+          </div>
 
           {canAssign && isEditing("assigneeId") ? (
             <div className="flex flex-col gap-3">
@@ -378,8 +433,6 @@ export function InlineLeadSummaryCard({
               <Input id="inline-lead-temperature" value={draft.temperature} onChange={(event) => update("temperature", event.target.value)} autoFocus={lastOpenedField === "temperature"} />
             </InlineField>
           ) : editableValue("temperature", "Mức độ quan tâm", lead.temperature ?? "-")}
-
-          <ReadonlyValue label="Chương trình" value={lead.institutionProgram ? `${lead.institutionProgram.name} · ${lead.institutionProgram.institutionName}` : "Chưa chọn"} />
 
           {isEditing("majorId") ? (
             <InlineField id="inline-lead-major" label="Ngành đăng ký">

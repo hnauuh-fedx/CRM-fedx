@@ -1379,6 +1379,11 @@ function EditLeadContent({
             lead={lead}
             options={options}
             canUpdate={canUpdate}
+            stageControl={{
+              stages: options?.stages.length ? options.stages : (fallbackStages ?? []),
+              onChange: transition.changeStage,
+              isPending: transition.isPending,
+            }}
           />
           </LeadDetailLayout>
           <SourceOccurrencesCard lead={lead} />

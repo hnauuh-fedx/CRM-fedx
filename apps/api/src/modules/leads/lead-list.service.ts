@@ -806,6 +806,14 @@ export async function getLeadDetail(user: AuthUser, leadId: string, institutionP
       take: 50,
     }),
   ]);
+  // The note shown under the stage belongs to the latest entry into the current stage only.
+  const currentStageEntry = lead.pipeline_stages
+    ? await prisma.lead_status_histories.findFirst({
+        where: { lead_id: leadId, to_stage_id: lead.pipeline_stages.id },
+        select: { note: true },
+        orderBy: { changed_at: "desc" },
+      })
+    : null;
   const failedStage = failedStageId
     ? await prisma.pipeline_stages.findUnique({
         where: { id: failedStageId },
@@ -870,6 +878,7 @@ export async function getLeadDetail(user: AuthUser, leadId: string, institutionP
           color: lead.pipeline_stages.color,
         }
       : null,
+    pipelineStageNote: currentStageEntry?.note ?? null,
     assignee: lead.users_leads_assigned_toTousers
       ? {
           id: lead.users_leads_assigned_toTousers.id,

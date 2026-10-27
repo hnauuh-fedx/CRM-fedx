@@ -160,6 +160,8 @@ export type LeadUnmatchedFieldValue = {
 
 export type LeadDetail = LeadListItem & {
   unmatchedFieldValues?: LeadUnmatchedFieldValue[];
+  /** Note chosen when the lead last entered its current pipeline stage. */
+  pipelineStageNote?: string | null;
   sourceOccurrences: Array<{
     id: string;
     sourceGroup: { id: string; name: string };
