@@ -106,10 +106,10 @@ function ProgramLeadSourcesPage() {
     <PageLoadingBoundary variant="list" queries={[listQuery, optionsQuery]}>
       <div className="mx-auto flex max-w-7xl flex-col gap-6">
       <PageHeader
-        eyebrow="CRM Marketing"
-        title="Nguồn lead"
+        eyebrow="CRM Marketing · Quản lý nguồn lead"
+        title="Nguồn học viên"
         scopeLabel="Theo chương trình"
-        description="Theo dõi nguồn lead và số lead đang hoạt động của chương trình đang làm việc."
+        description="Theo dõi nguồn học viên và số lead đang hoạt động của chương trình đang làm việc."
         actions={canManage ? (
           <LeadSourceDialog programId={selectedProgramId!} onSaved={(name) => {
             setStatusMessage(`Đã thêm nguồn “${name}”.`);
@@ -195,7 +195,7 @@ function LeadSourceDialog({ programId, source, onSaved }: { programId: string; s
       </DialogTrigger>
       <DialogContent className="max-h-[90dvh] overflow-y-auto" showCloseButton={!mutation.isPending}>
         <DialogHeader>
-          <DialogTitle>{isEdit ? "Sửa tên nguồn lead" : "Thêm nguồn lead"}</DialogTitle>
+          <DialogTitle>{isEdit ? "Sửa tên nguồn học viên" : "Thêm nguồn học viên"}</DialogTitle>
           <DialogDescription>{isEdit ? "Tên mới sẽ hiển thị ở mọi lead đang dùng nguồn này. Nguồn" : "Nguồn mới"} thuộc chương trình {program ? `${program.institutionName} - ${program.name}` : "đang làm việc"}.</DialogDescription>
         </DialogHeader>
         <form noValidate className="flex flex-col gap-5" onSubmit={form.handleSubmit((values) => {
@@ -231,7 +231,7 @@ function LeadSourceDialog({ programId, source, onSaved }: { programId: string; s
 function useColumns(manageProgramId: string | null, onStatus: (message: string) => void) {
   return useMemo<ColumnDef<LeadSourceItem>[]>(
     () => [
-      { accessorKey: "name", header: "Nguồn lead", cell: ({ row }) => <span className="font-medium">{row.original.name}</span> },
+      { accessorKey: "name", header: "Nguồn học viên", cell: ({ row }) => <span className="font-medium">{row.original.name}</span> },
       { accessorKey: "type", header: "Loại", cell: ({ row }) => row.original.type ?? "-" },
       { id: "institutionProgram", header: "Chương trình", enableSorting: false, cell: ({ row }) => row.original.institutionProgram ? `${row.original.institutionProgram.institutionName} / ${row.original.institutionProgram.name}` : "Chưa gán chương trình" },
       { accessorKey: "activeLeadCount", header: "Lead đang hoạt động", enableSorting: false },
@@ -267,7 +267,7 @@ function LeadSourceFilters({
   return (
     <Card className="gap-4 border-border/70 py-5 shadow-xs">
       <CardHeader className="gap-1 px-5">
-        <CardTitle>Bộ lọc nguồn lead</CardTitle>
+        <CardTitle>Bộ lọc nguồn học viên</CardTitle>
         <CardDescription>Tìm theo tên nguồn hoặc loại nguồn.</CardDescription>
       </CardHeader>
       <CardContent className="px-5">
@@ -345,7 +345,7 @@ function Results(props: ResultsProps) {
   return (
     <Card className="gap-0 overflow-hidden border-border/70 py-0 shadow-xs">
       <CardHeader className="gap-1 border-b py-5">
-        <CardTitle>Nguồn lead</CardTitle>
+        <CardTitle>Nguồn học viên</CardTitle>
         <CardDescription>
           {pagination
             ? `Hiển thị ${data.length} trong tổng số ${pagination.total} nguồn`
@@ -387,7 +387,7 @@ function SortableTable({ table }: { table: DataTable<LeadSourceItem> }) {
   return (
     <ServerDataTable
       table={table}
-      caption="Danh sách nguồn lead"
+      caption="Danh sách nguồn học viên"
       className="min-w-180"
     />
   );

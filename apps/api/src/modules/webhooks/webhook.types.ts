@@ -1,5 +1,6 @@
 import type { SourceGroupCode } from "@admission-crm/shared/source-group";
-import { leadFormFieldCatalog, type LeadSystemField } from "@admission-crm/shared/lead-form-field-catalog";
+import { getLeadFieldGroup } from "@admission-crm/shared/lead-field-groups";
+import { leadFieldConfigurationCatalog, type LeadSystemField } from "@admission-crm/shared/lead-form-field-catalog";
 
 export const webhookTargetModules = ["LEAD"] as const;
 export const webhookStatuses = ["ACTIVE", "DISABLED"] as const;
@@ -33,19 +34,26 @@ export type WebhookSystemFieldMetadata = {
   group: "STANDARD";
   groupKey: string;
   groupLabel: string;
+  /** Listed for completeness but filled by the system, never by a mapping. */
+  readOnly?: boolean;
+  readOnlyReason?: string;
 };
 
-/** Source is resolved by name; program, pipeline stage and admission status need their own workflows. */
+/** Source is resolved by name and its group from the URL; program, pipeline stage and admission status need their own workflows. */
 const nonMappableLeadFields = new Set([
-  "sourceId",
   "institutionProgramId",
   "pipelineStageId",
   "admissionStatusId",
 ]);
 const requiredLeadFields = new Set(["fullName", "phone", "source"]);
+/** Shown in the mapping list so every source field appears, but always derived by the system. */
+const systemDerivedFields: Record<string, string> = {
+  originId: "Hệ thống tự xác định từ URL nhóm nguồn hoặc nhóm nguồn cố định của webhook.",
+};
 
 function toWebhookFieldType(field: LeadSystemField): WebhookFieldType {
-  if (field.key === "tags") return "string";
+  // Nguồn arrives as a name; it is matched to (or added to) the program's Nguồn list when recorded.
+  if (field.key === "tags" || field.key === "source") return "string";
   if (field.dataType === "NUMBER") return "number";
   if (field.dataType === "DATE") return "date";
   if (field.dataType === "EMAIL") return "email";
@@ -54,30 +62,23 @@ function toWebhookFieldType(field: LeadSystemField): WebhookFieldType {
   return "string";
 }
 
-/** Every Lead form field a webhook may write, grouped in Lead form order. */
+/** Every Lead field a webhook may write, grouped in the Lead field configuration order. */
 export const webhookFieldMetadata: WebhookSystemFieldMetadata[] =
-  leadFormFieldCatalog.flatMap((group) => {
-    const toMetadata = (key: string, label: string, type: WebhookFieldType) => ({
-      key,
-      label,
-      type,
-      requiredByCrm: requiredLeadFields.has(key),
-      group: "STANDARD" as const,
-      groupKey: group.id,
-      groupLabel: group.label,
-    });
-    return group.fields.flatMap((field) => {
-      if (nonMappableLeadFields.has(field.key)) return [];
-      const metadata = toMetadata(field.key, field.label, toWebhookFieldType(field));
-      return field.key === "phone"
-        ? [
-            metadata,
-            toMetadata("source", "Nguồn", "string"),
-            toMetadata("sourceGroupUrl", "URL xác định nhóm nguồn", "string"),
-          ]
-        : [metadata];
-    });
-  });
+  leadFieldConfigurationCatalog.flatMap((group) =>
+    group.fields
+      .filter((field) => !nonMappableLeadFields.has(field.key))
+      .map((field) => ({
+        key: field.key,
+        label: field.label,
+        type: toWebhookFieldType(field),
+        requiredByCrm: requiredLeadFields.has(field.key),
+        group: "STANDARD" as const,
+        // Source fields (Nguồn học viên, Nhóm nguồn, Nguồn...) share the "Nguồn khách hàng" cluster everywhere.
+        groupKey: getLeadFieldGroup(field.key)?.id ?? group.id,
+        groupLabel: getLeadFieldGroup(field.key)?.label ?? group.label,
+        ...(systemDerivedFields[field.key] ? { readOnly: true, readOnlyReason: systemDerivedFields[field.key] } : {}),
+      })),
+  );
 
 export type WebhookCrmField = string;
 export type WebhookMappingInput = {

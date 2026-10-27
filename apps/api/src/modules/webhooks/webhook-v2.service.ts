@@ -43,7 +43,7 @@ export type WebhookConfigSnapshot = {
 };
 
 export type IngestWebhookResult =
-  | { ok: true; status: 202; data: { request_id: string; status: string; duplicate?: true } }
+  | { ok: true; status: 200; data: { request_id: string; status: string; duplicate?: true } }
   | { ok: false; status: number; error: { code: string; message: string }; retryAfterSeconds?: number };
 
 export type ProcessingFault = "after_processing" | "before_success_commit";
@@ -191,12 +191,12 @@ export async function ingestInboundWebhook(
       return { ok: false, status: 503, error: { code: "QUEUE_UNAVAILABLE", message: "YÃªu cáº§u Ä‘Ã£ Ä‘Æ°á»£c lÆ°u vÃ  sáº½ Ä‘Æ°á»£c khÃ´i phá»¥c; vui lÃ²ng gá»­i láº¡i sau." } };
     }
     const current = await prisma.webhook_requests.findUniqueOrThrow({ where: { request_id: existing.request_id }, select: { status: true } });
-    return { ok: true, status: 202, data: { request_id: existing.request_id, status: publicStatus(current.status), duplicate: true } };
+    return { ok: true, status: 200, data: { request_id: existing.request_id, status: publicStatus(current.status), duplicate: true } };
   }
 
   const queued = await enqueuePersistedRequest(requestId);
   if (!queued) return { ok: false, status: 503, error: { code: "QUEUE_UNAVAILABLE", message: "Yêu cầu đã được lưu và sẽ được khôi phục; vui lòng gửi lại sau." } };
-  return { ok: true, status: 202, data: { request_id: requestId, status: "accepted" } };
+  return { ok: true, status: 200, data: { request_id: requestId, status: "accepted" } };
 }
 
 function processingErrorFromFailure(error: ProcessFailure) {

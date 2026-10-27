@@ -21,6 +21,7 @@ import {
   ScrollText,
   Settings,
   ShieldCheck,
+  Signpost,
   KeyRound,
   Tags,
   UserPlus,
@@ -197,10 +198,24 @@ const navigationSections: NavigationSection[] = [
         permissions: ["campaign.view_all", "campaign.view", "campaign.view_own"],
       },
       {
-        label: "Nguồn lead",
-        href: "/marketing/nguon-lead",
+        type: "group",
+        label: "Quản lý nguồn lead",
         icon: Tags,
-        permissions: ["campaign.view_all", "lead_source.manage"],
+        permissions: ["lead_channel.view", "lead_channel.manage", "campaign.view_all", "lead_source.manage"],
+        children: [
+          {
+            label: "Nguồn",
+            href: "/marketing/nguon",
+            icon: Signpost,
+            permissions: ["lead_channel.view", "lead_channel.manage"],
+          },
+          {
+            label: "Nguồn học viên",
+            href: "/marketing/nguon-lead",
+            icon: GraduationCap,
+            permissions: ["campaign.view_all", "lead_source.manage"],
+          },
+        ],
       },
       {
         label: "Theo dõi UTM",

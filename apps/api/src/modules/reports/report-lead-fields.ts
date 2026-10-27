@@ -1,4 +1,4 @@
-import { leadFormFieldCatalog } from "@admission-crm/shared/lead-form-field-catalog";
+import { leadFormFieldCatalog, leadSourceFieldGroup } from "@admission-crm/shared/lead-form-field-catalog";
 
 import { Prisma } from "../../generated/prisma/client";
 import { leadFieldFilterDefinitions } from "../leads/lead-field-filter";
@@ -10,6 +10,8 @@ import { reportTextSql, type ReportFilterType, type TypedReportCondition } from 
  */
 
 const LEAD_FIELD_PREFIX = "LEAD:";
+/** Fields with several values per Lead: filtered with EXISTS, listed by distinct value. */
+const multiValueKeys = new Set(["tags", "source"]);
 /** Already report dimensions, or unique per Lead so a category filter is meaningless. */
 const excludedFromReports = new Set(["sourceId", "pipelineStageId", "fullName", "note", "gclid"]);
 
@@ -19,14 +21,14 @@ export const reportLeadFilterFields = leadFieldFilterDefinitions
     key: `${LEAD_FIELD_PREFIX}${field.key}`,
     label: field.label,
     type: field.kind === "date" ? ("DATE" as const) : ("CATEGORY" as const),
-    // A Lead can have several tags, so tags cannot be one row/column of a report.
-    allowedAsOutput: field.kind !== "list",
+    // A Lead can have several tags or source occurrences, so they cannot be one row/column of a report.
+    allowedAsOutput: !multiValueKeys.has(field.key),
     allowedAsFilter: true,
     filterType: (field.kind === "number" ? "number" : field.kind === "date" ? "date" : field.kind === "select" ? "enum" : "text") as ReportFilterType,
   }));
 
 const reportLeadFieldKeys = new Set(reportLeadFilterFields.map((field) => field.key));
-const storageByKey = new Map(leadFormFieldCatalog.flatMap((group) => group.fields).map((field) => [field.key, field.storage]));
+const storageByKey = new Map([...leadFormFieldCatalog, leadSourceFieldGroup].flatMap((group) => group.fields).map((field) => [field.key, field.storage]));
 
 export function isReportLeadField(fieldKey: string) {
   return reportLeadFieldKeys.has(fieldKey);
@@ -56,6 +58,11 @@ export function reportLeadFieldExpression(fieldKey: string): Prisma.Sql {
       JOIN admission_statuses report_status ON report_status.id = report_profile.admission_status_id
       WHERE report_profile.lead_id = fact.lead_id)`;
   }
+  if (key === "originId") {
+    return Prisma.sql`(SELECT report_origin.name FROM leads report_lead
+      JOIN lead_origins report_origin ON report_origin.id = report_lead.origin_id
+      WHERE report_lead.id = fact.lead_id)`;
+  }
   if (key === "gender") {
     return Prisma.sql`(SELECT CASE report_lead.gender WHEN 'male' THEN 'Nam' WHEN 'female' THEN 'Nữ' WHEN 'other' THEN 'Khác' ELSE report_lead.gender END
       FROM leads report_lead WHERE report_lead.id = fact.lead_id)`;
@@ -82,13 +89,35 @@ const tagExists = (extra: Prisma.Sql) => Prisma.sql`EXISTS (
   SELECT 1 FROM entity_tags report_entity_tag
   JOIN tags report_tag ON report_tag.id = report_entity_tag.tag_id
   WHERE report_entity_tag.entity_type = 'lead' AND report_entity_tag.entity_id = fact.lead_id ${extra})`;
+const sourceExists = (extra: Prisma.Sql) => Prisma.sql`EXISTS (
+  SELECT 1 FROM lead_source_occurrences report_occurrence
+  JOIN lead_channels report_channel ON report_channel.id = report_occurrence.channel_id
+  WHERE report_occurrence.lead_id = fact.lead_id ${extra})`;
+
+/** How each multi-value field is matched (EXISTS) and listed (JOIN) against the fact rows. */
+const multiValueFields: Record<string, { exists: (extra: Prisma.Sql) => Prisma.Sql; column: Prisma.Sql; joins: Prisma.Sql }> = {
+  tags: {
+    exists: tagExists,
+    column: Prisma.sql`report_tag.name`,
+    joins: Prisma.sql`JOIN entity_tags report_entity_tag ON report_entity_tag.entity_type = 'lead' AND report_entity_tag.entity_id = fact.lead_id
+      JOIN tags report_tag ON report_tag.id = report_entity_tag.tag_id`,
+  },
+  // Nguồn is the program list value of each occurrence, so renames apply to past occurrences too.
+  source: {
+    exists: sourceExists,
+    column: Prisma.sql`report_channel.name`,
+    joins: Prisma.sql`JOIN lead_source_occurrences report_occurrence ON report_occurrence.lead_id = fact.lead_id
+      JOIN lead_channels report_channel ON report_channel.id = report_occurrence.channel_id`,
+  },
+};
 
 /** SQL for a CATEGORY condition on a Lead field; empty strings count as "no value". */
 export function reportLeadCategoryCondition(fieldKey: string, operator: string, value?: string): Prisma.Sql {
-  if (leadKey(fieldKey) === "tags") {
-    if (operator === "IS_NOT_EMPTY") return tagExists(Prisma.empty);
-    if (operator === "IS_EMPTY") return Prisma.sql`NOT ${tagExists(Prisma.empty)}`;
-    const named = tagExists(Prisma.sql`AND lower(report_tag.name) = lower(${value ?? ""})`);
+  const multiValue = multiValueFields[leadKey(fieldKey)];
+  if (multiValue) {
+    if (operator === "IS_NOT_EMPTY") return multiValue.exists(Prisma.empty);
+    if (operator === "IS_EMPTY") return Prisma.sql`NOT ${multiValue.exists(Prisma.empty)}`;
+    const named = multiValue.exists(Prisma.sql`AND lower(${multiValue.column}) = lower(${value ?? ""})`);
     return operator === "NOT_EQUALS" ? Prisma.sql`NOT ${named}` : named;
   }
   const text = Prisma.sql`NULLIF(${reportLeadFieldExpression(fieldKey)}::text, '')`;
@@ -99,30 +128,31 @@ export function reportLeadCategoryCondition(fieldKey: string, operator: string, 
   return Prisma.sql`${text} = ${value ?? ""}`;
 }
 
-export function isReportTagField(fieldKey: string) {
-  return isReportLeadField(fieldKey) && leadKey(fieldKey) === "tags";
+export function isReportMultiValueField(fieldKey: string) {
+  return isReportLeadField(fieldKey) && Boolean(multiValueFields[leadKey(fieldKey)]);
 }
 
-/** Typed condition on tags: text operators match any tag name of the Lead. */
-export function reportTagConditionSql(condition: TypedReportCondition): Prisma.Sql {
-  if (condition.operator === "HAS_VALUE") return tagExists(Prisma.empty);
-  if (condition.operator === "HAS_NO_VALUE") return Prisma.sql`NOT ${tagExists(Prisma.empty)}`;
+/** Typed condition on a multi-value field: text operators match any value of the Lead. */
+export function reportMultiValueConditionSql(fieldKey: string, condition: TypedReportCondition): Prisma.Sql {
+  const multiValue = multiValueFields[leadKey(fieldKey)];
+  if (condition.operator === "HAS_VALUE") return multiValue.exists(Prisma.empty);
+  if (condition.operator === "HAS_NO_VALUE") return Prisma.sql`NOT ${multiValue.exists(Prisma.empty)}`;
   const negated = condition.operator === "NOT_CONTAINS" || condition.operator === "NOT_EQUALS";
   const positive = { ...condition, operator: condition.operator === "NOT_CONTAINS" ? "CONTAINS" : condition.operator === "NOT_EQUALS" ? "EQUALS" : condition.operator };
-  const named = tagExists(Prisma.sql`AND ${reportTextSql(Prisma.sql`report_tag.name`, positive)}`);
+  const named = multiValue.exists(Prisma.sql`AND ${reportTextSql(multiValue.column, positive)}`);
   return negated ? Prisma.sql`NOT ${named}` : named;
 }
 
 /** Distinct values of a Lead field among the report rows matched by `where`. */
 export function reportLeadFieldValuesQuery(fieldKey: string, from: Prisma.Sql, where: Prisma.Sql): Prisma.Sql {
-  if (leadKey(fieldKey) === "tags") {
+  const multiValue = multiValueFields[leadKey(fieldKey)];
+  if (multiValue) {
     return Prisma.sql`
-      SELECT report_tag.name AS value, COUNT(DISTINCT fact.lead_id)::bigint AS total
+      SELECT ${multiValue.column} AS value, COUNT(DISTINCT fact.lead_id)::bigint AS total
       FROM ${from}
-      JOIN entity_tags report_entity_tag ON report_entity_tag.entity_type = 'lead' AND report_entity_tag.entity_id = fact.lead_id
-      JOIN tags report_tag ON report_tag.id = report_entity_tag.tag_id
+      ${multiValue.joins}
       WHERE ${where}
-      GROUP BY report_tag.name ORDER BY total DESC, value ASC LIMIT 100`;
+      GROUP BY ${multiValue.column} ORDER BY total DESC, value ASC LIMIT 100`;
   }
   const text = Prisma.sql`NULLIF(${reportLeadFieldExpression(fieldKey)}::text, '')`;
   return Prisma.sql`

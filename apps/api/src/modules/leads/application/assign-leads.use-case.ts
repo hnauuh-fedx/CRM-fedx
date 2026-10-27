@@ -89,6 +89,7 @@ export async function assignLeads(
         title: "Bạn được phân công lead mới",
         content: `Lead ${lead.full_name} đã được phân công cho bạn.`,
         type: "lead_assignment",
+        lead_id: lead.id,
       })),
     });
     await tx.audit_logs.createMany({

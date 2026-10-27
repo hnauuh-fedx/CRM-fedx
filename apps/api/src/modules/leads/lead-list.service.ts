@@ -1,3 +1,4 @@
+import { formatLeadChannelName } from "@admission-crm/shared/lead-channel";
 import { describeLeadCreation, recordObject } from "./lead-creation-history";
 import { leadCreationActions, loadLeadCreationHistory, resolveLeadCreationNames } from "./lead-creation-history.service";
 import { isEnrolledStudent, studentMembershipWhere } from "../students/student-membership";
@@ -12,6 +13,7 @@ import {
 } from "./domain/lead-lifecycle-status";
 import { buildLeadFilterWhere, type FilterCondition } from "./lead-filter.service";
 import { getLeadCustomFieldDefinitions } from "./lead-custom-fields.service";
+import { listActiveLeadChannelOptions } from "../campaigns/lead-channel.service";
 import { listVisibleUnmatchedValues } from "./lead-unmatched-values.service";
 
 export const leadListPermissions = [
@@ -470,7 +472,7 @@ export async function getLeadFilterOptions(user: AuthUser, institutionProgramId?
     ...(institutionProgramId ? { institution_program_id: institutionProgramId } : {}),
   };
 
-  const [sources, institutionPrograms, assignees, stages, majors, admissionStatuses, stageCounts, totalLeads, failedLeads] = await prisma.$transaction([
+  const [sources, institutionPrograms, assignees, stages, majors, admissionStatuses, origins, stageCounts, totalLeads, failedLeads] = await prisma.$transaction([
     prisma.lead_sources.findMany({
       where: { leads: { some: scopeWhere } },
       select: { id: true, name: true },
@@ -514,6 +516,11 @@ export async function getLeadFilterOptions(user: AuthUser, institutionProgramId?
       select: { id: true, name: true },
       orderBy: [{ name: "asc" }, { id: "asc" }],
     }),
+    prisma.lead_origins.findMany({
+      where: { leads: { some: scopeWhere } },
+      select: { id: true, name: true },
+      orderBy: [{ name: "asc" }, { id: "asc" }],
+    }),
     prisma.leads.groupBy({
       by: ["pipeline_stage_id"],
       where: { AND: [scopeWhere, { status: ACTIVE_LEAD_STATUS }] },
@@ -527,9 +534,12 @@ export async function getLeadFilterOptions(user: AuthUser, institutionProgramId?
   );
 
   const customFieldDefinitions = await getLeadCustomFieldDefinitions(user, institutionProgramId ?? null, false);
+  // Nguồn options are the active values of the working program, used by "has any occurrence" filters.
+  const channels = institutionProgramId ? await listActiveLeadChannelOptions(institutionProgramId) : [];
 
   return {
     sources,
+    channels: channels.map((channel) => ({ id: channel.id, name: formatLeadChannelName(channel) })),
     institutionPrograms: institutionPrograms.map((program) => ({
       id: program.id,
       name: program.name,
@@ -549,6 +559,7 @@ export async function getLeadFilterOptions(user: AuthUser, institutionProgramId?
     })),
     majors,
     admissionStatuses,
+    origins,
     totalLeads,
     failedLeads,
     customFields: customFieldDefinitions.fields,
@@ -625,6 +636,7 @@ export async function getLeadDetail(user: AuthUser, leadId: string, institutionP
           note: true,
           received_at: true,
           lead_origins: { select: { id: true, name: true } },
+          lead_channels: { select: { id: true, name: true, is_auto_created: true } },
         },
       },
       pipeline_stages: { select: { id: true, name: true, color: true } },
@@ -836,7 +848,11 @@ export async function getLeadDetail(user: AuthUser, leadId: string, institutionP
     sourceOccurrences: lead.lead_source_occurrences.map((occurrence) => ({
       id: occurrence.id,
       sourceGroup: { id: occurrence.lead_origins.id, name: occurrence.lead_origins.name },
-      sourceName: occurrence.source_name,
+      // The Nguồn list value follows renames; the received name is the fallback for unlinked rows.
+      sourceName: occurrence.lead_channels
+        ? formatLeadChannelName({ name: occurrence.lead_channels.name, isAutoCreated: occurrence.lead_channels.is_auto_created })
+        : occurrence.source_name,
+      channelId: occurrence.lead_channels?.id ?? null,
       note: occurrence.note,
       receivedAt: occurrence.received_at.toISOString(),
     })),

@@ -41,10 +41,20 @@ test("webhook metadata lists every mappable Lead form field grouped by form clus
   for (const key of ["gender", "majorId", "highSchoolName", "province", "relative1FullName", "companyName", "gclid"]) {
     assert.ok(keys.includes(key), `missing ${key}`);
   }
-  for (const key of ["sourceId", "institutionProgramId", "pipelineStageId", "admissionStatusId"]) {
+  for (const key of ["institutionProgramId", "pipelineStageId", "admissionStatusId"]) {
     assert.ok(!keys.includes(key), `${key} must not be mappable`);
   }
-  assert.deepEqual(keys.slice(0, 4), ["fullName", "phone", "source", "sourceGroupUrl"]);
+  assert.deepEqual(keys.slice(0, 2), ["fullName", "phone"]);
+  // Every source field is listed in "Nguồn khách hàng"; Nhóm nguồn is shown but derived by the system.
+  const sourceFields = webhookFieldMetadata.filter((field) => field.groupKey === "customer-source");
+  assert.deepEqual(sourceFields.map((field) => [field.key, field.groupLabel, field.requiredByCrm, Boolean(field.readOnly)]), [
+    ["sourceId", "Nguồn khách hàng", false, false],
+    ["originId", "Nguồn khách hàng", false, true],
+    ["source", "Nguồn khách hàng", true, false],
+    ["sourceGroupUrl", "Nguồn khách hàng", false, false],
+  ]);
+  // Nguồn is a list field, but webhooks send a name that is matched to (or added to) the list when recorded.
+  assert.equal(webhookFieldMetadata.find((field) => field.key === "source")?.type, "string");
   assert.equal(webhookFieldMetadata.find((field) => field.key === "graduationYear")?.groupLabel, "Học vấn và tốt nghiệp");
 });
 

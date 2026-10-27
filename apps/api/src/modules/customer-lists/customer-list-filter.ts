@@ -276,17 +276,23 @@ export async function describeCustomerListFilters(config: CustomerListFilterConf
   const assigneeIds = config.conditions.filter((item) => item.field === "assigneeId" && item.value).map((item) => item.value!);
   const majorIds = config.conditions.filter((item) => item.field === "majorId" && item.value).map((item) => item.value!);
   const admissionStatusIds = config.conditions.filter((item) => item.field === "admissionStatusId" && item.value).map((item) => item.value!);
-  const [stages, sources, assignees, majors, admissionStatuses] = await Promise.all([
+  const originIds = config.conditions.filter((item) => item.field === "originId" && item.value).map((item) => item.value!);
+  const channelIds = config.conditions.filter((item) => item.field === "source" && item.value).map((item) => item.value!);
+  const [stages, sources, assignees, majors, admissionStatuses, origins, channels] = await Promise.all([
     prisma.pipeline_stages.findMany({ where: { id: { in: stageIds } }, select: { id: true, name: true } }),
     prisma.lead_sources.findMany({ where: { id: { in: sourceIds } }, select: { id: true, name: true } }),
     prisma.users.findMany({ where: { id: { in: assigneeIds } }, select: { id: true, full_name: true } }),
     prisma.majors.findMany({ where: { id: { in: majorIds } }, select: { id: true, name: true } }),
     prisma.admission_statuses.findMany({ where: { id: { in: admissionStatusIds } }, select: { id: true, name: true } }),
+    prisma.lead_origins.findMany({ where: { id: { in: originIds } }, select: { id: true, name: true } }),
+    prisma.lead_channels.findMany({ where: { id: { in: channelIds } }, select: { id: true, name: true } }),
   ]);
   const labels = new Map<string, string>([
     ...stages.map((item) => [item.id, item.name] as const), ...sources.map((item) => [item.id, item.name] as const),
     ...assignees.map((item) => [item.id, item.full_name] as const), ...majors.map((item) => [item.id, item.name] as const),
     ...admissionStatuses.map((item) => [item.id, item.name] as const),
+    ...origins.map((item) => [item.id, item.name] as const),
+    ...channels.map((item) => [item.id, item.name] as const),
     ["male", "Nam"], ["female", "Nữ"], ["other", "Khác"],
   ]);
   const descriptions = config.conditions.map((condition) => {

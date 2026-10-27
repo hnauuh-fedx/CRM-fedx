@@ -229,6 +229,42 @@ async function lockMonitor(tx: TransactionClient, monitorId: string) {
   `);
 }
 
+const interactionReasons = new Set<string>(["lead_opened", "care_activity_recorded", "lead_data_updated"]);
+
+/**
+ * Current transfer time of each monitor and whether its assignee already interacted with the lead.
+ * Interaction is otherwise only recorded when the warning/expiry job runs, so it is checked here too.
+ */
+export async function getReassignmentWarningStates(monitorIds: string[], now = new Date()) {
+  const states = new Map<string, { dueAt: Date; interacted: boolean; hasSecondWarning: boolean }>();
+  if (monitorIds.length === 0) return states;
+  const monitors = await prisma.automation_reassignment_monitors.findMany({
+    where: { id: { in: monitorIds } },
+    select: { id: true, status: true, completion_reason: true, lead_id: true, assignee_id: true, assignment_id: true, created_at: true, reassignment_due_at: true, policy_snapshot: true },
+  });
+  const assignments = await prisma.lead_assignments.findMany({
+    where: { id: { in: monitors.map((monitor) => monitor.assignment_id) } },
+    select: { id: true, assigned_at: true, first_opened_at: true },
+  });
+  const assignmentById = new Map(assignments.map((assignment) => [assignment.id, assignment]));
+  await Promise.all(monitors.map(async (monitor) => {
+    let interacted = monitor.status === "completed" && interactionReasons.has(monitor.completion_reason ?? "");
+    const policy = parsePolicy(monitor.policy_snapshot);
+    const assignment = assignmentById.get(monitor.assignment_id);
+    if (!interacted && policy && assignment && ["pending", "warned"].includes(monitor.status) && monitor.reassignment_due_at > now) {
+      interacted = Boolean(await findAssignmentInteraction(prisma, {
+        leadId: monitor.lead_id,
+        assigneeId: monitor.assignee_id,
+        assignedAt: assignment.assigned_at ?? monitor.created_at,
+        firstOpenedAt: assignment.first_opened_at,
+        criterion: policy.interactionCriterion,
+      }));
+    }
+    states.set(monitor.id, { dueAt: monitor.reassignment_due_at, interacted, hasSecondWarning: policy?.secondWarningEnabled === true });
+  }));
+  return states;
+}
+
 export async function processReassignmentWarning(
   monitorId: string,
   now = new Date(),
@@ -315,6 +351,9 @@ export async function processReassignmentWarning(
         title: warningKind === "second" ? "Cảnh báo lần hai: Lead sắp được chuyển" : "Lead sắp được chuyển cho nhân viên khác",
         content: renderedContent,
         type: warningKind === "second" ? "automation_reassignment_second_warning" : "automation_reassignment_warning",
+        lead_id: monitor.lead_id,
+        reassignment_monitor_id: monitor.id,
+        action_due_at: monitor.reassignment_due_at,
       },
     });
     const emailEnabled = warningKind === "second" ? policy.secondWarningEmailEnabled === true : policy.warningEmailEnabled === true;

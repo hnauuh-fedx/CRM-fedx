@@ -8,3 +8,7 @@ export function getPersonalNotifications(accessToken: string) {
 export function markNotificationRead(notificationId: string, accessToken: string) {
   return apiRequest<{ id: string }>(`/notifications/${notificationId}/read`, { method: "PATCH" }, accessToken);
 }
+
+export function hideNotificationCountdown(notificationId: string, accessToken: string) {
+  return apiRequest<{ id: string }>(`/notifications/${notificationId}/countdown/hide`, { method: "PATCH" }, accessToken);
+}

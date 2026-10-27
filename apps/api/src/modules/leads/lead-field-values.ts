@@ -39,7 +39,7 @@ export function parseLeadFieldText(key: string, text: string): unknown {
 export async function findEmptyLeadFields(tx: TransactionClient, leadId: string, keys: string[]) {
   if (!keys.length) return [];
   // Sequential on purpose: queries on one transaction client must not run concurrently.
-  const lead = await tx.leads.findUnique({ where: { id: leadId }, select: { cccd: true, temperature: true } });
+  const lead = await tx.leads.findUnique({ where: { id: leadId }, select: { cccd: true, temperature: true, origin_id: true } });
   const profile = await tx.student_profiles.findUnique({ where: { lead_id: leadId } });
   const admission = await tx.admission_profiles.findUnique({ where: { lead_id: leadId } });
   const addresses = await tx.addresses.findMany({ where: { lead_id: leadId }, orderBy: { id: "asc" } });
@@ -49,6 +49,7 @@ export async function findEmptyLeadFields(tx: TransactionClient, leadId: string,
   const current = (key: string): unknown => {
     if (key === "tags") return tagCount > 0 ? true : null;
     if (leadColumns[key]) return lead?.[leadColumns[key]];
+    if (key === "originId") return lead?.origin_id;
     const match = /^(\w+)\.(\w+)/.exec(catalogFields.get(key)?.storage ?? "");
     if (!match) return null;
     const [, table, column] = match;
@@ -69,6 +70,22 @@ export async function findEmptyLeadFields(tx: TransactionClient, leadId: string,
   });
 }
 
+/** Nhóm nguồn answered by name: reuse the program's group with that name, or create it (as webhooks do). */
+async function resolveOriginId(tx: TransactionClient, institutionProgramId: string | null, value: unknown) {
+  const name = typeof value === "string" ? value.trim().slice(0, 150) : "";
+  if (!name || !institutionProgramId) return undefined;
+  const normalizedName = name.toLowerCase();
+  const existing = await tx.lead_origins.findFirst({
+    where: { institution_program_id: institutionProgramId, OR: [{ normalized_name: normalizedName }, ...(/^[0-9a-f-]{36}$/i.test(name) ? [{ id: name }] : [])] },
+    select: { id: true },
+  });
+  if (existing) return existing.id;
+  return (await tx.lead_origins.create({
+    data: { institution_program_id: institutionProgramId, name, normalized_name: normalizedName },
+    select: { id: true },
+  })).id;
+}
+
 /** Writes typed Lead form values (from `parseLeadFieldText`) to the Lead and its related tables. */
 export async function writeLeadFieldValues(
   tx: TransactionClient,
@@ -76,11 +93,15 @@ export async function writeLeadFieldValues(
   institutionProgramId: string | null,
   values: Record<string, unknown>,
 ) {
-  const leadData = Object.fromEntries(
+  const leadData: Record<string, unknown> = Object.fromEntries(
     Object.entries(values).filter(([key]) => leadColumns[key]).map(([key, value]) => [leadColumns[key], value]),
   );
+  if (Object.hasOwn(values, "originId")) {
+    const originId = await resolveOriginId(tx, institutionProgramId, values.originId);
+    if (originId) leadData.origin_id = originId;
+  }
   if (Object.keys(leadData).length) await tx.leads.update({ where: { id: leadId }, data: { ...leadData, updated_at: new Date() } });
-  const related = Object.fromEntries(Object.entries(values).filter(([key]) => !leadColumns[key]));
+  const related = Object.fromEntries(Object.entries(values).filter(([key]) => !leadColumns[key] && key !== "originId"));
   return {
     ...(await patchCandidateInformation(tx, leadId, related)),
     ...(await patchAdmissionInformation(tx, leadId, institutionProgramId, related)),

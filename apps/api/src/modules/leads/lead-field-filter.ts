@@ -1,4 +1,5 @@
-import { leadFormFieldCatalog, type LeadSystemField } from "@admission-crm/shared/lead-form-field-catalog";
+import { getLeadFieldGroup } from "@admission-crm/shared/lead-field-groups";
+import { leadFormFieldCatalog, leadSourceFieldGroup, type LeadSystemField } from "@admission-crm/shared/lead-form-field-catalog";
 
 import type { Prisma } from "../../generated/prisma/client";
 
@@ -25,8 +26,10 @@ export type LeadFieldPredicate =
   | { type: "range"; gte?: number | Date; gt?: number | Date; lte?: number | Date; lt?: number | Date }
   | { type: "hasValue" };
 
-/** The program is fixed by the list scope, so it is never a useful filter. */
-const nonFilterableKeys = new Set(["institutionProgramId"]);
+/** The program is fixed by the list scope; the source group URL is only read while a webhook is received. */
+const nonFilterableKeys = new Set(["institutionProgramId", "sourceGroupUrl"]);
+/** Lead form fields plus the source data received from webhooks (Nhóm nguồn, Nguồn). */
+const filterableGroups = [...leadFormFieldCatalog, leadSourceFieldGroup];
 
 function kindOf(field: LeadSystemField): LeadFieldFilterKind {
   if (field.key === "tags") return "list";
@@ -36,7 +39,7 @@ function kindOf(field: LeadSystemField): LeadFieldFilterKind {
   return "text";
 }
 
-export const leadFieldFilterDefinitions: LeadFieldFilterDefinition[] = leadFormFieldCatalog.flatMap((group) =>
+export const leadFieldFilterDefinitions: LeadFieldFilterDefinition[] = filterableGroups.flatMap((group) =>
   group.fields
     .filter((field) => !nonFilterableKeys.has(field.key))
     .map((field) => ({
@@ -45,14 +48,14 @@ export const leadFieldFilterDefinitions: LeadFieldFilterDefinition[] = leadFormF
       kind: kindOf(field),
       // The Lead detail hides every address part without sensitive access, so filters follow it.
       isSensitive: Boolean(field.isSensitive) || field.storage.startsWith("addresses."),
-      groupKey: group.id,
-      groupLabel: group.label,
+      groupKey: getLeadFieldGroup(field.key)?.id ?? group.id,
+      groupLabel: getLeadFieldGroup(field.key)?.label ?? group.label,
       ...(field.optionSource ? { optionSource: field.optionSource } : {}),
     })),
 );
 
 const definitionByKey = new Map(leadFieldFilterDefinitions.map((field) => [field.key, field]));
-const storageByKey = new Map(leadFormFieldCatalog.flatMap((group) => group.fields).map((field) => [field.key, field.storage]));
+const storageByKey = new Map(filterableGroups.flatMap((group) => group.fields).map((field) => [field.key, field.storage]));
 
 export function getLeadFieldFilterDefinition(key: string) {
   return definitionByKey.get(key);
@@ -90,6 +93,8 @@ function locate(key: string): FieldLocation | undefined {
   if (table === "student_profiles") return related((inner) => ({ student_profiles: { is: inner } }));
   if (table === "admission_profiles") return related((inner) => ({ admission_profiles: { is: inner } }));
   if (table === "utm_trackings") return related((inner) => ({ utm_trackings: { some: inner } }));
+  // "Nguồn" is recorded on every source occurrence of the Lead; any occurrence may match.
+  if (table === "lead_source_occurrences") return related((inner) => ({ lead_source_occurrences: { some: inner } }));
   if (table === "addresses" && addressTypes[key]) {
     return related((inner) => ({ addresses: { some: { type: addressTypes[key], ...inner } } }));
   }

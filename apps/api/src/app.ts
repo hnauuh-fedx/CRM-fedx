@@ -12,6 +12,7 @@ import { auditLogsRouter } from "./modules/audit/audit-logs.router";
 import { campaignsRouter } from "./modules/campaigns/campaigns.router";
 import { customerListsRouter } from "./modules/customer-lists/customer-lists.router";
 import { formFieldsRouter, formsRouter } from "./modules/campaigns/forms.router";
+import { leadChannelsRouter } from "./modules/campaigns/lead-channel.router";
 import { MarketingFormConfigError } from "./modules/campaigns/marketing-form-config.validation";
 import {
   leadSourcesRouter,
@@ -74,6 +75,7 @@ app.use("/api/customer-lists", customerListsRouter);
 app.use("/api/forms", formsRouter);
 app.use("/api/form-fields", formFieldsRouter);
 app.use("/api/lead-sources", leadSourcesRouter);
+app.use("/api/lead-channels", leadChannelsRouter);
 app.use("/api/marketing-forms", marketingFormsRouter);
 app.use("/api/public", publicMarketingFormsRouter);
 app.use("/api/dashboard", dashboardRouter);

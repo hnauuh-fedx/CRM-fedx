@@ -90,7 +90,7 @@ async function main() {
       body: JSON.stringify(payload),
     });
     const accepted = await acceptedResponse.json() as any;
-    equal(acceptedResponse.status, 202, "Public endpoint phải ACK 202.");
+    equal(acceptedResponse.status, 200, "Public endpoint phải ACK 200.");
     check(typeof accepted.data.request_id === "string", "ACK phải có request_id.");
     equal(accepted.data.record_id, undefined, "ACK async không được trả record_id.");
     const requestId = accepted.data.request_id as string;
@@ -117,7 +117,7 @@ async function main() {
       body: JSON.stringify({ source: "Website", phone: payload.phone, name: "Async Lead" }),
     });
     const duplicate = await duplicateResponse.json() as any;
-    equal(duplicateResponse.status, 202, "Retry cùng semantic payload phải trả 202.");
+    equal(duplicateResponse.status, 200, "Retry cùng semantic payload phải trả 200.");
     equal(duplicate.data.request_id, requestId, "Retry phải trả request gốc.");
     equal(duplicate.data.duplicate, true, "Retry phải được đánh dấu duplicate.");
     equal(queued.length, beforeDuplicateQueueCount, "Request terminal không được enqueue lần nữa.");
@@ -134,17 +134,17 @@ async function main() {
     const concurrentPayload = { ...payload, phone: `097${Date.now().toString().slice(-7)}` };
     const queuedBeforeConcurrent = queued.length;
     const concurrentResults = await Promise.all([1, 2].map(() => fetch(`${baseUrl}/webhooks/${webhook.webhook_key}`, { method: "POST", headers: { "Content-Type": "application/json", "X-Webhook-Secret": secret, "Idempotency-Key": concurrentKey }, body: JSON.stringify(concurrentPayload) }).then(async (response) => ({ status: response.status, body: await response.json() as any }))));
-    equal(concurrentResults.every((result) => result.status === 202), true, "Hai request concurrent đều nhận ACK an toàn.");
+    equal(concurrentResults.every((result) => result.status === 200), true, "Hai request concurrent đều nhận ACK an toàn.");
     equal(concurrentResults[0].body.data.request_id, concurrentResults[1].body.data.request_id, "DB unique phải hợp nhất concurrent idempotency.");
     equal(await prisma.webhook_requests.count({ where: { webhook_id: webhook.id, idempotency_key: concurrentKey } }), 1, "Chỉ có một logical request.");
     equal(queued.length - queuedBeforeConcurrent, 1, "Concurrent idempotency chỉ enqueue một job.");
 
     const otherWebhookResponse = await fetch(`${baseUrl}/webhooks/${webhookB.webhook_key}`, { method: "POST", headers: { "Content-Type": "application/json", "X-Webhook-Secret": secret, "Idempotency-Key": concurrentKey }, body: JSON.stringify({ ...concurrentPayload, phone: `096${Date.now().toString().slice(-7)}` }) });
-    equal(otherWebhookResponse.status, 202, "Key giống nhau ở webhook khác không conflict.");
+    equal(otherWebhookResponse.status, 200, "Key giống nhau ở webhook khác không conflict.");
     equal(await prisma.webhook_requests.count({ where: { idempotency_key: concurrentKey } }), 2, "Idempotency phải scope theo webhook.");
 
     const noKeyResponse = await fetch(`${baseUrl}/webhooks/${webhook.webhook_key}`, { method: "POST", headers: { "Content-Type": "application/json", "X-Webhook-Secret": secret }, body: JSON.stringify({ ...payload, phone: `095${Date.now().toString().slice(-7)}` }) });
-    equal(noKeyResponse.status, 202, "Thiếu idempotency key vẫn phải hoạt động.");
+    equal(noKeyResponse.status, 200, "Thiếu idempotency key vẫn phải hoạt động.");
 
     const replayPhone = `094${Date.now().toString().slice(-7)}`;
     const replayResponse = await fetch(`${baseUrl}/webhooks/${webhook.webhook_key}`, { method: "POST", headers: { "Content-Type": "application/json", "X-Webhook-Secret": secret, "Idempotency-Key": `replay-${suffix}` }, body: JSON.stringify({ ...payload, phone: replayPhone }) });

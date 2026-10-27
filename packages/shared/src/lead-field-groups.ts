@@ -1,22 +1,25 @@
-import { leadFormFieldCatalog } from "./lead-form-field-catalog.js";
+import { leadFieldConfigurationCatalog, leadSourceFieldGroup } from "./lead-form-field-catalog.js";
 
 export type LeadFieldGroupRef = { id: string; label: string };
 
-/** Form clusters in the same order as the Lead form; custom field groups reuse these ids as `group_key`. */
-export const leadFieldGroups: LeadFieldGroupRef[] = leadFormFieldCatalog.map((group) => ({ id: group.id, label: group.label }));
+/**
+ * Clusters in the order of the Lead field configuration page (form groups plus "Nguồn khách hàng");
+ * custom field groups reuse these ids as `group_key`.
+ */
+export const leadFieldGroups: LeadFieldGroupRef[] = leadFieldConfigurationCatalog.map((group) => ({ id: group.id, label: group.label }));
 
-const groupByFieldKey = new Map<string, LeadFieldGroupRef>(
-  leadFormFieldCatalog.flatMap((group) => group.fields.map((field) => [field.key, { id: group.id, label: group.label }] as const)),
-);
+const sourceGroup: LeadFieldGroupRef = { id: leadSourceFieldGroup.id, label: leadSourceFieldGroup.label };
+const groupByFieldKey = new Map<string, LeadFieldGroupRef>([
+  ...leadFieldConfigurationCatalog.flatMap((group) => group.fields.map((field) => [field.key, { id: group.id, label: group.label }] as const)),
+  // Nguồn học viên is a basic Lead form input, but every field picker lists it with the other source fields.
+  ["sourceId", sourceGroup],
+]);
 
 /** Fields that are not inputs of the Lead form but still belong to one of its clusters. */
 const extraFieldGroups: Record<string, string> = {
   leadCode: "basic",
   createdAt: "basic",
   secondaryPhones: "basic",
-  source: "basic",
-  sourceGroupUrl: "basic",
-  originId: "basic",
   status: "classification",
   assigneeId: "classification",
   secondaryAssigneeId: "classification",

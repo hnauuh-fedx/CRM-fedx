@@ -13,7 +13,7 @@
     "dev": "tsx watch src/server.ts",
     "start": "tsx src/server.ts",
     "typecheck": "tsc --noEmit",
-    "test:auth": "tsx --test src/modules/auth/session-tokens.test.ts",
+    "test:auth": "tsx --test src/modules/auth/session-tokens.test.ts src/modules/auth/password-policy.test.ts",
     "test:integration:auth": "tsx src/integration/auth-session.integration.ts",
     "maintenance:auth-sessions": "tsx src/maintenance/cleanup-auth-sessions.ts",
     "prisma:generate": "prisma generate",

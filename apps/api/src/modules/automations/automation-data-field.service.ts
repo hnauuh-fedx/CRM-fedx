@@ -25,6 +25,7 @@ const legacySystemFieldAliases: Record<string, string> = {
 
 const derivedSystemFieldPaths: Record<string, string> = {
   sourceId: "source.id",
+  originId: "origin.id",
   pipelineStageId: "pipelineStage.id",
   assigneeId: "assignee.id",
   institutionProgramName: "institutionProgram.name",
@@ -76,6 +77,9 @@ export async function getAutomationLeadData(
     for (const [key, path] of Object.entries(derivedSystemFieldPaths)) {
       values.set(`system:${key}`, readPath(detail, path));
     }
+    // "Nguồn": the list values of every occurrence, so "equals" matches when any occurrence has the value.
+    const occurrences = (detail as { sourceOccurrences?: Array<{ channelId: string | null }> }).sourceOccurrences ?? [];
+    values.set("system:source", [...new Set(occurrences.flatMap((occurrence) => (occurrence.channelId ? [occurrence.channelId] : [])))]);
     for (const [legacyKey, path] of Object.entries(legacySystemFieldAliases)) {
       values.set(legacyKey, readPath(detail, path));
     }

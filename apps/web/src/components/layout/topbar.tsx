@@ -1,4 +1,4 @@
-import { ChevronDown, LogOut, Menu, PanelLeftClose, PanelLeftOpen } from "lucide-react";
+import { ChevronDown, KeyRound, LogOut, Menu, PanelLeftClose, PanelLeftOpen } from "lucide-react";
 import { useLayoutEffect, useRef, useState } from "react";
 import { NavLink } from "react-router-dom";
 
@@ -14,6 +14,7 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { cn } from "@/lib/utils";
+import { ChangePasswordDialog } from "@/modules/auth/change-password-dialog";
 import { useInstitutionProgram } from "@/modules/institutions/institution-program-context";
 import { PersonalNotificationsDialog } from "@/modules/notifications/components/personal-notifications-dialog";
 import type { AuthUser } from "@/types/auth";
@@ -90,7 +91,7 @@ export function Topbar({
 
       <div className="flex shrink-0 items-center gap-1">
         <PersonalNotificationsDialog accessToken={accessToken} />
-        <UserMenu user={user} onSignOut={onSignOut} />
+        <UserMenu user={user} accessToken={accessToken} onSignOut={onSignOut} />
       </div>
     </header>
   );
@@ -242,30 +243,38 @@ function ModuleTabs({ sections, activeSectionId }: ModuleTabsProps) {
   );
 }
 
-function UserMenu({ user, onSignOut }: { user: AuthUser; onSignOut: () => void }) {
+function UserMenu({ user, accessToken, onSignOut }: { user: AuthUser; accessToken: string; onSignOut: () => void }) {
+  const [isChangePasswordOpen, setChangePasswordOpen] = useState(false);
   return (
-    <DropdownMenu>
-      <DropdownMenuTrigger
-        aria-label={`Tài khoản ${user.fullName}`}
-        className="flex min-w-0 items-center gap-2 rounded-full p-1 transition-colors outline-none hover:bg-accent focus-visible:ring-2 focus-visible:ring-ring/50 data-[state=open]:bg-accent xl:rounded-lg xl:pr-2"
-      >
-        <Avatar>
-          <AvatarImage src={user.avatarUrl ?? undefined} alt="" />
-          <AvatarFallback className="text-xs">{getInitials(user.fullName)}</AvatarFallback>
-        </Avatar>
-        <span className="hidden max-w-40 truncate text-sm font-medium xl:block">{user.fullName}</span>
-      </DropdownMenuTrigger>
-      <DropdownMenuContent align="end" sideOffset={6} className="w-60">
-        <DropdownMenuLabel className="flex flex-col gap-0.5 font-normal">
-          <span className="truncate text-sm font-medium">{user.fullName}</span>
-          <span className="truncate text-xs text-muted-foreground">{user.email}</span>
-        </DropdownMenuLabel>
-        <DropdownMenuSeparator />
-        <DropdownMenuItem variant="destructive" onSelect={onSignOut}>
-          <LogOut aria-hidden="true" />
-          Đăng xuất
-        </DropdownMenuItem>
-      </DropdownMenuContent>
-    </DropdownMenu>
+    <>
+      <DropdownMenu>
+        <DropdownMenuTrigger
+          aria-label={`Tài khoản ${user.fullName}`}
+          className="flex min-w-0 items-center gap-2 rounded-full p-1 transition-colors outline-none hover:bg-accent focus-visible:ring-2 focus-visible:ring-ring/50 data-[state=open]:bg-accent xl:rounded-lg xl:pr-2"
+        >
+          <Avatar>
+            <AvatarImage src={user.avatarUrl ?? undefined} alt="" />
+            <AvatarFallback className="text-xs">{getInitials(user.fullName)}</AvatarFallback>
+          </Avatar>
+          <span className="hidden max-w-40 truncate text-sm font-medium xl:block">{user.fullName}</span>
+        </DropdownMenuTrigger>
+        <DropdownMenuContent align="end" sideOffset={6} className="w-60">
+          <DropdownMenuLabel className="flex flex-col gap-0.5 font-normal">
+            <span className="truncate text-sm font-medium">{user.fullName}</span>
+            <span className="truncate text-xs text-muted-foreground">{user.email}</span>
+          </DropdownMenuLabel>
+          <DropdownMenuSeparator />
+          <DropdownMenuItem onSelect={() => setChangePasswordOpen(true)}>
+            <KeyRound aria-hidden="true" />
+            Đổi mật khẩu
+          </DropdownMenuItem>
+          <DropdownMenuItem variant="destructive" onSelect={onSignOut}>
+            <LogOut aria-hidden="true" />
+            Đăng xuất
+          </DropdownMenuItem>
+        </DropdownMenuContent>
+      </DropdownMenu>
+      <ChangePasswordDialog open={isChangePasswordOpen} onOpenChange={setChangePasswordOpen} accessToken={accessToken} email={user.email} />
+    </>
   );
 }

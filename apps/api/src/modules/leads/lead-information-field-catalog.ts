@@ -1,8 +1,9 @@
+import { getLeadFieldGroup } from "@admission-crm/shared/lead-field-groups";
 import { leadFormFieldCatalog, type LeadSystemField } from "@admission-crm/shared/lead-form-field-catalog";
 
 const extraFields: LeadSystemField[] = [
   { key: "secondaryPhones", label: "Số điện thoại phụ", dataType: "MULTI_SELECT", storage: "leads.secondary_phones", isSensitive: true },
-  { key: "originId", label: "Nguồn tiếp cận", dataType: "SELECT", storage: "leads.origin_id" },
+  { key: "originId", label: "Nhóm nguồn", dataType: "SELECT", storage: "leads.origin_id" },
   { key: "leadScore", label: "Điểm Lead", dataType: "NUMBER", storage: "leads.lead_score" },
   { key: "leadCode", label: "Mã Lead", dataType: "TEXT", storage: "leads.lead_code" },
   { key: "assigneeId", label: "Sale phụ trách", dataType: "SELECT", storage: "leads.assigned_to" },
@@ -18,8 +19,16 @@ const extraFields: LeadSystemField[] = [
 ];
 
 export const leadInformationSystemFields = [
-  ...leadFormFieldCatalog.flatMap((group) => group.fields.map((field) => ({ ...field, groupKey: group.id, groupLabel: group.label }))),
-  ...extraFields.map((field) => ({ ...field, groupKey: field.storage.startsWith("admission_profiles.") ? "admission" : "basic", groupLabel: field.storage.startsWith("admission_profiles.") ? "Thông tin tuyển sinh" : "Thông tin cơ bản" })),
+  ...leadFormFieldCatalog.flatMap((group) => group.fields.map((field) => ({
+    ...field,
+    groupKey: getLeadFieldGroup(field.key)?.id ?? group.id,
+    groupLabel: getLeadFieldGroup(field.key)?.label ?? group.label,
+  }))),
+  ...extraFields.map((field) => {
+    const group = getLeadFieldGroup(field.key)
+      ?? (field.storage.startsWith("admission_profiles.") ? { id: "admission", label: "Thông tin tuyển sinh" } : { id: "basic", label: "Thông tin cơ bản" });
+    return { ...field, groupKey: group.id, groupLabel: group.label };
+  }),
 ];
 
 export const informationReadOnlyReasons: Record<string, string> = {

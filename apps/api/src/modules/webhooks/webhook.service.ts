@@ -42,7 +42,12 @@ export type FieldMetadata = {
   groupKey?: string;
   groupLabel?: string;
   customFieldId?: string;
+  /** Configured custom field code, suggested as the incoming key when mapping. */
+  fieldKey?: string;
   options?: string[];
+  /** Filled by the system (e.g. Nhóm nguồn); listed but never accepted in a mapping. */
+  readOnly?: boolean;
+  readOnlyReason?: string;
   /** Option labels, so incoming values can match either the code or the label. */
   choices?: Array<{ code: string; label: string }>;
 };
@@ -212,6 +217,7 @@ export async function getAllowedFieldMetadata(
       groupKey: group.id,
       groupLabel: group.label,
       customFieldId: field.id,
+      fieldKey: field.field_key,
       options: choices.map((choice) => choice.code),
       choices,
     };
@@ -241,7 +247,7 @@ export async function hasOnlyAllowedWebhookMappings(
   mappings: WebhookInput["mappings"],
 ) {
   const allowed = new Set(
-    (await getAllowedFieldMetadata(programId)).map((field) => field.key),
+    (await getAllowedFieldMetadata(programId)).filter((field) => !field.readOnly).map((field) => field.key),
   );
   return mappings.every((mapping) => allowed.has(mapping.crmField));
 }
@@ -619,7 +625,10 @@ type ResolvedFieldValue = {
   unmatchedRaw?: string;
 };
 type MajorReference = { id: string; name: string; code: string | null };
-type ReferenceLookups = { majors: () => Promise<MajorReference[]> };
+type ReferenceLookups = {
+  majors: () => Promise<MajorReference[]>;
+  sources: () => Promise<Array<{ id: string; name: string }>>;
+};
 
 /** These decide whether a Lead can be identified or created, so they are never stored as unmatched. */
 const strictFieldKeys = new Set(["fullName", "phone", "source", "sourceGroupUrl"]);
@@ -722,6 +731,13 @@ async function resolveFieldValue(
       const gender = genderAliases[normalizeVietnameseText(text)];
       return gender ? matched(gender) : unmatched(value);
     }
+    if (metadata.key === "sourceId") {
+      // Nguồn học viên of the webhook's program, matched by name like other reference fields.
+      const sources = await lookups.sources();
+      const sourceId = matchChoice(text, sources.map((source) => ({ code: source.id, label: source.name })))
+        ?? sources.find((source) => source.id === text)?.id;
+      return sourceId ? matched(sourceId) : unmatched(value);
+    }
     if (metadata.key === "majorId") {
       const majors = await lookups.majors();
       const majorId = matchChoice(
@@ -781,7 +797,13 @@ export async function mapWebhookPayload(
   const unmatchedValues: UnmatchedFieldValue[] = [];
   const resolvedFieldKeys: string[] = [];
   let majors: MajorReference[] | undefined;
+  let sources: Array<{ id: string; name: string }> | undefined;
   const lookups: ReferenceLookups = {
+    sources: async () => (sources ??= await prisma.lead_sources.findMany({
+      where: { institution_program_id: programId },
+      select: { id: true, name: true },
+      orderBy: [{ name: "asc" }, { id: "asc" }],
+    })),
     majors: async () => (majors ??= await prisma.majors.findMany({
       where: { OR: [{ institution_program_id: programId }, { institution_program_id: null }] },
       select: { id: true, name: true, code: true },

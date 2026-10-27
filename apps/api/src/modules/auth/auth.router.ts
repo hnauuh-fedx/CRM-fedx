@@ -1,9 +1,10 @@
+import { changePasswordSchema } from "@admission-crm/shared/password-policy";
 import { Router } from "express";
 import { z } from "zod";
 
 import { requireAuthentication } from "../../middlewares/auth.middleware";
 import { getAuthUser, loginWithPassword } from "./auth.service";
-import { logoutAuthSession, refreshAuthSession } from "./auth-session.service";
+import { changeOwnPassword, logoutAuthSession, refreshAuthSession } from "./auth-session.service";
 import { clearRefreshCookie, protectAuthMutation, readRefreshCookie, writeRefreshCookie } from "./auth-cookie";
 
 const loginSchema = z.object({
@@ -71,4 +72,24 @@ for (const [path, all] of [["/logout", false], ["/logout-all", true]] as const) 
 
 authRouter.get("/me", requireAuthentication, (request, response) => {
   response.json({ user: request.authUser });
+});
+
+// Bearer-authenticated, so it is not exposed to cookie-based cross-site requests.
+authRouter.post("/change-password", requireAuthentication, async (request, response, next) => {
+  try {
+    const parsed = changePasswordSchema.safeParse(request.body);
+    if (!parsed.success) {
+      response.status(400).json({ message: parsed.error.issues[0]?.message ?? "Dữ liệu đổi mật khẩu không hợp lệ." });
+      return;
+    }
+    // 400, not 401: a wrong current password must not trigger the re-login flow.
+    const result = await changeOwnPassword(request.authUser!.id, request.authSessionId!, parsed.data.currentPassword, parsed.data.newPassword, request.ip);
+    if (!result.ok) {
+      response.status(400).json({ message: "Mật khẩu hiện tại không chính xác.", field: "currentPassword" });
+      return;
+    }
+    response.json({ message: "Đã đổi mật khẩu. Các thiết bị khác đã được đăng xuất." });
+  } catch (error) {
+    next(error);
+  }
 });

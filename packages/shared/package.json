@@ -21,7 +21,9 @@
     "./display-layout": "./src/display-layout.ts",
     "./access-scope": "./src/access-scope.ts",
     "./lead-phone": "./src/lead-phone.ts",
-    "./lead-source": "./src/lead-source.ts"
+    "./lead-source": "./src/lead-source.ts",
+    "./lead-channel": "./src/lead-channel.ts",
+    "./password-policy": "./src/password-policy.ts"
   },
   "dependencies": {
     "zod": "4.4.3"

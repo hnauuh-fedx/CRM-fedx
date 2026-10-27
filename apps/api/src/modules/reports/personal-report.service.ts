@@ -32,8 +32,8 @@ import {
 } from "./report-filter-conditions";
 import {
   isReportLeadField,
-  isReportTagField,
-  reportTagConditionSql,
+  isReportMultiValueField,
+  reportMultiValueConditionSql,
   reportLeadCategoryCondition,
   reportLeadFieldExpression,
   reportLeadFieldValuesQuery,
@@ -470,7 +470,7 @@ const leadPresenceColumns: Record<string, string> = { ASSIGNEE: "assigned_to", S
 function typedReportConditionSql(datasetKey: PersonalReportDatasetKey, condition: PersonalReportFilterCondition) {
   const field = personalReportDatasetDefinitions[datasetKey].fields.find((item) => item.key === condition.fieldKey);
   if (!field) throw new Error("Trường báo cáo không nằm trong danh mục cho phép.");
-  if (isReportTagField(condition.fieldKey)) return reportTagConditionSql(condition);
+  if (isReportMultiValueField(condition.fieldKey)) return reportMultiValueConditionSql(condition.fieldKey, condition);
   const presenceColumn = leadPresenceColumns[condition.fieldKey];
   if (isPresenceOperator(condition.operator) && presenceColumn && datasetKey !== "STUDENTS") {
     const presence = condition.operator === "HAS_NO_VALUE"

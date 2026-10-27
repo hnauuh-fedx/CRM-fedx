@@ -2537,7 +2537,7 @@ const crmFieldChoices: FieldPickerChoice[] = [
       "Đã tốt nghiệp Đại học",
     ],
   },
-  { value: "source_id", label: "Nguồn lead", defaultType: "select" },
+  { value: "source_id", label: "Nguồn học viên", defaultType: "select" },
   {
     value: "institution_program_id",
     label: "Chương trình",

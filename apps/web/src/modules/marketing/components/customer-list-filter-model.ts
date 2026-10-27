@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { leadFormFieldCatalog } from "@admission-crm/shared/lead-form-field-catalog";
+import { leadFormFieldCatalog, leadSourceFieldGroup } from "@admission-crm/shared/lead-form-field-catalog";
 import type {
   CustomerListFilterField,
   CustomerListFilterOperator,
@@ -29,8 +29,9 @@ const legacyKeys = new Set(legacyFilterFields.map((field) => field.value));
 /** Every other Lead form field; tags are only filterable in the Lead list. */
 export const filterFields: CustomerListFilterFieldDefinition[] = [
   ...legacyFilterFields,
-  ...leadFormFieldCatalog.flatMap((group) => group.fields)
-    .filter((field) => !legacyKeys.has(field.key) && !["institutionProgramId", "tags"].includes(field.key))
+  // Lead form fields plus Nhóm nguồn / Nguồn received from webhooks.
+  ...[...leadFormFieldCatalog, leadSourceFieldGroup].flatMap((group) => group.fields)
+    .filter((field) => !legacyKeys.has(field.key) && !["institutionProgramId", "tags", "sourceGroupUrl"].includes(field.key))
     .map((field): CustomerListFilterFieldDefinition => ({
       value: field.key,
       label: field.label,
