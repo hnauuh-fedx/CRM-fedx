@@ -160,7 +160,7 @@ try {
     await click("#fixture-program"); await wait(`document.querySelector('[role="alertdialog"]')`);
     await button("Ở lại");
     await wait(`!document.querySelector('[role="alertdialog"]')`);
-    assert.equal(await evaluate(`localStorage.getItem('admission-crm.selected-institution-program-id')`), programA);
+    assert.equal(await evaluate(`localStorage.getItem('admission-crm.selected-institution-program-id:fixture')`), programA);
     await click("#fixture-program"); await wait(`document.querySelector('[role="alertdialog"]')`);
     await button("Bỏ thay đổi và tiếp tục");
     await wait(`document.querySelector('#fixture-list')`);

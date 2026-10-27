@@ -24,6 +24,18 @@ try {
   const { command, evaluate, wait, click, fill } = browser;
   await command("Page.navigate", { url: `http://127.0.0.1:${server.address().port}` });
   await wait("document.querySelector('#preference-inboundDuplicate')");
+  const assertTabBounds = async width => {
+    const geometry = await evaluate(`(() => {
+      const list = document.querySelector('[role=tablist]');
+      const bounds = list.getBoundingClientRect();
+      return { listHeight: bounds.height, tabs: [...list.querySelectorAll('[role=tab]')].map(tab => {
+        const rect = tab.getBoundingClientRect();
+        return { label: tab.textContent, top: rect.top - bounds.top, bottom: rect.bottom - bounds.top, height: rect.height };
+      }) };
+    })()`);
+    assert.ok(geometry.tabs.every(tab => tab.top >= 0 && tab.bottom <= geometry.listHeight), 'Tabs must stay inside the tablist at '+width+': '+JSON.stringify(geometry));
+  };
+  await assertTabBounds(1440);
   assert.ok(await evaluate("document.body.textContent.includes('Đang cấu hình: Chương trình A')"));
   assert.equal(await evaluate("window.preferenceSaves.length"), 0);
   const tab = async label => { const id = await evaluate(`[...document.querySelectorAll('[role=tab]')].find(e=>e.textContent===${JSON.stringify(label)})?.id`); assert.ok(id); await click(`[id="${id}"]`); };
@@ -38,9 +50,11 @@ try {
   await wait("!document.querySelector('[role=alertdialog]')");
   await click('button[type="submit"]');
   await wait("window.preferenceSaves.length===1");
+  await wait("document.body.textContent.includes('Đã lưu cấu hình.') && !document.querySelector('#preference-assignment').disabled && document.querySelector('button[type=submit]').disabled");
   assert.equal(await evaluate("window.preferenceSaves[0].value.assignment"), false);
   assert.ok(await evaluate("window.preferenceSaves[0].programId.endsWith('0001')"));
   await click("#preference-assignment");
+  await wait("!document.querySelector('button[type=submit]').disabled");
   await evaluate("window.conflictNext=true");
   await click('button[type="submit"]');
   await wait("document.body.textContent.includes('Cấu hình đã được người khác thay đổi')");
@@ -62,6 +76,7 @@ try {
   for (const width of [1440, 390, 375]) {
     await command('Emulation.setDeviceMetricsOverride', { width, height: 1000, deviceScaleFactor: 1, mobile: width < 500 });
     assert.ok(await evaluate('document.documentElement.scrollWidth <= innerWidth'), 'No overflow at '+width);
+    await assertTabBounds(width);
     const shot = await command('Page.captureScreenshot', { captureBeyondViewport: true });
     await writeFile(resolve(artifacts, 'settings-'+width+'.png'), Buffer.from(shot.data, 'base64'));
   }

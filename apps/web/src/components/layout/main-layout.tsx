@@ -4,6 +4,7 @@ import { Outlet, useLocation } from "react-router-dom";
 import { useAuth } from "@/modules/auth/auth-context";
 import { RouteLoadingState } from "@/routes/route-loading-state";
 import { InstitutionProgramProvider, useInstitutionProgram } from "@/modules/institutions/institution-program-context";
+import { InstitutionProgramGate } from "@/modules/institutions/institution-program-gate";
 import { getActiveNavigationSection, getNavigationSections } from "./navigation";
 import { Sidebar } from "./sidebar";
 import { Topbar } from "./topbar";
@@ -11,8 +12,10 @@ import { Topbar } from "./topbar";
 export function MainLayout() {
   const auth = useAuth();
   return (
-    <InstitutionProgramProvider accessToken={auth.accessToken!}>
-      <MainLayoutContent />
+    <InstitutionProgramProvider key={auth.user!.id} userId={auth.user!.id} allowedProgramIds={auth.user!.institutionProgramIds} accessToken={auth.accessToken!}>
+      <InstitutionProgramGate>
+        <MainLayoutContent />
+      </InstitutionProgramGate>
     </InstitutionProgramProvider>
   );
 }
@@ -76,17 +79,9 @@ function MainLayoutContent() {
         />
 
         <main id="main-content" className="flex-1 p-4 sm:p-5 lg:p-6" tabIndex={-1}>
-          {programContext.hasSelectedProgram ? (
-            <Suspense key={location.pathname} fallback={<RouteLoadingState />}>
-              <Outlet />
-            </Suspense>
-          ) : programContext.isLoading ? (
-            <RouteLoadingState />
-          ) : (
-            <p role="status" className="rounded-xl border bg-background p-6 text-sm text-muted-foreground">
-              Chưa có chương trình hoạt động để làm việc.
-            </p>
-          )}
+          <Suspense key={`${programContext.selectedProgramId}:${location.pathname}`} fallback={<RouteLoadingState />}>
+            <Outlet />
+          </Suspense>
         </main>
       </div>
     </div>

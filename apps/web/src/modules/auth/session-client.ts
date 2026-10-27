@@ -1,6 +1,6 @@
 import type { AuthSession, LoginInput } from "../../types/auth";
 import { ApiError } from "../../services/api-error";
-import { readSelectedInstitutionProgramId, storeSelectedInstitutionProgramId } from "../institutions/institution-program-storage";
+import { readSelectedInstitutionProgramId, setInstitutionProgramUser, storeSelectedInstitutionProgramId } from "../institutions/institution-program-storage";
 import { clearLegacyAccessTokens } from "./auth-storage";
 
 const apiUrl = import.meta.env.VITE_API_URL ?? "http://localhost:3000/api";
@@ -21,6 +21,7 @@ function emitSession() { window.dispatchEvent(new Event(sessionChangedEvent)); }
 export function forgetSession() {
   generation += 1;
   session = null;
+  setInstitutionProgramUser(null);
   validUntil = 0;
   suspended = false;
   acceptedTokens.clear();
@@ -33,9 +34,10 @@ function acceptSession(next: AuthSession) {
   if (session?.user.id !== next.user.id) acceptedTokens.clear();
   acceptedTokens.add(next.accessToken);
   if (acceptedTokens.size > 64) acceptedTokens.delete(acceptedTokens.values().next().value!);
+  setInstitutionProgramUser(next.user.id);
   const storedProgramId = readSelectedInstitutionProgramId();
-  if (!next.user.institutionProgramIds.includes(storedProgramId ?? "") && next.user.workingInstitutionProgramId) {
-    storeSelectedInstitutionProgramId(next.user.workingInstitutionProgramId);
+  if (storedProgramId && !next.user.institutionProgramIds.includes(storedProgramId)) {
+    storeSelectedInstitutionProgramId(null);
   }
   session = next;
   validUntil = Date.now() + next.expiresIn * 1000;
@@ -72,7 +74,7 @@ async function withAuthLock<T>(run: () => Promise<T>): Promise<T> {
 async function authRequest<T>(path: string, body?: unknown): Promise<T> {
   const response = await fetch(`${apiUrl}/auth/${path}`, {
     method: "POST", credentials: "include", cache: "no-store", signal: AbortSignal.timeout(15_000),
-    headers: { "Content-Type": "application/json", "X-CRM-Auth": "1", ...(readSelectedInstitutionProgramId() ? { "X-Institution-Program-Id": readSelectedInstitutionProgramId()! } : {}) },
+    headers: { "Content-Type": "application/json", "X-CRM-Auth": "1", ...(path !== "login" && readSelectedInstitutionProgramId() ? { "X-Institution-Program-Id": readSelectedInstitutionProgramId()! } : {}) },
     body: body === undefined ? undefined : JSON.stringify(body),
   });
   if (!response.ok) {

@@ -3,8 +3,8 @@ import { apiRequest } from "./api";
 import type { AuthUser } from "@/types/auth";
 export { signInSession as login } from "@/modules/auth/session-client";
 
-export function getCurrentUser(accessToken: string) {
-  return apiRequest<{ user: AuthUser }>("/auth/me", {}, accessToken);
+export function getCurrentUser(accessToken: string, signal?: AbortSignal) {
+  return apiRequest<{ user: AuthUser }>("/auth/me", { signal }, accessToken);
 }
 
 export function changePassword(input: ChangePasswordInput, accessToken: string) {

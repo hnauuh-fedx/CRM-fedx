@@ -115,7 +115,7 @@ const LoginForm = ({ onLogin }: LoginFormProps) => {
                 Đăng nhập
               </CardTitle>
               <CardDescription className="text-sm font-normal text-muted-foreground">
-                Nhập thông tin tài khoản để tiếp tục vào Admission CRM.
+                Đăng nhập để tiếp tục với chương trình làm việc của bạn.
               </CardDescription>
             </div>
           </CardHeader>
@@ -179,7 +179,7 @@ const LoginForm = ({ onLogin }: LoginFormProps) => {
                       )}
                     />
                     <FieldLabel htmlFor="remember-device" className="cursor-pointer text-sm font-normal">
-                      Ghi nhớ thiết bị này
+                      Ghi nhớ đăng nhập trên thiết bị này
                     </FieldLabel>
                   </div>
                   <span className="text-end text-sm text-muted-foreground">Quên mật khẩu?</span>

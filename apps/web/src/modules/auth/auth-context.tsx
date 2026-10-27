@@ -1,7 +1,7 @@
-import { createContext, type PropsWithChildren, useCallback, useContext, useEffect, useMemo, useState } from "react";
+import { createContext, type PropsWithChildren, useCallback, useContext, useEffect, useMemo, useState, useSyncExternalStore } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 
-import { storeSelectedInstitutionProgramId } from "@/modules/institutions/institution-program-storage";
+import { readSelectedInstitutionProgramId, subscribeToInstitutionProgram } from "@/modules/institutions/institution-program-storage";
 import { ApiError, unauthorizedApiEvent } from "@/services/api";
 import { getCurrentUser } from "@/services/auth.service";
 import type { AuthSession, AuthUser, LoginInput } from "@/types/auth";
@@ -15,6 +15,9 @@ type AuthContextValue = {
   isRestoring: boolean;
   restoreError: string | null;
   retryRestore: () => void;
+  isProfileLoading: boolean;
+  profileError: string | null;
+  retryProfile: () => void;
   signIn: (input: LoginInput) => Promise<void>;
   signOut: () => Promise<void>;
   can: (permission: string) => boolean;
@@ -29,9 +32,10 @@ export function AuthProvider({ children }: PropsWithChildren) {
   const [restoreError, setRestoreError] = useState<string | null>(null);
   const [needsLogin, setNeedsLogin] = useState(false);
   const [actionError, setActionError] = useState<string | null>(null);
+  const selectedProgramId = useSyncExternalStore(subscribeToInstitutionProgram, readSelectedInstitutionProgramId);
   const profileQuery = useQuery({
-    queryKey: ["auth", "me", session?.user.id],
-    queryFn: () => getCurrentUser(session!.accessToken),
+    queryKey: ["auth", "me", session?.user.id, selectedProgramId],
+    queryFn: ({ signal }) => getCurrentUser(session!.accessToken, signal),
     enabled: Boolean(session) && !needsLogin,
   });
   const user = profileQuery.data?.user ?? session?.user ?? null;
@@ -72,9 +76,6 @@ export function AuthProvider({ children }: PropsWithChildren) {
   const signIn = useCallback(async (input: LoginInput) => {
     const previous = currentSession();
     const next = await signInSession(input);
-    if (next.user.workingInstitutionProgramId) {
-      storeSelectedInstitutionProgramId(next.user.workingInstitutionProgramId);
-    }
     if (!previous || previous.user.id !== next.user.id) {
       await queryClient.cancelQueries();
       queryClient.clear();
@@ -82,7 +83,9 @@ export function AuthProvider({ children }: PropsWithChildren) {
     setNeedsLogin(false);
     setRestoreError(null);
     setActionError(null);
-    queryClient.setQueryData(["auth", "me", next.user.id], { user: next.user });
+    // Login can return permissions for a default program. Fetch /me again with
+    // this account's remembered context before allowing business routes to mount.
+    void queryClient.invalidateQueries({ queryKey: ["auth", "me", next.user.id] });
     if (previous?.user.id === next.user.id) void queryClient.invalidateQueries();
   }, [queryClient]);
 
@@ -100,9 +103,12 @@ export function AuthProvider({ children }: PropsWithChildren) {
 
   const value = useMemo<AuthContextValue>(() => ({
     accessToken: session?.accessToken ?? null, user, isRestoring, restoreError,
+    isProfileLoading: profileQuery.isPending,
+    profileError: profileQuery.isError ? "Không thể kiểm tra quyền truy cập chương trình. Vui lòng thử lại." : null,
+    retryProfile: () => { void profileQuery.refetch(); },
     retryRestore: () => { void restore(); }, signIn, signOut,
     can: (permission) => Boolean(user?.permissions.includes(permission)),
-  }), [session, user, isRestoring, restoreError, restore, signIn, signOut]);
+  }), [session, user, isRestoring, restoreError, restore, signIn, signOut, profileQuery.isPending, profileQuery.isError, profileQuery.refetch]);
 
   return (
     <AuthContext.Provider value={value}>

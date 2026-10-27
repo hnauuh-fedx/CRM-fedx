@@ -10,7 +10,7 @@ import { apiRequest } from "../src/services/api";
 import type { PublicMarketingFormConfig } from "../src/modules/marketing/marketing-reference.types";
 import "../src/index.css";
 
-localStorage.setItem("admission-crm.selected-institution-program-id", "11111111-1111-4111-8111-111111111111");
+localStorage.setItem("admission-crm.selected-institution-program-id:fixture", "11111111-1111-4111-8111-111111111111");
 const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
 function Shell() {
   const scope = useInstitutionProgram();

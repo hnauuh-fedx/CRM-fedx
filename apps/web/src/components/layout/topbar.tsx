@@ -12,7 +12,7 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Select, SelectContent, SelectGroup, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { cn } from "@/lib/utils";
 import { ChangePasswordDialog } from "@/modules/auth/change-password-dialog";
 import { useInstitutionProgram } from "@/modules/institutions/institution-program-context";
@@ -105,7 +105,7 @@ function ProgramSwitcher() {
       <span className="text-[11px] leading-4 font-medium text-muted-foreground">Chương trình</span>
       <Select value={selectedProgramId ?? undefined} onValueChange={selectProgram} disabled={isLoading || programs.length === 0}>
         <SelectTrigger
-          aria-label="Chọn chương trình"
+          aria-label="Đổi chương trình làm việc"
           className="-mx-1 h-6 w-auto max-w-56 gap-1 border-0 bg-transparent px-1 py-0 text-sm font-semibold text-foreground shadow-none focus-visible:ring-2 xl:max-w-72 dark:bg-transparent"
         >
           <SelectValue placeholder={isLoading ? "Đang tải chương trình..." : "Chưa có chương trình"} />
@@ -116,11 +116,11 @@ function ProgramSwitcher() {
           sideOffset={6}
           className="w-auto max-w-[min(28rem,calc(100vw-2rem))] min-w-64"
         >
-          {programs.map((program) => (
+          <SelectGroup>{programs.map((program) => (
             <SelectItem key={program.id} value={program.id} className="py-2">
               {program.institutionName} - {program.name}
             </SelectItem>
-          ))}
+          ))}</SelectGroup>
         </SelectContent>
       </Select>
     </div>
