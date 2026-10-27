@@ -868,7 +868,6 @@ export function LeadSummaryCard({
         <DetailValue label="Tiến trình" value={lead.pipelineStage?.name ?? "Chưa cập nhật"} />
         <div><dt className="text-sm text-muted-foreground">Nhân viên phụ trách</dt><dd className="mt-1 text-sm font-medium"><LeadAssigneeLines lead={lead} /></dd></div>
         <DetailValue label="Mức độ quan tâm" value={withUnmatchedValue(lead, "temperature", lead.temperature ?? "-")} />
-        <DetailValue label="Chương trình" value={lead.institutionProgram ? `${lead.institutionProgram.name} · ${lead.institutionProgram.institutionName}` : "Chưa chọn"} />
         <DetailValue label="Ngành đăng ký" value={withUnmatchedValue(lead, "majorId", lead.majorName ?? "Chưa chọn")} />
         <DetailValue label="Ghi chú" value={lead.note ?? "-"} />
       </dl></CardContent>

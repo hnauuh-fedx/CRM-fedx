@@ -333,7 +333,7 @@ export async function updateLead(
         leadId,
         existing.pipeline_stage_id,
         selectedStage,
-        { ipAddress },
+        { ipAddress, note: transitionNote.content },
       );
       await recordTransitionNote(tx, actor, leadId, transitionNote.content, input.noteTemplateId, ipAddress);
     }

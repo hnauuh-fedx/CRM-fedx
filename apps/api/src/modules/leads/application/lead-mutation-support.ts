@@ -223,6 +223,7 @@ export async function recordStageChange(
     activityContent?: string;
     includeStageNameInAudit?: boolean;
     ipAddress?: string;
+    note?: string;
   } = {},
 ) {
   const toStageId = toStage?.id ?? null;
@@ -232,6 +233,7 @@ export async function recordStageChange(
       from_stage_id: fromStageId,
       to_stage_id: toStageId,
       changed_by: user.id,
+      note: options.note,
     },
   });
   await tx.lead_activities.create({

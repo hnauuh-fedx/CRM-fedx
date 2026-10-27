@@ -233,7 +233,6 @@ function useColumns(manageProgramId: string | null, onStatus: (message: string) 
     () => [
       { accessorKey: "name", header: "Nguồn học viên", cell: ({ row }) => <span className="font-medium">{row.original.name}</span> },
       { accessorKey: "type", header: "Loại", cell: ({ row }) => row.original.type ?? "-" },
-      { id: "institutionProgram", header: "Chương trình", enableSorting: false, cell: ({ row }) => row.original.institutionProgram ? `${row.original.institutionProgram.institutionName} / ${row.original.institutionProgram.name}` : "Chưa gán chương trình" },
       { accessorKey: "activeLeadCount", header: "Lead đang hoạt động", enableSorting: false },
       { accessorKey: "createdAt", header: "Ngày tạo", cell: ({ row }) => formatDate(row.original.createdAt) },
       ...(manageProgramId ? [{

@@ -23,7 +23,6 @@ import {
 import { Button } from "@/components/ui/button";
 import {
   Field,
-  FieldDescription,
   FieldError,
   FieldGroup,
   FieldLabel,
@@ -127,9 +126,6 @@ export function LeadForm({
   const programId = form.watch("institutionProgramId");
   const surfaceLayout = useLeadSurfaceLayout("LEAD_FORM", useDisplayLayout, programId);
   const layoutLoading = useDisplayLayout && surfaceLayout.isLoading;
-  const selectedProgram = options.institutionPrograms.find(
-    (program) => program.id === programId,
-  );
   const customFieldsQuery = useLeadFormCustomFields(
     leadId,
     programId,
@@ -333,8 +329,6 @@ export function LeadForm({
           />
           <LeadAdditionalFieldsSection
             form={form}
-            selectedProgram={selectedProgram}
-            leadId={leadId}
             hiddenCustomValueWarning={hiddenCustomValueWarning}
             customFieldsQuery={customFieldsQuery}
             customFieldsByGroup={customFieldsByGroup}
@@ -1210,10 +1204,6 @@ function LeadCareSection({
 
 type LeadAdditionalFieldsSectionProps = {
   form: UseFormReturn<LeadFormInput>;
-  selectedProgram:
-    | { id: string; name: string; code: string; institutionName: string }
-    | undefined;
-  leadId: string | undefined;
   hiddenCustomValueWarning: boolean;
   customFieldsQuery: import("@tanstack/react-query").UseQueryResult<
     NoInfer<import("../lead.types").LeadCustomFieldsResponse>,
@@ -1225,8 +1215,6 @@ type LeadAdditionalFieldsSectionProps = {
 
 function LeadAdditionalFieldsSection({
   form,
-  selectedProgram,
-  leadId,
   hiddenCustomValueWarning,
   customFieldsQuery,
   customFieldsByGroup,
@@ -1235,33 +1223,13 @@ function LeadAdditionalFieldsSection({
   return (
     <FormSection
       title="Thông tin bổ sung"
-      description="Các trường dữ liệu tùy chỉnh áp dụng theo chương trình tuyển sinh đã chọn."
+      description="Các trường dữ liệu tùy chỉnh áp dụng cho chương trình đang làm việc."
     >
-      <Field
-        data-invalid={Boolean(form.formState.errors.institutionProgramId)}
-        data-disabled
-      >
-        <FieldLabel htmlFor="lead-institution-program">
-          Chương trình tuyển sinh *
-        </FieldLabel>
-        <Input
-          id="lead-institution-program"
-          value={
-            selectedProgram
-              ? `${selectedProgram.institutionName} - ${selectedProgram.name}`
-              : ""
-          }
-          disabled
-          aria-invalid={Boolean(form.formState.errors.institutionProgramId)}
-          placeholder="Chưa có chương trình đang làm việc"
-        />
-        <FieldDescription>
-          {leadId
-            ? "Chương trình của ứng viên không thể thay đổi tại đây."
-            : "Tự động theo chương trình đang làm việc và không thể thay đổi trong form."}
-        </FieldDescription>
-        <FieldError errors={[form.formState.errors.institutionProgramId]} />
-      </Field>
+      {form.formState.errors.institutionProgramId && (
+        <p role="alert" className="text-sm text-destructive">
+          Chưa có chương trình đang làm việc. Vui lòng chọn chương trình ở thanh trên cùng.
+        </p>
+      )}
       {hiddenCustomValueWarning && (
         <p role="status" className="text-sm text-amber-700">
           Một số giá trị vừa nhập không còn áp dụng theo chương trình mới. Chúng

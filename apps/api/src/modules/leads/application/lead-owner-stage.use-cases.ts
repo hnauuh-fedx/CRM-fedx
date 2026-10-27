@@ -99,6 +99,7 @@ export async function changeVisibleLeadStage(
       activityContent: `Chuyển lead sang giai đoạn ${stage.name}.`,
       includeStageNameInAudit: true,
       ipAddress,
+      note: note.content,
     });
     await recordTransitionNote(tx, actor, leadId, note.content, noteTemplateId, ipAddress);
     await transactionEffect?.(tx);
@@ -228,6 +229,7 @@ export async function changeVisibleLeadStatus(
       activityContent: `Kích hoạt lại lead tại tiến trình ${getPipelineStageMarker(restoredStage.name) ?? restoredStage.name}.`,
       includeStageNameInAudit: true,
       ipAddress,
+      note: note.content,
     });
     await recordLifecycleStatusAudit(
       tx,
