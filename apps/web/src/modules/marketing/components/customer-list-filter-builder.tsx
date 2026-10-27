@@ -155,6 +155,16 @@ function selectValueOptions(
       value: item.id,
       label: item.name,
     }));
+  if (field === "originId")
+    return (options?.origins ?? []).map((item) => ({
+      value: item.id,
+      label: item.name,
+    }));
+  if (field === "source")
+    return (options?.channels ?? []).map((item) => ({
+      value: item.id,
+      label: item.name,
+    }));
   return [];
 }
 

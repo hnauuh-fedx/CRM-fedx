@@ -1365,34 +1365,60 @@ function buildVisibleCustomFieldGroups({
     (systemFieldGroups ?? []).map((group) => [group.id, group]),
   );
   const databaseGroups = storedGroups ?? [];
+  const toCatalogOnlyGroup = (group: SystemFormFieldGroup) => {
+    const fields =
+      fieldSourceFilter === "custom"
+        ? []
+        : group.fields.filter(
+            (item) =>
+              !keyword ||
+              [item.label, item.key].some((value) =>
+                value.toLocaleLowerCase("vi").includes(keyword),
+              ),
+          );
+    return fields.length > 0
+      ? [
+          {
+            id: group.id,
+            groupKey: group.id,
+            label: group.label,
+            description: group.description,
+            isSystem: true,
+            fields,
+            customFields: [],
+          },
+        ]
+      : [];
+  };
   if (databaseGroups.length === 0) {
-    return (systemFieldGroups ?? []).flatMap((group) => {
-      const fields =
-        fieldSourceFilter === "custom"
-          ? []
-          : group.fields.filter(
-              (item) =>
-                !keyword ||
-                [item.label, item.key].some((value) =>
-                  value.toLocaleLowerCase("vi").includes(keyword),
-                ),
-            );
-      return fields.length > 0
-        ? [
-            {
-              id: group.id,
-              groupKey: group.id,
-              label: group.label,
-              description: group.description,
-              isSystem: true,
-              fields,
-              customFields: [],
-            },
-          ]
-        : [];
-    });
+    return (systemFieldGroups ?? []).flatMap(toCatalogOnlyGroup);
   }
-  return databaseGroups.flatMap((group) => {
+  // Read-only catalog groups (e.g. customer source) have no stored row; show them after their catalog predecessor.
+  const storedKeys = new Set(databaseGroups.map((group) => group.groupKey));
+  const catalogOnlyAfter = new Map<string | null, SystemFormFieldGroup[]>();
+  let previousStoredKey: string | null = null;
+  for (const group of systemFieldGroups ?? []) {
+    if (storedKeys.has(group.id)) {
+      previousStoredKey = group.id;
+      continue;
+    }
+    if (!group.fields.every((item) => item.readOnly)) continue;
+    catalogOnlyAfter.set(previousStoredKey, [
+      ...(catalogOnlyAfter.get(previousStoredKey) ?? []),
+      group,
+    ]);
+  }
+  return [
+    ...(catalogOnlyAfter.get(null) ?? []).flatMap(toCatalogOnlyGroup),
+    ...databaseGroups.flatMap((group) => [
+      ...toStoredGroup(group),
+      ...(catalogOnlyAfter.get(group.groupKey) ?? []).flatMap(
+        toCatalogOnlyGroup,
+      ),
+    ]),
+  ];
+
+  function toStoredGroup(group: CustomFieldGroupDefinition) {
     const catalog = catalogByKey.get(group.groupKey);
     const result = {
       id: group.id,
@@ -1421,7 +1447,7 @@ function buildVisibleCustomFieldGroups({
     return result.fields.length > 0 || result.customFields.length > 0
       ? [result]
       : [];
-  });
+  }
 }
 
 function filterVisibleCustomFields({
@@ -1560,7 +1586,7 @@ function SystemCustomFieldRow({
         <code className="text-xs text-muted-foreground">{item.key}</code>
       </TableCell>
       <TableCell>
-        {canConfigureSystemRequirements ? (
+        {canConfigureSystemRequirements && !item.readOnly ? (
           <SystemFieldRequirementControl
             systemRequirementsQuery={systemRequirementsQuery}
             item={item}
@@ -1987,6 +2013,7 @@ function SystemFieldInformation({
 }) {
   return (
     <div className="flex min-w-48 flex-wrap gap-1">
+      {item.readOnly && <Badge variant="outline">Chỉ xem</Badge>}
       {item.isRequired && <Badge variant="outline">Bắt buộc</Badge>}
       {item.isSensitive && <Badge variant="destructive">Nhạy cảm</Badge>}
       {item.optionSource && (

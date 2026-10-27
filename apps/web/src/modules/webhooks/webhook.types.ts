@@ -69,7 +69,12 @@ export type WebhookField = {
   groupKey?: string;
   groupLabel?: string;
   customFieldId?: string;
+  /** Custom field code; standard fields use `key` as their code. */
+  fieldKey?: string;
   options?: string[];
+  /** Filled by the system (e.g. Nhóm nguồn); listed but not selectable in a mapping. */
+  readOnly?: boolean;
+  readOnlyReason?: string;
 };
 
 export type WebhookLog = {

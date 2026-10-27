@@ -1,4 +1,5 @@
-import { leadFormFieldCatalog } from "@admission-crm/shared/lead-form-field-catalog";
+import { getLeadFieldGroup } from "@admission-crm/shared/lead-field-groups";
+import { leadFormFieldCatalog, leadSourceFieldGroup } from "@admission-crm/shared/lead-form-field-catalog";
 
 export type AutomationSystemFieldDefinition = {
   reference: string;
@@ -20,15 +21,21 @@ export const AUTOMATION_EVENT_FIELDS: AutomationSystemFieldDefinition[] = [
   { reference: "event:configurationVersion", key: "configurationVersion", label: "Phiên bản cấu hình", description: "Phiên bản snapshot cấu hình tại thời điểm gửi.", dataType: "TEXT", groupKey: "form_event", groupLabel: "Sự kiện Form & Survey", source: "event", isSensitive: false },
 ];
 
-export const AUTOMATION_SYSTEM_FIELDS: AutomationSystemFieldDefinition[] = leadFormFieldCatalog.flatMap((group) =>
+/** Lead form fields plus Nhóm nguồn / Nguồn received from webhooks (the URL is not stored, so it is not a condition). */
+const conditionGroups = [
+  ...leadFormFieldCatalog,
+  { ...leadSourceFieldGroup, fields: leadSourceFieldGroup.fields.filter((field) => field.key !== "sourceGroupUrl") },
+];
+
+export const AUTOMATION_SYSTEM_FIELDS: AutomationSystemFieldDefinition[] = conditionGroups.flatMap((group) =>
   group.fields.map((field) => ({
     reference: `system:${field.key}`,
     key: field.key,
     label: field.label,
     description: field.note ?? null,
     dataType: field.dataType,
-    groupKey: group.id,
-    groupLabel: group.label,
+    groupKey: getLeadFieldGroup(field.key)?.id ?? group.id,
+    groupLabel: getLeadFieldGroup(field.key)?.label ?? group.label,
     source: "system" as const,
     isSensitive: Boolean(field.isSensitive),
     ...(field.key === "pipelineStageId"

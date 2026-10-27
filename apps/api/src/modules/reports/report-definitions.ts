@@ -50,7 +50,7 @@ export const personalReportDatasetDefinitions = {
     key: "LEADS", label: "Tổng data", module: "SALE", countMetricKey: "totalLeads", primaryDateField: "CREATED_DATE",
     measure: { key: "LEAD_COUNT", label: "Số lượng lead" },
     fields: [
-      { key: "SOURCE", label: "Nguồn khách hàng", type: "CATEGORY", allowedAsOutput: true, allowedAsFilter: true, filterType: "enum" },
+      { key: "SOURCE", label: "Nguồn học viên", type: "CATEGORY", allowedAsOutput: true, allowedAsFilter: true, filterType: "enum" },
       { key: "ASSIGNEE", label: "Nhân viên phụ trách", type: "CATEGORY", allowedAsOutput: true, allowedAsFilter: true, filterType: "enum" },
       { key: "PIPELINE_STAGE", label: "Giai đoạn pipeline", type: "CATEGORY", allowedAsOutput: true, allowedAsFilter: true, filterType: "enum" },
       { key: "CREATED_DATE", label: "Ngày tạo", type: "DATE", allowedAsOutput: true, allowedAsFilter: true, filterType: "date" },
@@ -61,7 +61,7 @@ export const personalReportDatasetDefinitions = {
     key: "QUALIFIED_LEADS", label: "Tổng data đúng đối tượng (L2)", module: "SALE", countMetricKey: "totalLeads", primaryDateField: "CREATED_DATE",
     measure: { key: "QUALIFIED_LEAD_COUNT", label: "Số lượng data đúng đối tượng" },
     fields: [
-      { key: "SOURCE", label: "Nguồn khách hàng", type: "CATEGORY", allowedAsOutput: true, allowedAsFilter: true, filterType: "enum" },
+      { key: "SOURCE", label: "Nguồn học viên", type: "CATEGORY", allowedAsOutput: true, allowedAsFilter: true, filterType: "enum" },
       { key: "ASSIGNEE", label: "Nhân viên phụ trách", type: "CATEGORY", allowedAsOutput: true, allowedAsFilter: true, filterType: "enum" },
       { key: "PIPELINE_STAGE", label: "Giai đoạn pipeline", type: "CATEGORY", allowedAsOutput: true, allowedAsFilter: true, filterType: "enum" },
       { key: "CREATED_DATE", label: "Ngày tạo", type: "DATE", allowedAsOutput: true, allowedAsFilter: true, filterType: "date" },

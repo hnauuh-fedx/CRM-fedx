@@ -10,6 +10,7 @@ export type SystemFormField = {
   isSensitive?: boolean;
   optionSource?: string;
   note?: string;
+  readOnly?: boolean;
 };
 
 export type SystemFormFieldGroup = {

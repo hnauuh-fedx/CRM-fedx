@@ -59,7 +59,7 @@ async function api(
   if (
     processQueuedWebhook &&
     path.startsWith("/webhooks/") &&
-    response.status === 202 &&
+    response.status === 200 &&
     typeof payload.data?.request_id === "string"
   ) {
     await processQueuedWebhook(payload.data.request_id);

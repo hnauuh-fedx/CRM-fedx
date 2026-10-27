@@ -53,7 +53,7 @@ test("lead lifecycle filtering preserves scope, other filters and server paginat
 });
 
 test("Fail count uses the same visibility and program scope as stage counts", async (context) => {
-  for (const model of [prisma.lead_sources, prisma.institution_programs, prisma.users, prisma.pipeline_stages, prisma.majors, prisma.admission_statuses, prisma.custom_fields]) {
+  for (const model of [prisma.lead_sources, prisma.institution_programs, prisma.users, prisma.pipeline_stages, prisma.majors, prisma.admission_statuses, prisma.lead_origins, prisma.lead_channels, prisma.custom_fields]) {
     mockDelegate(context, model, "findMany", async () => []);
   }
   const stages = mockDelegate(context, prisma.leads, "groupBy", async (_args: { where: { AND: unknown[] } }) => []);

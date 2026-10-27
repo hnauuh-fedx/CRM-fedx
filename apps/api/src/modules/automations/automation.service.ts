@@ -1,6 +1,8 @@
 import { visibleAssignmentResults } from "./automation-assignment-result.serializer";
 import { automationInformationUpdatesSchema, validateInformationUpdate } from "@admission-crm/shared/automation-information-update";
 import { getLeadWritableFields } from "../leads/lead-information-update.service";
+import { formatLeadChannelName } from "@admission-crm/shared/lead-channel";
+import { listActiveLeadChannelOptions } from "../campaigns/lead-channel.service";
 import { Prisma } from "../../generated/prisma/client";
 
 import { prisma } from "../../database/prisma";
@@ -1121,6 +1123,17 @@ export async function getAutomationOptions(user: AuthUser, institutionProgramId?
       : Promise.resolve([]),
   ]);
   if (!webhookEndpoints) return null;
+  // Nhóm nguồn of the working program, for "Nhóm nguồn" conditions.
+  const origins = resolvedInstitutionProgramId
+    ? await prisma.lead_origins.findMany({
+        where: { institution_program_id: resolvedInstitutionProgramId },
+        select: { id: true, name: true },
+        orderBy: [{ name: "asc" }, { id: "asc" }],
+        take: 500,
+      })
+    : [];
+  // Active Nguồn values of the working program, for "Nguồn" conditions.
+  const channels = resolvedInstitutionProgramId ? await listActiveLeadChannelOptions(resolvedInstitutionProgramId) : [];
   const answerFields = [...new Map(marketingForms.flatMap((form) => form.marketing_form_fields.map((field) => [field.field_key, {
     reference: `event:answer:${field.field_key}`,
     key: field.field_key,
@@ -1187,6 +1200,8 @@ export async function getAutomationOptions(user: AuthUser, institutionProgramId?
     admissionClasses,
     systemFieldOptions: {
       lead_sources: sources.map((source) => ({ code: source.id, label: source.name })),
+      lead_origins: origins.map((origin) => ({ code: origin.id, label: origin.name })),
+      lead_channels: channels.map((channel) => ({ code: channel.id, label: formatLeadChannelName(channel) })),
       majors: majors.map((major) => ({ code: major.id, label: major.name })),
       admission_statuses: admissionStatuses.map((status) => ({ code: status.id, label: status.name })),
       tags: tags.map((tag) => ({ code: tag.name, label: tag.name })),

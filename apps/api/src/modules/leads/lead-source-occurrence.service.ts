@@ -1,4 +1,5 @@
 import type { Prisma } from "../../generated/prisma/client";
+import { resolveLeadChannel } from "../campaigns/lead-channel.service";
 
 type TransactionClient = Prisma.TransactionClient;
 export type LeadSourceOccurrence = {
@@ -62,10 +63,18 @@ export async function recordLeadSourceOccurrence(
     select: { id: true },
   });
   if (existing) return;
+  // "Nguồn" is a program list value; names that match no value are added and marked "*".
+  const channelId = await resolveLeadChannel(tx, {
+    institutionProgramId: input.institutionProgramId,
+    name: input.sourceOccurrence.sourceName,
+    actorId: input.actorId,
+    ipAddress: input.ipAddress,
+  });
   const occurrence = await tx.lead_source_occurrences.create({
     data: {
       lead_id: leadId,
       origin_id: originId,
+      channel_id: channelId,
       webhook_id: input.sourceOccurrence.webhookId,
       request_id: input.sourceOccurrence.requestId,
       source_name: input.sourceOccurrence.sourceName,
@@ -85,6 +94,7 @@ export async function recordLeadSourceOccurrence(
       new_data: {
         leadId,
         originId,
+        channelId,
         webhookId: input.sourceOccurrence.webhookId,
         requestId: input.sourceOccurrence.requestId,
         sourceName: input.sourceOccurrence.sourceName,

@@ -45,7 +45,8 @@ import { ApiError } from "@/services/api";
 import { addLeadsToCustomerList, createCustomerList, getCustomerListLeads, getCustomerLists } from "@/services/customer-list.service";
 import { assignLeads, deleteLeads, getLead, getLeadActionOptions, getLeadFilterOptions, getLeads, importLeads } from "@/services/lead.service";
 import { LeadProgressSelector, progressOptionClassName } from "../components/lead-form";
-import { openLeadInEditModeState } from "../lead-detail-navigation";
+import { openLeadInEditModeState, openLeadSearchParam } from "../lead-detail-navigation";
+import { AccessDeniedDialog } from "@/components/shared/access-denied-dialog";
 import { LeadImportErrorsTable } from "../components/lead-import-errors-table";
 import { LeadCustomFieldsCard } from "../components/lead-custom-fields-card";
 import { InlineLeadSummaryCard } from "../components/inline-lead-summary-card";
@@ -310,6 +311,17 @@ export function LeadsListPage({
   const [searchParams, setSearchParams] = useSearchParams();
   // Bộ lọc nâng cao được giữ trên URL để tải lại trang không mất điều kiện.
   const [filterConditions, setFilterConditions] = useState<FilterConditionState[]>(() => decodeConditions(searchParams));
+  // Other screens (e.g. notifications) open a lead's popup here via ?openLead=<id>; the param is consumed once.
+  const requestedLeadId = searchParams.get(openLeadSearchParam);
+  useEffect(() => {
+    if (!requestedLeadId) return;
+    setViewState((current) => ({ ...current, editingLeadId: requestedLeadId, isEditDialogOpen: true }));
+    setSearchParams((current) => {
+      const next = new URLSearchParams(current);
+      next.delete(openLeadSearchParam);
+      return next;
+    }, { replace: true });
+  }, [requestedLeadId, setSearchParams]);
   const canViewSensitiveLeadData = ["lead.sensitive.view", "lead.update_all", "lead.update_department", "lead.update_assigned"].some(auth.can);
   function applyFilterConditions(conditions: FilterConditionState[]) {
     setFilterConditions(conditions);
@@ -1379,6 +1391,23 @@ function LeadEditDialogController({
     queryFn: () => getLead(editingLeadId!, auth.accessToken!),
     enabled: Boolean(editingLeadId),
   });
+  const closeDialog = (open: boolean) => {
+    if (!open) {
+      setViewState((current) => ({ ...current, isEditDialogOpen: false }));
+    }
+  };
+  // Out of scope (e.g. reassigned to another sale) or missing permission: use the shared notice.
+  if (editingLeadQuery.error instanceof ApiError && [403, 404].includes(editingLeadQuery.error.status)) {
+    return (
+      <AccessDeniedDialog
+        open={isEditDialogOpen}
+        onOpenChange={(open) => {
+          closeDialog(open);
+          if (!open) setViewState((current) => ({ ...current, editingLeadId: null }));
+        }}
+      />
+    );
+  }
   return (
     <EditLeadDialog
       isOpen={isEditDialogOpen}
@@ -1399,11 +1428,7 @@ function LeadEditDialogController({
             ? "error"
             : "ready"
       }
-      onOpenChange={(open) => {
-        if (!open) {
-          setViewState((current) => ({ ...current, isEditDialogOpen: false }));
-        }
-      }}
+      onOpenChange={closeDialog}
       onAfterClose={() => {
         setViewState((current) =>
           current.isEditDialogOpen

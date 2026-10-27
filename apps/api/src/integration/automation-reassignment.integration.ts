@@ -245,6 +245,9 @@ async function main() {
     orderBy: { created_at: "desc" },
   });
   assert.ok(warningNotification.content?.includes(`Lead reassignment warning ${runId}`));
+  assert.equal(warningNotification.lead_id, warning.lead.id, "Cảnh báo phải trỏ tới lead để mở được từ thông báo.");
+  assert.equal(warningNotification.reassignment_monitor_id, warning.monitor.id);
+  assert.ok(warningNotification.action_due_at, "Cảnh báo phải lưu thời điểm chuyển lead lúc gửi.");
   assert.ok(!warningNotification.content?.includes("{{"), "Template token cảnh báo phải được render trước khi gửi.");
 
   const secondWarning = await createLeadWithMonitor(
@@ -272,6 +275,25 @@ async function main() {
   );
   const secondWarningMonitor = await prisma.automation_reassignment_monitors.findUniqueOrThrow({ where: { id: secondWarning.monitor.id } });
   assert.ok(secondWarningMonitor.second_warned_at, "Monitor phải lưu thời điểm gửi cảnh báo lần hai.");
+
+  const { hidePersonalNotificationCountdown, listPersonalNotifications } = await import("../modules/notifications/personal-notification.service.js");
+  const findCountdown = async (type: string, leadId: string) =>
+    (await listPersonalNotifications(firstSale.id, 1, 50)).data.find((item) => item.type === type && item.leadId === leadId)?.reassignmentCountdown;
+  const secondCountdown = await findCountdown("automation_reassignment_second_warning", secondWarning.lead.id);
+  assert.equal(secondCountdown?.warning, "second", "Cảnh báo lần hai phải có đồng hồ đếm ngược.");
+  assert.equal(secondCountdown?.dueAt, secondWarningMonitor.reassignment_due_at.toISOString());
+  assert.equal(secondCountdown?.display, "countdown");
+  // Two warnings: the first one shows a fixed duration. A single warning counts down.
+  assert.equal((await findCountdown("automation_reassignment_warning", secondWarning.lead.id))?.display, "duration");
+  const singleWarning = await findCountdown("automation_reassignment_warning", warning.lead.id);
+  assert.equal(singleWarning?.warning, "first");
+  assert.equal(singleWarning?.display, "countdown");
+  // Opening the lead in time removes the risk, so the countdown disappears before any job runs.
+  await prisma.lead_assignments.update({ where: { id: secondWarning.assignment.id }, data: { first_opened_at: new Date() } });
+  assert.equal(await findCountdown("automation_reassignment_second_warning", secondWarning.lead.id), null);
+  // After the user is told the lead is no longer theirs, the countdown stays hidden.
+  assert.equal(await hidePersonalNotificationCountdown(firstSale.id, warningNotification.id), true);
+  assert.equal(await findCountdown("automation_reassignment_warning", warning.lead.id), null);
 
   const cared = await createLeadWithMonitor(
     "cared",

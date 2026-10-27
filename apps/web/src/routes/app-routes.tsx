@@ -186,6 +186,11 @@ const LeadSourcesPage = lazy(() =>
     default: module.LeadSourcesPage,
   })),
 );
+const LeadChannelsPage = lazy(() =>
+  import("@/modules/marketing/pages/lead-channels-page").then((module) => ({
+    default: module.LeadChannelsPage,
+  })),
+);
 const UtmTrackingsPage = lazy(() =>
   import("@/modules/marketing/pages/utm-trackings-page").then((module) => ({
     default: module.UtmTrackingsPage,
@@ -403,6 +408,9 @@ export function AppRoutes() {
             </Route>
             <Route element={<ProtectedRoute anyPermissions={["campaign.view_all", "lead_source.manage"]} />}>
               <Route path="/marketing/nguon-lead" element={<LeadSourcesPage />} />
+            </Route>
+            <Route element={<ProtectedRoute anyPermissions={["lead_channel.view", "lead_channel.manage"]} />}>
+              <Route path="/marketing/nguon" element={<LeadChannelsPage />} />
             </Route>
             <Route element={<ProtectedRoute anyPermissions={["campaign.view_all", "utm.view", "utm.view_own"]} />}>
               <Route path="/marketing/utm" element={<UtmTrackingsPage />} />

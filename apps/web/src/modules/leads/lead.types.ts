@@ -122,6 +122,10 @@ export type LeadFilterOptions = {
   }>;
   majors: Array<{ id: string; name: string }>;
   admissionStatuses?: Array<{ id: string; name: string }>;
+  /** Nhóm nguồn of the working program. */
+  origins?: Array<{ id: string; name: string }>;
+  /** Active Nguồn values of the working program (names of auto-created values end with "*"). */
+  channels?: Array<{ id: string; name: string }>;
   totalLeads: number;
   failedLeads: number;
   customFields?: LeadCustomField[];

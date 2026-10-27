@@ -122,6 +122,7 @@ async function run() {
   assert.equal(activityCount, 2);
   assert.equal(auditCount, 2);
   assert.equal(notificationCount, 2);
+  assert.equal(await prisma.notifications.count({ where: { user_id: assignee.id, type: "lead_assignment", lead_id: { in: leadIds } } }), 2);
 
   console.log("Bulk lead assignment is atomic and records assignments, activities, audits, and notifications.");
 }

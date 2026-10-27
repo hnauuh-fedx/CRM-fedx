@@ -8,6 +8,8 @@ export type LeadSystemField = {
   isSensitive?: boolean;
   optionSource?: string;
   note?: string;
+  /** Filled by inbound integrations only; never rendered as a Lead form input or requirement toggle. */
+  readOnly?: boolean;
 };
 
 export type LeadSystemFieldGroup = {
@@ -140,4 +142,37 @@ export const leadFormFieldCatalog: LeadSystemFieldGroup[] = [
       field("institutionProgramId", "Chương trình tuyển sinh", "SELECT", "leads.institution_program_id + admission_profiles.institution_program_id", { optionSource: "institution_programs" }),
     ],
   },
+];
+
+/**
+ * Customer source data received from webhooks. Kept out of leadFormFieldCatalog so Lead forms,
+ * filters, automations and reports do not treat these keys as editable Lead columns.
+ */
+export const leadSourceFieldGroup: LeadSystemFieldGroup = {
+  id: "customer-source",
+  label: "Nguồn khách hàng",
+  description: "Dữ liệu nguồn nhận qua webhook, hệ thống tự ghi nhận cho mỗi lần Lead phát sinh.",
+  fields: [
+    field("originId", "Nhóm nguồn", "SELECT", "leads.origin_id → lead_origins", {
+      readOnly: true,
+      optionSource: "lead_origins",
+      note: "Hệ thống tự xác định từ URL nhóm nguồn; không nhận diện được thì ghi nhận là “Khác”.",
+    }),
+    field("source", "Nguồn", "SELECT", "lead_source_occurrences.channel_id → lead_channels", {
+      readOnly: true,
+      optionSource: "lead_channels",
+      note: "Chọn từ danh mục Nguồn của chương trình; giá trị mới nhận từ webhook được tự thêm và đánh dấu *.",
+    }),
+    field("sourceGroupUrl", "URL xác định nhóm nguồn", "TEXT", "Không lưu riêng", {
+      readOnly: true,
+      note: "Dùng tham số utm_source trong URL để xác định Nhóm nguồn.",
+    }),
+  ],
+};
+
+/** Lead structure shown on the field configuration page: form groups plus read-only source data. */
+export const leadFieldConfigurationCatalog: LeadSystemFieldGroup[] = [
+  leadFormFieldCatalog[0],
+  leadSourceFieldGroup,
+  ...leadFormFieldCatalog.slice(1),
 ];

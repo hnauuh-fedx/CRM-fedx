@@ -9,6 +9,7 @@ declare global {
   namespace Express {
     interface Request {
       authUser?: AuthUser;
+      authSessionId?: string;
     }
   }
 }
@@ -46,6 +47,7 @@ export async function requireAuthentication(
   }
 
   request.authUser = user;
+  request.authSessionId = payload.sid;
   next();
 }
 

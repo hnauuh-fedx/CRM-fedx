@@ -1,4 +1,5 @@
 import { randomUUID } from "node:crypto";
+import { compare, hash } from "bcryptjs";
 import jwt from "jsonwebtoken";
 
 import { env } from "../../config/env";
@@ -93,6 +94,31 @@ export async function revokeUserSessions(tx: Prisma.TransactionClient, userId: s
     user_id: actorId, entity_type: "auth_session", entity_id: sessionId ?? userId,
     action: "revoke", ip_address: ipAddress, new_data: { reason, userId, count: result.count },
   } });
+}
+
+// Self-service change: keeps the current session, signs out every other device.
+export async function changeOwnPassword(userId: string, sessionId: string, currentPassword: string, newPassword: string, ipAddress?: string) {
+  const user = await prisma.users.findFirst({ where: { id: userId, deleted_at: null, status: "active" }, select: { password_hash: true } });
+  if (!user || !user.password_hash.startsWith("$2") || !await compare(currentPassword, user.password_hash)) {
+    return { ok: false as const, reason: "invalid_current_password" as const };
+  }
+  const nextHash = await hash(newPassword, 12);
+  return prisma.$transaction(async (tx) => {
+    await tx.$queryRaw`SELECT id FROM users WHERE id = ${userId}::uuid FOR UPDATE`;
+    // Reject if the password changed between verification and this lock.
+    const locked = await tx.users.findUnique({ where: { id: userId }, select: { password_hash: true } });
+    if (locked?.password_hash !== user.password_hash) return { ok: false as const, reason: "invalid_current_password" as const };
+    await tx.users.update({ where: { id: userId }, data: { password_hash: nextHash, updated_at: new Date() } });
+    const revoked = await tx.auth_sessions.updateMany({
+      where: { user_id: userId, revoked_at: null, id: { not: sessionId } },
+      data: { revoked_at: new Date(), revoke_reason: "password_changed" },
+    });
+    await tx.audit_logs.create({ data: {
+      user_id: userId, entity_type: "user", entity_id: userId, action: "change_password",
+      ip_address: ipAddress, new_data: { passwordChanged: true, method: "self_service", revokedSessions: revoked.count },
+    } });
+    return { ok: true as const };
+  });
 }
 
 export async function logoutAuthSession(token: string, all: boolean, ipAddress?: string) {

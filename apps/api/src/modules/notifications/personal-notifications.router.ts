@@ -2,7 +2,7 @@ import { Router } from "express";
 import { z } from "zod";
 
 import { requireAuthentication } from "../../middlewares/auth.middleware";
-import { listPersonalNotifications, markPersonalNotificationRead } from "./personal-notification.service";
+import { hidePersonalNotificationCountdown, listPersonalNotifications, markPersonalNotificationRead } from "./personal-notification.service";
 
 const notificationIdSchema = z.uuid();
 const listQuerySchema = z.object({
@@ -35,6 +35,23 @@ personalNotificationsRouter.patch("/:id/read", async (request, response, next) =
       return;
     }
     if (!(await markPersonalNotificationRead(request.authUser!.id, parsedId.data))) {
+      response.status(404).json({ message: "Không tìm thấy thông báo." });
+      return;
+    }
+    response.json({ id: parsedId.data });
+  } catch (error) {
+    next(error);
+  }
+});
+
+personalNotificationsRouter.patch("/:id/countdown/hide", async (request, response, next) => {
+  try {
+    const parsedId = notificationIdSchema.safeParse(request.params.id);
+    if (!parsedId.success) {
+      response.status(400).json({ message: "Mã thông báo không hợp lệ." });
+      return;
+    }
+    if (!(await hidePersonalNotificationCountdown(request.authUser!.id, parsedId.data))) {
       response.status(404).json({ message: "Không tìm thấy thông báo." });
       return;
     }

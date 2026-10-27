@@ -175,6 +175,7 @@ model automation_reassignment_monitors {
   last_error             String?
   created_at             DateTime  @default(now()) @db.Timestamp(6)
   updated_at             DateTime  @default(now()) @db.Timestamp(6)
+  notifications          notifications[]
 
   @@unique([rule_id, node_id, assignment_id], map: "uq_automation_reassignment_rule_node_assignment")
   @@index([status, warning_due_at, id], map: "idx_automation_reassignment_warning_due")
@@ -661,6 +662,7 @@ model institution_programs {
   kpi_targets                  kpi_targets[]
   lead_sources                 lead_sources[]
   lead_origins                 lead_origins[]
+  lead_channels                lead_channels[]
   leads                        leads[]
   report_configs               report_configs[]
   personal_dashboard_widgets   personal_dashboard_widgets[]
@@ -780,16 +782,37 @@ model lead_source_occurrences {
   webhook_id   String?      @db.Uuid
   request_id   String       @unique @db.Uuid
   source_name  String       @db.VarChar(255)
+  channel_id    String?        @db.Uuid
   note         String?
   details      Json?
   received_at  DateTime     @default(now()) @db.Timestamp(6)
   leads        leads        @relation(fields: [lead_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
   lead_origins lead_origins @relation(fields: [origin_id], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  lead_channels lead_channels? @relation(fields: [channel_id], references: [id], onDelete: NoAction, onUpdate: NoAction)
   webhooks     webhooks?    @relation(fields: [webhook_id], references: [id], onDelete: SetNull, onUpdate: NoAction)
 
   @@index([lead_id, received_at, id])
   @@index([origin_id, received_at, id])
+  @@index([channel_id, lead_id])
   @@index([webhook_id, received_at, id])
+}
+
+/// "Nguồn" values of a program; inbound data that matches no value is added with is_auto_created.
+model lead_channels {
+  id                     String                    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  institution_program_id String                    @db.Uuid
+  name                   String                    @db.VarChar(255)
+  normalized_name        String                    @db.VarChar(255)
+  is_active              Boolean                   @default(true)
+  is_auto_created        Boolean                   @default(false)
+  created_at             DateTime                  @default(now()) @db.Timestamp(6)
+  updated_at             DateTime                  @default(now()) @db.Timestamp(6)
+  institution_programs   institution_programs      @relation(fields: [institution_program_id], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  occurrences            lead_source_occurrences[]
+
+  @@unique([institution_program_id, normalized_name])
+  @@index([institution_program_id, created_at, id])
+  @@index([institution_program_id, is_active, name])
 }
 
 model lead_status_histories {
@@ -837,6 +860,7 @@ model leads {
   admission_documents                      admission_documents[]
   admission_profiles                       admission_profiles?
   lead_activities                          lead_activities[]
+  notifications                            notifications[]
   lead_assignments                         lead_assignments[]
   lead_notes                               lead_notes[]
   lead_status_histories                    lead_status_histories[]
@@ -1024,8 +1048,8 @@ model marketing_form_submissions {
   marketing_forms    marketing_forms @relation(fields: [marketing_form_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
   leads              leads?          @relation(fields: [lead_id], references: [id], onDelete: SetNull, onUpdate: NoAction)
 
-    @@index([created_at, id], map: "idx_marketing_form_submissions_created_page")
     @@unique([marketing_form_id, idempotency_key], map: "uq_marketing_form_submission_idempotency")
+  @@index([created_at, id], map: "idx_marketing_form_submissions_created_page")
   @@index([lead_id, created_at, id], map: "idx_marketing_form_submissions_lead_page")
   @@index([marketing_form_id, created_at, id], map: "idx_marketing_form_submissions_form_page")
   @@index([marketing_form_id, status, created_at, id], map: "idx_marketing_form_submissions_form_status_page")
@@ -1039,10 +1063,21 @@ model notifications {
   type       String?   @db.VarChar(100)
   is_read    Boolean?  @default(false)
   created_at DateTime? @default(now()) @db.Timestamp(6)
+  /// Lead the notification is about; lets the UI open that lead (access is re-checked on open).
+  lead_id    String?   @db.Uuid
+  /// Reassignment warnings: the monitor that sent it and its transfer time when sent.
+  reassignment_monitor_id String?   @db.Uuid
+  action_due_at           DateTime? @db.Timestamp(6)
+  /// Set once the user learns the lead is no longer theirs; the countdown is not shown again.
+  countdown_hidden_at     DateTime? @db.Timestamp(6)
   users      users?    @relation(fields: [user_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  leads      leads?    @relation(fields: [lead_id], references: [id], onDelete: SetNull, onUpdate: NoAction)
+  automation_reassignment_monitors automation_reassignment_monitors? @relation(fields: [reassignment_monitor_id], references: [id], onDelete: SetNull, onUpdate: NoAction)
 
   @@index([is_read], map: "idx_notifications_is_read")
   @@index([user_id], map: "idx_notifications_user_id")
+  @@index([lead_id], map: "idx_notifications_lead_id")
+  @@index([reassignment_monitor_id], map: "idx_notifications_reassignment_monitor_id")
 }
 
 model permissions {
@@ -1306,6 +1341,7 @@ model display_layout_templates {
   created_by               String   @db.Uuid
   created_at               DateTime @default(now()) @db.Timestamptz(6)
   updated_at               DateTime @default(now()) @db.Timestamptz(6)
+
   @@index([institution_program_id, updated_at, id])
   @@index([institution_program_id, screen, updated_at, id], map: "display_layout_templates_program_screen_page_idx")
 }
@@ -1318,6 +1354,7 @@ model display_layout_versions {
   actor_id               String   @db.Uuid
   actor_name             String   @db.VarChar(255)
   created_at             DateTime @default(now()) @db.Timestamptz(6)
+
   @@unique([template_id, version])
 }
 
@@ -1328,6 +1365,7 @@ model display_layout_assignments {
   target_type            String   @db.VarChar(20)
   target_id              String   @db.VarChar(36)
   template_id            String   @db.Uuid
+
   @@unique([institution_program_id, screen, target_type, target_id], map: "display_layout_assignments_program_screen_target_key")
   @@index([template_id])
 }
@@ -1348,6 +1386,7 @@ model display_layout_preferences {
   presentation           Json?
   revision               Int      @default(1)
   updated_at             DateTime @default(now()) @db.Timestamptz(6)
+
   @@unique([institution_program_id, screen, user_id], map: "display_layout_preferences_program_screen_user_key")
 }
 

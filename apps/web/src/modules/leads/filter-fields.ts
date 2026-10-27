@@ -1,5 +1,5 @@
 import { getLeadCustomFieldGroup, getLeadFieldGroup, leadFieldGroupOrder } from "@admission-crm/shared/lead-field-groups";
-import { leadFormFieldCatalog } from "@admission-crm/shared/lead-form-field-catalog";
+import { leadFormFieldCatalog, leadSourceFieldGroup } from "@admission-crm/shared/lead-form-field-catalog";
 import { vietnamProvinces } from "@/lib/vietnam-provinces";
 import type { LeadCustomField, LeadCustomFieldDataType, LeadFilterOptions } from "./lead.types";
 
@@ -120,9 +120,10 @@ export function getAvailableFields(
     }));
   // Every other Lead form field (profile, education, address, relatives, admission) from the shared catalog.
   const legacyKeys = new Set(system.map((field) => field.key));
-  for (const group of leadFormFieldCatalog) {
+  // Lead form fields plus the source data received from webhooks (Nhóm nguồn, Nguồn).
+  for (const group of [...leadFormFieldCatalog, leadSourceFieldGroup]) {
     for (const field of group.fields) {
-      if (legacyKeys.has(field.key) || field.key === "institutionProgramId") continue;
+      if (legacyKeys.has(field.key) || field.key === "institutionProgramId" || field.key === "sourceGroupUrl") continue;
       if ((field.isSensitive || field.storage.startsWith("addresses.")) && !canViewSensitiveLeadData) continue;
       system.push({
         key: field.key,
@@ -148,6 +149,8 @@ const genderOptions = [{ value: "male", label: "Nam" }, { value: "female", label
 function catalogOptions(key: string, options: LeadFilterOptions | undefined) {
   if (key === "gender") return genderOptions;
   if (key === "admissionStatusId") return (options?.admissionStatuses ?? []).map((status) => ({ value: status.id, label: status.name }));
+  if (key === "originId") return (options?.origins ?? []).map((origin) => ({ value: origin.id, label: origin.name }));
+  if (key === "source") return (options?.channels ?? []).map((channel) => ({ value: channel.id, label: channel.name }));
   return [];
 }
 

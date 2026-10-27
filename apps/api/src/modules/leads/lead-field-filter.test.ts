@@ -38,6 +38,20 @@ test("date-only columns compare the local calendar day", () => {
   });
 });
 
+test("Nguồn is a list value matched on any source occurrence of the Lead", () => {
+  const channelId = "8f1c2d3e-4b5a-4c6d-8e7f-9a0b1c2d3e4f";
+  assert.equal(getLeadFieldFilterDefinition("source")?.kind, "select");
+  assert.equal(getLeadFieldFilterDefinition("source")?.optionSource, "lead_channels");
+  assert.deepEqual(leadFieldWhere("source", { type: "equals", value: channelId }), {
+    lead_source_occurrences: { some: { channel_id: channelId } },
+  });
+  assert.deepEqual(leadFieldWhere("source", { type: "equals", value: channelId }, true), {
+    NOT: { lead_source_occurrences: { some: { channel_id: channelId } } },
+  });
+  assert.equal(isCustomerListFilterCondition({ field: "source", operator: "equals", value: channelId }), true);
+  assert.equal(isCustomerListFilterCondition({ field: "source", operator: "contains", value: "tiktok" }), false);
+});
+
 test("customer list conditions validate catalog fields by type", () => {
   assert.equal(isCustomerListFilterCondition({ field: "graduationYear", operator: "greaterThan", value: "2020" }), true);
   assert.equal(isCustomerListFilterCondition({ field: "graduationYear", operator: "contains", value: "20" }), false);

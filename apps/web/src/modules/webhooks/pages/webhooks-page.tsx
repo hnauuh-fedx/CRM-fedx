@@ -387,6 +387,7 @@ export function WebhooksPage() {
         ) : (
           <WebhookDetails
             webhook={detail}
+            fields={metadataQuery.data?.fields ?? []}
             canManage={canManage}
             logs={logsQuery.data?.data ?? []}
             logsLoading={logsQuery.isLoading}
@@ -491,6 +492,7 @@ export function WebhooksPage() {
 
 type WebhookDetailsProps = {
   webhook: WebhookDetail;
+  fields: WebhookField[];
   canManage: boolean;
   logs: WebhookLog[];
   logsLoading: boolean;
@@ -516,6 +518,7 @@ type WebhookDetailsProps = {
 
 function WebhookDetails({
   webhook,
+  fields,
   canManage,
   logs,
   logsLoading,
@@ -539,6 +542,7 @@ function WebhookDetails({
   onLog,
 }: WebhookDetailsProps) {
   const url = getAbsoluteWebhookUrl(webhook.webhookUrl);
+  const fieldsByKey = new Map(fields.map((field) => [field.key, field]));
   return (
     <div className="grid gap-6 xl:grid-cols-[minmax(0,1fr)_minmax(0,1.2fr)]">
       <Card className="border-border/70 shadow-xs">
@@ -573,18 +577,30 @@ function WebhookDetails({
                   ]}
                 />
                 <TableBody>
-                  {webhook.mappings.map((mapping) => (
+                  {webhook.mappings.map((mapping) => {
+                    const crmField = fieldsByKey.get(mapping.crmField);
+                    return (
                     <TableRow key={mapping.id ?? mapping.incomingKey}>
                       <TableCell className="font-mono">
                         {mapping.incomingKey}
                       </TableCell>
-                      <TableCell>{mapping.crmField}</TableCell>
+                      <TableCell>
+                        <span className="block font-medium">
+                          {crmField?.label ?? mapping.crmField}
+                        </span>
+                        {crmField && (
+                          <code className="text-xs text-muted-foreground">
+                            {getWebhookFieldCode(crmField)}
+                          </code>
+                        )}
+                      </TableCell>
                       <TableCell>
                         {mapping.isRequired ? "Có" : "Không"}
                       </TableCell>
                       <TableCell>{mapping.defaultValue || "—"}</TableCell>
                     </TableRow>
-                  ))}
+                    );
+                  })}
                 </TableBody>
               </Table>
             </div>
@@ -812,6 +828,11 @@ const webhookFieldTypeLabels: Record<WebhookField["type"], string> = {
   province: "Tỉnh/Thành",
 };
 
+/** Field code shown to admins and suggested as incoming key; custom fields use their configured code, not the internal id. */
+function getWebhookFieldCode(field: WebhookField) {
+  return field.fieldKey ?? field.key;
+}
+
 function toWebhookFieldOptions(fields: WebhookField[]): GroupedFieldOption[] {
   return fields.map((field) => ({
     value: field.key,
@@ -821,6 +842,8 @@ function toWebhookFieldOptions(fields: WebhookField[]): GroupedFieldOption[] {
     description: webhookFieldTypeLabels[field.type] ?? field.type,
     badge: field.group === "CUSTOM" ? "Tùy chỉnh" : undefined,
     keywords: [field.key],
+    disabled: field.readOnly,
+    disabledReason: field.readOnlyReason,
   }));
 }
 
@@ -1034,7 +1057,15 @@ function WebhookForm({
                       id={`crm-field-${index}`}
                       value={field.value}
                       options={fieldOptions}
-                      onChange={field.onChange}
+                      onChange={(value) => {
+                        field.onChange(value);
+                        const selected = fields.find((item) => item.key === value);
+                        if (selected && !form.getValues(`mappings.${index}.incomingKey`)?.trim())
+                          form.setValue(`mappings.${index}.incomingKey`, getWebhookFieldCode(selected), {
+                            shouldDirty: true,
+                            shouldValidate: true,
+                          });
+                      }}
                       aria-label={`Trường CRM cho mapping ${index + 1}`}
                     />
                   )}

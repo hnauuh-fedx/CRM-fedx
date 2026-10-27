@@ -5,7 +5,7 @@ import { Navigate, useSearchParams } from "react-router-dom";
 import { Field, FieldLabel } from "@/components/ui/field";
 import { Select, SelectContent, SelectGroup, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import type { CustomFieldEntityType } from "../custom-field.types";
-import { leadFormFieldCatalog } from "@admission-crm/shared/lead-form-field-catalog";
+import { leadFieldConfigurationCatalog } from "@admission-crm/shared/lead-form-field-catalog";
 import { saleActivityFormFieldCatalog, saleReminderFormFieldCatalog } from "../sale-form-field-catalog";
 import { CustomFieldsManagementPage, type CustomFieldsManagementConfig } from "./custom-fields-management-page";
 
@@ -23,7 +23,7 @@ const saleFormConfigs: SaleFormConfig[] = [
     label: "Form lead",
     entityType: "LEAD",
     description: "Xem toàn bộ cấu trúc form lead và quản lý các trường thông tin bổ sung.",
-    systemFieldGroups: leadFormFieldCatalog,
+    systemFieldGroups: leadFieldConfigurationCatalog,
   },
   {
     key: "activity",

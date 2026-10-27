@@ -195,6 +195,7 @@ async function persistLeadInTransaction(
         title: "Bạn được phân công lead mới",
         content: `Lead ${input.fullName.trim()} đã được phân công cho bạn.`,
         type: "lead_assignment",
+        lead_id: lead.id,
       },
     });
     await tx.audit_logs.create({

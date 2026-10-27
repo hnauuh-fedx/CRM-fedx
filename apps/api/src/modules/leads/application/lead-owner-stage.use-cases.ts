@@ -433,6 +433,7 @@ export async function assignVisibleLead(
         title: "Bạn được phân công lead mới",
         content: `Lead ${lead.full_name} đã được phân công cho bạn.`,
         type: "lead_assignment",
+        lead_id: leadId,
       },
     });
     await tx.audit_logs.create({

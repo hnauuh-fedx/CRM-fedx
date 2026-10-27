@@ -208,9 +208,11 @@ const permissionCodeOptions = [
   { code: "campaign.delete", name: "Xóa chiến dịch", module: "marketing" },
   {
     code: "lead_source.manage",
-    name: "Quản lý nguồn lead",
+    name: "Quản lý nguồn học viên",
     module: "marketing",
   },
+  { code: "lead_channel.view", name: "Xem danh mục Nguồn", module: "marketing" },
+  { code: "lead_channel.manage", name: "Quản lý danh mục Nguồn", module: "marketing" },
   { code: "utm.view", name: "Xem UTM", module: "marketing" },
   { code: "utm.view_own", name: "Xem UTM của tôi", module: "marketing" },
   {

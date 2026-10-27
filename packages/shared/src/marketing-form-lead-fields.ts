@@ -1,4 +1,4 @@
-import { leadFormFieldCatalog, type LeadSystemField } from "./lead-form-field-catalog.js";
+import { leadFormFieldCatalog, leadSourceFieldGroup, type LeadSystemField } from "./lead-form-field-catalog.js";
 
 /** Original Lead columns, kept in snake_case because saved forms already reference them. */
 export const legacyMarketingLeadFields = [
@@ -19,7 +19,12 @@ const excludedCatalogKeys = new Set([
   "pipelineStageId", "admissionStatusId",
 ]);
 
-const catalogFields = leadFormFieldCatalog.flatMap((group) => group.fields);
+/** Nhóm nguồn can be answered by a question; the other source fields only come from webhooks. */
+const writableSourceKeys = new Set(["originId"]);
+const catalogFields = [
+  ...leadFormFieldCatalog.flatMap((group) => group.fields),
+  ...leadSourceFieldGroup.fields.filter((field) => writableSourceKeys.has(field.key)),
+];
 
 /** Other Lead form fields (camelCase catalog keys) that a question can write to. */
 export const extendedMarketingLeadFields = catalogFields
@@ -35,7 +40,7 @@ const legacyLabels: Record<(typeof legacyMarketingLeadFields)[number], string> =
   gender: "Giới tính",
   date_of_birth: "Ngày sinh",
   note: "Ghi chú",
-  source_id: "Nguồn lead",
+  source_id: "Nguồn học viên",
   institution_program_id: "Chương trình",
   major_id: "Ngành đăng ký",
 };

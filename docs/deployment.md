@@ -32,7 +32,7 @@ Idempotency-Key: external-event-id
 Content-Type: application/json
 ```
 
-A durable request accepted by the queue returns `202 Accepted` with `request_id`; it does not return a Lead ID. `Idempotency-Key` is optional but recommended. Reusing a key with the same canonical JSON payload returns the original request. Reusing it with a different payload returns `409 IDEMPOTENCY_KEY_CONFLICT`.
+A durable request accepted by the queue returns `200 OK` with `request_id` (some senders such as Ladipage retry on any other 2xx); it does not return a Lead ID. `Idempotency-Key` is optional but recommended. Reusing a key with the same canonical JSON payload returns the original request. Reusing it with a different payload returns `409 IDEMPOTENCY_KEY_CONFLICT`.
 
 Automatic retries use the webhook configuration snapshot captured at ingestion. Manual reprocessing uses the original masked payload with the current webhook mapping and policy. Attempts are finite and exhausted transient failures become `DEAD_LETTER`.
 
