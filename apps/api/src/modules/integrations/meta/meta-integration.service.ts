@@ -3,6 +3,7 @@ import type { Prisma } from "../../../generated/prisma/client";
 
 import { env, gptApiKey } from "../../../config/env";
 import { prisma } from "../../../database/prisma";
+import { storeIntegrationMessage } from "../shared/integration-message-store";
 import type { AuthUser } from "../../auth/auth.types";
 import { triggerAutomation } from "../../automations/automation-engine.service";
 import { extractLeadInformation, mayContainLeadInformation, normalizeVietnamPhone } from "../shared/lead-extraction.service";
@@ -231,6 +232,7 @@ export async function disconnectMetaConnection(user: AuthUser, id: string) {
 
 export async function storeMetaWebhookEvent(item: { pageId: string | null; senderId: string | null; timestamp: number | null; event: MetaMessagingEvent }) {
   if (!item.pageId || !item.senderId || item.event.message?.is_echo) return null;
+  const senderId = item.senderId;
   const connection = await prisma.meta_connections.findFirst({ where: { page_id: item.pageId, status: "active" } });
   if (!connection) return null;
   const eventType = item.event.message ? "message" : item.event.postback ? "postback" : null;
@@ -238,21 +240,21 @@ export async function storeMetaWebhookEvent(item: { pageId: string | null; sende
   const content = item.event.message?.text ?? item.event.postback?.title ?? item.event.postback?.payload ?? null;
   const fallbackId = createHash("sha256").update(`${item.pageId}:${item.senderId}:${item.timestamp}:${eventType}:${content ?? ""}`).digest("hex");
   const messageId = item.event.message?.mid ?? `event-${fallbackId}`;
-  const message = await prisma.meta_messages.upsert({
+  const message = await storeIntegrationMessage(() => prisma.meta_messages.upsert({
     where: { connection_id_meta_message_id: { connection_id: connection.id, meta_message_id: messageId } },
     update: {},
     create: {
       connection_id: connection.id,
       meta_message_id: messageId,
-      sender_psid: item.senderId,
+      sender_psid: senderId,
       direction: "inbound",
       event_type: eventType,
       message_text: content,
       sent_at: new Date(item.timestamp ?? Date.now()),
       raw_payload: JSON.parse(JSON.stringify(item.event)) as Prisma.InputJsonValue,
     },
-  });
-  return { messageId: message.id };
+  }), () => prisma.meta_messages.findUniqueOrThrow({ where: { connection_id_meta_message_id: { connection_id: connection.id, meta_message_id: messageId } } }));
+  return { messageId: message.id, processingStatus: message.processing_status };
 }
 
 async function syncMetaUserProfile(connection: { id: string; page_access_token_encrypted: string }, psid: string) {
@@ -309,7 +311,7 @@ export async function processMetaMessage(messageId: string) {
       ]);
       return;
     }
-    const existing = await prisma.leads.findFirst({ where: { phone, deleted_at: null }, select: { id: true } });
+    const existing = await prisma.leads.findFirst({ where: { phone, deleted_at: null, institution_program_id: connection.institution_program_id }, select: { id: true } });
     let leadId = existing?.id;
     if (leadId) {
       await prisma.lead_activities.create({ data: { lead_id: leadId, user_id: connection.created_by, type: "meta_information_received", content: "Nhận thêm thông tin ứng viên từ Facebook Messenger." } });

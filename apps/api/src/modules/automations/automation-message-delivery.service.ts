@@ -35,6 +35,7 @@ export function getAutomationMessageProviderCapabilities() {
 }
 
 export async function sendAutomationMessage(input: SendAutomationMessageInput) {
+  const retrySafe = { email: env.AUTOMATION_EMAIL_IDEMPOTENCY_SUPPORTED, sms: env.AUTOMATION_SMS_IDEMPOTENCY_SUPPORTED, zns: env.AUTOMATION_ZNS_IDEMPOTENCY_SUPPORTED }[input.channel];
   if (!input.actor.permissions.includes("lead.sensitive.view")) {
     throw new UnrecoverableError("Tài khoản kích hoạt không có quyền dùng thông tin liên hệ nhạy cảm.");
   }
@@ -108,9 +109,10 @@ export async function sendAutomationMessage(input: SendAutomationMessageInput) {
   });
   if (Buffer.byteLength(body, "utf8") > 64 * 1024) throw new UnrecoverableError("Nội dung gửi vượt quá giới hạn 64 KB.");
 
-  const claim = await claimAutomationDelivery(delivery.id);
+  const claim = await claimAutomationDelivery(delivery.id, undefined, undefined, retrySafe);
   if (!claim.claimed) {
     if (claim.status === "sent" || claim.status === "suppressed") return { status: claim.status };
+    if (claim.status === "needs_review") throw new UnrecoverableError("Kết quả gửi trước chưa được xác nhận. Cần đối soát với provider trước khi gửi lại.");
     throw new Error("Lượt gửi đang được worker khác xử lý.");
   }
   let response: Response;
@@ -122,14 +124,16 @@ export async function sendAutomationMessage(input: SendAutomationMessageInput) {
       signal: AbortSignal.timeout(10_000),
     });
   } catch (error) {
-    await recordTransientFailure(delivery.id, claim.attemptCount, "network_error", toErrorMessage(error));
+    await recordTransientFailure(delivery.id, claim.attemptCount, "network_error", toErrorMessage(error), retrySafe);
+    if (!retrySafe) throw new UnrecoverableError("Kết quả gửi chưa rõ do lỗi mạng. Cần đối soát trước khi gửi lại.");
     throw error;
   }
   const classification = classifyAutomationDeliveryHttpStatus(response.status);
   if (classification !== "success") {
     const message = `Provider ${input.channel.toUpperCase()} trả về HTTP ${response.status}.`;
-    await recordTransientFailure(delivery.id, claim.attemptCount, `http_${response.status}`, message);
+    await recordTransientFailure(delivery.id, claim.attemptCount, `http_${response.status}`, message, retrySafe || classification === "unrecoverable");
     if (classification === "unrecoverable") throw new UnrecoverableError(message);
+    if (!retrySafe) throw new UnrecoverableError(`${message} Cần đối soát trước khi gửi lại.`);
     throw new Error(message);
   }
   const providerDeliveryId = response.headers.get("x-delivery-id")?.slice(0, 255) ?? null;
@@ -140,10 +144,10 @@ export async function sendAutomationMessage(input: SendAutomationMessageInput) {
   return { status: "sent" as const };
 }
 
-async function recordTransientFailure(id: string, attemptCount: number, code: string, message: string) {
+async function recordTransientFailure(id: string, attemptCount: number, code: string, message: string, retrySafe: boolean) {
   await prisma.automation_message_deliveries.updateMany({
     where: { id, status: "sending", attempt_count: attemptCount },
-    data: { status: "failed", error_code: code, error_message: message.slice(0, 1000), updated_at: new Date() },
+    data: { status: retrySafe ? "failed" : "needs_review", error_code: code, error_message: message.slice(0, 1000), updated_at: new Date() },
   });
 }
 

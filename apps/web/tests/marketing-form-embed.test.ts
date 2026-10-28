@@ -62,7 +62,7 @@ test("host snippet verifies origin/source/form and never posts with wildcard", (
   assert.match(source, /event\.source !== iframe\.contentWindow/);
   assert.match(source, /data\.formId !== formId/);
   assert.match(source, /exactKeys\(data, baseKeys/);
-  assert.match(source, /postMessage\([^]*iframeUrl\.origin\)/);
+  assert.match(source, /postMessage\([^]*iframeUrl\.origin\s*,?\s*\)/);
   assert.doesNotMatch(source, /postMessage\([^,]+,\s*["']\*["']/);
   assert.match(source, /redirectUrl\.protocol === "https:"/);
   assert.match(source, /iframe\.style\.minHeight = "240px"/);
@@ -83,7 +83,7 @@ test("iframe verifies the configured parent before accepting tracking", () => {
 
 test("production share code requires an environment public base URL", () => {
   const source = readFileSync(fileURLToPath(new URL("../src/modules/marketing/pages/marketing-forms-page.tsx", import.meta.url)), "utf8");
-  assert.match(source, /VITE_PUBLIC_WEB_URL \?\? \(import\.meta\.env\.PROD \? "" : window\.location\.origin\)/);
+  assert.match(source, /VITE_PUBLIC_WEB_URL\s*\?\?\s*\(import\.meta\.env\.PROD \? "" : window\.location\.origin\)/);
   assert.match(source, /if \(!configuredOrigin\) return ""/);
   assert.match(source, /import\.meta\.env\.PROD && local/);
 });

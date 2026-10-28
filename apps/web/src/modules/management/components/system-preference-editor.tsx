@@ -17,6 +17,7 @@ import { DisplayLayoutLeaveGuard } from "../display-layout/use-display-layout-le
 import { preferenceDescriptions, preferenceFields, preferenceLabels, type PreferenceFieldDefinition } from "../system-preference-fields";
 import { saveSystemPreference } from "@/services/system-preferences.service";
 import { SystemPreferenceHistory } from "./system-preference-history";
+import { ManualLeadCreatorsPicker } from "./manual-lead-creators-picker";
 const savedDateFormatter = new Intl.DateTimeFormat("vi-VN", { dateStyle: "short", timeStyle: "short", timeZone: "Asia/Ho_Chi_Minh" });
 
 export function SystemPreferenceEditor({ snapshot, programId, onDirtyChange }: { snapshot: PreferenceSnapshot; programId: string; onDirtyChange: (dirty: boolean) => void }) {
@@ -32,6 +33,7 @@ export function SystemPreferenceEditor({ snapshot, programId, onDirtyChange }: {
       form.reset(saved.value); setBaseline(saved); onDirtyChange(false); setMessage("Đã lưu cấu hình.");
       queryClient.setQueryData<{ institutionProgramId: string; sections: PreferenceSnapshot[] }>(["system-preferences", programId], current => current ? { ...current, sections: current.sections.map(item => item.section === saved.section ? saved : item) } : current);
       void queryClient.invalidateQueries({ queryKey: ["system-preference-history", programId, snapshot.section] });
+      if (snapshot.section === "assignment") void queryClient.invalidateQueries({ queryKey: ["leads", "action-options"] });
     },
   });
   function change(key: string, value: unknown) {
@@ -48,6 +50,7 @@ export function SystemPreferenceEditor({ snapshot, programId, onDirtyChange }: {
         {snapshot.section === "assignment" && can("automation.manage") && <div className="flex flex-wrap gap-2"><Button type="button" asChild variant="outline"><Link to="/automations">Chọn Sale và cách chia trong Rule Automation</Link></Button><Button type="button" asChild variant="outline"><Link to="/management/sale-work-schedules">Thiết lập giờ làm việc</Link></Button></div>}
         {mutation.isError && <Alert variant="destructive"><AlertTitle>Chưa lưu được cấu hình</AlertTitle><AlertDescription>{mutation.error.message}<Button type="button" variant="outline" disabled={mutation.isPending} onClick={async () => { await queryClient.invalidateQueries({ queryKey: ["system-preferences", programId] }); setMessage("Đã tải dữ liệu mới. Chọn Hủy thay đổi để dùng phiên bản mới nhất."); }}>Tải dữ liệu mới</Button></AlertDescription></Alert>}
         {preferenceFields[snapshot.section].map(definition => <PreferenceControl key={definition.key} definition={definition} value={values[definition.key]} disabled={mutation.isPending} error={form.formState.errors[definition.key]?.message} onChange={value => change(definition.key, value)} />)}
+        {snapshot.section === "assignment" && <ManualLeadCreatorsPicker programId={programId} value={(values.manualUnassignedCreatorIds as string[] | undefined) ?? []} disabled={mutation.isPending} error={form.formState.errors.manualUnassignedCreatorIds?.message} onChange={ids => change("manualUnassignedCreatorIds", ids)} />}
         {message && <p role="status" className="text-sm text-muted-foreground">{message}</p>}
       </FieldGroup></CardContent>
       <CardFooter className="mt-6 flex flex-wrap justify-between gap-3 border-t pt-5">

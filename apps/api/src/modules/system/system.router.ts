@@ -2,7 +2,7 @@ import { Router } from "express";
 import { z } from "zod";
 import { preferenceSchemas, preferenceSections, simulatePreferences, type PreferenceSection, type SystemPreferences } from "@admission-crm/shared/system-preferences";
 import { getInstitutionProgramScope } from "../institutions/institution-program-scope";
-import { getPreferenceSnapshots, savePreference } from "./system-preferences.service";
+import { getPreferenceSnapshots, listManualLeadCreators, savePreference } from "./system-preferences.service";
 import { preferenceRevision } from "./system-preferences.service";
 import { prisma } from "../../database/prisma";
 import { leadFormFieldCatalog } from "@admission-crm/shared/lead-form-field-catalog";
@@ -46,6 +46,15 @@ const reportConfigSchema = z.object({
 export const systemRouter = Router();
 
 systemRouter.use(requireAuthentication, requireAnyPermission("system.manage"));
+
+systemRouter.get("/manual-lead-creators", async (request, response, next) => {
+  try {
+    const programId = getInstitutionProgramScope(request);
+    const parsed = z.object({ search: z.string().trim().max(100).default(""), page: z.coerce.number().int().min(1).max(10000).default(1), selectedIds: z.preprocess(value => typeof value === "string" ? value.split(",").filter(Boolean) : [], z.array(z.uuid()).max(500)) }).safeParse(request.query);
+    if (!programId || !parsed.success) { response.status(400).json({ message: "Thông tin tìm người dùng hoặc chương trình không hợp lệ." }); return; }
+    response.json(await listManualLeadCreators(programId, parsed.data.search, parsed.data.page, parsed.data.selectedIds));
+  } catch (error) { next(error); }
+});
 
 systemRouter.get("/lead-form", async (_request, response, next) => {
   try {
@@ -121,7 +130,9 @@ systemRouter.put("/preferences/:section", async (request, response, next) => {
       response.status(400).json({ message: "Cấu hình không hợp lệ. Kiểm tra các lựa chọn và chương trình áp dụng." }); return;
     }
     const saved = await savePreference(request.authUser!, programId, section, body.data.value, body.data.revision, request.ip);
-    if (!saved.ok) { response.status(409).json({ message: "Cấu hình đã được người khác thay đổi. Tải lại dữ liệu trước khi lưu." }); return; }
+    if (!saved.ok) {
+      response.status(saved.reason === "conflict" ? 409 : 400).json({ message: saved.reason === "conflict" ? "Cấu hình đã được người khác thay đổi. Tải lại dữ liệu trước khi lưu." : "Danh sách có tài khoản không còn hoạt động hoặc không thuộc chương trình này. Vui lòng bỏ chọn tài khoản không hợp lệ." }); return;
+    }
     response.json(saved.snapshot);
   } catch (error) { next(error); }
 });

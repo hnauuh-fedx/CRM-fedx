@@ -136,7 +136,7 @@ async function main() {
       created_by: manager.id,
       is_active: true,
     },
-    select: { id: true },
+    select: { id: true, name: true },
   });
   ruleIds.push(rule.id);
 
@@ -210,6 +210,14 @@ async function main() {
   assert.equal(changedLead.assigned_to, fourthSale.id, "Weighted reassignment phải chọn Sale có tỷ lệ tải/trọng số thấp nhất và loại người có thêm vai trò quản lý.");
   const oldMonitor = await prisma.automation_reassignment_monitors.findUniqueOrThrow({ where: { id: active.monitor.id } });
   assert.equal(oldMonitor.status, "reassigned");
+  const systemActivities = await prisma.lead_activities.findMany({ where: { lead_id: active.lead.id, type: { in: ["lead_assigned", "automation_reassignment"] } } });
+  assert.ok(systemActivities.length >= 2);
+  for (const activity of systemActivities) {
+    assert.deepEqual((activity.metadata as { executionSource?: unknown })?.executionSource, { channel: "automation", ruleId: rule.id, name: rule.name });
+  }
+  const assignmentAudit = await prisma.audit_logs.findFirstOrThrow({ where: { entity_id: active.lead.id, action: "reassign" } });
+  assert.deepEqual((assignmentAudit.new_data as { executionSource?: unknown })?.executionSource, { channel: "automation", ruleId: rule.id, name: rule.name });
+
   assert.ok(oldMonitor.next_assignment_id);
   const successor = await prisma.automation_reassignment_monitors.findFirst({
     where: { assignment_id: oldMonitor.next_assignment_id! },

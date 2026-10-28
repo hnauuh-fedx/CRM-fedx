@@ -1,47 +1,26 @@
 import { app } from "./app";
 import { env } from "./config/env";
 import { prisma } from "./database/prisma";
-import { processReminderNotifications } from "./modules/leads/reminder-notification.service";
-import { processFirstContactSla } from "./modules/leads/first-contact-sla.service";
-import { redisCommandConnection } from "./config/redis";
+import { redisCommandConnection, redisConnection } from "./config/redis";
+import { zaloQueue } from "./modules/integrations/zalo/zalo-queue.service";
+import { metaQueue } from "./modules/integrations/meta/meta-queue.service";
+import { installWorkerShutdown } from "./workers/worker-shutdown";
 import { getWebhookQueueAdapter } from "./modules/webhooks/webhook-queue.service";
 import { closeAutomationEngine } from "./modules/automations/automation-engine.service";
-
-const REMINDER_NOTIFICATION_INTERVAL_MS = 60_000;
 
 const server = app.listen(env.PORT, () => {
   console.log(`Admission CRM API listening on http://localhost:${env.PORT}`);
 });
 
-let processingReminders = false;
-async function runReminderNotificationProcessor() {
-  if (processingReminders) return;
-  processingReminders = true;
-  try {
-    await processReminderNotifications();
-    await processFirstContactSla();
-  } catch (error) {
-    console.error("Reminder notification processor failed.", error);
-  } finally {
-    processingReminders = false;
-  }
-}
-
-void runReminderNotificationProcessor();
-const reminderNotificationInterval = setInterval(() => {
-  void runReminderNotificationProcessor();
-}, REMINDER_NOTIFICATION_INTERVAL_MS);
-
-async function shutdown() {
-  clearInterval(reminderNotificationInterval);
+installWorkerShutdown({ name: "api", timeoutMs: env.WORKER_SHUTDOWN_TIMEOUT_MS, drain: async () => {
   await new Promise<void>((resolve, reject) => {
     server.close((error) => error ? reject(error) : resolve());
   });
+}, close: async () => {
   await closeAutomationEngine();
+  await Promise.all([zaloQueue?.close(), metaQueue?.close()]);
   await getWebhookQueueAdapter()?.close?.();
   await redisCommandConnection?.quit();
+  await redisConnection?.quit();
   await prisma.$disconnect();
-}
-
-process.on("SIGINT", shutdown);
-process.on("SIGTERM", shutdown);
+} });

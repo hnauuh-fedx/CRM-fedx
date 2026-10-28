@@ -718,7 +718,7 @@ function RecentChangesPanel({ lead }: { lead: LeadDetail }) {
           <div className="rounded-lg border bg-card p-4">
             <div className="flex flex-wrap items-center gap-2">
               <Badge variant="secondary">Nhật ký</Badge>
-              <p className="min-w-0 whitespace-pre-wrap break-words text-sm font-semibold">{change.description}</p>
+              <p className="min-w-0 whitespace-pre-wrap break-words text-sm font-semibold"><HistoryContent text={change.description} webhook={change.sourceWebhook} /></p>
             </div>
             <p className="mt-2 text-xs text-muted-foreground">
               {change.actorLabel ?? change.actor?.fullName ?? "Hệ thống"} ·{" "}
@@ -1217,6 +1217,14 @@ function FileComposer({
   );
 }
 
+function HistoryContent({ text, webhook }: { text: string; webhook?: { id: string; name: string } }) {
+  const auth = useAuth();
+  if (!webhook || !(auth.can("webhook.view") || auth.can("webhook.manage"))) return <>{text}</>;
+  const index = text.indexOf(webhook.name);
+  const link = <Link to={"/quan-ly/tich-hop/webhooks?webhookId=" + encodeURIComponent(webhook.id)} className="rounded-sm text-primary underline underline-offset-2 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring" aria-label={"Mở webhook " + webhook.name}>{webhook.name}</Link>;
+  return index < 0 ? <>{text}{" · "}{link}</> : <>{text.slice(0, index)}{link}{text.slice(index + webhook.name.length)}</>;
+}
+
 function TimelineCard({
   lead,
   embedded = false,
@@ -1243,7 +1251,7 @@ function TimelineCard({
               </p>
               {activity.content && (
                 <p className="whitespace-pre-wrap break-words text-sm text-muted-foreground">
-                  {activity.content}
+                  <HistoryContent text={activity.content} webhook={activity.sourceWebhook} />
                 </p>
               )}
               <p className="text-xs text-muted-foreground">

@@ -1,6 +1,7 @@
 import { createHmac } from "node:crypto";
 import { request as httpsRequest } from "node:https";
 import { UnrecoverableError } from "bullmq";
+import { env } from "../../config/env";
 
 import { prisma } from "../../database/prisma";
 import type { AuthUser } from "../auth/auth.types";
@@ -126,9 +127,10 @@ export async function callAutomationWebhook(input: {
     throw new UnrecoverableError(toErrorMessage(error));
   }
   const signature = createHmac("sha256", secret).update(`${timestamp}.${payload}`).digest("hex");
-  const claim = await claimAutomationDelivery(delivery.id);
+  const claim = await claimAutomationDelivery(delivery.id, undefined, undefined, env.AUTOMATION_WEBHOOK_IDEMPOTENCY_SUPPORTED);
   if (!claim.claimed) {
     if (claim.status === "sent" || claim.status === "suppressed") return;
+    if (claim.status === "needs_review") throw new UnrecoverableError("Kết quả webhook trước chưa rõ. Cần đối soát receiver trước khi gửi lại.");
     throw new Error("Webhook đang được worker khác xử lý.");
   }
   let response: { status: number; deliveryId: string | null };
@@ -141,6 +143,7 @@ export async function callAutomationWebhook(input: {
     }, payload);
   } catch (error) {
     await failDelivery(delivery.id, claim.attemptCount, "network_error", toErrorMessage(error));
+    if (!env.AUTOMATION_WEBHOOK_IDEMPOTENCY_SUPPORTED) throw new UnrecoverableError("Kết quả webhook chưa rõ do lỗi mạng. Cần đối soát trước khi gửi lại.");
     throw error;
   }
   const classification = classifyAutomationDeliveryHttpStatus(response.status);
@@ -148,6 +151,7 @@ export async function callAutomationWebhook(input: {
     const message = `Webhook trả về HTTP ${response.status}.`;
     await failDelivery(delivery.id, claim.attemptCount, `http_${response.status}`, message);
     if (classification === "unrecoverable") throw new UnrecoverableError(message);
+    if (!env.AUTOMATION_WEBHOOK_IDEMPOTENCY_SUPPORTED) throw new UnrecoverableError(`${message} Cần đối soát trước khi gửi lại.`);
     throw new Error(message);
   }
   await prisma.automation_message_deliveries.updateMany({
@@ -162,7 +166,7 @@ function canManageEndpointScope(user: AuthUser, institutionProgramId?: string) {
 }
 
 async function failDelivery(id: string, attemptCount: number, code: string, message: string) {
-  await prisma.automation_message_deliveries.updateMany({ where: { id, status: "sending", attempt_count: attemptCount }, data: { status: "failed", error_code: code, error_message: message.slice(0, 1000), updated_at: new Date() } });
+  await prisma.automation_message_deliveries.updateMany({ where: { id, status: "sending", attempt_count: attemptCount }, data: { status: env.AUTOMATION_WEBHOOK_IDEMPOTENCY_SUPPORTED ? "failed" : "needs_review", error_code: code, error_message: message.slice(0, 1000), updated_at: new Date() } });
 }
 
 function toErrorMessage(error: unknown) {

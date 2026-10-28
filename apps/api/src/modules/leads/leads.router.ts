@@ -6,6 +6,7 @@ import multer from "multer";
 import { z } from "zod";
 import * as XLSX from "xlsx";
 import { getPreference } from "../system/system-preferences.service";
+import { recordDataExport } from "../notifications/data-export-notification.service";
 import { LEAD_PHONE_MAX_LENGTH } from "@admission-crm/shared/lead-phone";
 
 import {
@@ -14,6 +15,7 @@ import {
 } from "../../middlewares/auth.middleware";
 import {
   getLeadDetail,
+  getLeadScopeWhere,
   getLeadFilterOptions,
   leadListPermissions,
   listLeads,
@@ -168,7 +170,7 @@ const leadBodySchema = z.object({
     context.addIssue({ code: "custom", path: ["institutionProgramId"], message: "Vui lòng chọn chương trình tuyển sinh." });
   }
 });
-const createLeadBodySchema = leadBodySchema.refine((input) => Boolean(input.institutionProgramId), {
+const createLeadBodySchema = leadBodySchema.extend({ customFieldValues: z.record(z.uuid(), z.unknown().nullable()).refine(values => Object.keys(values).length <= 100).default({}) }).refine((input) => Boolean(input.institutionProgramId), {
   path: ["institutionProgramId"],
   message: "Vui lòng chọn chương trình tuyển sinh.",
 });
@@ -236,7 +238,15 @@ leadsRouter.get("/export", requireAuthentication, requireAnyPermission("lead.exp
     const sheet = XLSX.utils.json_to_sheet(rows, { header: columns.map(column => labels[column]) });
     const workbook = XLSX.utils.book_new(); XLSX.utils.book_append_sheet(workbook, sheet, "Lead");
     const buffer = XLSX.write(workbook, { type: "buffer", bookType: config.format });
-    await prisma.audit_logs.create({ data: { user_id: request.authUser!.id, entity_type: "lead_export", action: "export", ip_address: request.ip, new_data: { institutionProgramId: programId, page: parsed.data.page, count: rows.length, columns, format: config.format } } });
+    await recordDataExport(request.authUser!, {
+      institutionProgramId: programId,
+      label: parsed.data.audience === "students" ? "danh sách sinh viên" : parsed.data.audience === "all" ? "danh sách khách hàng" : "danh sách lead",
+      count: rows.length,
+      format: config.format,
+      entityType: "lead_export",
+      metadata: { page: parsed.data.page, columns },
+    }, request.ip);
+    response.setHeader("Cache-Control", "no-store");
     response.setHeader("Content-Type", config.format === "csv" ? "text/csv; charset=utf-8" : "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet");
     response.setHeader("Content-Disposition", `attachment; filename="leads-page-${parsed.data.page}.${config.format}"`);
     response.send(buffer);
@@ -534,7 +544,8 @@ leadsRouter.post(
         response.status(400).json({ message: "Dữ liệu tạo lead không hợp lệ." });
         return;
       }
-      const result = await createLead(request.authUser!, parsed.data, request.ip);
+      const { customFieldValues, ...leadInput } = parsed.data;
+      const result = await createLead(request.authUser!, leadInput, request.ip, undefined, Object.entries(customFieldValues).map(([fieldId, value]) => ({ fieldId, value })));
       if (!result.ok) {
         if (
           result.reason === "permission_denied" ||
@@ -563,7 +574,8 @@ leadsRouter.post(
         });
         return;
       }
-      response.status(201).json(result.data);
+      const visible = await prisma.leads.findFirst({ where: { id: result.data.id, deleted_at: null, ...getLeadScopeWhere(request.authUser!, institutionProgramId) }, select: { id: true } });
+      response.status(201).json({ ...result.data, canOpen: Boolean(visible) });
     } catch (error) {
       next(error);
     }

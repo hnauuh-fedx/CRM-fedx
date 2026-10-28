@@ -1,5 +1,25 @@
 # Nghiệm thu cấu hình hiển thị — 16/10/2026
 
+## Sửa dropdown phòng ban — 28/10/2026
+
+Đã tái hiện hai lỗi bằng kiểm thử trước khi sửa: phòng ban chưa có Sale bị loại khỏi danh sách chủ sở hữu; tra cứu Sale/phòng ban và tính phạm vi ảnh hưởng còn đọc bảng gán vai trò cũ. Đã tách mục đích chọn chủ sở hữu khỏi điều kiện áp dụng mẫu và chuyển truy vấn sang `user_program_roles`.
+
+Các file chính: `display-layout-owner-picker.tsx`, `grouped-field-picker.tsx`, `display-layout-editor.tsx`, service web và router/service API của display-layout. Thêm kiểm thử API và trình duyệt riêng cho dropdown; cập nhật fixture tích hợp theo mô hình vai trò hiện hành.
+
+| Kiểm tra đợt sửa | Kết quả |
+| --- | --- |
+| `test:integration:display-layout-owner` (API) | PASS: phòng ban chưa có Sale, phạm vi, quyền, chủ sở hữu không tồn tại, giữ điều kiện áp dụng mẫu |
+| `test:integration:display-layout` (API/PostgreSQL/HTTP) | PASS sau khi cập nhật fixture dùng vai trò theo chương trình |
+| `test:display-layout-owner-browser` (Web) | PASS: dropdown, thử lại khi lỗi, phân trang, tìm kiếm, chọn bằng bàn phím, giữ nhãn đã chọn, không có kết quả, màn hình 390 px |
+| TypeScript API và Web | PASS |
+| Vite production build | PASS; log `build-owner-dropdown.log` |
+| React Doctor diff | 100/100, không có chẩn đoán |
+| React Doctor toàn frontend hiện tại | 82/100; 33 chẩn đoán ở các phần khác, không thuộc dropdown vừa sửa |
+| Smoke test danh sách cũ `test:display-layout-browser` | Chưa đạt: fixture còn giả định offset cột thao tác 104 px (thực tế 70 px); thử kiểm tra tiếp gặp selector bộ lọc `#lead-search` không còn hiện trong fixture. Không sửa các giả định ngoài phạm vi này. |
+| `git diff --check` | PASS |
+
+Ảnh kiểm tra: [dropdown ở màn hình nhỏ](owner-dropdown-mobile.png). Các kết quả bên dưới là lịch sử nghiệm thu ngày 16/10, không thay thế kết quả hiện tại ở bảng này.
+
 Đường dẫn: `/quan-ly/cau-hinh-hien-thi`. Phạm vi: bảng danh sách lead CRM Sale.
 
 Đã hoàn thành phần tiếp theo: ghim cột, độ rộng và giao diện cá nhân theo chính sách của mẫu quản lý. Người quản lý bật từng thao tác trong mẫu rồi lưu/áp dụng; Sale dùng nút **Giao diện cá nhân** trong danh sách lead.

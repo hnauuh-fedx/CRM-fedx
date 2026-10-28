@@ -17,6 +17,16 @@ test("validators reject contradictory, unknown and out-of-range settings", () =>
   assert.equal(preferenceSchemas.exports.safeParse({ format: "xlsx", columns: ["phone", "phone"] }).success, false);
   assert.equal(preferenceSchemas.intake.safeParse({ ...defaultSystemPreferences.intake, arbitrary: true }).success, false);
 });
+test("manual creator exceptions default to empty for legacy settings and validate account IDs", () => {
+  const legacy = { enabled: false, preserveAssigned: true, sources: ["manual"] };
+  const restored = readPreference("assignment", JSON.stringify({ value: legacy }));
+  assert.deepEqual(restored.manualUnassignedCreatorIds, []);
+  assert.equal(restored.enabled, false);
+  const id = "00000000-0000-4000-8000-000000000001";
+  assert.equal(preferenceSchemas.assignment.safeParse({ ...legacy, manualUnassignedCreatorIds: [id] }).success, true);
+  assert.equal(preferenceSchemas.assignment.safeParse({ ...legacy, manualUnassignedCreatorIds: [id, id] }).success, false);
+  assert.equal(preferenceSchemas.assignment.safeParse({ ...legacy, manualUnassignedCreatorIds: ["DIRECTOR"] }).success, false);
+});
 test("preserving blanks keeps false/zero while excluding empty text and missing fields", () => {
   const input = { note: " ", email: "", score: 0, enabled: false, name: "An", absent: undefined };
   assert.deepEqual([...selectInboundFields(Object.keys(input) as Array<keyof typeof input>, input, true)], ["score", "enabled", "name"]);

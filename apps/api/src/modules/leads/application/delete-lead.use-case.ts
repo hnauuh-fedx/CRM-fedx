@@ -2,6 +2,7 @@ import { prisma } from "../../../database/prisma";
 import type { AuthUser } from "../../auth/auth.types";
 import { getLeadScopeWhere } from "../lead-list.service";
 import { findVisibleLeadForMutation } from "./lead-mutation-support";
+import { notifyDataDeletion } from "../../notifications/management-data-notification.service";
 
 function canDeleteLead(actor: AuthUser) {
   return actor.permissions.includes("lead.delete");
@@ -53,6 +54,7 @@ export async function deleteLead(
         new_data: { deleted: true },
       },
     });
+    await notifyDataDeletion(tx, actor, [lead]);
     return { ok: true as const, data: { id: leadId } };
   });
 }
@@ -81,6 +83,7 @@ export async function deleteLeads(
       select: {
         id: true,
         full_name: true,
+        institution_program_id: true,
         pipeline_stage_id: true,
         assigned_to: true,
       },
@@ -118,6 +121,7 @@ export async function deleteLeads(
       })),
     });
 
+    await notifyDataDeletion(tx, actor, leads);
     return {
       ok: true as const,
       data: {

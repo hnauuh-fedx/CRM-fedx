@@ -4,6 +4,7 @@ import { Prisma } from "../../generated/prisma/client";
 import type { AuthUser } from "../auth/auth.types";
 import { getLeadScopeWhere } from "../leads/lead-list.service";
 import { getMarketingFormVisibility } from "./marketing-form-scope";
+import { recordDataExport } from "../notifications/data-export-notification.service";
 
 export const marketingFormReportPermissions = ["report.view_all", "report.marketing.view", "report.marketing.view_own"];
 export const marketingFormReportQuerySchema = z.object({
@@ -85,7 +86,16 @@ export async function exportMarketingFormReport(user: AuthUser, formId: string, 
   if (!user.permissions.includes("report.personal.export")) return { ok: false as const, reason: "permission_denied" as const };
   const report = await getMarketingFormReport(user, formId, query);
   if (!report.ok) return report;
-  await prisma.audit_logs.create({ data: { user_id: user.id, entity_type: "marketing_form", entity_id: formId, action: "export_aggregate_report",
-    ip_address: ipAddress, new_data: { institutionProgramId: report.data.form.institutionProgramId, ...report.data.filters, page: query.page } }, select: { id: true } });
-  return { ok: true as const, data: marketingFormReportCsv(report.data) };
+  const csv = marketingFormReportCsv(report.data);
+  await recordDataExport(user, {
+    institutionProgramId: report.data.form.institutionProgramId,
+    label: "báo cáo biểu mẫu marketing",
+    count: Object.keys(report.data.summary).length + report.data.statuses.length + report.data.pipeline.length,
+    format: "csv",
+    entityType: "marketing_form",
+    entityId: formId,
+    action: "export_aggregate_report",
+    metadata: { ...report.data.filters, page: query.page },
+  }, ipAddress);
+  return { ok: true as const, data: csv };
 }

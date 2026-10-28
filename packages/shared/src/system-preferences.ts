@@ -7,7 +7,7 @@ export const preferenceSchemas = {
     excelDuplicate: z.enum(["reject", "skip"]),
     bizflyDuplicate: z.enum(["legacy", "skip", "reject"]),
   }).strict(),
-  assignment: z.object({ enabled: z.boolean(), preserveAssigned: z.literal(true), sources: z.array(z.enum(["manual", "import", "public_form", "api", "webhook"])).max(5).default(["manual", "import", "public_form", "api", "webhook"]) }).strict(),
+  assignment: z.object({ enabled: z.boolean(), preserveAssigned: z.literal(true), sources: z.array(z.enum(["manual", "import", "public_form", "api", "webhook"])).max(5).default(["manual", "import", "public_form", "api", "webhook"]), manualUnassignedCreatorIds: z.array(z.uuid()).max(500).refine(ids => new Set(ids).size === ids.length, "Người dùng không được lặp lại.").default([]) }).strict(),
   notifications: z.object({ assignment: z.boolean(), reminderDue: z.boolean(), reminderOverdue: z.boolean() }).strict(),
   reminders: z.object({ overdueHours: z.number().int().min(1).max(720), warnOverlap: z.boolean() }).strict(),
   sla: z.object({ enabled: z.boolean(), firstContactMinutes: z.number().int().min(5).max(43200) }).strict(),
@@ -21,7 +21,7 @@ export const preferenceSections = Object.keys(preferenceSchemas) as PreferenceSe
 // These are compatibility defaults. Loading the page never writes or resets them.
 export const defaultSystemPreferences: SystemPreferences = {
   intake: { inboundDuplicate: "source", blankValues: "legacy", excelDuplicate: "reject", bizflyDuplicate: "legacy" },
-  assignment: { enabled: true, preserveAssigned: true, sources: ["manual", "import", "public_form", "api", "webhook"] },
+  assignment: { enabled: true, preserveAssigned: true, sources: ["manual", "import", "public_form", "api", "webhook"], manualUnassignedCreatorIds: [] },
   notifications: { assignment: true, reminderDue: true, reminderOverdue: true },
   reminders: { overdueHours: 24, warnOverlap: true },
   sla: { enabled: false, firstContactMinutes: 30 },

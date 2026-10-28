@@ -25,6 +25,18 @@ API key/value cũ không được sửa/xóa key cấu hình nghiệp vụ có g
 
 ## Các nguyên tắc thực thi
 
+### Ngoại lệ cho người tạo lead nhập tay
+
+Trong **Phân công Sale → Người nhập tay để trống Sale phụ trách**, quản trị có thể tìm, tích chọn nhiều tài khoản và lưu riêng cho từng chương trình. Danh sách lưu tại `assignment.manualUnassignedCreatorIds`, mặc định rỗng và tương thích với cấu hình cũ. Không tự thêm tài khoản theo tên vai trò Admin/Giám đốc.
+
+- Không chọn Sale trong biểu mẫu: tài khoản trong danh sách tạo lead với `assigned_to = null`, chờ rule `lead_created` đang bật; tài khoản ngoài danh sách tự nhận khi đủ điều kiện Sale trong chương trình. Tài khoản không đủ điều kiện Sale vẫn để trống.
+- Chọn Sale chính/phụ cụ thể: giữ nguyên xử lý phân công và kiểm tra permission/scope hiện có. Danh sách ngoại lệ không cấp `lead.create`, `lead.assign` hay quyền xem thêm lead.
+- Người tạo vẫn lưu ở `owner_id` và lịch sử tạo. Excel, Bizfly, API/webhook và form công khai không nhận mặc định tự gán của nhập tay.
+- Cần bật tự phân công, nguồn Nhập tay và có rule phù hợp; cấu hình không tạo hoặc bật rule thay người quản trị.
+- Bộ chọn trả tối đa 20 tài khoản mỗi trang và chỉ trả tên/ID trong chương trình. Lưu từ chối tài khoản sai chương trình, không còn hoạt động, ID không hợp lệ hoặc trùng ID. Có thể bỏ chọn tài khoản cũ không còn khả dụng.
+- Trường bổ sung của ứng viên được lưu trong cùng transaction tạo lead, trước khi quyền xem thay đổi vì phân công. Nếu dữ liệu bổ sung sai, toàn bộ lần tạo được rollback. Popup nhận trạng thái `canOpen` từ máy chủ; khi không có quyền xem hồ sơ mới, hiển thị tạo thành công thay vì điều hướng tới trang 403.
+- Kiểm thử bổ sung bao gồm mặc định tự nhận, người tạo ngoại lệ, gán cụ thể, khác chương trình, picker không lộ người ngoài phạm vi, dữ liệu bổ sung và thực thi node phân công thật. Browser test kiểm tra tìm/chọn/lưu/hủy danh sách ở desktop/mobile; ảnh `artifacts/system-preferences/manual-creators-*.png`.
+
 - API quản trị yêu cầu xác thực + `system.manage` + chương trình được cấp quyền. Quyền quản trị không cấp quyền đọc hay xuất lead.
 - Lưu từng nhóm có revision SHA-256 và khóa transaction; lưu từ revision cũ trả HTTP 409. Khôi phục vẫn dùng cùng kiểm tra revision và ghi audit mới.
 - Mẫu ghi chú và biểu mẫu toàn hệ thống cũng kiểm tra revision. Toggle trường ở màn hình cũ dùng chung khóa khi cập nhật.

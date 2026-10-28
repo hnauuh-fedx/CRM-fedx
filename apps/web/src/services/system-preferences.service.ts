@@ -4,6 +4,11 @@ import { apiRequest } from "./api";
 export function getSystemPreferences(token: string, programId: string) {
   return apiRequest<{ institutionProgramId: string; sections: PreferenceSnapshot[] }>("/system/preferences", { headers: { "X-Institution-Program-Id": programId } }, token);
 }
+export type ManualLeadCreatorOptions = { data: Array<{ id: string; fullName: string }>; selected: Array<{ id: string; fullName: string; active: boolean }>; page: number; hasMore: boolean };
+export function getManualLeadCreators(token: string, programId: string, search: string, page: number, selectedIds: string[]) {
+  const params = new URLSearchParams({ search, page: String(page), selectedIds: selectedIds.join(",") });
+  return apiRequest<ManualLeadCreatorOptions>(`/system/manual-lead-creators?${params}`, { headers: { "X-Institution-Program-Id": programId } }, token);
+}
 export function saveSystemPreference(token: string, programId: string, section: PreferenceSection, value: unknown, revision: string) {
   return apiRequest<PreferenceSnapshot>(`/system/preferences/${section}`, { method: "PUT", headers: { "X-Institution-Program-Id": programId }, body: JSON.stringify({ value, revision }) }, token);
 }

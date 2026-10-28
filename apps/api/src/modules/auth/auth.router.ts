@@ -6,9 +6,10 @@ import { requireAuthentication } from "../../middlewares/auth.middleware";
 import { getAuthUser, loginWithPassword } from "./auth.service";
 import { changeOwnPassword, logoutAuthSession, refreshAuthSession } from "./auth-session.service";
 import { clearRefreshCookie, protectAuthMutation, readRefreshCookie, writeRefreshCookie } from "./auth-cookie";
+import { createLoginRateLimitMiddleware } from "./login-rate-limit";
 
 const loginSchema = z.object({
-  email: z.string().trim().email(),
+  email: z.string().trim().max(254).email(),
   password: z.string().min(1).max(100),
   rememberDevice: z.boolean().default(false),
 });
@@ -16,7 +17,7 @@ const loginSchema = z.object({
 export const authRouter = Router();
 authRouter.use((_request, response, next) => { response.setHeader("Cache-Control", "no-store"); next(); });
 
-authRouter.post("/login", protectAuthMutation, async (request, response, next) => {
+authRouter.post("/login", protectAuthMutation, createLoginRateLimitMiddleware(), async (request, response, next) => {
   try {
     const parsed = loginSchema.safeParse(request.body);
     if (!parsed.success) {

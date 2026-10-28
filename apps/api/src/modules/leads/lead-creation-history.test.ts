@@ -7,6 +7,8 @@ test("trusted inbound creation must not attribute API receipt to the director", 
   const activities: any[] = [];
   const audits: any[] = [];
   const tx: any = {
+    $queryRaw: async () => [],
+    system_settings: { findUnique: async () => null },
     leads: { create: async () => ({ id: "lead" }) },
     student_profiles: { findUnique: async () => null },
     admission_profiles: { findUnique: async () => null },

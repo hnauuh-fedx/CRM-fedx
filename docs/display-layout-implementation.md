@@ -1,5 +1,11 @@
 # Cấu hình hiển thị lead
 
+## Chọn phòng ban sở hữu mẫu — 28/10/2026
+
+Khi tạo mẫu mới, bấm **Phòng ban sở hữu mẫu** để mở dropdown, tìm theo tên và chọn phòng ban. Tìm kiếm và phân trang nằm ngay trong dropdown; có trạng thái tải, không có kết quả và nút thử lại khi lỗi. Người có phạm vi toàn bộ có thể chọn **Toàn bộ chương trình (mẫu chung)**.
+
+Danh sách chủ sở hữu trả về phòng ban trong phạm vi quản lý, kể cả phòng ban chưa có Sale. API dùng `purpose=OWNER` riêng cho lựa chọn này; danh sách đối tượng áp dụng vẫn dùng điều kiện Sale hợp lệ trong chương trình. Tra cứu quyền theo chương trình và tính phạm vi ảnh hưởng dùng bảng `user_program_roles` hiện hành. Không thay đổi schema.
+
 ## Sử dụng
 
 Mở **Quản trị → Cấu hình hiển thị** (`/quan-ly/cau-hinh-hien-thi`).

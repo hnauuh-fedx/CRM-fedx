@@ -1,6 +1,7 @@
 import { Queue, UnrecoverableError, Worker, type Job } from "bullmq";
 
-import { redisConnection } from "../../config/redis";
+import { redisConnection, isRedisDisabled } from "../../config/redis";
+import { instrumentWorker } from "../operations/worker-heartbeat";
 import { prisma } from "../../database/prisma";
 import { executeRegisteredAutomationNode } from "./automation-action-registry";
 import { decideNodeExecution } from "./automation-execution-state";
@@ -28,7 +29,7 @@ export const AUTOMATION_QUEUE_NAME = getAutomationQueueName();
 const AUTOMATION_BULK_PREPARE_QUEUE_NAME = `${AUTOMATION_QUEUE_NAME}_bulk_prepare`;
 const AUTOMATION_BULK_LEAD_QUEUE_NAME = `${AUTOMATION_QUEUE_NAME}_bulk_lead`;
 const delayMsPerMinute = getDelayMsPerMinute();
-const isAutomationDisabled = process.env.DISABLE_AUTOMATION_WORKER === "true" || process.env.NODE_ENV === "test";
+const isAutomationDisabled = isRedisDisabled || process.env.DISABLE_AUTOMATION_WORKER === "true" || process.env.NODE_ENV === "test";
 const automationProcessRole = process.env.AUTOMATION_PROCESS_ROLE ?? (process.env.NODE_ENV === "integration" ? "all" : "api");
 const shouldRunAutomationWorkers = !isAutomationDisabled && (automationProcessRole === "worker" || automationProcessRole === "all");
 
@@ -460,6 +461,9 @@ const automationBulkLeadWorker = !shouldRunAutomationWorkers
       limiter: { max: 100, duration: 60_000 },
     });
 
+instrumentWorker(automationWorker);
+instrumentWorker(automationBulkPrepareWorker);
+instrumentWorker(automationBulkLeadWorker);
 let slaScanTimer: NodeJS.Timeout | null = null;
 if (automationWorker) {
   const scanSchedules = () => {

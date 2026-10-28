@@ -11,14 +11,15 @@ export async function claimAutomationDelivery(
   id: string,
   now = new Date(),
   store: DeliveryClaimStore = prisma.automation_message_deliveries as unknown as DeliveryClaimStore,
+  allowAmbiguousRetry = false,
 ) {
   const staleBefore = new Date(now.getTime() - DELIVERY_LEASE_MS);
   const claimed = await store.updateManyAndReturn({
     where: {
       id,
       OR: [
-        { status: { in: ["pending", "failed"] } },
-        { status: "sending", updated_at: { lt: staleBefore } },
+        { status: { in: allowAmbiguousRetry ? ["pending", "failed"] : ["pending"] } },
+        ...(allowAmbiguousRetry ? [{ status: "sending", updated_at: { lt: staleBefore } }] : []),
       ],
     },
     data: { status: "sending", attempt_count: { increment: 1 }, error_code: null, error_message: null, updated_at: now },
@@ -27,6 +28,11 @@ export async function claimAutomationDelivery(
   if (claimed.length > 0) {
     return { claimed: true as const, status: "sending", attemptCount: claimed[0].attempt_count };
   }
+  if (!allowAmbiguousRetry) await store.updateManyAndReturn({
+    where: { id, OR: [{ status: "failed" }, { status: "sending", updated_at: { lt: staleBefore } }] },
+    data: { status: "needs_review", error_code: "delivery_outcome_unknown", error_message: "Không tự gửi lại khi provider chưa được xác nhận hỗ trợ idempotency.", updated_at: now },
+    select: { attempt_count: true },
+  });
   const delivery = await store.findUnique({ where: { id }, select: { status: true } });
   return { claimed: false as const, status: delivery?.status ?? "missing" };
 }

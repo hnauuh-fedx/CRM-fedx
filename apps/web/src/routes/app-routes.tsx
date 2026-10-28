@@ -8,6 +8,8 @@ import { WorkspacePage } from "@/modules/dashboard/pages/workspace-page";
 import { ForbiddenPage } from "@/pages/forbidden-page";
 import { ProtectedRoute } from "./protected-route";
 
+const ReleasesPage = lazy(() => import("@/modules/management/pages/releases-page").then(module => ({ default: module.ReleasesPage })));
+
 const UsersAccessPage = lazy(() =>
   import("@/modules/management/pages/users-access-page").then((module) => ({
     default: module.UsersAccessPage,
@@ -271,6 +273,9 @@ export function AppRoutes() {
 
         <Route element={<ProtectedRoute />}>
           <Route element={<MainLayout />}>
+            <Route element={<ProtectedRoute anyPermissions={["release.view"]} />}>
+              <Route path="/management/releases" element={<ReleasesPage />} />
+            </Route>
             <Route path="/tong-quan" element={<WorkspacePage />} />
             <Route path="/khong-co-quyen" element={<ForbiddenPage />} />
 

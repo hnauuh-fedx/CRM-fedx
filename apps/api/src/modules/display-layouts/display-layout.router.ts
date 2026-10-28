@@ -143,6 +143,10 @@ displayLayoutsRouter.get(
       search(req.query.search),
       page(req.query.page),
       req.query.departmentId ? id(req.query.departmentId) : undefined,
+      z
+        .enum(["ASSIGNMENT", "OWNER"])
+        .default("ASSIGNMENT")
+        .parse(req.query.purpose),
     ),
   ),
 );

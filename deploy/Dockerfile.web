@@ -1,0 +1,23 @@
+FROM node:24-bookworm-slim AS build
+WORKDIR /app
+COPY package.json package-lock.json ./
+COPY apps/api/package.json apps/api/package.json
+COPY apps/web/package.json apps/web/package.json
+COPY apps/release-controller/package.json apps/release-controller/package.json
+COPY packages/shared/package.json packages/shared/package.json
+RUN npm ci --ignore-scripts
+COPY packages/shared packages/shared
+COPY apps/web apps/web
+ARG RELEASE_COMMIT=development
+ARG PUBLIC_WEB_URL
+ENV VITE_API_URL=/api VITE_PUBLIC_WEB_URL=$PUBLIC_WEB_URL
+RUN npm run typecheck --workspace apps/web && npm run build --workspace apps/web
+RUN node -e "require('fs').writeFileSync('apps/web/dist/version.json',JSON.stringify({commit:process.argv[1]}))" "$RELEASE_COMMIT"
+
+FROM node:24-bookworm-slim
+WORKDIR /app
+COPY --from=build /app/apps/web/dist ./public
+COPY deploy/web-server.mjs ./server.mjs
+USER node
+EXPOSE 8080
+CMD ["node", "server.mjs"]

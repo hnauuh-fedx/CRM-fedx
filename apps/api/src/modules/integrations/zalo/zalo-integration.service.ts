@@ -2,6 +2,7 @@ import { createHash, timingSafeEqual } from "node:crypto";
 
 import { env, gptApiKey } from "../../../config/env";
 import { prisma } from "../../../database/prisma";
+import { storeIntegrationMessage } from "../shared/integration-message-store";
 import type { AuthUser } from "../../auth/auth.types";
 import { triggerAutomation } from "../../automations/automation-engine.service";
 import {
@@ -344,7 +345,7 @@ export async function storeZaloWebhookMessage(payload: ZaloWebhookPayload) {
   if (!appId || !oaId || !zaloUserId || !zaloMessageId || payload.event_name !== "user_send_text") return null;
   const connection = await prisma.zalo_connections.findFirst({ where: { app_id: appId, oa_id: oaId, status: "active" } });
   if (!connection) return null;
-  const message = await prisma.zalo_messages.upsert({
+  const message = await storeIntegrationMessage(() => prisma.zalo_messages.upsert({
     where: { connection_id_zalo_message_id: { connection_id: connection.id, zalo_message_id: zaloMessageId } },
     update: {},
     create: {
@@ -352,14 +353,14 @@ export async function storeZaloWebhookMessage(payload: ZaloWebhookPayload) {
       zalo_message_id: zaloMessageId,
       zalo_user_id: zaloUserId,
       direction: "inbound",
-      event_name: payload.event_name,
+      event_name: "user_send_text",
       message_type: "text",
       message_text: payload.message?.text ?? null,
       sent_at: new Date(Number(payload.timestamp) || Date.now()),
       raw_payload: JSON.parse(JSON.stringify(payload)),
     },
-  });
-  return { connectionId: connection.id, messageId: message.id };
+  }), () => prisma.zalo_messages.findUniqueOrThrow({ where: { connection_id_zalo_message_id: { connection_id: connection.id, zalo_message_id: zaloMessageId } } }));
+  return { connectionId: connection.id, messageId: message.id, processingStatus: message.processing_status };
 }
 
 async function syncZaloUserProfile(connection: {
@@ -435,6 +436,7 @@ export async function processZaloMessage(messageId: string) {
   if (!message || message.processing_status !== "pending") return;
   const connection = await prisma.zalo_connections.findUnique({ where: { id: message.connection_id } });
   if (!connection || connection.status === "disconnected") return;
+  if (!connection.institution_program_id) throw new Error("Kết nối Zalo chưa được gắn chương trình tuyển sinh. Cần kiểm tra cấu hình.");
   const profileDisplayName = await syncZaloUserProfile(connection, message.zalo_user_id);
   const text = message.message_text?.trim() ?? "";
   if (!text) {
@@ -501,7 +503,7 @@ export async function processZaloMessage(messageId: string) {
       const leadId = latestLeadExtraction.lead_id;
       const updated = await prisma.$transaction(async (tx) => {
         const currentLead = await tx.leads.findFirst({
-          where: { id: leadId, deleted_at: null },
+          where: { id: leadId, deleted_at: null, institution_program_id: connection.institution_program_id },
           select: { full_name: true },
         });
         if (!currentLead) return false;
@@ -571,7 +573,7 @@ export async function processZaloMessage(messageId: string) {
 
     const resolvedName = resolveInboundLeadName(explicitName, profileDisplayName, phone);
 
-    const existing = await prisma.leads.findFirst({ where: { phone, deleted_at: null }, select: { id: true } });
+    const existing = await prisma.leads.findFirst({ where: { phone, deleted_at: null, institution_program_id: connection.institution_program_id }, select: { id: true } });
     let leadId = existing?.id;
     if (leadId) {
       await prisma.lead_activities.create({

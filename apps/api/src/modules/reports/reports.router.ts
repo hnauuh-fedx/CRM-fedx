@@ -31,6 +31,7 @@ import {
   updatePersonalDashboardConfig,
 } from "./personal-dashboard.service";
 import { reportFilterOperators } from "./report-filter-conditions";
+import { recordDataExport } from "../notifications/data-export-notification.service";
 
 export const reportsRouter = Router();
 const overviewQuerySchema = z.object({
@@ -208,7 +209,7 @@ reportsRouter.get("/personal/:id/export", requireAuthentication, requireAnyPermi
   const format = z.enum(["csv", "xlsx"]).safeParse(request.query.format);
   if (!id.success || !format.success) return response.status(400).json({ message: "Yêu cầu xuất báo cáo không hợp lệ." });
   const result = await executePersonalReport(request.authUser!, id.data, getInstitutionProgramScope(request));
-  if (!result) return response.status(404).json({ message: "Không tìm thấy báo cáo trong phạm vi của bạn." });
+  if (!result?.report?.institutionProgramId) return response.status(404).json({ message: "Không tìm thấy báo cáo trong phạm vi của bạn." });
   const rows = result.pivot
     ? [
         ...result.pivot.rows.map((item) => ({
@@ -228,16 +229,28 @@ reportsRouter.get("/personal/:id/export", requireAuthentication, requireAnyPermi
       ];
   const safeName = result.report!.name.replace(/[^a-zA-Z0-9_-]+/g, "-").replace(/^-|-$/g, "") || "bao-cao-kpi";
   const sheet = XLSX.utils.json_to_sheet(rows);
+  const workbook = XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(workbook, sheet, "KPI");
+  const file = format.data === "csv"
+    ? `\uFEFF${XLSX.utils.sheet_to_csv(sheet)}`
+    : XLSX.write(workbook, { type: "buffer", bookType: "xlsx" });
+  await recordDataExport(request.authUser!, {
+    institutionProgramId: result.report!.institutionProgramId,
+    label: "báo cáo cá nhân",
+    count: rows.length,
+    format: format.data,
+    entityType: "personal_report",
+    entityId: id.data,
+  }, request.ip);
+  response.setHeader("Cache-Control", "no-store");
   if (format.data === "csv") {
     response.setHeader("Content-Type", "text/csv; charset=utf-8");
     response.setHeader("Content-Disposition", `attachment; filename="${safeName}.csv"`);
-    return response.send(`\uFEFF${XLSX.utils.sheet_to_csv(sheet)}`);
+    return response.send(file);
   }
-  const workbook = XLSX.utils.book_new();
-  XLSX.utils.book_append_sheet(workbook, sheet, "KPI");
   response.setHeader("Content-Type", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet");
   response.setHeader("Content-Disposition", `attachment; filename="${safeName}.xlsx"`);
-  return response.send(XLSX.write(workbook, { type: "buffer", bookType: "xlsx" }));
+  return response.send(file);
 });
 
 reportsRouter.get(

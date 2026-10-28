@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import { hash } from "bcryptjs";
+import { getLeadDetail } from "../modules/leads/lead-list.service";
 import { prisma } from "../database/prisma";
 import { mapWebhookPayload, testWebhook } from "../modules/webhooks/webhook.service";
 import { webhookFieldMetadata } from "../modules/webhooks/webhook.types";
@@ -84,6 +85,24 @@ async function run() {
     assert.equal(await prisma.lead_source_occurrences.count({ where: { lead_id: occurrence.lead_id } }), 2);
     assert.equal((await prisma.leads.findUniqueOrThrow({ where: { id: occurrence.lead_id } })).source_id, studentSource.id);
 
+    const history = await getLeadDetail(actor, occurrence.lead_id, program.id);
+    assert.ok(history);
+    assert.equal(history.activities.find((row) => row.type === "lead_updated")?.actorLabel, "API / Webhook · Renamed webhook");
+    assert.ok(history.activities.filter((row) => row.type === "source_received").every((row) => row.actorLabel?.startsWith("API / Webhook · ")));
+    assert.equal(history.recentChanges.find((row) => row.action === "webhook_update")?.actorLabel, "API / Webhook · Renamed webhook");
+    assert.ok(history.recentChanges.filter((row) => row.action === "source_received").every((row) => row.actorLabel?.startsWith("API / Webhook · ")));
+
+    assert.equal(history.activities.find((row) => row.type === "lead_created")?.sourceWebhook, undefined, "No webhook navigation without permission");
+    const linkedHistory = await getLeadDetail({ ...actor, permissions: [...actor.permissions, "webhook.view"] }, occurrence.lead_id, program.id);
+    assert.ok(linkedHistory);
+    assert.deepEqual(linkedHistory.activities.find((row) => row.type === "lead_created")?.sourceWebhook, { id: webhook.id, name: "Webhook fallback" });
+    assert.deepEqual(linkedHistory.recentChanges.find((row) => row.action === "create")?.sourceWebhook, { id: webhook.id, name: "Webhook fallback" });
+    const otherProgram = await prisma.institution_programs.findFirstOrThrow({ where: { id: { not: program.id } } });
+    await prisma.webhooks.update({ where: { id: webhook.id }, data: { institution_program_id: otherProgram.id } });
+    const movedHistory = await getLeadDetail({ ...actor, permissions: [...actor.permissions, "webhook.view"] }, occurrence.lead_id, program.id);
+    assert.equal(movedHistory?.activities.find((row) => row.type === "lead_created")?.sourceWebhook, undefined, "No cross-program webhook navigation");
+    await prisma.webhooks.update({ where: { id: webhook.id }, data: { institution_program_id: program.id } });
+
     const form = await prisma.marketing_forms.create({ data: {
       platform: "facebook",
       name: "Created form source", public_key: randomUUID(), status: "published", form_type: "lead_form", institution_program_id: program.id, source_id: studentSource.id,
@@ -127,6 +146,7 @@ async function run() {
       await prisma.leads.deleteMany({ where: { institution_program_id: programId } });
       await prisma.lead_origins.deleteMany({ where: { institution_program_id: programId } });
       await prisma.lead_sources.deleteMany({ where: { institution_program_id: programId } });
+      await prisma.lead_channels.deleteMany({ where: { institution_program_id: programId } });
       await prisma.institution_programs.delete({ where: { id: programId } });
     }
     await prisma.$disconnect();

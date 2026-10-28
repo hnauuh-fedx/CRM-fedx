@@ -89,7 +89,7 @@ export function updateLeadCustomFields(leadId: string, input: LeadCustomFieldUpd
 
 export function createLead(input: LeadFormInput, accessToken: string) {
   const headers = input.institutionProgramId ? { "X-Institution-Program-Id": input.institutionProgramId } : undefined;
-  return apiRequest<{ id: string }>("/leads", { method: "POST", headers, body: JSON.stringify(input) }, accessToken);
+  return apiRequest<{ id: string; canOpen?: boolean }>("/leads", { method: "POST", headers, body: JSON.stringify(input) }, accessToken);
 }
 
 export function importLeads(file: File, accessToken: string, preview = false) {

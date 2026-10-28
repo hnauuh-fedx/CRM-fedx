@@ -1,6 +1,7 @@
 import { UnrecoverableError } from "bullmq";
 import { lockWorkScheduleProgram } from "../sale-work-schedules/work-schedule-lock";
 
+import { withHistorySource } from "../../database/history-source";
 import { prisma } from "../../database/prisma";
 import { getPreference } from "../system/system-preferences.service";
 import { Prisma } from "../../generated/prisma/client";
@@ -98,7 +99,9 @@ export async function executeRegisteredAutomationNode(
   }
   const executor: AutomationActionExecutor | undefined = executors[node.type];
   if (!executor) throw new UnrecoverableError(`Loại node không được hỗ trợ: ${String(node.type)}`);
-  return executor(node, context, nodeExecutionId);
+  const rule = await prisma.automation_rules.findUnique({ where: { id: context.ruleId }, select: { name: true } });
+  return withHistorySource({ channel: "automation", ruleId: context.ruleId, name: rule?.name },
+    () => executor(node, context, nodeExecutionId));
 }
 
 async function executeConditionAction(node: AutomationNode, context: AutomationContext, nodeExecutionId: string) {

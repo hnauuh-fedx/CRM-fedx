@@ -15,7 +15,7 @@ import {
   verifyZaloWebhookSignature,
   type ZaloWebhookPayload,
 } from "./zalo-integration.service";
-import { enqueueZaloMessage, enqueueZaloRefresh } from "./zalo-worker.service";
+import { enqueueZaloMessage, enqueueZaloRefresh } from "./zalo-queue.service";
 
 declare global {
   namespace Express {
@@ -51,7 +51,7 @@ zaloRouter.post("/webhook", async (request, response, next) => {
       return;
     }
     const stored = await storeZaloWebhookMessage(payload);
-    if (stored) await enqueueZaloMessage(stored.messageId);
+    if (stored?.processingStatus === "pending" && !await enqueueZaloMessage(stored.messageId)) { response.status(503).json({ message: "Sự kiện đã được lưu, hàng đợi Zalo chưa sẵn sàng." }); return; }
     response.status(200).json({ message: "OK" });
   } catch (error) {
     next(error);

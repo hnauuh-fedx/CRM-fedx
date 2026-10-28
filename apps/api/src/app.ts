@@ -1,4 +1,9 @@
 import cors from "cors";
+import { releasesRouter } from "./modules/releases/releases.router";
+import { prisma } from "./database/prisma";
+import { redisCommandConnection, redisFeatures } from "./config/redis";
+import { checkReadiness } from "./modules/operations/readiness";
+import { operationsRouter } from "./modules/operations/operations.router";
 import { saleWorkSchedulesRouter } from "./modules/sale-work-schedules/sale-work-schedule.router";
 import { displayLayoutsRouter } from "./modules/display-layouts/display-layout.router";
 import express, { type ErrorRequestHandler } from "express";
@@ -41,11 +46,9 @@ import { publicWebhookRouter, webhooksAdminRouter } from "./modules/webhooks/web
 import { zaloRouter } from "./modules/integrations/zalo/zalo.router";
 import { metaRouter } from "./modules/integrations/meta/meta.router";
 import { tiktokRouter } from "./modules/integrations/tiktok/tiktok.router";
-import "./modules/integrations/zalo/zalo-worker.service";
-import "./modules/integrations/meta/meta-worker.service";
 
 export const app = express();
-app.set("trust proxy", 1);
+app.set("trust proxy", env.AUTH_TRUSTED_PROXY_CIDRS.length ? env.AUTH_TRUSTED_PROXY_CIDRS : false);
 const publicDirectory = path.resolve(__dirname, "../public");
 
 app.disable("x-powered-by");
@@ -66,6 +69,17 @@ app.use(express.json({
 app.get("/api/health", (_request, response) => {
   response.json({ status: "ok" });
 });
+
+app.get("/api/ready", async (_request, response) => {
+  response.setHeader("Cache-Control", "no-store");
+  const ready = await checkReadiness({ database: () => prisma.$queryRaw`SELECT 1`, redis: redisCommandConnection ? redisCommandConnection.ping.bind(redisCommandConnection) : null, features: redisFeatures });
+  if (ready) response.json({ status: "ok", commit: process.env.RELEASE_COMMIT ?? "development" });
+  else response.status(503).json({ status: "unavailable" });
+});
+
+app.use("/api/system/operations", operationsRouter);
+
+app.use("/api/system/releases", releasesRouter);
 
 app.use("/api/auth", authRouter);
 app.use("/api/admissions", admissionsRouter);

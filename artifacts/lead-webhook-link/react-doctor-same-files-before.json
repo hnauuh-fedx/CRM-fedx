@@ -1,0 +1,161 @@
+{
+  "schemaVersion": 3,
+  "sourceRevision": "a582f8cd6c54b1a964827b0b33d37585e1536fd6",
+  "mode": "diff",
+  "reactDetected": true,
+  "version": "0.9.18",
+  "ok": true,
+  "directory": "D:\\Project Visual Studio Code\\crm_website\\admission-crm\\apps\\web",
+  "diff": {
+    "baseBranch": "pull request target",
+    "currentBranch": null,
+    "changedFileCount": 2,
+    "isCurrentChanges": false
+  },
+  "projects": [
+    {
+      "directory": "D:\\Project Visual Studio Code\\crm_website\\admission-crm\\apps\\web",
+      "packageRoot": "D:\\Project Visual Studio Code\\crm_website\\admission-crm\\apps\\web",
+      "sourceFilterConfigHash": "bccba9af786c396a5fb90c4b05d568dfa2361741e7b91c1c423877cbaa48bf12",
+      "framework": "vite",
+      "project": {
+        "rootDirectory": "D:\\Project Visual Studio Code\\crm_website\\admission-crm\\apps\\web",
+        "projectName": "@admission-crm/web",
+        "reactVersion": "^19.2.6",
+        "reactMajorVersion": 19,
+        "tailwindVersion": "^4.3.0",
+        "zodVersion": "^4.4.3",
+        "zodMajorVersion": 4,
+        "mobxVersion": null,
+        "mobxMajorVersion": null,
+        "hasMobxReact": false,
+        "mobxReactVersion": null,
+        "hasMobxReactLite": false,
+        "mobxReactLiteVersion": null,
+        "hasMobxStateTree": false,
+        "hasMobxReactObserver": false,
+        "zustandVersion": null,
+        "zustandMajorVersion": null,
+        "framework": "vite",
+        "hasTypeScript": true,
+        "hasReactCompiler": false,
+        "hasReactCompilerLintPlugin": false,
+        "hasTanStackQuery": true,
+        "hasI18nLibrary": false,
+        "hasRadixUi": true,
+        "hasBaseUi": false,
+        "hasReactAriaComponents": false,
+        "hasTanstackTable": true,
+        "hasTanstackVirtual": false,
+        "hasTanstackForm": false,
+        "tanstackQueryVersion": "^5.100.14",
+        "styledComponentsVersion": null,
+        "valtioVersion": null,
+        "valtioMajorVersion": null,
+        "hasRemotion": false,
+        "remotionVersion": null,
+        "remotionMajorVersion": null,
+        "hasThree": false,
+        "threeVersion": null,
+        "threeRelease": null,
+        "hasReactThreeFiber": false,
+        "reactThreeFiberVersion": null,
+        "reactThreeFiberMajorVersion": null,
+        "hasSsrDependency": false,
+        "preactVersion": null,
+        "preactMajorVersion": null,
+        "hasReactNativeWorkspace": false,
+        "nextjsVersion": null,
+        "nextjsMajorVersion": null,
+        "reactRouterVersion": "^7.15.1",
+        "hasReactRouterFramework": false,
+        "expoVersion": null,
+        "shopifyFlashListVersion": null,
+        "shopifyFlashListMajorVersion": null,
+        "hasReanimated": false,
+        "reanimatedVersion": null,
+        "hasShadcnUi": true,
+        "isPreES2023Target": true,
+        "isStaticExport": false,
+        "sourceFileCount": 391
+      },
+      "diagnostics": [
+        {
+          "filePath": "src/modules/leads/pages/lead-detail-page.tsx",
+          "plugin": "react-doctor",
+          "rule": "no-high-complexity-react-function",
+          "severity": "warning",
+          "title": "React function has high control-flow complexity",
+          "message": "`LeadDetailPage` has cyclomatic complexity 26, cognitive complexity 22, and maximum nesting depth 1, so its React logic is hard to understand and change. Extract independent branches into components or hooks.",
+          "help": "Extract independent render branches and state logic into focused components or hooks until the control flow is easy to follow.",
+          "line": 160,
+          "column": 8,
+          "offset": 5265,
+          "length": 5652,
+          "endLine": 309,
+          "category": "Maintainability",
+          "fingerprint": "49a1c9a7f494531b501fcbfd408f0bdea5517e6badff56c6859b806502cddf6a",
+          "id": "src/modules/leads/pages/lead-detail-page.tsx::160:8::react-doctor/no-high-complexity-react-function::e804758526b5829a0a3d668dc051b2cc348abd43accafb14f8c4570cf24b997a",
+          "normalizedFilePath": "src/modules/leads/pages/lead-detail-page.tsx",
+          "tags": [
+            "react-jsx-only",
+            "test-noise"
+          ]
+        }
+      ],
+      "score": {
+        "score": 93,
+        "label": "Great",
+        "rules": {
+          "react-doctor/no-high-complexity-react-function": {
+            "priority": null,
+            "tier": "P3"
+          }
+        }
+      },
+      "skippedChecks": [],
+      "analyzedFiles": [
+        "src/modules/leads/pages/lead-detail-page.tsx",
+        "src/modules/webhooks/pages/webhooks-page.tsx"
+      ],
+      "analyzedFileCount": 2,
+      "complete": true,
+      "scannedFileCount": 2,
+      "elapsedMilliseconds": 2837.9586
+    }
+  ],
+  "diagnostics": [
+    {
+      "filePath": "src/modules/leads/pages/lead-detail-page.tsx",
+      "plugin": "react-doctor",
+      "rule": "no-high-complexity-react-function",
+      "severity": "warning",
+      "title": "React function has high control-flow complexity",
+      "message": "`LeadDetailPage` has cyclomatic complexity 26, cognitive complexity 22, and maximum nesting depth 1, so its React logic is hard to understand and change. Extract independent branches into components or hooks.",
+      "help": "Extract independent render branches and state logic into focused components or hooks until the control flow is easy to follow.",
+      "line": 160,
+      "column": 8,
+      "offset": 5265,
+      "length": 5652,
+      "endLine": 309,
+      "category": "Maintainability",
+      "fingerprint": "49a1c9a7f494531b501fcbfd408f0bdea5517e6badff56c6859b806502cddf6a",
+      "id": "src/modules/leads/pages/lead-detail-page.tsx::160:8::react-doctor/no-high-complexity-react-function::e804758526b5829a0a3d668dc051b2cc348abd43accafb14f8c4570cf24b997a",
+      "normalizedFilePath": "src/modules/leads/pages/lead-detail-page.tsx",
+      "tags": [
+        "react-jsx-only",
+        "test-noise"
+      ]
+    }
+  ],
+  "summary": {
+    "errorCount": 0,
+    "warningCount": 1,
+    "affectedFileCount": 1,
+    "totalDiagnosticCount": 1,
+    "score": 93,
+    "scoreLabel": "Great"
+  },
+  "elapsedMilliseconds": 2911.1867,
+  "error": null
+}

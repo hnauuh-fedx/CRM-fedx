@@ -1,142 +1,63 @@
-import { randomUUID } from "node:crypto";
-import { Queue, Worker, type Job } from "bullmq";
-
+import { Worker, type Job } from "bullmq";
 import { redisConnection } from "../../../config/redis";
 import { prisma } from "../../../database/prisma";
+import { instrumentWorker } from "../../operations/worker-heartbeat";
+import { processDurableIntegrationMessage } from "../shared/integration-message-task";
+import { runIntegrationTask } from "../shared/integration-task-receipt";
+import { ZALO_QUEUE_NAME, zaloQueue, enqueueZaloMessage, enqueueZaloRefresh, type ZaloJobData } from "./zalo-queue.service";
 import { processZaloMessage, refreshZaloConnection, syncRecentZaloUserProfiles } from "./zalo-integration.service";
 
-type ZaloJobData =
-  | { type: "refresh_sweep" }
-  | { type: "refresh_connection"; connectionId: string; force?: boolean }
-  | { type: "process_message"; messageId: string };
-
-export const ZALO_QUEUE_NAME = "zalo_integration_queue";
-const disabled = !redisConnection || process.env.NODE_ENV === "test";
-
-export const zaloQueue = disabled
-  ? null
-  : new Queue<ZaloJobData>(ZALO_QUEUE_NAME, { connection: redisConnection as any });
-
-export async function enqueueZaloMessage(messageId: string) {
-  if (!zaloQueue) return false;
-  await zaloQueue.add("process_message", { type: "process_message", messageId }, {
-    jobId: `zalo-message-${messageId}`,
-    attempts: 4,
-    backoff: { type: "exponential", delay: 60_000 },
-    removeOnComplete: 1_000,
-    removeOnFail: 5_000,
+export async function recoverZaloMessages() {
+  const rows = await prisma.$queryRaw<Array<{ id: string }>>`
+    WITH candidates AS (
+      (SELECT m.id,m.created_at FROM zalo_messages m JOIN zalo_connections c ON c.id=m.connection_id
+       WHERE c.status='active' AND m.processing_status='pending' ORDER BY m.created_at,m.id LIMIT 500)
+      UNION
+      (SELECT m.id,m.created_at FROM integration_task_receipts r JOIN zalo_messages m ON m.id=r.entity_id
+       JOIN zalo_connections c ON c.id=m.connection_id WHERE c.status='active' AND r.provider='zalo' AND r.status='running'
+       AND r.task_key='message:zalo:'||m.id::text ORDER BY m.created_at,m.id LIMIT 500)
+    ) SELECT id FROM candidates ORDER BY created_at,id LIMIT 500`;
+  for (const row of rows) await enqueueZaloMessage(row.id);
+}
+async function refreshConnection(id: string, force: boolean) {
+  const connection = await prisma.zalo_connections.findUnique({ where: { id } });
+  if (!connection || connection.status === "disconnected" || (!force && connection.next_refresh_at > new Date())) return;
+  await runIntegrationTask({ key: `refresh:zalo:${id}:${connection.token_version}`, provider: "zalo", entityId: id, lock: `zalo-refresh:${id}`,
+    terminal: async () => (await prisma.zalo_connections.findUnique({ where: { id }, select: { token_version: true } }))?.token_version !== connection.token_version,
+    action: async () => { await refreshZaloConnection(id); },
+    review: () => prisma.zalo_connections.updateMany({ where: { id, token_version: connection.token_version }, data: { status: "error", last_refresh_error: "Lần refresh trước chưa rõ kết quả. Cần kiểm tra token trước khi thử lại.", updated_at: new Date() } }),
   });
-  return true;
 }
-
-export async function enqueueZaloRefresh(connectionId: string, force = false) {
-  if (!zaloQueue) return false;
-  await zaloQueue.add("refresh_connection", { type: "refresh_connection", connectionId, force }, {
-    jobId: `zalo-refresh-${connectionId}-${Date.now()}`,
-    attempts: 4,
-    backoff: { type: "exponential", delay: 60_000 },
-    removeOnComplete: 100,
-    removeOnFail: 1_000,
-  });
-  return true;
+async function sweep() {
+  await recoverZaloMessages();
+  const configuredApp = process.env.ZALO_APP_ID?.trim() ?? "";
+  const connections = await prisma.$queryRaw<Array<{ id: string }>>`
+    SELECT c.id FROM zalo_connections c WHERE c.status IN ('active','error') AND c.next_refresh_at<=now()
+      AND (${configuredApp}='' OR c.app_id=${configuredApp}) AND NOT EXISTS
+      (SELECT 1 FROM integration_task_receipts r WHERE r.task_key='refresh:zalo:'||c.id::text||':'||c.token_version::text AND r.status='needs_review')
+    ORDER BY c.next_refresh_at,c.id LIMIT 500`;
+  for (const connection of connections) await enqueueZaloRefresh(connection.id);
+  await syncRecentZaloUserProfiles();
 }
-
-async function withRefreshLock(connectionId: string, action: () => Promise<void>) {
-  if (!redisConnection) return;
-  const key = `zalo-token-refresh:${connectionId}`;
-  const owner = randomUUID();
-  const acquired = await redisConnection.set(key, owner, "PX", 120_000, "NX");
-  if (acquired !== "OK") return;
-  try {
-    await action();
-  } finally {
-    await redisConnection.eval(
-      "if redis.call('get', KEYS[1]) == ARGV[1] then return redis.call('del', KEYS[1]) else return 0 end",
-      1,
-      key,
-      owner,
-    );
-  }
+export function createZaloWorker(processMessage = processZaloMessage) {
+  if (!zaloQueue || !redisConnection) return null;
+  const worker = new Worker<ZaloJobData>(ZALO_QUEUE_NAME, async (job: Job<ZaloJobData>) => {
+    if (job.data.type === "refresh_sweep") return sweep();
+    if (job.data.type === "refresh_connection") return refreshConnection(job.data.connectionId, job.data.force ?? false);
+    const id = job.data.messageId;
+    const message = await prisma.zalo_messages.findUnique({ where: { id }, select: { connection_id: true } });
+    if (!message) return;
+    const connection = await prisma.zalo_connections.findUnique({ where: { id: message.connection_id }, select: { status: true } });
+    if (!connection || connection.status === "disconnected") return;
+    return processDurableIntegrationMessage("zalo", id, () => processMessage(id));
+  }, { connection: redisConnection as never, concurrency: 5 });
+  instrumentWorker(worker);
+  worker.on("error", () => console.error(JSON.stringify({ event: "zalo_worker_error" })));
+  worker.on("failed", () => console.error(JSON.stringify({ event: "zalo_worker_failed" })));
+  return worker;
 }
-
-async function withMessageLock(messageId: string, action: () => Promise<void>) {
-  if (!redisConnection) return;
-  const message = await prisma.zalo_messages.findUnique({
-    where: { id: messageId },
-    select: { connection_id: true, zalo_user_id: true },
-  });
-  if (!message) return;
-
-  const key = `zalo-message-processing:${message.connection_id}:${message.zalo_user_id}`;
-  const owner = randomUUID();
-  const acquired = await redisConnection.set(key, owner, "PX", 120_000, "NX");
-  if (acquired !== "OK") throw new Error("Cuộc hội thoại Zalo đang được một worker khác xử lý.");
-  try {
-    await action();
-  } finally {
-    await redisConnection.eval(
-      "if redis.call('get', KEYS[1]) == ARGV[1] then return redis.call('del', KEYS[1]) else return 0 end",
-      1,
-      key,
-      owner,
-    );
-  }
-}
-
-async function runRefreshSweep() {
-  const configuredAppId = process.env.ZALO_APP_ID?.trim();
-  const due = await prisma.zalo_connections.findMany({
-    where: {
-      status: { in: ["active", "error"] },
-      next_refresh_at: { lte: new Date() },
-      ...(configuredAppId ? { app_id: configuredAppId } : {}),
-    },
-    select: { id: true },
-    take: 500,
-  });
-  await Promise.all(due.map((connection) => enqueueZaloRefresh(connection.id)));
-}
-
-export const zaloWorker = disabled
-  ? null
-  : new Worker<ZaloJobData>(
-      ZALO_QUEUE_NAME,
-      async (job: Job<ZaloJobData>) => {
-        if (job.data.type === "refresh_sweep") {
-          await runRefreshSweep();
-          return;
-        }
-        if (job.data.type === "process_message") {
-          const { messageId } = job.data;
-          await withMessageLock(messageId, () => processZaloMessage(messageId));
-          return;
-        }
-        const { connectionId, force } = job.data;
-        await withRefreshLock(connectionId, async () => {
-          if (!force) {
-            const connection = await prisma.zalo_connections.findUnique({
-              where: { id: connectionId },
-              select: { next_refresh_at: true },
-            });
-            if (!connection || connection.next_refresh_at.getTime() > Date.now()) return;
-          }
-          await refreshZaloConnection(connectionId);
-        });
-      },
-      { connection: redisConnection as any, concurrency: 5 },
-    );
-
-zaloWorker?.on("failed", (job, error) => {
-  console.error(`Zalo integration job failed: ${job?.id}`, error);
-});
-
-if (zaloQueue) {
-  zaloQueue.upsertJobScheduler(
-    "zalo-refresh-sweep",
-    { every: 15 * 60 * 1000 },
-    { name: "refresh_sweep", data: { type: "refresh_sweep" } },
-  ).catch((error) => console.error("Cannot schedule Zalo token refresh:", error));
-
-  runRefreshSweep().catch((error) => console.error("Cannot reconcile Zalo token refresh jobs:", error));
-  syncRecentZaloUserProfiles().catch((error) => console.error("Cannot sync recent Zalo user profiles:", error));
+export async function scheduleZaloRecovery() {
+  if (!zaloQueue) return;
+  await zaloQueue.upsertJobScheduler("zalo-recovery-sweep", { every: 60000 }, { name: "refresh_sweep", data: { type: "refresh_sweep" }, opts: { attempts: 3, backoff: { type: "exponential", delay: 1000 }, removeOnComplete: 100, removeOnFail: 1000 } });
+  await zaloQueue.removeJobScheduler("zalo-refresh-sweep");
 }

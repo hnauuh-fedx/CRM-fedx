@@ -1,0 +1,109 @@
+name: Build and register release
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:18-alpine
+        env:
+          POSTGRES_USER: test
+          POSTGRES_PASSWORD: test
+          POSTGRES_DB: test
+        ports: ['5432:5432']
+        options: >-
+          --health-cmd "pg_isready -U test -d test"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+          cache: npm
+      - run: npm ci --ignore-scripts
+      - run: npm run prisma:generate --workspace apps/api
+      - run: npm run typecheck --workspace apps/api
+      - run: npm run typecheck --workspace apps/web
+      - run: npm run typecheck --workspace apps/release-controller
+      - name: Backend unit tests
+        working-directory: apps/api
+        env:
+          NODE_ENV: test
+          DATABASE_URL: postgresql://test:test@localhost:5432/test
+          JWT_SECRET: ci-only-secret-at-least-32-characters-long
+          WEBHOOK_QUEUE_ENABLED: 'false'
+        run: node --import tsx --test --test-force-exit --test-concurrency=2 $(find src -name '*.test.ts')
+      - name: Frontend unit tests
+        working-directory: apps/web
+        run: node --import tsx --test --test-force-exit --test-concurrency=2 $(find tests -name '*.test.ts' -o -name '*.test.tsx')
+      - run: npm test --workspace apps/release-controller
+      - run: npm run test:integration --workspace apps/release-controller
+        env:
+          CONTROL_TEST_DATABASE_URL: postgresql://test:test@localhost:5432/test
+      - run: npm run test:integration:operations --workspace apps/api
+        env:
+          DATABASE_URL: postgresql://test:test@localhost:5432/test
+          JWT_SECRET: ci-only-secret-at-least-32-characters-long
+      - run: npm run test:integration:background-lifecycle --workspace apps/api
+        env:
+          DATABASE_URL: postgresql://test:test@localhost:5432/test
+          JWT_SECRET: ci-only-secret-at-least-32-characters-long
+      - run: npm run test:integration:login-protection --workspace apps/api
+        env:
+          DATABASE_URL: postgresql://test:test@localhost:5432/test
+          JWT_SECRET: ci-only-secret-at-least-32-characters-long
+      - run: npm run build --workspace apps/web
+  publish:
+    needs: verify
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+    steps:
+      - uses: actions/checkout@v4
+      - uses: docker/setup-buildx-action@v3
+      - uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - id: names
+        env:
+          REPOSITORY: ${{ github.repository }}
+        run: echo "prefix=ghcr.io/${REPOSITORY,,}" >> "$GITHUB_OUTPUT"
+      - id: api
+        uses: docker/build-push-action@v7
+        with:
+          context: .
+          file: deploy/Dockerfile.api
+          push: true
+          tags: ${{ steps.names.outputs.prefix }}/api:${{ github.sha }}
+          build-args: RELEASE_COMMIT=${{ github.sha }}
+      - id: web
+        uses: docker/build-push-action@v7
+        with:
+          context: .
+          file: deploy/Dockerfile.web
+          push: true
+          tags: ${{ steps.names.outputs.prefix }}/web:${{ github.sha }}
+          build-args: |
+            RELEASE_COMMIT=${{ github.sha }}
+            PUBLIC_WEB_URL=${{ vars.PUBLIC_WEB_URL }}
+      - name: Register immutable release
+        env:
+          CONTROL_URL: ${{ vars.RELEASE_CONTROL_URL }}
+          CONTROL_CI_TOKEN: ${{ secrets.RELEASE_CONTROL_CI_TOKEN }}
+          RELEASE_SCHEMA_GENERATION: ${{ vars.RELEASE_SCHEMA_GENERATION }}
+          API_IMAGE: ${{ steps.names.outputs.prefix }}/api@${{ steps.api.outputs.digest }}
+          WEB_IMAGE: ${{ steps.names.outputs.prefix }}/web@${{ steps.web.outputs.digest }}
+        run: node scripts/register-release.mjs

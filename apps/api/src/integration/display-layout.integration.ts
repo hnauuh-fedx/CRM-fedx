@@ -116,8 +116,14 @@ async function run() {
     await prisma.role_institution_programs.create({
       data: { role_id: roleId, institution_program_id: programId },
     });
-    await prisma.user_roles.createMany({
-      data: users.slice(1).map((id) => ({ user_id: id, role_id: roleId })),
+    await prisma.user_program_roles.createMany({
+      data: users
+        .slice(1)
+        .map((id) => ({
+          user_id: id,
+          role_id: roleId,
+          institution_program_id: programId,
+        })),
     });
     await prisma.user_departments.createMany({
       data: [
@@ -570,7 +576,9 @@ async function run() {
     await prisma.user_departments.deleteMany({
       where: { user_id: { in: users } },
     });
-    await prisma.user_roles.deleteMany({ where: { user_id: { in: users } } });
+    await prisma.user_program_roles.deleteMany({
+      where: { user_id: { in: users } },
+    });
     await prisma.role_permissions.deleteMany({ where: { role_id: roleId } });
     await prisma.role_institution_programs.deleteMany({
       where: { role_id: roleId },

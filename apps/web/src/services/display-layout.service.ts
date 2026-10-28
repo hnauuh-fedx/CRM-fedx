@@ -75,9 +75,10 @@ export const getDisplayLayoutTargets = (
   search: string,
   page: number,
   departmentId?: string,
+  purpose: "ASSIGNMENT" | "OWNER" = "ASSIGNMENT",
 ) =>
   apiRequest<{ data: Array<{ id: string; name: string }>; totalPages: number }>(
-    `${base}/targets?${new URLSearchParams({ type, search, page: String(page), ...(departmentId ? { departmentId } : {}) })}`,
+    `${base}/targets?${new URLSearchParams({ type, search, page: String(page), purpose, ...(departmentId ? { departmentId } : {}) })}`,
     {},
     token,
   );

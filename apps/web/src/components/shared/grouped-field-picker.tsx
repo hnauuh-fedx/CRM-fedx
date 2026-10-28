@@ -1,4 +1,4 @@
-import { useCallback, useId, useMemo, useState, type KeyboardEvent } from "react";
+import { useCallback, useId, useMemo, useState, type KeyboardEvent, type ReactNode } from "react";
 import { Check, ChevronsUpDown, Search } from "lucide-react";
 import { normalizeVietnameseText } from "@admission-crm/shared/lead-field-groups";
 
@@ -31,6 +31,12 @@ type GroupedFieldPickerProps = {
   placeholder?: string;
   searchPlaceholder?: string;
   emptyText?: string;
+  /** Server-side search and pagination for large option catalogs. */
+  onSearchChange?: (search: string) => void;
+  selectedLabel?: string;
+  searchLabel?: string;
+  loading?: boolean;
+  footer?: ReactNode;
   disabled?: boolean;
   className?: string;
   size?: "sm" | "default";
@@ -57,6 +63,11 @@ export function GroupedFieldPicker({
   placeholder = "Chọn trường dữ liệu",
   searchPlaceholder = "Tìm tên hoặc mã trường",
   emptyText = "Không tìm thấy trường phù hợp.",
+  onSearchChange,
+  selectedLabel,
+  searchLabel = "Tìm trường dữ liệu",
+  loading = false,
+  footer,
   disabled,
   className,
   size = "default",
@@ -70,13 +81,14 @@ export function GroupedFieldPicker({
   const selected = options.find((option) => option.value === value);
 
   const visible = useMemo(() => {
+    if (onSearchChange) return options;
     const keyword = normalizeVietnameseText(search);
     if (!keyword) return options;
     return options.filter((option) =>
       [option.label, option.value, option.description ?? "", option.groupLabel, ...(option.keywords ?? [])]
         .some((text) => normalizeVietnameseText(text).includes(keyword)),
     );
-  }, [options, search]);
+  }, [options, search, onSearchChange]);
 
   const groups = useMemo(() => {
     const result: OptionGroup[] = [];
@@ -107,6 +119,7 @@ export function GroupedFieldPicker({
   function changeOpen(nextOpen: boolean) {
     setOpen(nextOpen);
     setSearch("");
+    onSearchChange?.("");
     setActiveIndex(nextOpen ? options.findIndex((option) => option.value === value) : -1);
   }
 
@@ -130,6 +143,7 @@ export function GroupedFieldPicker({
   }
 
   function handleKeyDown(event: KeyboardEvent<HTMLInputElement>) {
+    if (loading) return;
     if (event.key === "ArrowDown" || event.key === "ArrowUp") {
       event.preventDefault();
       moveActive(event.key === "ArrowDown" ? 1 : -1);
@@ -166,7 +180,7 @@ export function GroupedFieldPicker({
           )}
         >
           <span className={cn("min-w-0 truncate", !selected && !value && "text-muted-foreground")}>
-            {selected?.label ?? (value || placeholder)}
+            {selected?.label ?? selectedLabel ?? (value || placeholder)}
           </span>
           <ChevronsUpDown className="ml-2 size-4 shrink-0 text-muted-foreground" aria-hidden="true" />
         </Button>
@@ -184,13 +198,14 @@ export function GroupedFieldPicker({
               value={search}
               onChange={(event) => {
                 setSearch(event.target.value);
+                onSearchChange?.(event.target.value);
                 setActiveIndex(-1);
               }}
               onKeyDown={handleKeyDown}
               className="h-9 pl-9"
               placeholder={searchPlaceholder}
               role="combobox"
-              aria-label="Tìm trường dữ liệu"
+              aria-label={searchLabel}
               aria-expanded
               aria-controls={listId}
               aria-autocomplete="list"
@@ -203,9 +218,10 @@ export function GroupedFieldPicker({
           id={listId}
           role="listbox"
           aria-label={aria["aria-label"] ?? "Danh sách trường dữ liệu"}
-          className="relative max-h-[min(20rem,calc(var(--radix-popover-content-available-height)-4rem))] min-h-24 overflow-y-auto overscroll-contain px-1 pb-1"
+          aria-busy={loading}
+          className={cn("relative min-h-24 overflow-y-auto overscroll-contain px-1 pb-1", footer ? "max-h-[min(20rem,calc(var(--radix-popover-content-available-height)-8rem))]" : "max-h-[min(20rem,calc(var(--radix-popover-content-available-height)-4rem))]")}
         >
-          {groups.length === 0 ? (
+          {loading ? <p role="status" className="px-3 py-6 text-center text-sm text-muted-foreground">Đang tải danh sách…</p> : groups.length === 0 ? (
             <p className="px-3 py-6 text-center text-sm text-muted-foreground">{emptyText}</p>
           ) : groups.map((group) => (
             <div key={group.key || "__ungrouped__"} role="group" aria-label={group.label || undefined} className="py-1">
@@ -243,6 +259,7 @@ export function GroupedFieldPicker({
             </div>
           ))}
         </div>
+        {footer && <div className="border-t p-2">{footer}</div>}
       </PopoverContent>
     </Popover>
   );

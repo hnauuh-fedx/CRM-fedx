@@ -2,6 +2,7 @@ import { Button } from "@/components/ui/button";
 import {
   Dialog,
   DialogContent,
+  DialogClose,
   DialogDescription,
   DialogHeader,
   DialogTitle,
@@ -15,13 +16,11 @@ import { ApiError } from "@/services/api";
 import {
   createLead,
   getLeadActionOptions,
-  updateLeadCustomFields,
 } from "@/services/lead.service";
 import type { UseQueryResult } from "@tanstack/react-query";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { Plus } from "lucide-react";
-import { useState } from "react";
-import { Link, useNavigate } from "react-router-dom";
+import { useNavigate } from "react-router-dom";
 export function CreateLeadDialog({
   actionOptionsQuery,
   detailBasePath,
@@ -34,28 +33,11 @@ export function CreateLeadDialog({
   const auth = useAuth();
   const navigate = useNavigate();
   const queryClient = useQueryClient();
-  const [partialCreateLeadId, setPartialCreateLeadId] = useState<string | null>(
-    null,
-  );
   const createMutation = useMutation({
-    mutationFn: async (input: LeadFormInput) => {
-      const createdLead = await createLead(input, auth.accessToken!);
-      setPartialCreateLeadId(createdLead.id);
-      const values = Object.entries(input.customFieldValues).map(
-        ([fieldId, value]) => ({ fieldId, value }),
-      );
-      if (values.length > 0)
-        await updateLeadCustomFields(
-          createdLead.id,
-          { values },
-          auth.accessToken!,
-        );
-      return createdLead;
-    },
+    mutationFn: (input: LeadFormInput) => createLead(input, auth.accessToken!),
     onSuccess: (createdLead) => {
-      setPartialCreateLeadId(null);
       queryClient.invalidateQueries({ queryKey: ["leads"] });
-      navigate(`${detailBasePath}/${createdLead.id}`);
+      if (createdLead.canOpen !== false) navigate(`${detailBasePath}/${createdLead.id}`);
     },
   });
 
@@ -64,7 +46,6 @@ export function CreateLeadDialog({
       onOpenChange={(open) => {
         if (open) {
           createMutation.reset();
-          setPartialCreateLeadId(null);
         }
       }}
     >
@@ -89,54 +70,25 @@ export function CreateLeadDialog({
               : "Không thể tạo lead. Vui lòng thử lại."}
           </p>
         )}
-        {partialCreateLeadId && createMutation.isError && (
-          <p className="mx-6 mt-2 text-sm text-muted-foreground">
-            Lead đã được tạo nhưng thông tin bổ sung chưa lưu.{" "}
-            <Link
-              className="font-medium text-primary underline"
-              to={`${detailBasePath}/${partialCreateLeadId}`}
-            >
-              Mở lead để lưu lại
-            </Link>
-            .
-          </p>
-        )}
-        {actionOptionsQuery.isLoading ? (
-          <p role="status" className="px-6 py-5 text-sm text-muted-foreground">
-            Đang tải thông tin tạo lead…
-          </p>
-        ) : actionOptionsQuery.isError ? (
-          <p role="alert" className="px-6 py-5 text-sm text-destructive">
-            Không thể tải nguồn lead. Vui lòng đóng cửa sổ và thử lại.
-          </p>
-        ) : (
-          <LeadForm
-            useDisplayLayout={detailBasePath === "/sale/leads"}
-            defaultValues={emptyLeadForm}
-            options={{
-              sources: actionOptionsQuery.data?.sources ?? [],
-              stages: actionOptionsQuery.data?.stages ?? [],
-              telesales: actionOptionsQuery.data?.telesales ?? [],
-              institutionPrograms:
-                actionOptionsQuery.data?.institutionPrograms ?? [],
-              majors: actionOptionsQuery.data?.majors ?? [],
-              admissionStatuses:
-                actionOptionsQuery.data?.admissionStatuses ?? [],
-              tags: actionOptionsQuery.data?.tags ?? [],
-              systemFieldRequirements: actionOptionsQuery.data
-                ?.systemFieldRequirements ?? {
-                fullName: true,
-                phone: true,
-                sourceId: true,
-              },
-            }}
-            submitLabel="Lưu ứng viên"
-            isPending={createMutation.isPending}
-            dialogLayout
-            onSubmit={(values) => createMutation.mutate(values)}
-          />
-        )}
+        {createMutation.isSuccess && createMutation.data.canOpen === false ? <div className="flex flex-col gap-4 p-6"><p role="status">Đã tạo ứng viên thành công. Lead chưa thuộc phạm vi xem của bạn; hệ thống sẽ áp dụng rule chia Sale đang bật.</p><DialogClose asChild><Button type="button" className="self-end">Đóng</Button></DialogClose></div> : <CreateLeadEntryForm query={actionOptionsQuery} detailBasePath={detailBasePath} isPending={createMutation.isPending} onSubmit={values => createMutation.mutate(values)} />}
       </DialogContent>
     </Dialog>
   );
+}
+
+
+type LeadActionOptionsQuery = UseQueryResult<Awaited<ReturnType<typeof getLeadActionOptions>>>;
+function CreateLeadEntryForm({ query, detailBasePath, isPending, onSubmit }: { query: LeadActionOptionsQuery; detailBasePath: string; isPending: boolean; onSubmit: (values: LeadFormInput) => void }) {
+  if (query.isLoading) return <p role="status" className="px-6 py-5 text-sm text-muted-foreground">Đang tải thông tin tạo lead…</p>;
+  if (query.isError || !query.data) return <p role="alert" className="px-6 py-5 text-sm text-destructive">Không thể tải nguồn lead. Vui lòng đóng cửa sổ và thử lại.</p>;
+  return <>
+    <ManualAssignmentNotice policy={query.data.manualAssignment} />
+    <LeadForm useDisplayLayout={detailBasePath === "/sale/leads"} defaultValues={emptyLeadForm} options={query.data} submitLabel="Lưu ứng viên" isPending={isPending} dialogLayout onSubmit={onSubmit} />
+  </>;
+}
+function ManualAssignmentNotice({ policy }: { policy: Awaited<ReturnType<typeof getLeadActionOptions>>["manualAssignment"] }) {
+  if (!policy) return null;
+  if (policy.keepUnassigned) return <p role="status" className="mx-6 mt-4 text-sm text-muted-foreground">Nếu không chọn Sale, lead sẽ được để trống nhân viên phụ trách để rule chia Sale xử lý.{!policy.automationEnabled && " Tự phân công cho nguồn Nhập tay hiện đang tắt; lead sẽ chờ phân công."}</p>;
+  if (policy.defaultAssigneeId) return <p className="mx-6 mt-4 text-sm text-muted-foreground">Nếu không chọn Sale, bạn sẽ là nhân viên phụ trách lead này.</p>;
+  return null;
 }

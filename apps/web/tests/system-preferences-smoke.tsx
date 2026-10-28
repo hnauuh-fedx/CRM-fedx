@@ -10,6 +10,7 @@ import "../src/index.css";
 const programA = "00000000-0000-4000-8000-000000000001";
 const programB = "00000000-0000-4000-8000-000000000002";
 const user = { id: "user", email: "test@local.test", fullName: "Quản trị test", roles: [], permissions: ["system.manage", "audit.view", "automation.view_logs"], institutionProgramIds: [programA, programB], workingInstitutionProgramId: programA, departmentIds: [], accessScope: "ALL", avatarUrl: null };
+localStorage.setItem("admission-crm.selected-institution-program-id:user", programA);
 const documents = new Map([programA, programB].map(id => [id, preferenceSections.map(section => ({ section, value: structuredClone(defaultSystemPreferences[section]), revision: "0".repeat(64), updatedAt: null as string | null, updatedBy: null as string | null }))]));
 declare global { interface Window { preferenceSaves: unknown[]; conflictNext: boolean } }
 window.preferenceSaves = []; window.conflictNext = false;
@@ -21,6 +22,12 @@ window.fetch = async (input, init) => {
   if (url.pathname.endsWith("/auth/me")) return Response.json({ user });
   if (url.pathname.endsWith("/institution-programs/options")) return Response.json({ data: [programA, programB].map((id, index) => ({ id, name: `Chương trình ${index ? "B" : "A"}`, code: `TEST_${index}`, institutionName: "Trường test" })) });
   if (url.pathname.endsWith("/system/preferences")) return Response.json({ institutionProgramId: programId, sections: documents.get(programId) });
+  if (url.pathname.endsWith("/system/manual-lead-creators")) {
+    const users = [{ id: "00000000-0000-4000-8000-000000000003", fullName: "Quản trị test" }, { id: "00000000-0000-4000-8000-000000000004", fullName: "Giám đốc test" }];
+    const selected = new Set((url.searchParams.get("selectedIds") ?? "").split(","));
+    const search = (url.searchParams.get("search") ?? "").toLocaleLowerCase("vi");
+    return Response.json({ data: users.filter(user => user.fullName.toLocaleLowerCase("vi").includes(search)), selected: users.filter(user => selected.has(user.id)).map(user => ({ ...user, active: true })), page: 1, hasMore: false });
+  }
   if (url.pathname.endsWith("/system/lead-form")) return Response.json({ requirements: { email: false }, revision: "0".repeat(64) });
   if (url.pathname.endsWith("/system/note-templates")) return Response.json([{ target: "FAIL", label: "Fail", pipelineName: null, templates: [], revision: "0".repeat(64) }]);
   if (url.pathname.includes("/system/preferences/") && init?.method === "PUT") {

@@ -1,0 +1,24 @@
+[Unit]
+Description=Admission CRM Release Controller
+After=network-online.target docker.service
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=crm-release
+Group=crm-release
+SupplementaryGroups=docker
+WorkingDirectory=/srv/admission-crm-control/apps/release-controller
+EnvironmentFile=/srv/admission-crm-control/apps/release-controller/.env
+Environment=NODE_ENV=production
+ExecStart=/usr/bin/node --import tsx src/server.ts
+Restart=on-failure
+RestartSec=5
+# Allow an active deployment to finish before stopping the independent controller.
+TimeoutStopSec=1000
+KillMode=mixed
+NoNewPrivileges=true
+PrivateTmp=true
+
+[Install]
+WantedBy=multi-user.target

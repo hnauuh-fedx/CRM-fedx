@@ -424,6 +424,12 @@ const navigationSections: NavigationSection[] = [
         permissions: ["system.manage"],
       },
       {
+        label: "Phiên bản",
+        href: "/management/releases",
+        icon: History,
+        permissions: ["release.view"],
+      },
+      {
         label: "Cấu hình hiển thị",
         href: "/quan-ly/cau-hinh-hien-thi",
         icon: Settings,
@@ -465,8 +471,9 @@ export function isNavigationLink(item: NavigationItem): item is NavigationLinkIt
   return !isNavigationGroup(item);
 }
 
-export function getNavigationSections(permissions: string[]) {
+export function getNavigationSections(permissions: string[], accessScope?: string) {
   const grantedPermissions = new Set(permissions);
+  if (accessScope !== "ALL") grantedPermissions.delete("release.view");
   return navigationSections.reduce<NavigationSection[]>((visibleSections, section) => {
     const items = filterNavigationItems(section.items, grantedPermissions);
     if (items.length > 0) {

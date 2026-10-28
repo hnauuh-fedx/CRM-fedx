@@ -11,8 +11,10 @@ import { saveCandidateProfile } from "../../students/candidate-profile.service";
 import type { AuthUser } from "../../auth/auth.types";
 import { getPreference } from "../../system/system-preferences.service";
 import { scheduleFirstContactSla } from "../first-contact-sla.service";
-import { assertRequiredLeadInput } from "../lead-required-fields";
+import { assertRequiredLeadInput, LeadRequiredFieldsError } from "../lead-required-fields";
 import { lockLeadPhones } from "../lead-phone-lock";
+import { getManualLeadAssignmentPolicy } from "../manual-lead-assignment.service";
+import { saveSaleCustomFieldValues, type SaleCustomFieldInput } from "../sale-custom-fields.service";
 import type { LeadInput } from "../domain/lead-input";
 import { createFailedLeadStatus } from "../domain/lead-lifecycle-status";
 import {
@@ -32,6 +34,7 @@ import {
 } from "./lead-mutation-support";
 
 export type CreateLeadOptions = {
+  customFieldValues?: SaleCustomFieldInput[];
   creationSource?: LeadCreationSource;
   allowDuplicate?: boolean;
   allowMissingSource?: boolean;
@@ -56,6 +59,15 @@ async function persistLeadInTransaction(
   }
   if (!options.skipAuthorization && (input.assigneeId || input.secondaryAssigneeId) && !canAssignLead(actor)) {
     return { ok: false as const, reason: "assignment_forbidden" as const };
+  }
+  const isManualCreation = !options.skipAuthorization && !options.importInitialization && (!options.creationSource || options.creationSource.channel === "manual");
+  let assignedToCreator = false;
+  if (isManualCreation && !input.assigneeId && !input.secondaryAssigneeId) {
+    const policy = await getManualLeadAssignmentPolicy(actor, input.institutionProgramId, tx);
+    if (policy.defaultAssigneeId) {
+      input.assigneeId = policy.defaultAssigneeId;
+      assignedToCreator = true;
+    }
   }
   await assertRequiredLeadInput(tx, input);
   await lockLeadPhones(tx, input.institutionProgramId, input.phone, input.secondaryPhones);
@@ -108,7 +120,7 @@ async function persistLeadInTransaction(
     assignee && isAssigneeInScope(actor, assignee.user_departments);
   if (
     input.assigneeId &&
-    (!assignee || (!options.skipAuthorization && !assigneeInScope))
+    (!assignee || (!options.skipAuthorization && !assignedToCreator && !assigneeInScope))
   ) {
     return { ok: false as const, reason: "assignee_not_telesale" as const };
   }
@@ -143,6 +155,10 @@ async function persistLeadInTransaction(
   await saveCandidateProfile(tx, lead.id, input);
   await saveAdmissionProfile(tx, lead.id, input);
   await saveLeadAttributionAndTags(tx, lead.id, input);
+  if (options.customFieldValues?.length) {
+    const custom = await saveSaleCustomFieldValues(tx, actor, "LEAD", lead.id, input.institutionProgramId ?? null, options.customFieldValues, options.ipAddress);
+    if (!custom.ok) throw new LeadRequiredFieldsError("Trường dữ liệu bổ sung không hợp lệ hoặc không có quyền chỉnh sửa. Ứng viên chưa được tạo.");
+  }
 
   const creation = createLeadCreationSnapshot({ ...input, sourceName, pipelineStageName: selectedStage?.name, assigneeName: assignee?.full_name, secondaryAssigneeName: secondaryAssignee?.full_name }, options.creationSource ?? {
     channel: options.skipAuthorization ? "api" : options.importInitialization ? "import" : "manual",
@@ -286,6 +302,7 @@ export async function createLead(
   input: LeadInput,
   ipAddress?: string,
   creationSource?: LeadCreationSource,
+  customFieldValues?: SaleCustomFieldInput[],
 ) {
   if (!canCreateLead(actor)) {
     return { ok: false as const, reason: "permission_denied" as const };
@@ -298,7 +315,7 @@ export async function createLead(
   }
 
   const result = await prisma.$transaction((tx) =>
-    createLeadInTransaction(tx, actor, input, { ipAddress, creationSource }),
+    createLeadInTransaction(tx, actor, input, { ipAddress, creationSource, customFieldValues }),
   );
 
   if (result.ok) {

@@ -1,3 +1,4 @@
+import { leadHistoryActorLabel } from "./lead-history-actor";
 import { formatLeadChannelName } from "@admission-crm/shared/lead-channel";
 import { describeLeadCreation, recordObject } from "./lead-creation-history";
 import { leadCreationActions, loadLeadCreationHistory, resolveLeadCreationNames } from "./lead-creation-history.service";
@@ -590,7 +591,7 @@ function describeLeadChange(action: string, newData: unknown) {
   if (action === "file_attached") return "Đính kèm tệp vào Lead";
   if (action === "delete") return "Xóa Lead";
   if (action === "update" && newData && typeof newData === "object" && !Array.isArray(newData)) {
-    const fields = Object.keys(newData as Record<string, unknown>).map((key) => auditFieldLabels[key] ?? key);
+    const fields = Object.keys(newData as Record<string, unknown>).filter((key) => key !== "executionSource").map((key) => auditFieldLabels[key] ?? key);
     return fields.length > 0 ? `Cập nhật: ${fields.join(", ")}` : "Cập nhật thông tin Lead";
   }
   return "Cập nhật dữ liệu Lead";
@@ -766,6 +767,19 @@ export async function getLeadDetail(user: AuthUser, leadId: string, institutionP
     ...lead.lead_activities.map((activity) => recordObject(activity.metadata).creation),
   ], lead.institution_programs?.id ?? null);
   const creationDisplay = describeLeadCreation(creation, canViewSensitive);
+  const webhookIds = [...new Set([creation, ...activityCreations].flatMap((item) => {
+    const id = recordObject(item).webhookId;
+    return typeof id === "string" && /^[0-9a-f]{8}-(?:[0-9a-f]{4}-){3}[0-9a-f]{12}$/i.test(id) ? [id] : [];
+  }))];
+  const webhooks = webhookIds.length && user.permissions.some((permission) => ["webhook.view", "webhook.manage"].includes(permission)) && lead.institution_programs
+    ? await prisma.webhooks.findMany({ where: { id: { in: webhookIds }, institution_program_id: lead.institution_programs.id }, select: { id: true, name: true } })
+    : [];
+  const sourceWebhook = (snapshot: unknown) => {
+    const data = recordObject(snapshot);
+    const webhook = webhooks.find((item) => item.id === data.webhookId);
+    if (!webhook) return undefined;
+    return { id: webhook.id, name: typeof data.webhookName === "string" && data.webhookName.trim() ? data.webhookName : webhook.name };
+  };
   const failedStageId = getFailedLeadStageId(lead.status);
   const [relatedFiles, relatedTags, recentChanges] = await prisma.$transaction([
     prisma.file_relations.findMany({
@@ -992,16 +1006,18 @@ export async function getLeadDetail(user: AuthUser, leadId: string, institutionP
         id: activity.id,
         type: activity.type,
         content: isCreation ? display.description : activity.content,
+        sourceWebhook: isCreation ? sourceWebhook(recordObject(metadata.creation).channel ? activityCreations[index] : creation) : undefined,
         createdAt: activity.created_at?.toISOString() ?? null,
-        actorLabel: isCreation ? display.actorLabel : undefined,
+        actorLabel: leadHistoryActorLabel(activity.type, activity.metadata, activity.content) ?? (isCreation ? display.actorLabel : undefined),
         actor: isCreation && display.automated ? null : activity.users ? { id: activity.users.id, fullName: activity.users.full_name } : null,
       };
     }),
     recentChanges: recentChanges.map((change) => ({
       id: change.id,
       action: change.action,
+      sourceWebhook: leadCreationActions.includes(change.action) ? sourceWebhook(creation) : undefined,
       description: leadCreationActions.includes(change.action) ? creationDisplay.description : describeLeadChange(change.action, change.new_data),
-      actorLabel: leadCreationActions.includes(change.action) ? creationDisplay.actorLabel : undefined,
+      actorLabel: leadHistoryActorLabel(change.action, change.new_data) ?? (leadCreationActions.includes(change.action) ? creationDisplay.actorLabel : undefined),
       createdAt: change.created_at?.toISOString() ?? null,
       actor: leadCreationActions.includes(change.action) && creationDisplay.automated ? null : change.users ? { id: change.users.id, fullName: change.users.full_name } : null,
     })),

@@ -84,12 +84,11 @@ function serialize(item: Template): DisplayLayout {
 const programUserWhere = (programId: string): Prisma.usersWhereInput => ({
   deleted_at: null,
   status: "active",
-  user_roles: {
+  user_program_roles: {
     some: {
+      institution_program_id: programId,
+      institution_programs: { status: "active" },
       roles: {
-        role_institution_programs: {
-          some: { institution_program_id: programId },
-        },
         role_permissions: {
           some: {
             permissions: {
@@ -308,6 +307,15 @@ export async function createLayout(
   assertProgram(actor, programId);
   assertLayoutManager(actor, departmentId);
   return prisma.$transaction(async (db) => {
+    if (
+      departmentId &&
+      !(await db.departments.findUnique({
+        where: { id: departmentId },
+        select: { id: true },
+      }))
+    ) {
+      throw new DisplayLayoutError(400, "Phòng ban sở hữu mẫu không tồn tại.");
+    }
     await validateTargets(db, draft, programId, actor, departmentId, screen);
     draft = {
       ...draft,
@@ -390,9 +398,9 @@ async function impact(
       SELECT u.id, (SELECT count(*) FROM user_departments ud WHERE ud.user_id=u.id) AS department_count,
         (SELECT min(ud.department_id::text) FROM user_departments ud WHERE ud.user_id=u.id) AS department_id
       FROM users u WHERE u.deleted_at IS NULL AND u.status='active' AND EXISTS (
-        SELECT 1 FROM user_roles ur JOIN role_institution_programs rip ON rip.role_id=ur.role_id
+        SELECT 1 FROM user_program_roles ur JOIN institution_programs ip ON ip.id=ur.institution_program_id AND ip.status='active'
         JOIN role_permissions rp ON rp.role_id=ur.role_id JOIN permissions p ON p.id=rp.permission_id
-        WHERE ur.user_id=u.id AND rip.institution_program_id=${programId}::uuid AND p.is_active=true
+        WHERE ur.user_id=u.id AND ur.institution_program_id=${programId}::uuid AND p.is_active=true
           AND p.code IN ('lead.view_all','lead.view_department','lead.view_assigned')
       )
     ), effective AS (
@@ -759,10 +767,13 @@ export async function layoutTargetOptions(
   search: string,
   page: number,
   departmentId?: string,
+  purpose: "ASSIGNMENT" | "OWNER" = "ASSIGNMENT",
 ) {
   assertProgram(actor, programId);
   if (!actor.permissions.includes("system.manage"))
     throw new DisplayLayoutError(403, "Bạn không có quyền cấu hình hiển thị.");
+  if (purpose === "OWNER" && type !== "DEPARTMENT")
+    throw new DisplayLayoutError(400, "Chỉ chọn phòng ban làm chủ sở hữu mẫu.");
   if (departmentId) assertLayoutManager(actor, departmentId);
   const membershipScope = departmentId
     ? [departmentId]
@@ -777,7 +788,11 @@ export async function layoutTargetOptions(
         ? {}
         : { id: { in: membershipScope } }),
       name: { contains: search, mode: "insensitive" as const },
-      user_departments: { some: { users: programUserWhere(programId) } },
+      ...(purpose === "OWNER"
+        ? {}
+        : {
+            user_departments: { some: { users: programUserWhere(programId) } },
+          }),
     };
     const [data, total] = await prisma.$transaction([
       prisma.departments.findMany({

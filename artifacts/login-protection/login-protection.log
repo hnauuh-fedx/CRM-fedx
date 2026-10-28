@@ -1,0 +1,1 @@
+PASS: real migration, atomic shared account limits, unknown accounts, restart persistence, expiry recovery, blocked valid passwords without sessions, IP spraying/malformed budgets, untrusted header spoofing, trusted proxy chain, fail-closed store outage.

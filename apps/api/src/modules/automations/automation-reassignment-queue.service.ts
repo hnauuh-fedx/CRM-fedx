@@ -1,4 +1,5 @@
 import { Queue, UnrecoverableError, Worker, type Job } from "bullmq";
+import { instrumentWorker } from "../operations/worker-heartbeat";
 
 import { isRedisDisabled, redisConnection } from "../../config/redis";
 import { prisma } from "../../database/prisma";
@@ -83,6 +84,7 @@ async function processJob(job: Job<ReassignmentJobData>) {
 const reassignmentWorker = shouldRunWorker
   ? new Worker<ReassignmentJobData>(QUEUE_NAME, processJob, { connection: redisConnection as any, concurrency: 5 })
   : null;
+instrumentWorker(reassignmentWorker);
 
 export async function recoverDueReassignmentMonitors(now = new Date(), limit = 500) {
   const calendarRefreshed = await refreshChangedWorkCalendars(limit, now);

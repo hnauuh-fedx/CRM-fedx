@@ -1,0 +1,24 @@
+# Example fragments for an EXISTING Nginx deployment, not a new service.
+# Keep the existing TLS/certificate settings. Verify actual upstream addresses.
+# In http {}:
+limit_req_zone $binary_remote_addr zone=crm_login:10m rate=10r/m;
+
+# In the existing server {} that proxies the CRM API:
+# Matching remains case-insensitive, like Express's default router.
+location ~* ^/api/auth/login/?$ {
+    limit_req zone=crm_login burst=10 nodelay;
+    limit_req_status 429;
+    error_page 429 = @crm_login_throttled;
+    proxy_pass http://127.0.0.1:3000;
+    proxy_set_header Host $host;
+    # Overwrite incoming client-supplied forwarding headers.
+    proxy_set_header X-Forwarded-For $remote_addr;
+    proxy_set_header X-Forwarded-Host $host;
+    proxy_set_header X-Forwarded-Proto $scheme;
+}
+
+location @crm_login_throttled {
+    add_header Retry-After 60 always;
+    default_type application/json;
+    return 429 '{"message":"Bạn đã thử đăng nhập quá nhiều lần. Vui lòng thử lại sau."}';
+}

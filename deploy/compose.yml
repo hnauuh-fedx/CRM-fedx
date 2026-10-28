@@ -1,0 +1,97 @@
+# Copy this operator-owned file to each environment directory as compose.yml.
+# Control service is intentionally outside this stack. Never mount Docker into CRM containers.
+name: ${CRM_PROJECT:?Set a distinct project name per environment}
+services:
+  integrations-worker:
+    image: ${API_IMAGE:?Required}
+    restart: unless-stopped
+    init: true
+    stop_grace_period: 45s
+    env_file: ./api.env
+    environment:
+      NODE_ENV: production
+      RELEASE_COMMIT: ${RELEASE_COMMIT:?Required}
+      AUTOMATION_PROCESS_ROLE: api
+      OPERATIONS_ENVIRONMENT: ${CRM_PROJECT:?Required}
+    command: ["node", "--import", "tsx", "apps/api/src/workers/integrations.worker.ts"]
+  reminders-worker:
+    image: ${API_IMAGE:?Required}
+    restart: unless-stopped
+    init: true
+    stop_grace_period: 45s
+    env_file: ./api.env
+    environment:
+      NODE_ENV: production
+      RELEASE_COMMIT: ${RELEASE_COMMIT:?Required}
+      AUTOMATION_PROCESS_ROLE: api
+      OPERATIONS_ENVIRONMENT: ${CRM_PROJECT:?Required}
+    command: ["node", "--import", "tsx", "apps/api/src/workers/reminders.worker.ts"]
+  operations-monitor:
+    image: ${API_IMAGE:?Required}
+    restart: unless-stopped
+    init: true
+    env_file: ./api.env
+    environment:
+      NODE_ENV: production
+      RELEASE_COMMIT: ${RELEASE_COMMIT:?Required}
+      OPERATIONS_ENVIRONMENT: ${CRM_PROJECT:?Required}
+    command: ["npm", "run", "monitor:operations", "--workspace", "apps/api"]
+    healthcheck:
+      test: ["CMD", "node", "--import", "tsx", "apps/api/src/modules/operations/monitor-healthcheck.ts"]
+      interval: 15s
+      timeout: 7s
+      retries: 6
+      start_period: 30s
+  api:
+    image: ${API_IMAGE:?Digest-pinned API image required}
+    restart: unless-stopped
+    init: true
+    stop_grace_period: 45s
+    env_file: ./api.env
+    environment:
+      NODE_ENV: production
+      RELEASE_COMMIT: ${RELEASE_COMMIT:?Required}
+      AUTOMATION_PROCESS_ROLE: api
+      OPERATIONS_ENVIRONMENT: ${CRM_PROJECT:?Required}
+    ports: ["127.0.0.1:${API_PORT:?Required}:3000"]
+    command: ["node", "--import", "tsx", "apps/api/src/api.ts"]
+    healthcheck:
+      test: ["CMD", "node", "-e", "fetch('http://127.0.0.1:3000/api/ready').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+      start_period: 30s
+  web:
+    image: ${WEB_IMAGE:?Digest-pinned web image required}
+    restart: unless-stopped
+    init: true
+    ports: ["127.0.0.1:${WEB_PORT:?Required}:8080"]
+    healthcheck:
+      test: ["CMD", "node", "-e", "fetch('http://127.0.0.1:8080/version.json').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"]
+      interval: 10s
+      timeout: 5s
+      retries: 6
+  webhook-worker:
+    image: ${API_IMAGE:?Required}
+    restart: unless-stopped
+    init: true
+    stop_grace_period: 45s
+    env_file: ./api.env
+    environment:
+      NODE_ENV: production
+      RELEASE_COMMIT: ${RELEASE_COMMIT:?Required}
+      AUTOMATION_PROCESS_ROLE: api
+      OPERATIONS_ENVIRONMENT: ${CRM_PROJECT:?Required}
+    command: ["node", "--import", "tsx", "apps/api/src/workers/webhook.worker.ts"]
+  automation-worker:
+    image: ${API_IMAGE:?Required}
+    restart: unless-stopped
+    init: true
+    stop_grace_period: 45s
+    env_file: ./api.env
+    environment:
+      NODE_ENV: production
+      RELEASE_COMMIT: ${RELEASE_COMMIT:?Required}
+      AUTOMATION_PROCESS_ROLE: worker
+      OPERATIONS_ENVIRONMENT: ${CRM_PROJECT:?Required}
+    command: ["node", "--import", "tsx", "apps/api/src/workers/automation.worker.ts"]

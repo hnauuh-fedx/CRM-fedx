@@ -2,6 +2,7 @@ import { prisma } from "../../../database/prisma";
 import type { AuthUser } from "../../auth/auth.types";
 import { assignableSaleWhere } from "./lead-mutation-support";
 import { getSystemFieldRequirements } from "../../custom-fields/system-field-requirements.service";
+import { getManualLeadAssignmentPolicy } from "../manual-lead-assignment.service";
 
 export async function getLeadActionOptions(
   actor: AuthUser,
@@ -150,6 +151,7 @@ export async function getLeadActionOptions(
   };
 
   return {
+    manualAssignment: await getManualLeadAssignmentPolicy(actor, institutionProgramId),
     sources,
     stages: stages.map((stage) => ({
       id: stage.id,

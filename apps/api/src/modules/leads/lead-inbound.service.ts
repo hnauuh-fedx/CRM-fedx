@@ -1,3 +1,4 @@
+import { withHistorySource } from "../../database/history-source";
 import { resolveLeadOrigin, recordLeadSourceOccurrence, type LeadSourceOccurrence } from "./lead-source-occurrence.service";
 import type { LeadCreationSource } from "./lead-creation-history";
 import { prisma } from "../../database/prisma";
@@ -78,7 +79,17 @@ class InboundMutationFailure extends Error {
   }
 }
 
-export async function applyInboundLeadMutation(
+export function applyInboundLeadMutation(input: MutationInput): Promise<MutationResult> {
+  const source = input.creationSource;
+  return withHistorySource({
+    channel: source?.channel === "public_form" ? "public_form" : source?.channel === "webhook" ? "webhook" : "api",
+    name: source?.webhookName ?? source?.formName,
+    webhookId: source?.webhookId,
+    requestId: source?.requestId,
+  }, () => applyInboundLeadMutationWithSource(input));
+}
+
+async function applyInboundLeadMutationWithSource(
   input: MutationInput,
 ): Promise<MutationResult> {
   let result: MutationResult;

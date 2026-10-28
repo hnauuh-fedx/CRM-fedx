@@ -1,6 +1,7 @@
 import "dotenv/config";
 
 import { z } from "zod";
+import { isIP } from "node:net";
 
 const optionalSecret = (minimumLength = 1) => z.preprocess(
   (value) => typeof value === "string" && value.trim() === "" ? undefined : value,
@@ -8,15 +9,34 @@ const optionalSecret = (minimumLength = 1) => z.preprocess(
 );
 
 const envSchema = z.object({
+  RELEASE_CONTROL_URL: z.preprocess(value => value === "" ? undefined : value, z.string().url().optional()),
+  RELEASE_CONTROL_TOKEN: optionalSecret(32),
   DATABASE_URL: z.string().min(1, "DATABASE_URL is required."),
   JWT_SECRET: z.string().min(32, "JWT_SECRET must contain at least 32 characters."),
   JWT_EXPIRES_IN_SECONDS: z.coerce.number().int().positive().default(900).transform((seconds) => Math.min(seconds, 900)),
   NODE_ENV: z.enum(["development", "test", "integration", "production"]).default("development"),
   AUTH_COOKIE_SAME_SITE: z.enum(["lax", "strict", "none"]).default("lax"),
+  AUTH_TRUSTED_PROXY_CIDRS: z.string().default("").transform(value => value.split(",").map(item => item.trim()).filter(Boolean)).refine(items => items.every(item => {
+    const [address, prefix, extra] = item.split("/");
+    const version = isIP(address);
+    return !extra && version !== 0 && (prefix === undefined || (/^\d+$/.test(prefix) && Number(prefix) > 0 && Number(prefix) <= (version === 4 ? 32 : 128)));
+  }), "Use explicit proxy IP addresses or CIDRs; wildcard trust is forbidden."),
+  AUTH_LOGIN_IP_LIMIT: z.coerce.number().int().min(1).max(10000).default(100),
+  AUTH_LOGIN_IP_WINDOW_SECONDS: z.coerce.number().int().min(1).max(86400).default(300),
+  AUTH_LOGIN_ACCOUNT_LIMIT: z.coerce.number().int().min(1).max(1000).default(10),
+  AUTH_LOGIN_ACCOUNT_WINDOW_SECONDS: z.coerce.number().int().min(1).max(86400).default(900),
   PORT: z.coerce.number().int().positive().default(3000),
   WEB_ORIGIN: z.string().url().default("http://localhost:5173"),
   REDIS_URL: z.string().min(1, "REDIS_URL is required.").default("redis://localhost:6379"),
   WEBHOOK_QUEUE_ENABLED: z.enum(["true", "false"]).default("true").transform((value) => value === "true"),
+  ZALO_QUEUE_ENABLED: z.enum(["true", "false"]).default("true").transform(value => value === "true"),
+  META_QUEUE_ENABLED: z.enum(["true", "false"]).default("true").transform(value => value === "true"),
+  REMINDER_QUEUE_ENABLED: z.enum(["true", "false"]).default("true").transform(value => value === "true"),
+  WORKER_SHUTDOWN_TIMEOUT_MS: z.coerce.number().int().min(1000).max(600000).default(30000),
+  AUTOMATION_EMAIL_IDEMPOTENCY_SUPPORTED: z.enum(["true", "false"]).default("false").transform(value => value === "true"),
+  AUTOMATION_SMS_IDEMPOTENCY_SUPPORTED: z.enum(["true", "false"]).default("false").transform(value => value === "true"),
+  AUTOMATION_ZNS_IDEMPOTENCY_SUPPORTED: z.enum(["true", "false"]).default("false").transform(value => value === "true"),
+  AUTOMATION_WEBHOOK_IDEMPOTENCY_SUPPORTED: z.enum(["true", "false"]).default("false").transform(value => value === "true"),
   WEBHOOK_WORKER_CONCURRENCY: z.coerce.number().int().min(1).max(50).default(10),
   WEBHOOK_MAX_ATTEMPTS: z.coerce.number().int().min(1).max(10).default(5),
   WEBHOOK_PROCESSING_STALE_SECONDS: z.coerce.number().int().min(60).max(86_400).default(600),

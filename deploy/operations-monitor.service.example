@@ -1,0 +1,19 @@
+[Unit]
+Description=Admission CRM Operations Monitor
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=crm-monitor
+WorkingDirectory=/srv/admission-crm/apps/api
+EnvironmentFile=/srv/admission-crm/apps/api/.env
+ExecStart=/usr/bin/node --import tsx src/workers/operations-monitor.worker.ts
+Restart=on-failure
+RestartSec=5
+TimeoutStopSec=30
+NoNewPrivileges=true
+PrivateTmp=true
+
+[Install]
+WantedBy=multi-user.target

@@ -27,10 +27,22 @@ test("delivery claim is exclusive and a stale lease can be reclaimed with a new 
     async findUnique() { return { status: state.status }; },
   };
   const now = new Date("2026-10-05T01:00:00.000Z");
-  const first = await claimAutomationDelivery("delivery-1", now, store);
-  const concurrent = await claimAutomationDelivery("delivery-1", now, store);
-  const reclaimed = await claimAutomationDelivery("delivery-1", new Date(now.getTime() + 120_001), store);
+  const first = await claimAutomationDelivery("delivery-1", now, store, true);
+  const concurrent = await claimAutomationDelivery("delivery-1", now, store, true);
+  const reclaimed = await claimAutomationDelivery("delivery-1", new Date(now.getTime() + 120_001), store, true);
   assert.deepEqual(first, { claimed: true, status: "sending", attemptCount: 1 });
   assert.deepEqual(concurrent, { claimed: false, status: "sending" });
   assert.deepEqual(reclaimed, { claimed: true, status: "sending", attemptCount: 2 });
+});
+
+test("an ambiguous sending attempt is quarantined when provider idempotency is not certified", async () => {
+  let status = "sending";
+  const store = {
+    async updateManyAndReturn(args: any) {
+      if (args.data.status === "needs_review") { status = "needs_review"; return [{ attempt_count: 1 }]; }
+      return [];
+    },
+    async findUnique() { return { status }; },
+  };
+  assert.deepEqual(await claimAutomationDelivery("uncertain", new Date(), store), { claimed: false, status: "needs_review" });
 });

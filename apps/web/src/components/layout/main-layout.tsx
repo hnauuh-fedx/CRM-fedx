@@ -27,7 +27,7 @@ function MainLayoutContent() {
   const user = auth.user!;
   const [isNavigationOpen, setIsNavigationOpen] = useState(false);
   const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(false);
-  const navigationSections = getNavigationSections(user.permissions);
+  const navigationSections = getNavigationSections(user.permissions, user.accessScope);
   const activeSection = getActiveNavigationSection(location.pathname, navigationSections);
   const navigationItems = activeSection?.items ?? [];
 

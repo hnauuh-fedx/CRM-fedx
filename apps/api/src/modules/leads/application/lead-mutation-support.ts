@@ -24,6 +24,7 @@ export async function findVisibleLeadForMutation(
     select: {
       id: true,
       full_name: true,
+      institution_program_id: true,
       phone: true,
       email: true,
       gender: true,
@@ -105,7 +106,7 @@ export const assignableSaleWhere = {
 };
 
 export async function findActiveAssignableSale(
-  tx: Prisma.TransactionClient,
+  tx: Pick<Prisma.TransactionClient, "users">,
   assigneeId: string,
   departmentId?: string,
   institutionProgramId?: string,

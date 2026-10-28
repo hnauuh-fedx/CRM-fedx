@@ -1,0 +1,25 @@
+{
+  "name": "@admission-crm/release-controller",
+  "private": true,
+  "scripts": {
+    "start": "tsx src/server.ts",
+    "db:init": "tsx src/init.ts",
+    "typecheck": "tsc --noEmit",
+    "test": "tsx --test src/*.test.ts",
+    "test:integration": "tsx src/control.integration.ts"
+  },
+  "dependencies": {
+    "@admission-crm/shared": "*",
+    "dotenv": "^17.4.2",
+    "express": "^5.2.1",
+    "pg": "^8.21.0",
+    "zod": "^4.4.3"
+  },
+  "devDependencies": {
+    "@types/express": "^5.0.6",
+    "@types/node": "^25.9.1",
+    "@types/pg": "^8.20.0",
+    "tsx": "^4.22.3",
+    "typescript": "^6.0.3"
+  }
+}

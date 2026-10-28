@@ -18,6 +18,7 @@ import {
   Webhook,
 } from "lucide-react";
 import { useState } from "react";
+import { useSearchParams } from "react-router-dom";
 import { Controller, useFieldArray, useForm } from "react-hook-form";
 import { EmptyState } from "@/components/shared/data-states";
 import { GroupedFieldPicker, type GroupedFieldOption } from "@/components/shared/grouped-field-picker";
@@ -215,7 +216,14 @@ export function WebhooksPage() {
   const { selectedProgramId } = useInstitutionProgram();
   const queryClient = useQueryClient();
   const canManage = auth.can("webhook.manage");
-  const [selectedId, setSelectedId] = useState<string | null>(null);
+  const [searchParams, setSearchParams] = useSearchParams();
+  const selectedId = searchParams.get("webhookId");
+  const setSelectedId = (id: string | null) => setSearchParams((current) => {
+    const next = new URLSearchParams(current);
+    if (id) next.set("webhookId", id);
+    else next.delete("webhookId");
+    return next;
+  });
   const [page, setPage] = useState(1);
   const [logPage, setLogPage] = useState(1);
   const [logStatus, setLogStatus] = useState<"ALL" | WebhookRequestStatus>(
@@ -1434,9 +1442,7 @@ type WebhookResultsProps = {
     Error
   >;
   items: WebhookSummary[];
-  setSelectedId: import("react").Dispatch<
-    import("react").SetStateAction<string | null>
-  >;
+  setSelectedId: (id: string | null) => void;
   setLogPage: import("react").Dispatch<import("react").SetStateAction<number>>;
   setLogStatus: import("react").Dispatch<
     import("react").SetStateAction<WebhookRequestStatus | "ALL">

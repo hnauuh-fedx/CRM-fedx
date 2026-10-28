@@ -258,6 +258,7 @@ export type LeadDetail = LeadListItem & {
     id: string;
     type: string;
     content: string | null;
+    sourceWebhook?: { id: string; name: string };
     createdAt: string | null;
     actorLabel?: string;
     actor: { id: string; fullName: string } | null;
@@ -266,6 +267,7 @@ export type LeadDetail = LeadListItem & {
     id: string;
     action: string;
     description: string;
+    sourceWebhook?: { id: string; name: string };
     createdAt: string | null;
     actorLabel?: string;
     actor: { id: string; fullName: string } | null;
@@ -356,6 +358,7 @@ export type LeadFormInput = {
 };
 
 export type LeadActionOptions = {
+  manualAssignment?: { defaultAssigneeId: string | null; keepUnassigned: boolean; automationEnabled: boolean };
   sources: Array<{ id: string; name: string }>;
   stages: Array<{ id: string; name: string; color: string | null; pipelineId: string | null; pipelineName: string | null }>;
   assignees: Array<{ id: string; fullName: string }>;

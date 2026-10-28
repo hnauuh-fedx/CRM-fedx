@@ -1,0 +1,19 @@
+FROM node:24-bookworm-slim
+WORKDIR /app
+RUN apt-get update && apt-get install -y --no-install-recommends openssl ca-certificates && rm -rf /var/lib/apt/lists/*
+COPY package.json package-lock.json ./
+COPY apps/api/package.json apps/api/package.json
+COPY apps/web/package.json apps/web/package.json
+COPY apps/release-controller/package.json apps/release-controller/package.json
+COPY packages/shared/package.json packages/shared/package.json
+RUN npm ci --ignore-scripts
+COPY packages/shared packages/shared
+COPY apps/api apps/api
+COPY database database
+RUN npm run prisma:generate --workspace apps/api && npm run typecheck --workspace apps/api
+ARG RELEASE_COMMIT=development
+RUN node -e "require('fs').writeFileSync('/app/release.json',JSON.stringify({commit:process.argv[1]}))" "$RELEASE_COMMIT"
+ENV NODE_ENV=production RELEASE_COMMIT=$RELEASE_COMMIT
+USER node
+EXPOSE 3000
+CMD ["node", "--import", "tsx", "apps/api/src/api.ts"]

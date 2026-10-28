@@ -7,6 +7,32 @@ datasource db {
   provider = "postgresql"
 }
 
+model auth_login_buckets {
+  key        String   @id @db.VarChar(80)
+  attempts   Int
+  expires_at DateTime @db.Timestamptz(6)
+
+  @@index([expires_at], map: "idx_auth_login_buckets_expiry")
+}
+
+model operations_monitor_states {
+  key        String   @id @db.VarChar(100)
+  value      Json
+  updated_at DateTime @default(now()) @db.Timestamptz(6)
+}
+
+model integration_task_receipts {
+  task_key    String    @id @db.VarChar(200)
+  provider    String    @db.VarChar(20)
+  entity_id   String    @db.Uuid
+  status      String    @db.VarChar(30)
+  started_at  DateTime  @default(now()) @db.Timestamptz(6)
+  finished_at DateTime? @db.Timestamptz(6)
+
+  @@index([provider, entity_id], map: "idx_integration_task_receipts_provider_entity")
+  @@index([status, started_at], map: "idx_integration_task_receipts_review")
+}
+
 model addresses {
   id             String      @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
   lead_id        String?     @db.Uuid

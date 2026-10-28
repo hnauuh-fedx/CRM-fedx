@@ -227,6 +227,8 @@ function DisplayLayoutPresentationControls({ model }: { model: EditorModel }) {
 
 function DisplayLayoutMetadata({ model }: { model: EditorModel }) {
   const { auth, state, setState, form, busy, dirty, edit } = model;
+  const owner = state.item?.managementDepartmentId ?? state.departmentId;
+  const scopeLabel = owner ? "Trong phòng ban sở hữu mẫu" : auth.user?.accessScope === "ALL" ? "Toàn bộ chương trình đang chọn" : "Chưa chọn phòng ban sở hữu mẫu";
   return (
     <Card>
       <CardHeader>
@@ -263,7 +265,7 @@ function DisplayLayoutMetadata({ model }: { model: EditorModel }) {
             />
             <FieldError>{form.formState.errors.name?.message}</FieldError>
           </Field>
-          {!state.item && auth.user?.accessScope !== "ALL" && (
+          {!state.item && (
             <DisplayLayoutOwnerPicker
               value={state.departmentId}
               disabled={busy}
@@ -275,9 +277,7 @@ function DisplayLayoutMetadata({ model }: { model: EditorModel }) {
           )}
           <p className="text-sm text-muted-foreground">
             Phạm vi quản lý:{" "}
-            {(state.item?.managementDepartmentId ?? state.departmentId)
-              ? "Trong phòng ban sở hữu mẫu"
-              : "Toàn bộ chương trình đang chọn"}
+            {scopeLabel}
             . Người thuộc nhiều phòng ban dùng mẫu riêng hoặc mẫu chung vì hệ
             thống chưa có phòng ban chính.
           </p>

@@ -1,3 +1,4 @@
+import { withHistorySource } from "../../database/history-source";
 import { prisma } from "../../database/prisma";
 import { buildWorkingSchedule, getWorkPeriods, refreshWorkingMonitor } from "../sale-work-schedules/reassignment-work-calendar.service";
 import { lockWorkScheduleProgram } from "../sale-work-schedules/work-schedule-lock";
@@ -398,6 +399,13 @@ async function completeStoppedMonitor(monitorId: string, reason: string, now: Da
 }
 
 export async function processReassignmentExpiry(monitorId: string, now = new Date()) {
+  const monitor = await prisma.automation_reassignment_monitors.findUnique({ where: { id: monitorId }, select: { rule_id: true } });
+  const rule = monitor ? await prisma.automation_rules.findUnique({ where: { id: monitor.rule_id }, select: { name: true } }) : null;
+  return withHistorySource({ channel: "automation", ruleId: monitor?.rule_id, name: rule?.name },
+    () => processReassignmentExpiryWithSource(monitorId, now));
+}
+
+async function processReassignmentExpiryWithSource(monitorId: string, now: Date) {
   const processingStartedAt = Date.now();
   const processingNow = () => new Date(now.getTime() + Date.now() - processingStartedAt);
   const target = await prisma.automation_reassignment_monitors.findUnique({ where: { id: monitorId }, select: { institution_program_id: true } });

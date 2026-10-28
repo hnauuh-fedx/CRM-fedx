@@ -1,4 +1,5 @@
 import { Worker, type Job } from "bullmq";
+import { instrumentWorker } from "../operations/worker-heartbeat";
 
 import { env } from "../../config/env";
 import { redisConnection } from "../../config/redis";
@@ -7,7 +8,7 @@ import { WEBHOOK_QUEUE_NAME, type WebhookJobData } from "./webhook-queue.service
 
 export function createWebhookWorker() {
   if (!env.WEBHOOK_QUEUE_ENABLED || !redisConnection) throw new Error("Webhook worker yêu cầu Redis và WEBHOOK_QUEUE_ENABLED=true.");
-  return new Worker<WebhookJobData>(
+  const worker = new Worker<WebhookJobData>(
     WEBHOOK_QUEUE_NAME,
     async (job: Job<WebhookJobData>) => {
       const result = await processInboundWebhookRequest(job.data.requestId, { workerId: job.id });
@@ -16,4 +17,6 @@ export function createWebhookWorker() {
     },
     { connection: redisConnection as never, concurrency: env.WEBHOOK_WORKER_CONCURRENCY },
   );
+  instrumentWorker(worker);
+  return worker;
 }

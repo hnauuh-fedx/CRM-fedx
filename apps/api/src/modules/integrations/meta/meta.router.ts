@@ -5,11 +5,11 @@ import { env } from "../../../config/env";
 import { requireAnyPermission, requireAuthentication } from "../../../middlewares/auth.middleware";
 import {
   completeMetaOAuthCallback, connectMetaPage, disconnectMetaConnection, getMetaConnectionOptions,
-  listMetaConnections, listMetaOAuthPages, listMetaProcessingLogs, processMetaMessage,
+  listMetaConnections, listMetaOAuthPages, listMetaProcessingLogs,
   startMetaOAuth, storeMetaWebhookEvent, testMetaConnection,
 } from "./meta-integration.service";
 import { getMetaMessagingEvents, verifyMetaWebhookChallenge, verifyMetaWebhookSignature, type MetaWebhookPayload } from "./meta-webhook.service";
-import { enqueueMetaMessage } from "./meta-worker.service";
+import { enqueueMetaMessage } from "./meta-queue.service";
 
 const connectionInputSchema = z.object({ institutionProgramId: z.uuid(), leadSourceId: z.uuid() });
 const idSchema = z.uuid();
@@ -30,16 +30,11 @@ metaRouter.post("/webhook", async (request, response, next) => {
     }
     if (payload.object !== "page") { response.sendStatus(404); return; }
     const events = getMetaMessagingEvents(payload);
-    response.sendStatus(200);
     for (const event of events) {
-      try {
-        const stored = await storeMetaWebhookEvent(event);
-        if (stored) {
-          const queued = await enqueueMetaMessage(stored.messageId);
-          if (!queued) void processMetaMessage(stored.messageId).catch((error) => console.error("Meta message processing failed", error));
-        }
-      } catch (error) { console.error("Cannot persist Meta webhook event", error); }
+      const stored = await storeMetaWebhookEvent(event);
+      if (stored?.processingStatus === "pending" && !await enqueueMetaMessage(stored.messageId)) { response.status(503).json({ message: "Sự kiện đã được lưu, hàng đợi Meta chưa sẵn sàng." }); return; }
     }
+    response.sendStatus(200);
   } catch (error) { next(error); }
 });
 

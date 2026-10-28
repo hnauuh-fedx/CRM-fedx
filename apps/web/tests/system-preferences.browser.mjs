@@ -39,6 +39,23 @@ try {
   assert.ok(await evaluate("document.body.textContent.includes('Đang cấu hình: Chương trình A')"));
   assert.equal(await evaluate("window.preferenceSaves.length"), 0);
   const tab = async label => { const id = await evaluate(`[...document.querySelectorAll('[role=tab]')].find(e=>e.textContent===${JSON.stringify(label)})?.id`); assert.ok(id); await click(`[id="${id}"]`); };
+  await tab("Phân công Sale");
+  const creatorCheckbox = '#manual-creator-00000000-0000-4000-8000-000000000003';
+  await wait(`document.querySelector(${JSON.stringify(creatorCheckbox)})`);
+  await click(creatorCheckbox);
+  await wait("document.body.textContent.includes('Đã chọn 1 người dùng') && !document.querySelector('button[type=submit]').disabled");
+  await click('button[type="submit"]');
+  await wait("window.preferenceSaves.length===1 && document.querySelector('button[type=submit]').disabled");
+  assert.deepEqual(await evaluate("window.preferenceSaves[0].value.manualUnassignedCreatorIds"), ['00000000-0000-4000-8000-000000000003']);
+  await tab("Tiếp nhận dữ liệu"); await tab("Phân công Sale");
+  await wait(`document.querySelector(${JSON.stringify(creatorCheckbox)})?.getAttribute('data-state')==='checked'`);
+  await fill('#manual-lead-creators-search', 'Giám đốc');
+  await wait("document.querySelector('#manual-creator-00000000-0000-4000-8000-000000000004') && !document.querySelector('#manual-creator-00000000-0000-4000-8000-000000000004').disabled");
+  await click('#manual-creator-00000000-0000-4000-8000-000000000004');
+  await wait("document.body.textContent.includes('Đã chọn 2 người dùng')");
+  await evaluate("[...document.querySelectorAll('button')].find(e=>e.textContent==='Hủy thay đổi').click()");
+  await wait("document.body.textContent.includes('Đã chọn 1 người dùng')");
+  await evaluate("window.preferenceSaves=[]");
   await tab("Thông báo");
   await wait("document.querySelector('#preference-assignment')");
   await click("#preference-assignment");
@@ -82,6 +99,15 @@ try {
   }
   await browser.key("Tab", "Tab");
   assert.notEqual(await evaluate("document.activeElement.tagName"), 'BODY');
+  await tab("Phân công Sale");
+  await wait("document.querySelector('#manual-lead-creators-search')");
+  for (const width of [1440, 375]) {
+    await command('Emulation.setDeviceMetricsOverride', { width, height: 1000, deviceScaleFactor: 1, mobile: width < 500 });
+    assert.ok(await evaluate('document.documentElement.scrollWidth <= innerWidth'), 'Creator picker must fit '+width);
+    await assertTabBounds(width);
+    const shot = await command('Page.captureScreenshot', { captureBeyondViewport: true });
+    await writeFile(resolve(artifacts, 'manual-creators-'+width+'.png'), Buffer.from(shot.data, 'base64'));
+  }
   console.log('PASS: grouped settings, Vietnamese copy, defaults, save, conflict, leave guard, search, locked core fields, export controls, keyboard and 1440/390/375px layout');
 } finally {
   await browser?.close();

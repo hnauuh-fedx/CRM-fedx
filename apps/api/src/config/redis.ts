@@ -1,6 +1,9 @@
 import { Redis } from "ioredis";
 
 import { env } from "./env";
+import { resolveRedisFeatures } from "../modules/operations/redis-features";
+
+export const redisFeatures = resolveRedisFeatures({ ...process.env, ...env });
 
 export const isRedisDisabled =
   process.env.DISABLE_REDIS === "true" ||
