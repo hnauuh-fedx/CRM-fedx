@@ -3,6 +3,7 @@ import { prisma } from "../../database/prisma";
 
 type TransactionClient = Parameters<Parameters<typeof prisma.$transaction>[0]>[0];
 type AdmissionDocumentMutationOptions = {
+  managedFile?: { id: string; token: string };
   causationRuleIds?: string[];
   afterMutation?: (tx: TransactionClient) => Promise<void>;
 };
@@ -146,7 +147,12 @@ export async function uploadAdmissionDocument(
     }
 
     const hasFile = Boolean(input.fileName?.trim() && input.fileUrl?.trim());
-    const file = hasFile
+    if (options.managedFile) {
+      await tx.$queryRaw`SELECT id FROM files WHERE id=${options.managedFile.id}::uuid FOR UPDATE`;
+      const claim = await tx.files.updateMany({ where: { id: options.managedFile.id, uploaded_by: user.id, upload_target_id: input.leadId, upload_domain: "admission", institution_program_id: scopedProgramId, storage_provider: "s3", storage_status: "pending", operation_token: options.managedFile.token, lease_until: { gt: new Date() } }, data: { storage_status: "ready", operation_token: null, lease_until: null } });
+      if (!claim.count) throw new Error("Managed file claim expired.");
+    }
+    const file = options.managedFile ? await tx.files.findUniqueOrThrow({ where: { id: options.managedFile.id }, select: { id: true, file_name: true } }) : hasFile
       ? await tx.files.create({
           data: {
             file_name: input.fileName!.trim(),
@@ -203,7 +209,7 @@ export async function uploadAdmissionDocument(
     await options.afterMutation?.(tx);
     return { ok: true as const, data: { id: document.id } };
   });
-  if (result.ok && !input.fileUrl) {
+  if (result.ok && !input.fileUrl && !options.managedFile) {
     const profile = await prisma.admission_profiles.findUnique({
       where: { lead_id: input.leadId },
       select: { id: true, institution_program_id: true },

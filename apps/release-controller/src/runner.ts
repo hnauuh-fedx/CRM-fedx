@@ -15,7 +15,13 @@ export function composeInvocation(directory: string, manifest: ReleaseRegistrati
     env: { ...process.env, API_IMAGE: manifest.apiImage, WEB_IMAGE: manifest.webImage, RELEASE_COMMIT: manifest.commit },
   };
 }
-export async function applyRelease(environment: ReleaseEnvironment, manifest: ReleaseRegistration, event: (message: string) => Promise<void>) {
+export async function applyRelease(environment: ReleaseEnvironment, manifest: ReleaseRegistration, event: (message: string) => Promise<void>, deploymentId?: string, assertActive?: () => void) {
+  if (config.CONTROL_DEPLOYMENT_MODE === "render-cloudflare") {
+    if (!deploymentId) throw new Error("Cloud deployment ID is required.");
+    const { applyCloudRelease } = await import("./cloud-executor.js");
+    return applyCloudRelease(environment, manifest, event, deploymentId, assertActive);
+  }
+  if (config.CONTROL_DEPLOYMENT_MODE !== "compose" || manifest.provider === "render-cloudflare") throw new Error("Deployment provider mismatch.");
   const directory = environment === "staging" ? config.CONTROL_STAGING_DIRECTORY : config.CONTROL_PRODUCTION_DIRECTORY;
   const command = composeInvocation(directory, manifest);
   // Commands and compose paths are operator-owned; browser/CI can never supply shell text.
@@ -37,7 +43,8 @@ export async function startRunner(apply = applyRelease, interval = 1500) {
   const lock = await pool.connect();
   const acquired = (await lock.query("SELECT pg_try_advisory_lock(20481028) AS acquired")).rows[0].acquired;
   if (!acquired) { lock.release(); throw new Error("Another release controller is already running."); }
-  lock.on("error", () => { console.error("Controller lock connection lost. Stop and reconcile deployment state."); process.exit(1); });
+  let leaseLost = false;
+  lock.on("error", () => { leaseLost = true; console.error("Controller lock connection lost. Stop and reconcile deployment state."); process.exit(1); });
   try { await transaction(async tx => {
     await tx.query("UPDATE environments SET blocked=true WHERE name IN (SELECT environment FROM deployments WHERE status='RUNNING')");
     await tx.query("INSERT INTO deployment_events(deployment_id,message) SELECT id,'Dịch vụ khởi động lại khi đang triển khai; cần kiểm tra thực tế.' FROM deployments WHERE status='RUNNING'");
@@ -57,7 +64,7 @@ export async function startRunner(apply = applyRelease, interval = 1500) {
     if (!job) return;
     const event = async (message: string) => { await pool.query("INSERT INTO deployment_events(deployment_id,message) VALUES($1,$2)", [job.id, message]); };
     try {
-      await apply(job.environment, job.manifest, event);
+      await apply(job.environment, job.manifest, event, job.id, () => { if (leaseLost) throw new Error("Deployment lease lost."); });
       await transaction(async tx => {
         await tx.query("UPDATE environments SET current_release_id=$1 WHERE name=$2", [job.release_id, job.environment]);
         await tx.query("UPDATE deployments SET status='SUCCEEDED',finished_at=now(),message='Triển khai thành công.' WHERE id=$1", [job.id]);

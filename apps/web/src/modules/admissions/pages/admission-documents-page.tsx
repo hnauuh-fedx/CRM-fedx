@@ -500,6 +500,8 @@ function UploadDocumentDialog(props: {
   onClose: () => void;
   onSubmit: (input: AdmissionDocumentInput) => void;
 }) {
+  const fileAuth = useAuth();
+  const fileQueries = useQueryClient();
   const [form, setForm] = useState<AdmissionDocumentInput>({
     leadId: "",
     documentType: "",
@@ -539,6 +541,7 @@ function UploadDocumentDialog(props: {
           }}
           className="space-y-5"
         >
+          {fileAuth.accessToken && form.leadId && form.documentType.trim() && <PrivateFileUpload key={`${form.leadId}:${form.documentType.trim()}`} leadId={form.leadId} documentType={form.documentType.trim()} token={fileAuth.accessToken} onUploaded={() => { void fileQueries.invalidateQueries({ queryKey: ["admissions", "documents"] }); props.onClose(); }} />}
           <FieldGroup className="grid gap-4 md:grid-cols-2">
             <Field className="md:col-span-2">
               <FieldLabel htmlFor="document-profile">
@@ -728,6 +731,7 @@ function AdmissionDocumentResults({
     status: AdmissionDocumentStatus,
   ) => void;
 }) {
+  const fileAuth = useAuth();
   return (
     <Card className="gap-0 overflow-hidden border-border/70 py-0 shadow-xs">
       <CardHeader className="gap-1 border-b py-5">
@@ -817,7 +821,7 @@ function AdmissionDocumentResults({
                     <DocumentStatusBadge status={document.status} />
                   </TableCell>
                   <TableCell className="px-3 py-2">
-                    {document.fileUrl ? (
+                    {document.canDownload && document.fileId && fileAuth.accessToken ? <PrivateFileDownload id={document.fileId} name={document.fileName ?? "tài liệu"} token={fileAuth.accessToken} /> : document.fileUrl ? (
                       <a
                         className="text-primary underline-offset-4 hover:underline"
                         href={document.fileUrl}
@@ -863,3 +867,4 @@ function AdmissionDocumentResults({
     </Card>
   );
 }
+import { PrivateFileUpload, PrivateFileDownload } from "@/components/shared/private-file-controls";

@@ -99,3 +99,6 @@ Verify pipeline configuration permission, stage maintenance, and audit logging a
 ```powershell
 npm run test:integration:pipelines --workspace apps/api
 ```
+## Chuẩn bị triển khai cloud
+
+Local và Docker Compose vẫn là mặc định. Hướng dẫn cấu hình Cloudflare Pages/R2, Render và DigitalOcean theo lựa chọn môi trường: [docs/cloud-deployment-preparation.md](docs/cloud-deployment-preparation.md). Các mẫu này chưa tự triển khai dịch vụ bên ngoài.

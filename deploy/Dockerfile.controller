@@ -1,0 +1,15 @@
+FROM node:24-bookworm-slim
+WORKDIR /app
+RUN apt-get update && apt-get install -y --no-install-recommends ca-certificates && rm -rf /var/lib/apt/lists/*
+COPY package.json package-lock.json ./
+COPY apps/api/package.json apps/api/package.json
+COPY apps/web/package.json apps/web/package.json
+COPY apps/release-controller/package.json apps/release-controller/package.json
+COPY packages/shared/package.json packages/shared/package.json
+RUN npm ci --ignore-scripts
+COPY packages/shared packages/shared
+COPY apps/release-controller apps/release-controller
+RUN npm run typecheck --workspace apps/release-controller
+USER node
+EXPOSE 3100
+CMD ["node", "--import", "tsx", "apps/release-controller/src/server.ts"]

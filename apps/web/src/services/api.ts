@@ -63,8 +63,9 @@ export async function apiFormRequest<T>(
   path: string,
   body: FormData,
   accessToken?: string | null,
+  extraHeaders?: HeadersInit,
 ): Promise<T> {
-  const headers = new Headers();
+  const headers = new Headers(extraHeaders);
   if (accessToken) {
     headers.set("Authorization", `Bearer ${accessToken}`);
     const selectedProgramId = readSelectedInstitutionProgramId();

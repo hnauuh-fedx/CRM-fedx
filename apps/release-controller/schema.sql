@@ -36,3 +36,15 @@ CREATE TABLE IF NOT EXISTS deployment_events (
   message text NOT NULL,
   created_at timestamptz NOT NULL DEFAULT now()
 );
+CREATE TABLE IF NOT EXISTS deployment_components (
+  deployment_id uuid NOT NULL REFERENCES deployments(id),
+  component text NOT NULL,
+  target_id text NOT NULL,
+  target_artifact text NOT NULL,
+  intent_id uuid NOT NULL,
+  provider_deployment_id text,
+  status text NOT NULL CHECK(status IN ('PLANNED','REQUESTED','VERIFYING','VERIFIED','FAILED','UNKNOWN')),
+  previous_deployment_id text,
+  updated_at timestamptz NOT NULL DEFAULT now(),
+  PRIMARY KEY(deployment_id,component)
+);

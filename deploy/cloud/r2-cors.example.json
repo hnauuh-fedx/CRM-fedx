@@ -1,0 +1,9 @@
+[
+  {
+    "AllowedOrigins": ["https://crm-staging.example.com"],
+    "AllowedMethods": ["GET", "HEAD"],
+    "AllowedHeaders": ["Range"],
+    "ExposeHeaders": ["ETag", "Content-Length", "Content-Type"],
+    "MaxAgeSeconds": 300
+  }
+]

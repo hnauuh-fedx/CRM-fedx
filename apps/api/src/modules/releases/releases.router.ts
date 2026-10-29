@@ -47,6 +47,13 @@ releasesRouter.get("/deployments/:id/events", async (request, response) => {
     response.status(result.status).json(result.payload);
   } catch { response.status(503).json({ message: "Không thể tải nhật ký triển khai." }); }
 });
+releasesRouter.get("/deployments/:id/components", async (request, response) => {
+  const id = z.uuid().safeParse(request.params.id);
+  if (!id.success) { response.status(400).json({ message: "Yêu cầu không hợp lệ." }); return; }
+  if (!configured()) { response.status(503).json({ message: "Chưa cấu hình dịch vụ triển khai." }); return; }
+  try { const result = await controlRequest(`deployments/${id.data}/components`); response.status(result.status).json(result.payload); }
+  catch { response.status(503).json({ message: "Không thể tải trạng thái thành phần." }); }
+});
 releasesRouter.post("/deployments", async (request, response, next) => {
   const parsed = deploymentRequestSchema.safeParse(request.body);
   if (!parsed.success) { response.status(400).json({ message: parsed.error.issues[0]?.message ?? "Yêu cầu triển khai không hợp lệ." }); return; }

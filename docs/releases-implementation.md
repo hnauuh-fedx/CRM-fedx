@@ -1,6 +1,10 @@
 # Quản lý phiên bản
 
+Ngoài Compose, đã có executor Render/Cloudflare tùy chọn, journal từng thành phần và frontend artifact theo môi trường. Xem [hướng dẫn vận hành cloud](cloud-features-operations.md); local/Compose vẫn là mặc định.
+
 Tính năng quản lý bản phát hành và yêu cầu triển khai từ CRM. Dịch vụ điều khiển triển khai hoạt động độc lập với web/API/worker.
+
+Đã có lớp **chuẩn bị tùy chọn** cho Cloudflare/Render/DigitalOcean tại [cloud-deployment-preparation.md](cloud-deployment-preparation.md). Mặc định vẫn là Compose. `CONTROL_DEPLOYMENT_MODE=prepare-only` chặn triển khai khi thử cấu hình cloud; CLI cloud chỉ tạo kế hoạch không thực thi, chưa thay runner hiện tại.
 
 ## Đã triển khai
 

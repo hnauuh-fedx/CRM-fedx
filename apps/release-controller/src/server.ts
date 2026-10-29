@@ -31,6 +31,12 @@ export function createControlApp() {
   });
   app.post("/v1/recovery/reconcile", authenticate(config.CONTROL_RECOVERY_TOKEN), async (req, res) => {
     const body = z.object({ environment: z.enum(["staging", "production"]), observedReleaseId: z.uuid(), reason: z.string().trim().min(10).max(500), operator: z.string().trim().min(1).max(200) }).strict().parse(req.body);
+    if (config.CONTROL_DEPLOYMENT_MODE === "render-cloudflare") {
+      const release = (await pool.query("SELECT manifest FROM releases WHERE id=$1", [body.observedReleaseId])).rows[0];
+      if (!release) throw new ControlError(404, "Không tìm thấy phiên bản đối soát.");
+      const { reconcileCloudRelease } = await import("./cloud-executor.js");
+      try { await reconcileCloudRelease(body.environment, release.manifest); } catch { throw new ControlError(409, "Chưa xác minh được đồng nhất phiên bản thực tế trên cloud."); }
+    }
     await transaction(async tx => {
       const state = (await tx.query("SELECT * FROM environments WHERE name=$1 FOR UPDATE", [body.environment])).rows[0];
       if (!state?.blocked) throw new ControlError(409, "Môi trường không ở trạng thái cần đối soát.");
@@ -68,6 +74,11 @@ export function createControlApp() {
     const rows = await pool.query("SELECT id::text,message,created_at AS \"createdAt\" FROM deployment_events WHERE deployment_id=$1 ORDER BY id DESC LIMIT $2 OFFSET $3", [id, limit, (page - 1) * limit]);
     res.json({ data: rows.rows });
   });
+  app.get("/v1/deployments/:id/components", async (req, res) => {
+    const id = z.uuid().parse(req.params.id);
+    const rows = await pool.query("SELECT component,status,provider_deployment_id AS \"providerId\",updated_at AS \"updatedAt\" FROM deployment_components WHERE deployment_id=$1 ORDER BY component", [id]);
+    res.json({ data: rows.rows });
+  });
   app.post("/v1/deployments", async (req, res) => {
     const body = z.object({ deployment: deploymentRequestSchema, actor: releaseActorSchema }).strict().parse(req.body);
     res.status(202).json(await enqueueDeployment(body.deployment, body.actor));
@@ -83,7 +94,7 @@ export function createControlApp() {
 }
 async function main() {
   await pool.query("SELECT 1 FROM environments LIMIT 1");
-  const stop = await startRunner();
+  const stop = config.CONTROL_DEPLOYMENT_MODE === "prepare-only" ? async () => {} : await startRunner();
   const server = createControlApp().listen(config.CONTROL_PORT, config.CONTROL_BIND_HOST);
   let closing = false;
   const shutdown = async () => {

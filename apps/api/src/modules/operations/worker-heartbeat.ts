@@ -3,6 +3,7 @@ import { randomUUID } from "node:crypto";
 import type { Worker } from "bullmq";
 import type { Redis } from "ioredis";
 import { redisCommandConnection } from "../../config/redis";
+import { releaseCommit } from "../../config/release-commit";
 import { readMonitorConfig } from "./monitor-config";
 import { heartbeatIndex, heartbeatPrefix, type WorkerHeartbeat } from "./worker-telemetry";
 export function instrumentWorker(worker: Worker<any, any, string> | null, options?: { connection: Redis; environment: string; intervalMs: number; staleMs: number }) {
@@ -12,7 +13,7 @@ export function instrumentWorker(worker: Worker<any, any, string> | null, option
   if (!connection) return;
   const intervalMs = options?.intervalMs ?? config.OPERATIONS_HEARTBEAT_MS;
   const staleMs = options?.staleMs ?? config.OPERATIONS_STALE_MS;
-  const record: WorkerHeartbeat = { queue: worker.name, instance: `${hostname()}:${process.pid}:${randomUUID()}`, commit: process.env.RELEASE_COMMIT ?? "development", at: 0, healthy: false, completed: 0, failed: 0, stalled: 0, lastSuccessAt: null, lastFailureAt: null, lastDurationMs: null };
+  const record: WorkerHeartbeat = { queue: worker.name, instance: `${hostname()}:${process.pid}:${randomUUID()}`, commit: releaseCommit(), at: 0, healthy: false, completed: 0, failed: 0, stalled: 0, lastSuccessAt: null, lastFailureAt: null, lastDurationMs: null };
   const key = heartbeatPrefix(options?.environment ?? config.OPERATIONS_ENVIRONMENT, worker.name) + record.instance;
   const index = heartbeatIndex(options?.environment ?? config.OPERATIONS_ENVIRONMENT, worker.name);
   let writing = false; let closed = false;

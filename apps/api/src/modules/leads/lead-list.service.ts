@@ -783,7 +783,7 @@ export async function getLeadDetail(user: AuthUser, leadId: string, institutionP
   const failedStageId = getFailedLeadStageId(lead.status);
   const [relatedFiles, relatedTags, recentChanges] = await prisma.$transaction([
     prisma.file_relations.findMany({
-      where: { entity_type: "lead", entity_id: leadId },
+      where: { entity_type: "lead", entity_id: leadId, files: { is: { storage_status: "ready" } } },
       select: {
         id: true,
         files: {
@@ -791,6 +791,7 @@ export async function getLeadDetail(user: AuthUser, leadId: string, institutionP
             id: true,
             file_name: true,
             file_url: true,
+            storage_provider: true,
             mime_type: true,
             file_size: true,
             created_at: true,
@@ -1027,6 +1028,8 @@ export async function getLeadDetail(user: AuthUser, leadId: string, institutionP
             id: relation.files.id,
             fileName: relation.files.file_name,
             fileUrl: relation.files.file_url,
+            storageKind: relation.files.storage_provider,
+            canDownload: relation.files.storage_provider === "s3",
             mimeType: relation.files.mime_type,
             fileSize: relation.files.file_size?.toString() ?? null,
             createdAt: relation.files.created_at?.toISOString() ?? null,

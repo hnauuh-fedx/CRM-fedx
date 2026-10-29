@@ -103,6 +103,8 @@ export type AdmissionDocumentInput = {
 };
 
 export type AdmissionDocumentItem = {
+  fileId?: string | null;
+  canDownload?: boolean;
   id: string;
   candidateName: string | null;
   leadCode: string | null;

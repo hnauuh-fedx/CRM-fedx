@@ -2,6 +2,7 @@
   "name": "@admission-crm/web",
   "private": true,
   "scripts": {
+    "test:private-files-browser": "node tests/private-files.browser-smoke.mjs",
     "test:display-layout-owner-browser": "node tests/display-layout-owner.browser-smoke.mjs",
     "test:releases-browser": "node tests/releases.browser-smoke.mjs",
     "test:program-entry-browser": "node tests/program-entry.browser-smoke.mjs",

@@ -708,7 +708,20 @@ model institution_programs {
 model files {
   id                  String                @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
   file_name           String                @db.VarChar(255)
-  file_url            String
+  file_url            String?
+  storage_provider    String                @default("external") @db.VarChar(20)
+  storage_status      String                @default("ready") @db.VarChar(20)
+  storage_bucket      String?
+  object_key          String?
+  institution_program_id String?            @db.Uuid
+  upload_target_id    String?               @db.Uuid
+  upload_domain       String?               @db.VarChar(20)
+  document_type       String?               @db.VarChar(150)
+  request_id          String?               @db.Uuid
+  request_fingerprint String?               @db.VarChar(64)
+  content_sha256      String?               @db.VarChar(64)
+  operation_token     String?               @db.Uuid
+  lease_until         DateTime?             @db.Timestamptz(6)
   mime_type           String?               @db.VarChar(100)
   file_size           BigInt?
   uploaded_by         String?               @db.Uuid
@@ -716,6 +729,10 @@ model files {
   admission_documents admission_documents[]
   file_relations      file_relations[]
   users               users?                @relation(fields: [uploaded_by], references: [id], onDelete: NoAction, onUpdate: NoAction)
+
+  @@unique([uploaded_by, request_id], map: "files_upload_request_key")
+  @@unique([storage_bucket, object_key], map: "files_storage_object_key")
+  @@index([storage_provider, storage_status, lease_until], map: "idx_files_storage_cleanup")
 }
 
 model lead_activities {

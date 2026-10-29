@@ -65,7 +65,14 @@ async function main() {
     await stop(); stop = undefined;
     const incompatible = await registerRelease({ ...base, commit: "c".repeat(40), schemaGeneration: "g2" });
     await assert.rejects(enqueueDeployment({ ...request, releaseId: incompatible.id, environment: "production", requestId: randomUUID() }, actor));
-    console.log("PASS: immutable registration, registry allowlist, idempotency, concurrent requests, staging gate, successful promotion, failure blocking, rollback and restart recovery.");
+    const { databaseCloudJournal } = await import("./cloud-executor.js");
+    const journal = databaseCloudJournal(first.id);
+    await journal.save({ component: "api", targetId: "srv-fixture", artifact: base.apiImage, intentId: randomUUID(), status: "REQUESTED" });
+    assert.equal((await databaseCloudJournal(first.id).load("api"))?.status, "REQUESTED");
+    const checkpoint = (await journal.load("api"))!;
+    await journal.save({ ...checkpoint, status: "VERIFIED", providerId: "dep-fixture" });
+    assert.equal((await databaseCloudJournal(first.id).load("api"))?.providerId, "dep-fixture");
+    console.log("PASS: immutable registration, registry allowlist, idempotency, concurrent requests, staging gate, successful promotion, failure blocking, rollback, restart recovery and durable component journal.");
   } finally {
     await stop?.(); await pool.end();
     if (!/^crm_release_test_\d+$/.test(name) || target.pathname !== `/${name}`) throw new Error("Unsafe cleanup target");

@@ -2,6 +2,7 @@ import { Pool, type PoolClient } from "pg";
 import { Redis } from "ioredis";
 import { hostname } from "node:os";
 import { env } from "../config/env";
+import { releaseCommit } from "../config/release-commit";
 import { readMonitorConfig } from "../modules/operations/monitor-config";
 import { monitoredQueueNames, resolveRedisFeatures } from "../modules/operations/redis-features";
 import { QueueSampler } from "../modules/operations/queue-sampler";
@@ -15,7 +16,8 @@ async function main() {
   const connection = new Redis(env.REDIS_URL, { lazyConnect: names.length === 0, maxRetriesPerRequest: 1, enableOfflineQueue: false, connectTimeout: 2000, commandTimeout: 2500 });
   connection.on("error", () => {});
   const sampler = new QueueSampler(connection, config.OPERATIONS_ENVIRONMENT, config.OPERATIONS_STALE_MS);
-  const pool = new Pool({ connectionString: env.DATABASE_URL, max: 2, connectionTimeoutMillis: 2500, statement_timeout: 2500 });
+  const { sessionDatabaseConnectionOptions } = await import("../config/postgres.js");
+  const pool = new Pool({ ...sessionDatabaseConnectionOptions, max: 2, connectionTimeoutMillis: 2500, statement_timeout: 2500 });
   pool.on("error", () => {});
   let lease: PoolClient | null = null;
   let document = emptyMonitorDocument(Math.max(60000, config.OPERATIONS_POLL_MS * 4));
@@ -52,7 +54,7 @@ async function main() {
     const priorEvents = new Set(document.alerts.history.map(event => event.id));
     document = await sampleMonitor(document, { names, databaseReady: database === "owned" && !lastPersistFailed, ping: () => connection.ping(), sample: (name, previous, now) => sampler.sample(name, previous, now), config });
     document.staleAfterMs = Math.max(60000, config.OPERATIONS_POLL_MS * 4);
-    document.producer = { host: hostname(), commit: process.env.RELEASE_COMMIT ?? "development" };
+    document.producer = { host: hostname(), commit: releaseCommit() };
     sampled = true;
     for (const event of document.alerts.history) if (!priorEvents.has(event.id)) console.log(JSON.stringify({ event: "operations_alert", ...event }));
     // Persist pending event before delivery. Stable IDs allow receiver-side deduplication after a crash.

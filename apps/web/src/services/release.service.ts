@@ -7,3 +7,4 @@ export const listReleases = (token: string, page: number, search: string) => api
 export const listDeployments = (token: string, page: number) => apiRequest<ReleasePage<Deployment>>(`${base}/deployments?page=${page}`, {}, token);
 export const requestDeployment = (token: string, input: DeploymentRequest) => apiRequest<Deployment>(`${base}/deployments`, { method: "POST", body: JSON.stringify(input) }, token);
 export const getDeploymentEvents = (token: string, id: string, page: number) => apiRequest<{ data: { id: string; message: string; createdAt: string }[] }>(`${base}/deployments/${id}/events?page=${page}`, {}, token);
+export const getDeploymentComponents = (token: string, id: string) => apiRequest<{ data: Array<{ component: string; status: string; providerId: string | null; updatedAt: string }> }>(`/system/releases/deployments/${id}/components`, {}, token);

@@ -2,6 +2,9 @@
   "name": "@admission-crm/api",
   "private": true,
   "scripts": {
+    "maintenance:private-files": "tsx src/maintenance/cleanup-private-files.ts",
+    "test:integration:private-files": "node scripts/test-private-files-isolated.cjs",
+    "deployment:check": "tsx src/maintenance/check-deployment-preparation.ts",
     "test:integration:display-layout-owner": "tsx src/integration/display-layout-owner.integration.ts",
     "test:login-protection": "tsx --test src/modules/auth/login-rate-limit.test.ts",
     "test:integration:login-protection": "node scripts/test-login-protection-isolated.cjs",
@@ -96,6 +99,8 @@
   },
   "dependencies": {
     "@admission-crm/shared": "*",
+    "@aws-sdk/client-s3": "^3.1159.0",
+    "@aws-sdk/s3-request-presigner": "^3.1159.0",
     "@prisma/adapter-pg": "^7.8.0",
     "@prisma/client": "^7.8.0",
     "bcryptjs": "^3.0.3",

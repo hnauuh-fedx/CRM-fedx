@@ -1,6 +1,7 @@
 import { Queue } from "bullmq";
 
 import { env } from "../../config/env";
+import { failedJobRetention } from "../../config/queue-retention";
 import { redisCommandConnection } from "../../config/redis";
 
 export const WEBHOOK_QUEUE_NAME = "webhook_inbound_queue";
@@ -31,7 +32,7 @@ const bullAdapter: WebhookQueueAdapter | null = bullQueue
           attempts: env.WEBHOOK_MAX_ATTEMPTS,
           backoff: { type: "exponential", delay: 30_000 },
           removeOnComplete: true,
-          removeOnFail: false,
+          removeOnFail: failedJobRetention(false),
         });
       },
       async has(requestId) {

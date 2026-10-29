@@ -1,0 +1,48 @@
+{
+  "staging": {
+    "environment": "staging",
+    "schemaGeneration": "replace-after-schema-review",
+    "renderOwnerId": "REPLACE_WITH_WORKSPACE_ID",
+    "requiredCapabilities": [
+      "private-files-v1"
+    ],
+    "publicApiOrigin": "https://api-staging.example.com",
+    "publicWebOrigin": "https://crm-staging.example.com",
+    "pages": {
+      "accountId": "REPLACE_WITH_ACCOUNT_ID",
+      "projectName": "admission-crm-staging",
+      "productionBranch": "main"
+    },
+    "render": {
+      "api": "REPLACE_WITH_SERVICE_ID",
+      "webhooks": "REPLACE_WITH_SERVICE_ID",
+      "automation": "REPLACE_WITH_SERVICE_ID",
+      "integrations": "REPLACE_WITH_SERVICE_ID",
+      "reminders": "REPLACE_WITH_SERVICE_ID",
+      "monitor": "REPLACE_WITH_SERVICE_ID"
+    }
+  },
+  "production": {
+    "environment": "production",
+    "schemaGeneration": "replace-after-schema-review",
+    "renderOwnerId": "REPLACE_WITH_WORKSPACE_ID",
+    "requiredCapabilities": [
+      "private-files-v1"
+    ],
+    "publicApiOrigin": "https://api.example.com",
+    "publicWebOrigin": "https://crm.example.com",
+    "pages": {
+      "accountId": "REPLACE_WITH_ACCOUNT_ID",
+      "projectName": "admission-crm-production",
+      "productionBranch": "main"
+    },
+    "render": {
+      "api": "REPLACE_WITH_SERVICE_ID",
+      "webhooks": "REPLACE_WITH_SERVICE_ID",
+      "automation": "REPLACE_WITH_SERVICE_ID",
+      "integrations": "REPLACE_WITH_SERVICE_ID",
+      "reminders": "REPLACE_WITH_SERVICE_ID",
+      "monitor": "REPLACE_WITH_SERVICE_ID"
+    }
+  }
+}

@@ -11,7 +11,9 @@ import { LeadRequiredFieldsError } from "./modules/leads/lead-required-fields";
 import path from "node:path";
 
 import { env } from "./config/env";
+import { releaseCommit } from "./config/release-commit";
 import { authRouter } from "./modules/auth/auth.router";
+import { privateFilesRouter } from "./modules/files/private-files.router";
 import { admissionsRouter } from "./modules/admissions/admissions.router";
 import { majorsRouter } from "./modules/admissions/majors.router";
 import { auditLogsRouter } from "./modules/audit/audit-logs.router";
@@ -73,7 +75,7 @@ app.get("/api/health", (_request, response) => {
 app.get("/api/ready", async (_request, response) => {
   response.setHeader("Cache-Control", "no-store");
   const ready = await checkReadiness({ database: () => prisma.$queryRaw`SELECT 1`, redis: redisCommandConnection ? redisCommandConnection.ping.bind(redisCommandConnection) : null, features: redisFeatures });
-  if (ready) response.json({ status: "ok", commit: process.env.RELEASE_COMMIT ?? "development" });
+  if (ready) response.json({ status: "ok", commit: releaseCommit() });
   else response.status(503).json({ status: "unavailable" });
 });
 
@@ -82,6 +84,7 @@ app.use("/api/system/operations", operationsRouter);
 app.use("/api/system/releases", releasesRouter);
 
 app.use("/api/auth", authRouter);
+app.use("/api", privateFilesRouter);
 app.use("/api/admissions", admissionsRouter);
 app.use("/api/majors", majorsRouter);
 app.use("/api/audit-logs", auditLogsRouter);

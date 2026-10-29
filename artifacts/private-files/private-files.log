@@ -1,0 +1,1 @@
+PASS: additive migration, real API authentication/scope, private upload/download, durable replay, payload conflict, MIME/size checks, admission association, permission revocation, orphan cleanup and disabled local mode.

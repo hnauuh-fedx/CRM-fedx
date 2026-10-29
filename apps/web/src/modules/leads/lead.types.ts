@@ -275,7 +275,9 @@ export type LeadDetail = LeadListItem & {
   files: Array<{
     id: string;
     fileName: string;
-    fileUrl: string;
+    fileUrl: string | null;
+    storageKind?: string;
+    canDownload?: boolean;
     mimeType: string | null;
     fileSize: string | null;
     createdAt: string | null;

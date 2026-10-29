@@ -1,6 +1,7 @@
 import { Queue, UnrecoverableError, Worker, type Job } from "bullmq";
 
 import { redisConnection, isRedisDisabled } from "../../config/redis";
+import { failedJobRetention } from "../../config/queue-retention";
 import { instrumentWorker } from "../operations/worker-heartbeat";
 import { prisma } from "../../database/prisma";
 import { executeRegisteredAutomationNode } from "./automation-action-registry";
@@ -50,7 +51,7 @@ export async function enqueueAutomationBulkRun(bulkJobId: string) {
     backoff: { type: "exponential", delay: 5_000 },
     jobId: bulkJobId,
     removeOnComplete: true,
-    removeOnFail: false,
+    removeOnFail: failedJobRetention(false),
   });
   return true;
 }
@@ -63,7 +64,7 @@ async function enqueueAutomationJob(data: ExecutionJobData, delay = 0) {
     backoff: { type: "exponential", delay: 5_000 },
     jobId: `${data.logId}-${data.nodeId}`,
     removeOnComplete: true,
-    removeOnFail: false,
+    removeOnFail: failedJobRetention(false),
   });
 }
 
@@ -419,7 +420,7 @@ const automationBulkPrepareWorker = !shouldRunAutomationWorkers
               backoff: { type: "exponential", delay: 5_000 },
               jobId: `${job.data.bulkJobId}-${leadId}`,
               removeOnComplete: true,
-              removeOnFail: false,
+              removeOnFail: failedJobRetention(false),
             },
           })));
         }

@@ -126,12 +126,18 @@ function DeploymentDialog({ action, pending, error, onClose, onSubmit }: { actio
 }
 
 function DeploymentEvents({ token, id, onClose }: { token: string; id: string; onClose: () => void }) {
+  const components = useQuery({ queryKey: ["releases", "components", id], queryFn: () => getDeploymentComponents(token, id), refetchInterval: 5000 });
+  const componentNames: Record<string, string> = { api: "API", webhooks: "Webhook", automation: "Tự động hóa", integrations: "Tích hợp", reminders: "Nhắc việc", monitor: "Giám sát", pages: "Giao diện" };
+  const componentStatuses: Record<string, string> = { PLANNED: "Chưa bắt đầu", REQUESTED: "Đã gửi yêu cầu", VERIFYING: "Đang xác minh", VERIFIED: "Đã xác minh", FAILED: "Thất bại", UNKNOWN: "Cần đối soát" };
   const [page, setPage] = useState(1);
   const events = useQuery({ queryKey: ["releases", "events", id, page], queryFn: () => getDeploymentEvents(token, id, page), refetchInterval: 5000 });
   return <Dialog open onOpenChange={open => { if (!open) onClose(); }}><DialogContent><DialogHeader><DialogTitle>Nhật ký triển khai</DialogTitle><DialogDescription>Các bước xử lý được lưu bởi dịch vụ triển khai.</DialogDescription></DialogHeader>
+    {components.data && components.data.data.length > 0 && <ul aria-label="Trạng thái từng thành phần" className="flex flex-col gap-2">{components.data.data.map(item => <li key={item.component} className="flex flex-wrap justify-between gap-2"><span>{componentNames[item.component] ?? item.component}</span><Badge variant={item.status === "UNKNOWN" || item.status === "FAILED" ? "destructive" : "secondary"}>{componentStatuses[item.status] ?? item.status}</Badge></li>)}</ul>}
+    {components.isError && <p role="alert">Không thể xác nhận trạng thái từng thành phần.</p>}
     {events.isPending && <Skeleton className="h-24 w-full" />}
     {events.isError && <p role="alert">Không thể tải nhật ký. Vui lòng thử lại.</p>}
     <ol className="flex max-h-80 flex-col gap-3 overflow-y-auto">{events.data?.data.map(item => <li key={item.id}><p className="text-sm">{item.message}</p><time className="text-xs text-muted-foreground">{date(item.createdAt)}</time></li>)}</ol>
     <DialogFooter><Button variant="outline" disabled={page <= 1 || events.isFetching} onClick={() => setPage(value => value - 1)}>Mới hơn</Button><Button variant="outline" disabled={!events.data || events.data.data.length < 20 || events.isFetching} onClick={() => setPage(value => value + 1)}>Cũ hơn</Button><Button onClick={onClose}>Đóng</Button></DialogFooter>
   </DialogContent></Dialog>;
 }
+import { getDeploymentComponents } from "@/services/release.service";

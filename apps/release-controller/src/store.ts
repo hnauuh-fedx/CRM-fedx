@@ -3,9 +3,9 @@ import { randomUUID } from "node:crypto";
 import {
   deploymentBlockReason, type DeploymentRequest, type ReleaseRegistration,
 } from "@admission-crm/shared/releases";
-import { config } from "./config";
+import { config, controlDatabaseConnectionOptions } from "./config";
 
-export const pool = new Pool({ connectionString: config.CONTROL_DATABASE_URL, max: 8 });
+export const pool = new Pool(controlDatabaseConnectionOptions);
 export class ControlError extends Error {
   constructor(public status: number, message: string) { super(message); }
 }
@@ -35,6 +35,7 @@ export async function registerRelease(manifest: ReleaseRegistration) {
   return releaseRow(row);
 }
 export async function enqueueDeployment(input: DeploymentRequest, actor: { id: string; name: string }) {
+  if (config.CONTROL_DEPLOYMENT_MODE === "prepare-only") throw new ControlError(409, "Dịch vụ đang ở chế độ chuẩn bị. Chưa bật triển khai Render/Cloudflare.");
   return transaction(async tx => {
     const state = (await tx.query("SELECT * FROM environments WHERE name=$1 FOR UPDATE", [input.environment])).rows[0];
     if (!state) throw new ControlError(503, "Môi trường chưa được khởi tạo.");
@@ -45,6 +46,13 @@ export async function enqueueDeployment(input: DeploymentRequest, actor: { id: s
     }
     const release = (await tx.query("SELECT * FROM releases WHERE id=$1", [input.releaseId])).rows[0];
     if (!release) throw new ControlError(404, "Không tìm thấy phiên bản.");
+    if ((release.manifest.provider ?? "compose") !== config.CONTROL_DEPLOYMENT_MODE) throw new ControlError(409, "Phiên bản không thuộc provider triển khai đang được cấu hình.");
+    if (config.CONTROL_DEPLOYMENT_MODE === "render-cloudflare") {
+      const { readCloudTopologies } = await import("./cloud-executor.js");
+      const topology = (await readCloudTopologies())[input.environment];
+      const artifact = release.manifest.cloud?.[input.environment];
+      if (!artifact || artifact.apiOrigin !== new URL(topology.publicApiOrigin).origin || artifact.webOrigin !== new URL(topology.publicWebOrigin).origin || topology.schemaGeneration !== release.manifest.schemaGeneration || (topology.requiredCapabilities ?? []).some(value => !release.manifest.capabilities?.includes(value))) throw new ControlError(409, "Phiên bản không tương thích cấu hình hoặc dữ liệu của môi trường.");
+    }
     const busy = (await tx.query("SELECT 1 FROM deployments WHERE environment=$1 AND status IN ('QUEUED','RUNNING')", [input.environment])).rowCount! > 0;
     const successes = (await tx.query("SELECT DISTINCT environment FROM deployments WHERE release_id=$1 AND status='SUCCEEDED'", [input.releaseId])).rows;
     const reason = deploymentBlockReason({ generation: state.schema_generation, targetGeneration: release.manifest.schemaGeneration,

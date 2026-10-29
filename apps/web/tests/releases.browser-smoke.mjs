@@ -39,6 +39,10 @@ try {
   assert.equal(requests.length, 2); assert.equal(requests[0].requestId, requests[1].requestId);
   assert.equal(requests[0].environment, 'staging'); assert.equal(requests[0].operation, 'deploy');
   await clickText('Xem nhật ký'); await wait("document.body.textContent.includes('Kiểm tra kết nối và mã phiên bản thành công.')");
+  await wait("document.querySelector('[aria-label=\"Trạng thái từng thành phần\"]')?.children.length === 7");
+  await mkdir(resolve('../../artifacts/releases'), { recursive: true });
+  const componentsShot = await command('Page.captureScreenshot', { captureBeyondViewport: true });
+  await writeFile(resolve('../../artifacts/releases/ui-components-desktop.png'), Buffer.from(componentsShot.data, 'base64'));
   await clickText('Đóng');
   await mkdir(resolve('../../artifacts/releases'), { recursive: true });
   let shot = await command('Page.captureScreenshot', { captureBeyondViewport: true });

@@ -26,6 +26,7 @@ window.fetch = async (input, init) => {
     deployments.unshift(result); return json(result);
   }
   if (url.pathname.endsWith("/deployments")) return json({ data: deployments, pagination: { page: 1, totalPages: 1, total: deployments.length } });
+  if (url.pathname.endsWith("/components")) return json({ data: ["api", "webhooks", "automation", "integrations", "reminders", "monitor", "pages"].map(component => ({ component, status: "VERIFIED", providerId: "fixture", updatedAt: "2026-10-29T02:00:00Z" })) });
   if (url.pathname.endsWith("/events")) return json({ data: [{ id: "1", message: "Kiểm tra kết nối và mã phiên bản thành công.", createdAt: "2026-10-28T02:00:00Z" }] });
   return Response.json({ message: "Endpoint ngoài fixture" }, { status: 404 });
 };

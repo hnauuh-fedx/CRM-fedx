@@ -3,6 +3,7 @@
   "private": true,
   "type": "module",
   "exports": {
+    "./postgres-config": "./src/postgres-config.ts",
     "./releases": "./src/releases.ts",
     "./system-preferences": "./src/system-preferences.ts",
     "./source-group": "./src/source-group.ts",

@@ -71,7 +71,7 @@ export async function listAdmissionDocuments(
         document_type: true,
         status: true,
         uploaded_at: true,
-        files: { select: { file_name: true, file_url: true, mime_type: true, file_size: true } },
+        files: { select: { id: true, file_name: true, file_url: true, mime_type: true, file_size: true, storage_provider: true, storage_status: true } },
         leads: {
           select: {
             full_name: true,
@@ -97,6 +97,8 @@ export async function listAdmissionDocuments(
       status: item.status,
       fileName: canViewSensitive ? item.files?.file_name ?? null : null,
       fileUrl: canViewSensitive ? item.files?.file_url ?? null : null,
+      fileId: canViewSensitive && item.files?.storage_status === "ready" ? item.files.id : null,
+      canDownload: canViewSensitive && item.files?.storage_status === "ready" && item.files.storage_provider === "s3",
       mimeType: canViewSensitive ? item.files?.mime_type ?? null : null,
       fileSize: canViewSensitive && item.files?.file_size != null ? String(item.files.file_size) : null,
       uploadedAt: toIso(item.uploaded_at),

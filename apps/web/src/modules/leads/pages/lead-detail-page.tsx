@@ -740,9 +740,10 @@ function FilesPanel({
   canFile: boolean;
   accessToken: string;
 }) {
+  const fileQueryClient = useQueryClient();
   return (
     <div className="flex flex-col gap-5">
-      {canFile && <FileComposer leadId={lead.id} accessToken={accessToken} />}
+      {canFile && <><PrivateFileUpload key={lead.id} leadId={lead.id} token={accessToken} onUploaded={() => { void fileQueryClient.invalidateQueries({ queryKey: ["leads"] }); }} /><FileComposer leadId={lead.id} accessToken={accessToken} /></>}
       {lead.files.length === 0 ? (
         <p className="text-sm text-muted-foreground">Chưa có tệp đính kèm.</p>
       ) : (
@@ -763,7 +764,7 @@ function FilesPanel({
                   </p>
                 </div>
               </div>
-              <Button asChild size="sm" variant="outline">
+              {file.canDownload ? <PrivateFileDownload id={file.id} name={file.fileName} token={accessToken} /> : file.fileUrl ? <Button asChild size="sm" variant="outline">
                 <a
                   href={file.fileUrl}
                   target="_blank"
@@ -773,7 +774,7 @@ function FilesPanel({
                   <ExternalLink aria-hidden="true" />
                   Mở
                 </a>
-              </Button>
+              </Button> : null}
             </li>
           ))}
         </ul>
@@ -1476,3 +1477,4 @@ function getLeadPipelineView(
 
   return { visibleStages, currentIndex, pipelineName };
 }
+import { PrivateFileUpload, PrivateFileDownload } from "@/components/shared/private-file-controls";

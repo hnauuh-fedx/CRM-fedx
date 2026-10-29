@@ -3,7 +3,15 @@ import { z } from "zod";
 export const releasePermissions = { view: "release.view", deploy: "release.deploy" } as const;
 export const environmentSchema = z.enum(["staging", "production"]);
 export type ReleaseEnvironment = z.infer<typeof environmentSchema>;
+const cloudArtifactSchema = z.object({
+  key: z.string().regex(/^releases\/[a-f0-9]{40}\/(staging|production)\/web-[a-f0-9]{64}\.tar\.gz$/),
+  sha256: z.string().regex(/^[a-f0-9]{64}$/), size: z.number().int().positive().max(104857600),
+  apiOrigin: z.string().url(), webOrigin: z.string().url(),
+}).strict();
 export const releaseRegistrationSchema = z.object({
+  provider: z.enum(["compose", "render-cloudflare"]).optional(),
+  cloud: z.object({ staging: cloudArtifactSchema, production: cloudArtifactSchema }).strict().optional(),
+  capabilities: z.array(z.enum(["private-files-v1"])).max(10).optional(),
   commit: z.string().regex(/^[a-f0-9]{40}$/),
   version: z.string().trim().min(1).max(100),
   notes: z.string().trim().max(4000).default(""),
@@ -11,7 +19,14 @@ export const releaseRegistrationSchema = z.object({
   webImage: z.string().regex(/^[a-z0-9][a-z0-9./_-]+@sha256:[a-f0-9]{64}$/),
   schemaGeneration: z.string().regex(/^[a-zA-Z0-9._-]{1,80}$/),
   buildUrl: z.string().url().startsWith("https://").max(500),
-}).strict();
+}).strict().superRefine((release, context) => {
+  if (release.provider === "render-cloudflare" && !release.cloud) context.addIssue({ code: "custom", path: ["cloud"], message: "Cloud artifacts are required." });
+  if (release.cloud && release.provider !== "render-cloudflare") context.addIssue({ code: "custom", path: ["provider"], message: "Cloud artifacts require cloud provider." });
+  if (release.cloud) for (const environment of ["staging", "production"] as const) {
+    const artifact = release.cloud[environment];
+    if (artifact.key !== `releases/${release.commit}/${environment}/web-${artifact.sha256}.tar.gz`) context.addIssue({ code: "custom", path: ["cloud", environment, "key"], message: "Artifact identity mismatch." });
+  }
+});
 export type ReleaseRegistration = z.infer<typeof releaseRegistrationSchema>;
 export type Release = ReleaseRegistration & { id: string; createdAt: string };
 export const deploymentRequestSchema = z.object({

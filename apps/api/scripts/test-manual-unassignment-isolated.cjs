@@ -14,7 +14,7 @@ async function main() {
   await admin.connect();
   await admin.query(`CREATE DATABASE "${database}"`);
   const target = new URL(base); target.pathname = `/${database}`;
-  const env = { ...process.env, NODE_ENV: 'test', DATABASE_URL: target.toString(), WEBHOOK_QUEUE_ENABLED: 'false' };
+  const env = { ...process.env, NODE_ENV: 'test', DATABASE_URL: target.toString(), DATABASE_DIRECT_URL: target.toString(), DATABASE_SSL_MODE: 'url', DATABASE_SSL_CA: '', FILE_STORAGE_PROVIDER: 'external', WEBHOOK_QUEUE_ENABLED: 'false' };
   const logs = process.env.AUTOMATION_TEST_ARTIFACT_DIR ? path.resolve(process.env.AUTOMATION_TEST_ARTIFACT_DIR) : path.resolve(process.argv.includes('automation-assignment-conflict') ? '../../artifacts/automation-assignment-conflict/backend' : process.argv.includes('automation-information-update') ? '../../artifacts/automation-information-update/backend' : '../../artifacts/manual-unassignment');
   mkdirSync(logs, { recursive: true });
   const run = (label, script, args) => {

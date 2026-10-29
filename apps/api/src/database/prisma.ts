@@ -1,10 +1,10 @@
 import { PrismaPg } from "@prisma/adapter-pg";
 
 import { historyData } from "./history-source";
-import { env } from "../config/env";
+import { databaseConnectionOptions } from "../config/postgres";
 import { PrismaClient } from "../generated/prisma/client";
 
-const adapter = new PrismaPg({ connectionString: env.DATABASE_URL });
+const adapter = new PrismaPg(databaseConnectionOptions);
 
 // Query-only extension preserves the public client and transaction contract.
 export const prisma: PrismaClient = new PrismaClient({ adapter }).$extends({

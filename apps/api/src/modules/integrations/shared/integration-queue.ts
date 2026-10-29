@@ -1,4 +1,5 @@
 import type { Queue } from "bullmq";
+import { failedJobRetention } from "../../../config/queue-retention";
 
 export async function enqueueStoredMessage(queue: Queue | null, provider: "zalo" | "meta", messageId: string) {
   if (!queue) return false;
@@ -8,6 +9,6 @@ export async function enqueueStoredMessage(queue: Queue | null, provider: "zalo"
     if (await previous.getState() === "failed") await previous.retry();
     return true;
   }
-  await queue.add("process_message", { type: "process_message", messageId }, { jobId, attempts: 8, backoff: { type: "exponential", delay: 1000 }, removeOnComplete: 1000, removeOnFail: 5000 });
+  await queue.add("process_message", { type: "process_message", messageId }, { jobId, attempts: 8, backoff: { type: "exponential", delay: 1000 }, removeOnComplete: 1000, removeOnFail: failedJobRetention(5000) });
   return true;
 }

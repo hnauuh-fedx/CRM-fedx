@@ -1,0 +1,62 @@
+# PREPARATION TEMPLATE ONLY. Not auto-discovered by Render; review before importing.
+# Create the admission-crm-staging environment group yourself from api.env.example.
+# Select the region and paid compute plans explicitly in Render; no sizing promise is made here.
+# All paths are relative to the repository root, including when this Blueprint is under deploy/cloud.
+services:
+  - type: web
+    name: admission-crm-staging-api
+    runtime: docker
+    dockerfilePath: ./deploy/Dockerfile.api
+    dockerContext: .
+    dockerCommand: node --import tsx apps/api/src/api.ts
+    autoDeployTrigger: 'off'
+    healthCheckPath: /api/ready
+    envVars:
+      - fromGroup: admission-crm-staging
+  - type: worker
+    name: admission-crm-staging-webhooks
+    runtime: docker
+    dockerfilePath: ./deploy/Dockerfile.api
+    dockerContext: .
+    dockerCommand: node --import tsx apps/api/src/workers/webhook.worker.ts
+    autoDeployTrigger: 'off'
+    envVars:
+      - fromGroup: admission-crm-staging
+  - type: worker
+    name: admission-crm-staging-automation
+    runtime: docker
+    dockerfilePath: ./deploy/Dockerfile.api
+    dockerContext: .
+    dockerCommand: node --import tsx apps/api/src/workers/automation.worker.ts
+    autoDeployTrigger: 'off'
+    envVars:
+      - fromGroup: admission-crm-staging
+  - type: worker
+    name: admission-crm-staging-integrations
+    runtime: docker
+    dockerfilePath: ./deploy/Dockerfile.api
+    dockerContext: .
+    dockerCommand: node --import tsx apps/api/src/workers/integrations.worker.ts
+    autoDeployTrigger: 'off'
+    envVars:
+      - fromGroup: admission-crm-staging
+  - type: worker
+    name: admission-crm-staging-reminders
+    runtime: docker
+    dockerfilePath: ./deploy/Dockerfile.api
+    dockerContext: .
+    dockerCommand: node --import tsx apps/api/src/workers/reminders.worker.ts
+    autoDeployTrigger: 'off'
+    envVars:
+      - fromGroup: admission-crm-staging
+  - type: worker
+    name: admission-crm-staging-monitor
+    runtime: docker
+    dockerfilePath: ./deploy/Dockerfile.api
+    dockerContext: .
+    dockerCommand: node --import tsx apps/api/src/workers/operations-monitor.worker.ts
+    autoDeployTrigger: 'off'
+    envVars:
+      - fromGroup: admission-crm-staging
+# Existing Render Key Value and DigitalOcean database are referenced through the env group.
+# This template intentionally does not provision databases, Redis, disks or a release controller.

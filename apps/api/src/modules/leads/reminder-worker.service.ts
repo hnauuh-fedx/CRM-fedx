@@ -17,6 +17,10 @@ export function createReminderWorker() {
   const worker = new Worker(name, async () => {
     const reminders = await processReminderNotifications();
     await processFirstContactSla();
+    if (process.env.FILE_STORAGE_PROVIDER === "s3") {
+      const { cleanupPrivateFiles } = await import("../files/private-file.service.js");
+      await cleanupPrivateFiles(undefined, 5);
+    }
     return reminders;
   }, { connection: redisConnection as never, concurrency: 1 });
   instrumentWorker(worker);

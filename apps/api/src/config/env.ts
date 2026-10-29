@@ -2,6 +2,7 @@ import "dotenv/config";
 
 import { z } from "zod";
 import { isIP } from "node:net";
+import { postgresEnvironmentSchema } from "@admission-crm/shared/postgres-config";
 
 const optionalSecret = (minimumLength = 1) => z.preprocess(
   (value) => typeof value === "string" && value.trim() === "" ? undefined : value,
@@ -33,6 +34,7 @@ const envSchema = z.object({
   META_QUEUE_ENABLED: z.enum(["true", "false"]).default("true").transform(value => value === "true"),
   REMINDER_QUEUE_ENABLED: z.enum(["true", "false"]).default("true").transform(value => value === "true"),
   WORKER_SHUTDOWN_TIMEOUT_MS: z.coerce.number().int().min(1000).max(600000).default(30000),
+  QUEUE_FAILED_RETENTION_COUNT: z.coerce.number().int().min(0).max(100000).default(0),
   AUTOMATION_EMAIL_IDEMPOTENCY_SUPPORTED: z.enum(["true", "false"]).default("false").transform(value => value === "true"),
   AUTOMATION_SMS_IDEMPOTENCY_SUPPORTED: z.enum(["true", "false"]).default("false").transform(value => value === "true"),
   AUTOMATION_ZNS_IDEMPOTENCY_SUPPORTED: z.enum(["true", "false"]).default("false").transform(value => value === "true"),
@@ -71,6 +73,6 @@ const envSchema = z.object({
   GPT_MODEL: z.string().min(1).default("gpt-5.4-mini"),
 });
 
-export const env = envSchema.parse(process.env);
+export const env = { ...envSchema.parse(process.env), ...postgresEnvironmentSchema.parse(process.env) };
 
 export const gptApiKey = env.GPT_API_KEY ?? env["GPT-API-KEY"];

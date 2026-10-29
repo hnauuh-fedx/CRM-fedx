@@ -2,6 +2,7 @@ import { Queue, UnrecoverableError, Worker, type Job } from "bullmq";
 import { instrumentWorker } from "../operations/worker-heartbeat";
 
 import { isRedisDisabled, redisConnection } from "../../config/redis";
+import { failedJobRetention } from "../../config/queue-retention";
 import { prisma } from "../../database/prisma";
 import { refreshChangedWorkCalendars } from "../sale-work-schedules/reassignment-work-calendar.service";
 import { processReassignmentExpiry, processReassignmentWarning } from "./automation-reassignment.service";
@@ -45,7 +46,7 @@ async function addJob(data: ReassignmentJobData, runAt: Date) {
     backoff: { type: "exponential", delay: 5_000 },
     jobId,
     removeOnComplete: true,
-    removeOnFail: false,
+    removeOnFail: failedJobRetention(false),
   });
   return true;
 }
