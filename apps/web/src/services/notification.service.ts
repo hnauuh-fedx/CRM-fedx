@@ -1,5 +1,9 @@
 import type { PersonalNotificationResponse } from "@/modules/notifications/notification.types";
-import { apiRequest } from "./api";
+import { apiRequest, apiStream } from "./api";
+
+export function openNotificationStream(accessToken: string, signal: AbortSignal) {
+  return apiStream("/notifications/stream", accessToken, signal);
+}
 
 export function getPersonalNotifications(accessToken: string) {
   return apiRequest<PersonalNotificationResponse>("/notifications", {}, accessToken);

@@ -7,12 +7,24 @@ const toneByType: Record<string, NotificationTone> = {
   automation_reassignment_removed: "removed",
 };
 
-export const notificationToneStyles: Record<NotificationTone, { dotClassName: string; label: string }> = {
-  assignment: { dotClassName: "bg-emerald-500", label: "Phân công lead" },
-  warning: { dotClassName: "bg-orange-500", label: "Cảnh báo sắp chuyển lead" },
-  removed: { dotClassName: "bg-zinc-400", label: "Lead đã được chuyển đi" },
-  other: { dotClassName: "bg-sky-500", label: "Thông báo khác" },
+// toastClassName: a mid-light tint of the dot color for the new-notification popup.
+export const notificationToneStyles: Record<NotificationTone, { dotClassName: string; toastClassName: string; label: string }> = {
+  assignment: { dotClassName: "bg-emerald-500", toastClassName: "border-emerald-300 bg-emerald-100 text-emerald-950 dark:border-emerald-800 dark:bg-emerald-950 dark:text-emerald-50", label: "Phân công lead" },
+  warning: { dotClassName: "bg-orange-500", toastClassName: "border-orange-300 bg-orange-100 text-orange-950 dark:border-orange-800 dark:bg-orange-950 dark:text-orange-50", label: "Cảnh báo sắp chuyển lead" },
+  removed: { dotClassName: "bg-zinc-400", toastClassName: "border-zinc-300 bg-zinc-100 text-zinc-900 dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-50", label: "Lead đã được chuyển đi" },
+  other: { dotClassName: "bg-sky-500", toastClassName: "border-sky-300 bg-sky-100 text-sky-950 dark:border-sky-800 dark:bg-sky-950 dark:text-sky-50", label: "Thông báo khác" },
 };
+
+/**
+ * Unread notifications not seen in an earlier response. The first response (seenIds null) only
+ * records what is there, so notifications that existed before the page opened never pop up.
+ */
+export function collectNewNotifications<T extends { id: string; isRead: boolean }>(seenIds: ReadonlySet<string> | null, items: T[]) {
+  const seen = new Set(seenIds);
+  const fresh = seenIds ? items.filter((item) => !item.isRead && !seenIds.has(item.id)) : [];
+  for (const item of items) seen.add(item.id);
+  return { seen, fresh };
+}
 
 export function getNotificationTone(type: string | null): NotificationTone {
   return (type && toneByType[type]) || "other";

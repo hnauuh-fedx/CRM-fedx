@@ -55,3 +55,25 @@ export type DirectorDashboardFilters = {
   fromDate?: string;
   toDate?: string;
 };
+
+export type MonthlyRevenueMatrixResponse = {
+  granularity: "MONTH" | "QUARTER" | "DAY";
+  year: number | null;
+  availableYears: number[];
+  columns: Array<{ key: string; label: string; total: number }>;
+  rows: Array<{
+    id: string;
+    name: string;
+    values: Record<string, number>;
+    total: number;
+  }>;
+  total: number;
+};
+
+export type MonthlyRevenueMatrixFilters = Pick<
+  DirectorDashboardFilters,
+  "majorId" | "sourceId" | "filterOperator" | "timePreset" | "fromDate" | "toDate"
+> & {
+  year?: number;
+  granularity?: "MONTH" | "QUARTER";
+};

@@ -1,4 +1,9 @@
-import type { DirectorDashboardFilters, DirectorDashboardResponse } from "@/modules/dashboard/dashboard.types";
+import type {
+  DirectorDashboardFilters,
+  DirectorDashboardResponse,
+  MonthlyRevenueMatrixFilters,
+  MonthlyRevenueMatrixResponse,
+} from "@/modules/dashboard/dashboard.types";
 import { apiRequest } from "./api";
 
 export function getDirectorDashboard(accessToken: string, filters: DirectorDashboardFilters = {}) {
@@ -31,6 +36,19 @@ export function getDirectorLeadSourceBreakdown(accessToken: string, filters: Dir
   const query = params.size > 0 ? `?${params.toString()}` : "";
   return apiRequest<DirectorDashboardResponse["leadSourceBreakdown"]>(
     `/dashboard/director/lead-source-breakdown${query}`,
+    {},
+    accessToken,
+  );
+}
+
+export function getDirectorMonthlyRevenueMatrix(accessToken: string, filters: MonthlyRevenueMatrixFilters = {}) {
+  const params = new URLSearchParams();
+  for (const [key, value] of Object.entries(filters)) {
+    if (value) params.set(key, String(value));
+  }
+  const query = params.size > 0 ? `?${params.toString()}` : "";
+  return apiRequest<MonthlyRevenueMatrixResponse>(
+    `/dashboard/director/monthly-revenue-matrix${query}`,
     {},
     accessToken,
   );
