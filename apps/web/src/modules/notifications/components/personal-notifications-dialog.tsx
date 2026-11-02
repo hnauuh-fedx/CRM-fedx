@@ -1,6 +1,6 @@
 import { useMutation, useQuery, useQueryClient, type UseQueryResult } from "@tanstack/react-query";
 import { Bell } from "lucide-react";
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
 
 import { AccessDeniedDialog } from "@/components/shared/access-denied-dialog";
@@ -11,7 +11,10 @@ import { leadListOpenHref } from "@/modules/leads/lead-detail-navigation";
 import { ApiError } from "@/services/api";
 import { getLead } from "@/services/lead.service";
 import { getPersonalNotifications, hideNotificationCountdown, markNotificationRead } from "@/services/notification.service";
+import { collectNewNotifications } from "../notification-presentation";
 import type { NotificationItem, PersonalNotificationResponse } from "../notification.types";
+import { useNotificationStream } from "../use-notification-stream";
+import { NewNotificationToasts } from "./new-notification-toasts";
 import { NotificationRow } from "./notification-row";
 
 // "Lead đã được chuyển cho nhân viên khác" (automation_reassignment_removed) is intentionally not linked.
@@ -61,24 +64,52 @@ function useOpenNotificationLead(accessToken: string, onOpened: () => void) {
   };
 }
 
+/** Notifications that arrived while the page is open; none pop up while the list itself is open. */
+function useNewNotificationToasts(data: PersonalNotificationResponse | undefined, isListOpen: boolean) {
+  const [items, setItems] = useState<NotificationItem[]>([]);
+  const seenIdsRef = useRef<ReadonlySet<string> | null>(null);
+  useEffect(() => {
+    if (!data) return;
+    const { seen, fresh } = collectNewNotifications(seenIdsRef.current, data.data);
+    seenIdsRef.current = seen;
+    if (fresh.length > 0 && !isListOpen) setItems((current) => [...fresh, ...current]);
+  }, [data, isListOpen]);
+  return {
+    items,
+    dismiss: (notificationId: string) => setItems((current) => current.filter((item) => item.id !== notificationId)),
+    clear: () => setItems([]),
+  };
+}
+
 export function PersonalNotificationsDialog({ accessToken }: { accessToken: string }) {
   const queryClient = useQueryClient();
   const [isOpen, setOpen] = useState(false);
   const query = useQuery({
     queryKey: ["notifications", "personal"],
     queryFn: () => getPersonalNotifications(accessToken),
+    // Fallback for when the realtime stream is unavailable (proxy, network, API restart).
     refetchInterval: 60_000,
   });
+  useNotificationStream(accessToken, () => { void queryClient.invalidateQueries({ queryKey: ["notifications", "personal"] }); });
   const markRead = useMutation({
     mutationFn: (notificationId: string) => markNotificationRead(notificationId, accessToken),
     onSuccess: () => queryClient.invalidateQueries({ queryKey: ["notifications", "personal"] }),
   });
   const leadOpener = useOpenNotificationLead(accessToken, () => setOpen(false));
   const unreadCount = query.data?.unreadCount ?? 0;
+  const toasts = useNewNotificationToasts(query.data, isOpen);
+  const openList = () => { toasts.clear(); setOpen(true); };
+  const openToast = (item: NotificationItem) => {
+    toasts.dismiss(item.id);
+    const leadId = getLinkedLeadId(item);
+    if (!leadId) { openList(); return; }
+    if (!item.isRead) markRead.mutate(item.id);
+    leadOpener.open(item.id, leadId);
+  };
 
   return (
     <>
-      <Dialog open={isOpen} onOpenChange={(open) => { setOpen(open); if (!open) leadOpener.reset(); }}>
+      <Dialog open={isOpen} onOpenChange={(open) => { setOpen(open); if (open) toasts.clear(); else leadOpener.reset(); }}>
         <DialogTrigger asChild>
           <Button type="button" variant="ghost" size="icon-lg" className="relative" aria-label={`Thông báo${unreadCount ? `, ${unreadCount} chưa đọc` : ""}`}>
             <Bell aria-hidden="true" />
@@ -109,6 +140,7 @@ export function PersonalNotificationsDialog({ accessToken }: { accessToken: stri
         </DialogContent>
       </Dialog>
       <AccessDeniedDialog open={leadOpener.isAccessDenied} onOpenChange={leadOpener.setAccessDenied} />
+      <NewNotificationToasts toasts={toasts.items} onOpen={openToast} onOpenList={openList} onDismiss={toasts.dismiss} onDismissAll={toasts.clear} />
     </>
   );
 }

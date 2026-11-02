@@ -16,7 +16,7 @@
     "test:display-layout-surfaces-browser": "node tests/display-layout-surfaces.browser-smoke.mjs",
     "test:display-layout-browser": "node tests/display-layout.browser-smoke.mjs",
     "test:report-filter-rows": "tsx --test tests/report-filter-rows.test.ts",
-    "test:notifications": "tsx --test tests/notification-presentation.test.ts",
+    "test:notifications": "tsx --test tests/notification-presentation.test.ts tests/notification-stream.test.ts",
     "test:react-doctor-browser": "node tests/react-doctor-refactor.browser-smoke.mjs",
     "dev": "vite",
     "build": "vite build",

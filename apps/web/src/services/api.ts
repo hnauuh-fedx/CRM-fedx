@@ -93,6 +93,18 @@ export async function apiFormRequest<T>(
   return payload as T;
 }
 
+/** Opens a long-lived authenticated GET (Server-Sent Events); the caller reads and closes the body. */
+export async function apiStream(path: string, accessToken: string, signal: AbortSignal) {
+  const headers = authorizedHeaders(accessToken);
+  headers.set("Accept", "text/event-stream");
+  const response = await fetchWithSession(`${apiUrl}${path}`, { headers, signal, cache: "no-store" }, accessToken);
+  if (!response.ok || !response.body) {
+    const payload = (await response.json().catch(() => ({}))) as { message?: string };
+    throw new ApiError(payload.message ?? "Không thể kết nối đến máy chủ.", response.status);
+  }
+  return response.body;
+}
+
 export async function apiDownload(path: string, accessToken: string, init: RequestInit = {}) {
   const headers = authorizedHeaders(accessToken);
   new Headers(init.headers).forEach((value, key) => headers.set(key, value));

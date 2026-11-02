@@ -46,11 +46,14 @@ import { useAuth } from "@/modules/auth/auth-context";
 import type {
   DirectorDashboardFilters,
   DirectorDashboardResponse,
+  MonthlyRevenueMatrixFilters,
+  MonthlyRevenueMatrixResponse,
 } from "@/modules/dashboard/dashboard.types";
 import {
   getDirectorDashboard,
   getDirectorLeadPipelineMatrix,
   getDirectorLeadSourceBreakdown,
+  getDirectorMonthlyRevenueMatrix,
 } from "@/services/dashboard.service";
 
 const integerFormatter = new Intl.NumberFormat("vi-VN");
@@ -99,6 +102,17 @@ const emptyFilter: SharedFilterState = {
   toDate: "",
 };
 
+type MonthlyRevenueFilterState = SharedFilterState & {
+  year: number | null;
+  quarterView: boolean;
+};
+
+const emptyMonthlyRevenueFilter: MonthlyRevenueFilterState = {
+  ...emptyFilter,
+  year: null,
+  quarterView: false,
+};
+
 const datePresetOptions: Array<{
   value: Exclude<DatePreset, "CUSTOM">;
   label: string;
@@ -117,6 +131,9 @@ export function DirectorDashboardPage() {
     useState<SharedFilterState>(emptyFilter);
   const [sourceFilter, setSourceFilter] =
     useState<SharedFilterState>(emptyFilter);
+  const [revenueFilter, setRevenueFilter] = useState<MonthlyRevenueFilterState>(
+    emptyMonthlyRevenueFilter,
+  );
   const requestFilters = useMemo(() => toRequestFilters(filter), [filter]);
   const matrixRequestFilters = useMemo(
     () => toRequestFilters(matrixFilter),
@@ -140,6 +157,21 @@ export function DirectorDashboardPage() {
     ],
     queryFn: () =>
       getDirectorLeadPipelineMatrix(auth.accessToken!, matrixRequestFilters),
+    placeholderData: (previousData) => previousData,
+  });
+  const revenueRequestFilters = useMemo(
+    () => toMonthlyRevenueRequestFilters(revenueFilter),
+    [revenueFilter],
+  );
+  const revenueQuery = useQuery({
+    queryKey: [
+      "dashboard",
+      "director",
+      "monthly-revenue-matrix",
+      revenueRequestFilters,
+    ],
+    queryFn: () =>
+      getDirectorMonthlyRevenueMatrix(auth.accessToken!, revenueRequestFilters),
     placeholderData: (previousData) => previousData,
   });
   const sourceQuery = useQuery({
@@ -259,6 +291,17 @@ export function DirectorDashboardPage() {
         </CardContent>
       </Card>
 
+      <MonthlyRevenueMatrix
+        matrix={revenueQuery.data}
+        filter={revenueFilter}
+        options={dashboard.filterOptions}
+        isLoading={revenueQuery.isLoading}
+        isFetching={revenueQuery.isFetching}
+        isError={revenueQuery.isError}
+        onFilterChange={setRevenueFilter}
+        onReset={() => setRevenueFilter(emptyMonthlyRevenueFilter)}
+        onRetry={() => revenueQuery.refetch()}
+      />
       <LeadPipelineMatrix
         matrix={matrixQuery.data ?? dashboard.leadPipelineMatrix}
         filter={matrixFilter}
@@ -279,6 +322,352 @@ export function DirectorDashboardPage() {
         onFilterChange={setSourceFilter}
         onReset={() => setSourceFilter(emptyFilter)}
       />
+    </div>
+  );
+}
+
+type MonthlyRevenueMatrixProps = {
+  matrix: MonthlyRevenueMatrixResponse | undefined;
+  filter: MonthlyRevenueFilterState;
+  options: DashboardFilterOptions;
+  isLoading: boolean;
+  isFetching: boolean;
+  isError: boolean;
+  onFilterChange: (filter: MonthlyRevenueFilterState) => void;
+  onReset: () => void;
+  onRetry: () => void;
+};
+
+function MonthlyRevenueMatrix({
+  matrix,
+  filter,
+  options,
+  isLoading,
+  isFetching,
+  isError,
+  onFilterChange,
+  onReset,
+  onRetry,
+}: MonthlyRevenueMatrixProps) {
+  const activeDescription = getMonthlyRevenueFilterDescription(filter, options);
+
+  return (
+    <Card className="gap-0 overflow-hidden border-border/70 py-0 shadow-xs">
+      <CardHeader className="flex flex-row items-center justify-between gap-4 border-b px-4 py-3.5">
+        <CardTitle className="text-lg font-semibold">
+          Doanh số tháng theo nhân viên
+        </CardTitle>
+        {isFetching && !isLoading && (
+          <span className="text-xs text-muted-foreground" role="status">
+            Đang cập nhật…
+          </span>
+        )}
+      </CardHeader>
+      <div
+        className={cn(
+          "border-b px-4 py-3 transition-colors",
+          activeDescription && "bg-primary/5",
+        )}
+      >
+        <MonthlyRevenueFilter
+          filter={filter}
+          options={options}
+          availableYears={matrix?.availableYears ?? []}
+          activeDescription={activeDescription}
+          onChange={onFilterChange}
+          onReset={onReset}
+        />
+        {isError && matrix && (
+          <p role="alert" className="mt-3 text-sm text-destructive">
+            Không thể cập nhật bộ lọc bảng doanh số. Dữ liệu gần nhất vẫn đang
+            được hiển thị.
+          </p>
+        )}
+      </div>
+      <CardContent className="p-0">
+        {isLoading ? (
+          <p
+            className="h-24 content-center text-center text-sm text-muted-foreground"
+            role="status"
+          >
+            Đang tải bảng doanh số…
+          </p>
+        ) : !matrix ? (
+          <ErrorState
+            title="Không thể tải bảng doanh số"
+            description="Vui lòng thử lại để cập nhật số liệu doanh số theo nhân viên."
+            onReload={onRetry}
+          />
+        ) : matrix.rows.length === 0 ? (
+          <p className="h-24 content-center px-4 text-center text-sm text-muted-foreground">
+            Không có dữ liệu doanh số tháng trong khoảng thời gian đã chọn.
+          </p>
+        ) : (
+          <Table className="min-w-full border-separate border-spacing-0">
+            <TableCaption className="sr-only">
+              Bảng số lead có doanh số tháng theo nhân viên phụ trách và thời
+              gian
+            </TableCaption>
+            <TableHeader className="bg-blue-300">
+              <TableRow className="hover:bg-transparent!">
+                <TableHead
+                  scope="col"
+                  className="sticky left-0 z-10 h-auto min-w-40 border-r border-b-2 bg-blue-300 px-3 py-3 text-xs font-semibold whitespace-normal lg:text-sm 2xl:px-4"
+                >
+                  Nhân viên
+                </TableHead>
+                {matrix.columns.map((column) => (
+                  <TableHead
+                    key={column.key}
+                    scope="col"
+                    className="h-auto min-w-24 border-r border-b-2 px-2 py-3 text-center text-xs font-semibold whitespace-nowrap tabular-nums lg:text-sm"
+                  >
+                    {column.label}
+                  </TableHead>
+                ))}
+                <TableHead
+                  scope="col"
+                  className="sticky right-0 z-10 h-auto min-w-20 border-b-2 border-l bg-blue-300 px-3 py-3 text-right text-xs font-semibold whitespace-nowrap lg:text-sm 2xl:px-4"
+                >
+                  Tổng
+                </TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {matrix.rows.map((row) => (
+                <TableRow key={row.id} className="group">
+                  <TableCell className="sticky left-0 z-10 border-r border-b bg-card px-3 py-2.5 text-xs font-bold whitespace-normal wrap-break-word group-hover:bg-muted lg:text-sm 2xl:px-4">
+                    {row.name}
+                  </TableCell>
+                  {matrix.columns.map((column) => {
+                    const value = row.values[column.key] ?? 0;
+                    return (
+                      <TableCell
+                        key={column.key}
+                        className={cn(
+                          "border-r border-b px-2 py-2.5 text-center text-xs tabular-nums lg:text-sm",
+                          value === 0 ? "text-muted-foreground" : "font-bold",
+                        )}
+                      >
+                        {integerFormatter.format(value)}
+                      </TableCell>
+                    );
+                  })}
+                  <TableCell className="sticky right-0 z-10 border-b border-l bg-card px-3 py-2.5 text-right text-xs font-semibold text-primary tabular-nums group-hover:bg-muted lg:text-sm 2xl:px-4">
+                    {integerFormatter.format(row.total)}
+                  </TableCell>
+                </TableRow>
+              ))}
+            </TableBody>
+            <TableFooter className="bg-muted">
+              <TableRow className="hover:bg-muted">
+                <TableCell className="sticky left-0 z-10 border-r bg-muted px-3 py-2.5 text-xs font-semibold lg:text-sm 2xl:px-4">
+                  Tổng
+                </TableCell>
+                {matrix.columns.map((column) => (
+                  <TableCell
+                    key={column.key}
+                    className="border-r px-2 py-2.5 text-center text-xs font-semibold text-primary tabular-nums lg:text-sm"
+                  >
+                    {integerFormatter.format(column.total)}
+                  </TableCell>
+                ))}
+                <TableCell className="sticky right-0 z-10 border-l bg-muted px-3 py-2.5 text-right text-xs font-bold text-primary tabular-nums lg:text-sm 2xl:px-4">
+                  {integerFormatter.format(matrix.total)}
+                </TableCell>
+              </TableRow>
+            </TableFooter>
+          </Table>
+        )}
+      </CardContent>
+    </Card>
+  );
+}
+
+function MonthlyRevenueFilter({
+  filter,
+  options,
+  availableYears,
+  activeDescription,
+  onChange,
+  onReset,
+}: {
+  filter: MonthlyRevenueFilterState;
+  options: DashboardFilterOptions;
+  availableYears: number[];
+  activeDescription: string | null;
+  onChange: (filter: MonthlyRevenueFilterState) => void;
+  onReset: () => void;
+}) {
+  // A selected year and a date filter exclude each other.
+  const isDateFilterActive = filter.timePreset !== null;
+  const isYearSelected = filter.year !== null;
+  const isCustomDateActive = filter.timePreset === "CUSTOM";
+  const changeShared = (next: SharedFilterState) =>
+    onChange({ ...filter, ...next });
+  const applyDateFilter = (next: Partial<MonthlyRevenueFilterState>) =>
+    onChange({ ...filter, year: null, quarterView: false, ...next });
+
+  return (
+    <div className="grid grid-cols-2 gap-2 xl:grid-cols-[minmax(0,1fr)_minmax(0,0.7fr)_minmax(0,1.4fr)_auto]">
+      <Select
+        value={filter.field === "NONE" ? "" : filter.field}
+        onValueChange={(value) =>
+          onChange({
+            ...filter,
+            field: value as SharedFilterField,
+            operator: "EQUALS",
+            value: "",
+          })
+        }
+      >
+        <SelectTrigger
+          size="sm"
+          className="col-span-2 w-full sm:col-span-1"
+          aria-label="Trường thông tin"
+        >
+          <SelectValue placeholder="Trường thông tin" />
+        </SelectTrigger>
+        <SelectContent position="popper" align="start">
+          <SelectGroup>
+            <SelectItem value="NONE">Không lọc theo trường</SelectItem>
+            <SelectItem value="SOURCE">Nguồn</SelectItem>
+            <SelectItem value="MAJOR">Ngành đăng ký</SelectItem>
+          </SelectGroup>
+        </SelectContent>
+      </Select>
+      <DashboardFilterCondition filter={filter} onChange={changeShared} />
+      <DashboardFilterValue
+        filter={filter}
+        options={options}
+        onChange={changeShared}
+      />
+      <Button
+        type="button"
+        size="sm"
+        variant="outline"
+        className="col-span-2 w-full sm:col-span-1 xl:w-auto"
+        onClick={onReset}
+        disabled={
+          filter.field === "NONE" &&
+          !isDateFilterActive &&
+          !isYearSelected &&
+          !filter.quarterView
+        }
+      >
+        <RotateCcw aria-hidden="true" /> Xóa lọc
+      </Button>
+      <div
+        role="group"
+        aria-label="Lọc theo thời gian doanh số tháng"
+        className="col-span-2 flex flex-wrap gap-1.5 xl:col-span-4"
+      >
+        <Select
+          value={filter.year === null ? "" : String(filter.year)}
+          disabled={isDateFilterActive}
+          onValueChange={(value) => onChange({ ...filter, year: Number(value) })}
+        >
+          <SelectTrigger
+            size="sm"
+            className="min-w-32"
+            aria-label="Chọn năm"
+            title={
+              isDateFilterActive ? "Xóa lọc theo ngày để chọn năm" : undefined
+            }
+          >
+            <SelectValue placeholder="Chọn năm" />
+          </SelectTrigger>
+          <SelectContent position="popper" align="start">
+            <SelectGroup>
+              {availableYears.map((year) => (
+                <SelectItem key={year} value={String(year)}>
+                  Năm {year}
+                </SelectItem>
+              ))}
+            </SelectGroup>
+          </SelectContent>
+        </Select>
+        <Button
+          type="button"
+          size="sm"
+          className="px-2.5 font-normal"
+          variant={filter.quarterView ? "default" : "outline"}
+          aria-pressed={filter.quarterView}
+          onClick={() =>
+            onChange({
+              ...filter,
+              quarterView: !filter.quarterView,
+              timePreset: null,
+              fromDate: "",
+              toDate: "",
+            })
+          }
+        >
+          Theo quý
+        </Button>
+        <fieldset
+          disabled={isYearSelected}
+          className="contents"
+          title={isYearSelected ? "Xóa năm đã chọn để lọc theo ngày" : undefined}
+        >
+          <legend className="sr-only">Lọc theo ngày doanh số tháng</legend>
+          {datePresetOptions.map((option) => {
+            const isActive = filter.timePreset === option.value;
+            return (
+              <Button
+                key={option.value}
+                type="button"
+                size="sm"
+                className="px-2.5 font-normal"
+                variant={isActive ? "default" : "outline"}
+                aria-pressed={isActive}
+                onClick={() =>
+                  applyDateFilter({
+                    timePreset: option.value,
+                    fromDate: "",
+                    toDate: "",
+                  })
+                }
+              >
+                {option.label}
+              </Button>
+            );
+          })}
+          <DateRangeFilter
+            className="w-auto"
+            buttonClassName={cn(
+              "h-8 px-2.5",
+              isCustomDateActive &&
+                "bg-primary text-primary-foreground hover:bg-primary/90 hover:text-primary-foreground",
+            )}
+            isActive={isCustomDateActive}
+            placeholder="Khoảng tùy chọn"
+            fromDate={filter.fromDate}
+            toDate={filter.toDate}
+            onOpenChange={(open) => {
+              if (open && !isCustomDateActive) {
+                applyDateFilter({
+                  timePreset: "CUSTOM",
+                  fromDate: "",
+                  toDate: "",
+                });
+              }
+            }}
+            onChange={(fromDate, toDate) =>
+              applyDateFilter({ timePreset: "CUSTOM", fromDate, toDate })
+            }
+          />
+        </fieldset>
+      </div>
+      {activeDescription && (
+        <p
+          className="col-span-2 rounded-md border border-primary/20 bg-background/80 px-3 py-1.5 text-xs leading-5 text-primary xl:col-span-4"
+          role="status"
+          aria-live="polite"
+        >
+          <span className="font-medium">Đang áp dụng:</span> {activeDescription}
+        </p>
+      )}
     </div>
   );
 }
@@ -928,6 +1317,51 @@ function getActiveFilterDescription(
     );
   }
   return descriptions.length > 0 ? descriptions.join(" ") : null;
+}
+
+function getMonthlyRevenueFilterDescription(
+  filter: MonthlyRevenueFilterState,
+  options: DashboardFilterOptions,
+) {
+  const descriptions: string[] = [];
+  const categoryDescription = getActiveFilterDescription(
+    { ...filter, timePreset: null },
+    options,
+  );
+  if (categoryDescription) descriptions.push(categoryDescription);
+  if (filter.year !== null)
+    descriptions.push(`Doanh số tháng trong năm ${filter.year}.`);
+  if (filter.quarterView) descriptions.push("Hiển thị theo các quý đã kết thúc.");
+  if (filter.timePreset === "CUSTOM" && filter.fromDate && filter.toDate) {
+    descriptions.push(
+      `Doanh số tháng từ ${formatFilterDate(filter.fromDate)} đến ${formatFilterDate(filter.toDate)}, hiển thị theo ngày.`,
+    );
+  } else if (filter.timePreset && filter.timePreset !== "CUSTOM") {
+    descriptions.push(
+      `Doanh số tháng trong ${relativeDateLabel(filter.timePreset)}, hiển thị theo ngày.`,
+    );
+  }
+  return descriptions.length > 0 ? descriptions.join(" ") : null;
+}
+
+function toMonthlyRevenueRequestFilters(
+  filter: MonthlyRevenueFilterState,
+): MonthlyRevenueMatrixFilters {
+  const { majorId, sourceId, filterOperator, timePreset, fromDate, toDate } =
+    toRequestFilters(filter);
+  const request: MonthlyRevenueMatrixFilters = {
+    majorId,
+    sourceId,
+    filterOperator,
+    timePreset,
+    fromDate,
+    toDate,
+  };
+  if (!request.timePreset) {
+    if (filter.year !== null) request.year = filter.year;
+    if (filter.quarterView) request.granularity = "QUARTER";
+  }
+  return request;
 }
 
 function formatFilterDate(value: string) {

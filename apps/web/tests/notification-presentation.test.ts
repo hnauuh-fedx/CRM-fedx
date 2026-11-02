@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { formatCountdown, formatDurationText, getNotificationTone } from "../src/modules/notifications/notification-presentation";
+import { collectNewNotifications, formatCountdown, formatDurationText, getNotificationTone } from "../src/modules/notifications/notification-presentation";
 
 test("countdown drops the hour part under one hour and keeps counting hours past a day", () => {
   assert.equal(formatCountdown(640_000), "10:40");
@@ -24,4 +24,13 @@ test("each notification type maps to one of four dot colours", () => {
   assert.equal(getNotificationTone("automation_reassignment_removed"), "removed");
   assert.equal(getNotificationTone("reminder"), "other");
   assert.equal(getNotificationTone(null), "other");
+});
+
+test("only unread notifications arriving after the first response pop up", () => {
+  const first = collectNewNotifications(null, [{ id: "a", isRead: false }, { id: "b", isRead: true }]);
+  assert.deepEqual(first.fresh, []);
+  const second = collectNewNotifications(first.seen, [{ id: "c", isRead: false }, { id: "d", isRead: true }, { id: "a", isRead: false }]);
+  assert.deepEqual(second.fresh.map((item) => item.id), ["c"]);
+  const third = collectNewNotifications(second.seen, [{ id: "c", isRead: false }]);
+  assert.deepEqual(third.fresh, []);
 });
