@@ -11,6 +11,7 @@ import { LeadRequiredFieldsError } from "./modules/leads/lead-required-fields";
 import path from "node:path";
 
 import { env } from "./config/env";
+import { createEdgeProxyClientIp } from "./middlewares/edge-proxy.middleware";
 import { releaseCommit } from "./config/release-commit";
 import { authRouter } from "./modules/auth/auth.router";
 import { privateFilesRouter } from "./modules/files/private-files.router";
@@ -51,6 +52,7 @@ import { tiktokRouter } from "./modules/integrations/tiktok/tiktok.router";
 
 export const app = express();
 app.set("trust proxy", env.AUTH_TRUSTED_PROXY_CIDRS.length ? env.AUTH_TRUSTED_PROXY_CIDRS : false);
+app.use(createEdgeProxyClientIp(env.AUTH_EDGE_PROXY_SECRET));
 const publicDirectory = path.resolve(__dirname, "../public");
 
 app.disable("x-powered-by");

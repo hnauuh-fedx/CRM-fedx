@@ -22,6 +22,7 @@ const envSchema = z.object({
     const version = isIP(address);
     return !extra && version !== 0 && (prefix === undefined || (/^\d+$/.test(prefix) && Number(prefix) > 0 && Number(prefix) <= (version === 4 ? 32 : 128)));
   }), "Use explicit proxy IP addresses or CIDRs; wildcard trust is forbidden."),
+  AUTH_EDGE_PROXY_SECRET: optionalSecret(32),
   AUTH_LOGIN_IP_LIMIT: z.coerce.number().int().min(1).max(10000).default(100),
   AUTH_LOGIN_IP_WINDOW_SECONDS: z.coerce.number().int().min(1).max(86400).default(300),
   AUTH_LOGIN_ACCOUNT_LIMIT: z.coerce.number().int().min(1).max(1000).default(10),
