@@ -434,6 +434,79 @@ async function main() {
     && item.delayMs >= 0
   )), "Nhật ký gần đây phải có lý do, Sale cũ/mới và độ trễ.");
 
+  // Stop pending, warned and already claimed jobs in the same rule.
+  const stopped = await createLeadWithMonitor("stopped-rule");
+  const stoppedWarning = await createLeadWithMonitor("stopped-warning", undefined,
+    { ...policy, warningEnabled: true }, new Date(Date.now() - 45 * 60_000));
+  await processReassignmentWarning(stoppedWarning.monitor.id);
+  const inFlight = await createLeadWithMonitor("in-flight-stop");
+  const { Prisma } = await import("../generated/prisma/client.js");
+  const { toggleAutomationRule } = await import("../modules/automations/automation.service.js");
+  let releaseAssignment!: () => void;
+  let lockAcquired!: () => void;
+  const locked = new Promise<void>(resolve => { lockAcquired = resolve; });
+  const release = new Promise<void>(resolve => { releaseAssignment = resolve; });
+  const blocker = prisma.$transaction(async tx => {
+    await tx.$executeRaw(Prisma.sql`SELECT pg_advisory_xact_lock(hashtext(${`lead-assignment:${inFlight.lead.id}`}))`);
+    lockAcquired();
+    await release;
+  }, { timeout: 15_000 });
+  await Promise.race([locked, blocker]);
+  const runningExpiry = processReassignmentExpiry(inFlight.monitor.id);
+  try {
+    const deadline = Date.now() + 3_000;
+    while ((await prisma.automation_reassignment_monitors.findUniqueOrThrow({ where: { id: inFlight.monitor.id } })).status !== "processing") {
+      assert.ok(Date.now() < deadline, "Worker must claim the monitor before stopping the rule.");
+      await new Promise(resolve => setTimeout(resolve, 10));
+    }
+    const stopResult = await toggleAutomationRule({
+      id: manager.id, email: "manager@example.test", fullName: "Manager", avatarUrl: null,
+      roles: [], permissions: ["automation.manage"], departmentIds: [department.id],
+      institutionProgramIds: [program.id], workingInstitutionProgramId: program.id, accessScope: "DEPARTMENT",
+    }, rule.id, false);
+    assert.equal(stopResult?.ok, true);
+    for (const fixture of [stopped, stoppedWarning, inFlight]) {
+      const monitor = await prisma.automation_reassignment_monitors.findUniqueOrThrow({ where: { id: fixture.monitor.id } });
+      assert.equal(monitor.status, "cancelled");
+      assert.equal(monitor.completion_reason, "rule_inactive");
+    }
+    // Simulate enabling the rule again before the claimed worker resumes.
+    // Old cancelled jobs must stay cancelled, even though the rule is active now.
+    await prisma.automation_rules.update({ where: { id: rule.id }, data: { is_active: true } });
+  } finally {
+    releaseAssignment();
+    await blocker;
+    await runningExpiry;
+  }
+  await processReassignmentExpiry(stopped.monitor.id);
+  const warningCount = await prisma.notifications.count({ where: { reassignment_monitor_id: stoppedWarning.monitor.id } });
+  await processReassignmentWarning(stoppedWarning.monitor.id);
+  await processReassignmentWarning(stoppedWarning.monitor.id, new Date(), "second");
+  assert.equal(await prisma.notifications.count({ where: { reassignment_monitor_id: stoppedWarning.monitor.id } }), warningCount);
+  for (const fixture of [stopped, stoppedWarning, inFlight]) {
+    assert.equal((await prisma.leads.findUniqueOrThrow({ where: { id: fixture.lead.id } })).assigned_to,
+      firstSale.id, "Stopping the rule must prevent already scheduled sale reassignment.");
+    assert.equal(await prisma.lead_assignments.count({ where: { lead_id: fixture.lead.id } }), 1);
+    assert.equal((await prisma.automation_reassignment_monitors.findUniqueOrThrow({ where: { id: fixture.monitor.id } })).status, "cancelled");
+  }
+
+  // Protect old jobs left in the database before this fix, including archived rules.
+  for (const archived of [false, true]) {
+    const legacyExpiry = await createLeadWithMonitor(`legacy-expiry-${archived}`);
+    const legacyWarning = await createLeadWithMonitor(`legacy-warning-${archived}`, undefined,
+      { ...policy, warningEnabled: true }, new Date(Date.now() - 45 * 60_000));
+    await prisma.automation_rules.update({ where: { id: rule.id }, data: { is_active: archived, archived_at: archived ? new Date() : null } });
+    await processReassignmentExpiry(legacyExpiry.monitor.id);
+    assert.equal((await processReassignmentWarning(legacyWarning.monitor.id)).outcome, "inactive");
+    for (const fixture of [legacyExpiry, legacyWarning]) {
+      const monitor = await prisma.automation_reassignment_monitors.findUniqueOrThrow({ where: { id: fixture.monitor.id } });
+      assert.equal(monitor.status, "cancelled");
+      assert.equal(monitor.completion_reason, "rule_inactive");
+      assert.equal(await prisma.lead_assignments.count({ where: { lead_id: fixture.lead.id } }), 1);
+      assert.equal(await prisma.notifications.count({ where: { reassignment_monitor_id: fixture.monitor.id } }), 0);
+    }
+  }
+
   console.log("Automation reassignment integration test passed.");
 }
 

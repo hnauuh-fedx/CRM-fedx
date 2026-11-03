@@ -489,6 +489,13 @@ export async function toggleAutomationRule(user: AuthUser, id: string, isActive:
       data: { is_active: isActive, updated_at: new Date() },
       select: { id: true, name: true, is_active: true },
     });
+    if (!isActive) {
+      const stoppedAt = new Date();
+      await tx.automation_reassignment_monitors.updateMany({
+        where: { rule_id: id, status: { in: ["pending", "warned", "processing"] } },
+        data: { status: "cancelled", completion_reason: "rule_inactive", processed_at: stoppedAt, updated_at: stoppedAt },
+      });
+    }
     await tx.audit_logs.create({
       data: {
         user_id: user.id,
