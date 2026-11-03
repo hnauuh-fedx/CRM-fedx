@@ -23,7 +23,8 @@ type Paginated<T> = {
 const apiUrl = import.meta.env.VITE_API_URL ?? "http://localhost:3000/api";
 
 export function getAbsoluteWebhookUrl(relativePath: string) {
-  const base = apiUrl.endsWith("/") ? apiUrl : `${apiUrl}/`;
+  // VITE_API_URL may be same-origin ("/api") behind the Cloudflare Worker.
+  const base = new URL(apiUrl.endsWith("/") ? apiUrl : `${apiUrl}/`, window.location.origin);
   return new URL(relativePath.replace(/^\/api\//, ""), base).toString();
 }
 

@@ -6,6 +6,7 @@
     "test:integration:private-files": "node scripts/test-private-files-isolated.cjs",
     "deployment:check": "tsx src/maintenance/check-deployment-preparation.ts",
     "test:integration:display-layout-owner": "tsx src/integration/display-layout-owner.integration.ts",
+    "test:edge-proxy": "tsx --test src/middlewares/edge-proxy.middleware.test.ts",
     "test:login-protection": "tsx --test src/modules/auth/login-rate-limit.test.ts",
     "test:integration:login-protection": "node scripts/test-login-protection-isolated.cjs",
     "worker:integrations": "tsx src/workers/integrations.worker.ts",
