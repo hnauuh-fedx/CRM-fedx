@@ -28,6 +28,7 @@
     "dev": "tsx watch src/api.ts",
     "start": "tsx src/api.ts",
     "typecheck": "tsc --noEmit",
+    "test:student-conversion": "tsx --test src/modules/students/student-conversion-requirements.test.ts",
     "test:notifications": "tsx --test src/modules/notifications/*.test.ts",
     "test:auth": "tsx --test src/modules/auth/session-tokens.test.ts src/modules/auth/password-policy.test.ts",
     "test:integration:auth": "tsx src/integration/auth-session.integration.ts",

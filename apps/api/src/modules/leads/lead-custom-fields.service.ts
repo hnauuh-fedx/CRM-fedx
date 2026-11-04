@@ -113,6 +113,20 @@ function applicable(programId: string | null) {
   };
 }
 
+/** Active Lead custom fields required before student conversion, with the lead's stored value. */
+export async function listStudentConversionCustomFields(
+  client: Pick<Prisma.TransactionClient, "custom_fields">,
+  leadId: string,
+  programId: string | null,
+) {
+  const fields = await client.custom_fields.findMany({
+    where: { AND: [applicable(programId), { OR: [{ is_required: true }, { is_required_for_student: true }] }] },
+    include: { custom_field_values: { where: { entity_type: "LEAD", entity_id: leadId } } },
+    orderBy: [{ custom_field_groups: { display_order: "asc" } }, { display_order: "asc" }, { id: "asc" }],
+  });
+  return fields.map((field) => ({ id: field.id, label: field.field_label, value: readValue(field, field.custom_field_values[0]) }));
+}
+
 async function leadFor(
   user: AuthUser,
   leadId: string,

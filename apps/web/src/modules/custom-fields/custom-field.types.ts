@@ -62,6 +62,8 @@ export type CustomFieldDefinition = {
   programId: string | null;
   fieldType: CustomFieldDataType;
   isRequired: boolean;
+  /** Lead only: effective flag, always true when the field is required on input. */
+  isRequiredForStudent: boolean;
   isActive: boolean;
   archivedAt: string | null;
   isSearchable: boolean;
@@ -85,6 +87,7 @@ export type CustomFieldInput = {
   programId?: string;
   fieldType: CustomFieldDataType;
   isRequired: boolean;
+  isRequiredForStudent?: boolean;
   isSearchable: boolean;
   isFilterable: boolean;
   isSensitive: boolean;

@@ -77,9 +77,11 @@ import {
   createCustomFieldGroup,
   getCustomFieldGroups,
   getCustomFields,
+  getStudentConversionRequirements,
   getSystemFieldRequirements,
   setCustomFieldStatus,
   updateCustomField,
+  updateStudentConversionRequirement,
   updateSystemFieldRequirement,
 } from "@/services/custom-field.service";
 import { TransitionNoteSettings } from "../components/transition-note-settings";
@@ -143,6 +145,7 @@ const formSchema = z
     fieldType: z.enum(customFieldDataTypes),
     maxFiles: z.union([z.literal(1), z.literal(5), z.literal(10)]),
     isRequired: z.boolean(),
+    isRequiredForStudent: z.boolean(),
     isSearchable: z.boolean(),
     isFilterable: z.boolean(),
     isSensitive: z.boolean(),
@@ -574,6 +577,8 @@ function CustomFieldForm({
   const fieldType = form.watch("fieldType");
   const scopeType = form.watch("scopeType");
   const isSensitive = form.watch("isSensitive");
+  const isRequired = form.watch("isRequired");
+  const studentRequirementAvailable = entityType === "LEAD";
   const labelRegistration = form.register("fieldLabel");
   const optionType = isOptionFieldType(fieldType);
   const metadataOnlyType = fieldType === "FILE";
@@ -607,6 +612,9 @@ function CustomFieldForm({
         description: values.description || undefined,
         fieldType: values.fieldType,
         isRequired: values.isRequired,
+        isRequiredForStudent: studentRequirementAvailable
+          ? values.isRequired || values.isRequiredForStudent
+          : false,
         isSearchable:
           values.isSensitive || metadataOnlyType ? false : values.isSearchable,
         isFilterable:
@@ -628,6 +636,9 @@ function CustomFieldForm({
       programId: values.scopeType === "PROGRAM" ? values.programId : undefined,
       fieldType: values.fieldType,
       isRequired: values.isRequired,
+      isRequiredForStudent: studentRequirementAvailable
+        ? values.isRequired || values.isRequiredForStudent
+        : false,
       isSearchable:
         values.isSensitive || metadataOnlyType ? false : values.isSearchable,
       isFilterable:
@@ -742,11 +753,29 @@ function CustomFieldForm({
               id="custom-field-required"
               label="Bắt buộc nhập"
               description="Không cho phép bỏ trống khi lưu."
-              checked={form.watch("isRequired")}
+              checked={isRequired}
               onChange={(checked) =>
                 form.setValue("isRequired", checked, { shouldDirty: true })
               }
             />
+            {studentRequirementAvailable && (
+              <CheckboxField
+                id="custom-field-required-for-student"
+                label="Bắt buộc khi chuyển học viên"
+                description={
+                  isRequired
+                    ? "Đã bắt buộc nhập nên luôn bắt buộc khi chuyển học viên."
+                    : "Phải có dữ liệu mới được chuyển lead sang học viên."
+                }
+                checked={isRequired || form.watch("isRequiredForStudent")}
+                disabled={isRequired}
+                onChange={(checked) =>
+                  form.setValue("isRequiredForStudent", checked, {
+                    shouldDirty: true,
+                  })
+                }
+              />
+            )}
             <CheckboxField
               id="custom-field-searchable"
               label="Cho phép tìm kiếm"
@@ -923,6 +952,7 @@ function toFormValues(
         fieldType: field.fieldType,
         maxFiles: toFileLimit(field.validationRules?.maxFiles),
         isRequired: field.isRequired,
+        isRequiredForStudent: field.isRequiredForStudent ?? false,
         isSearchable: field.isSearchable,
         isFilterable: field.isFilterable,
         isSensitive: field.isSensitive,
@@ -947,6 +977,7 @@ function toFormValues(
         fieldType: "TEXT",
         maxFiles: 1,
         isRequired: false,
+        isRequiredForStudent: false,
         isSearchable: false,
         isFilterable: false,
         isSensitive: false,
@@ -1862,6 +1893,9 @@ function DefinedFieldBadges({ field }: { field: CustomFieldDefinition }) {
   return (
     <div className="flex min-w-40 flex-wrap gap-1">
       {field.isRequired && <Badge variant="outline">Bắt buộc</Badge>}
+      {field.entityType === "LEAD" && field.isRequiredForStudent && (
+        <Badge variant="outline">Bắt buộc khi chuyển học viên</Badge>
+      )}
       {field.isSearchable && <Badge variant="outline">Tìm kiếm</Badge>}
       {field.isFilterable && <Badge variant="outline">Lọc</Badge>}
       {field.isSensitive && <Badge variant="destructive">Nhạy cảm</Badge>}
@@ -1871,6 +1905,7 @@ function DefinedFieldBadges({ field }: { field: CustomFieldDefinition }) {
         </Badge>
       )}
       {!field.isRequired &&
+        !field.isRequiredForStudent &&
         !field.isSearchable &&
         !field.isFilterable &&
         !field.isSensitive &&
@@ -1963,13 +1998,13 @@ function SystemFieldRequirementControl({
   canUpdate,
   systemRequirementMutation,
 }: SystemFieldRequirementControlProps) {
+  const isRequired =
+    systemRequirementsQuery.data?.[item.key] ?? item.isRequired ?? false;
   return (
     <div className="flex min-w-48 flex-col items-start gap-2">
       <label className="flex min-h-8 items-center gap-2 text-sm">
         <Checkbox
-          checked={
-            systemRequirementsQuery.data?.[item.key] ?? item.isRequired ?? false
-          }
+          checked={isRequired}
           disabled={
             item.requiredLocked ||
             !canUpdate ||
@@ -1986,6 +2021,12 @@ function SystemFieldRequirementControl({
         />
         Bắt buộc nhập
       </label>
+      <StudentConversionRequirementControl
+        item={item}
+        canUpdate={canUpdate}
+        isRequired={isRequired}
+        requirementsLoading={systemRequirementsQuery.isLoading}
+      />
       {item.requiredLocked && (
         <span className="text-xs text-muted-foreground">
           Trường định danh cốt lõi luôn bắt buộc.
@@ -2002,6 +2043,59 @@ function SystemFieldRequirementControl({
           </span>
         )}
       </div>
+    </div>
+  );
+}
+
+/** Lead system fields only; a field required on input is always required for conversion. */
+function StudentConversionRequirementControl({
+  item,
+  canUpdate,
+  isRequired,
+  requirementsLoading,
+}: {
+  item: import("../form-field-catalog.types").SystemFormField;
+  canUpdate: boolean;
+  isRequired: boolean;
+  requirementsLoading: boolean;
+}) {
+  const auth = useAuth();
+  const queryClient = useQueryClient();
+  const query = useQuery({
+    queryKey: ["student-conversion-requirements"],
+    queryFn: () => getStudentConversionRequirements(auth.accessToken!),
+    enabled: Boolean(auth.accessToken),
+  });
+  const mutation = useMutation({
+    mutationFn: (checked: boolean) =>
+      updateStudentConversionRequirement(item.key, checked, auth.accessToken!),
+    onSuccess: (data) =>
+      queryClient.setQueryData(["student-conversion-requirements"], data),
+  });
+  return (
+    <div className="flex flex-col items-start gap-1">
+      <label className="flex min-h-8 items-center gap-2 text-sm">
+        <Checkbox
+          checked={isRequired || (query.data?.[item.key] ?? false)}
+          disabled={
+            isRequired ||
+            !canUpdate ||
+            mutation.isPending ||
+            query.isLoading ||
+            requirementsLoading
+          }
+          onCheckedChange={(checked) => mutation.mutate(checked === true)}
+          aria-label={`Đặt trường ${item.label} là bắt buộc khi chuyển học viên`}
+        />
+        Bắt buộc khi chuyển học viên
+      </label>
+      {mutation.error && (
+        <span role="alert" className="text-xs text-destructive">
+          {mutation.error instanceof ApiError
+            ? mutation.error.message
+            : "Không thể lưu cấu hình. Vui lòng thử lại."}
+        </span>
+      )}
     </div>
   );
 }

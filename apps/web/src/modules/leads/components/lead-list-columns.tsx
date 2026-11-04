@@ -13,6 +13,7 @@ import { Eye } from "lucide-react";
 import { useMemo } from "react";
 import { Link } from "react-router-dom";
 import { openLeadInEditModeState } from "../lead-detail-navigation";
+import { LeadNameTrigger } from "./lead-name-trigger";
 const dateFormatter = new Intl.DateTimeFormat("vi-VN", {
   day: "2-digit",
   month: "2-digit",
@@ -110,8 +111,9 @@ const dataColumns: Record<string, ColumnDef<LeadListItem>> = Object.fromEntries(
         accessorKey: "fullName",
         header: "Họ và tên",
         cell: ({ row }) => (
-          <div className="max-w-150 truncate" title={row.original.fullName}>
-            <span className="font-medium">{row.original.fullName}</span>
+          // pb-0.5 keeps the hover underline inside truncate's overflow clip.
+          <div className="max-w-150 truncate pb-0.5" title={row.original.fullName}>
+            <LeadNameTrigger lead={row.original} />
           </div>
         ),
       },

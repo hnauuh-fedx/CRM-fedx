@@ -1,10 +1,11 @@
-import { useLayoutEffect, useRef, useState, type KeyboardEvent, type ReactNode, type RefObject } from "react";
+import { useLayoutEffect, useRef, useState, type ReactNode, type RefObject } from "react";
 import { flexRender, type Column, type Table as DataTable } from "@tanstack/react-table";
 import { ArrowDown, ArrowUp, ArrowUpDown } from "lucide-react";
 
 import { TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import type { LeadListItem } from "../lead.types";
 import { leadColumnClass, leadColumnStyle } from "./lead-column-presentation";
+import { OpenLeadContext } from "./lead-name-trigger";
 
 const actionColumns = new Set(["select", "view"]);
 // px-3 on both sides of a data cell.
@@ -52,14 +53,6 @@ export function LeadListTable({
     cells().forEach((cell) => observer.observe(cell));
     return () => observer.disconnect();
   }, [pinnedKey]);
-
-  function openLeadWithKeyboard(event: KeyboardEvent<HTMLTableRowElement>, leadId: string) {
-    if (event.target !== event.currentTarget) return;
-    if (event.key === "Enter") {
-      event.preventDefault();
-      onEditLead(leadId);
-    }
-  }
 
   const isFixed = (column: Column<LeadListItem>) => column.id in sizing;
   const columnProps = (column: Column<LeadListItem>, header: boolean) => {
@@ -130,16 +123,14 @@ export function LeadListTable({
               </TableRow>
             ))}
           </TableHeader>
+          {/* Only the lead name opens the detail popup (see LeadNameTrigger). */}
+          <OpenLeadContext value={onEditLead}>
           <TableBody>
             {table.getRowModel().rows.map((row) => (
               <TableRow
                 key={row.id}
                 data-state={row.getIsSelected() ? "selected" : undefined}
-                className="group cursor-pointer focus-visible:bg-muted/50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring"
-                tabIndex={0}
-                aria-label={`${row.original.fullName} — nhấn Enter hoặc nhấp đúp để mở chi tiết`}
-                onDoubleClick={() => onEditLead(row.original.id)}
-                onKeyDown={(event) => openLeadWithKeyboard(event, row.original.id)}
+                className="group"
               >
                 {row.getVisibleCells().map((cell) => (
                   <TableCell key={cell.id} {...columnProps(cell.column, false)}>
@@ -149,6 +140,7 @@ export function LeadListTable({
               </TableRow>
             ))}
           </TableBody>
+          </OpenLeadContext>
         </table>
       </div>
       <StickyHorizontalScrollbar scrollRef={scrollRef} tableRef={tableRef} />

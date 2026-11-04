@@ -1,6 +1,7 @@
 import { useState, type FormEvent, type ReactNode } from "react";
 import { ArrowRight, GraduationCap, LogOut, RefreshCw } from "lucide-react";
 
+import { SessionLoadingState } from "@/components/shared/page-loading-state";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
@@ -11,6 +12,16 @@ import { Spinner } from "@/components/ui/spinner";
 import { useAuth } from "@/modules/auth/auth-context";
 import { useInstitutionProgram } from "./institution-program-context";
 
+type GateView = "workspace" | "restoring" | "selection";
+
+// A remembered program keeps the same neutral loader as session restore instead of
+// flashing the selection screen; the selection screen is only for a real choice.
+function getGateView(state: { isLoading: boolean; hasError: boolean; hasSelectedProgram: boolean; hasRememberedProgram: boolean }): GateView {
+  if (state.hasError) return "selection";
+  if (!state.isLoading && state.hasSelectedProgram) return "workspace";
+  return state.isLoading && state.hasRememberedProgram ? "restoring" : "selection";
+}
+
 export function InstitutionProgramGate({ children }: { children: ReactNode }) {
   const auth = useAuth();
   const context = useInstitutionProgram();
@@ -19,7 +30,9 @@ export function InstitutionProgramGate({ children }: { children: ReactNode }) {
   const isLoading = context.isLoading || (context.hasSelectedProgram && auth.isProfileLoading);
   const error = context.error ?? (context.hasSelectedProgram ? auth.profileError : null);
 
-  if (!isLoading && !error && context.hasSelectedProgram) return children;
+  const view = getGateView({ isLoading, hasError: Boolean(error), hasSelectedProgram: context.hasSelectedProgram, hasRememberedProgram: context.hasRememberedProgram });
+  if (view === "workspace") return children;
+  if (view === "restoring") return <SessionLoadingState />;
 
   const canChoose = !isLoading && !error && context.programs.length > 0;
   const isValidDraft = context.programs.some((program) => program.id === draftProgramId);
