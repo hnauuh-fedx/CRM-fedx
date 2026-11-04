@@ -1,13 +1,10 @@
 name: Deploy web to Cloudflare Workers
+# Deploys only after the CI/CD workflow (tests) succeeds for a push to main.
 on:
-  push:
+  workflow_run:
+    workflows: [CI/CD]
+    types: [completed]
     branches: [main]
-    paths:
-      - apps/web/**
-      - packages/shared/**
-      - package.json
-      - package-lock.json
-      - .github/workflows/deploy-web-cloudflare.yml
   workflow_dispatch:
 permissions:
   contents: read
@@ -16,9 +13,13 @@ concurrency:
   cancel-in-progress: false
 jobs:
   deploy:
+    if: github.event_name == 'workflow_dispatch' || (github.event.workflow_run.conclusion == 'success' && github.event.workflow_run.event == 'push')
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+        with:
+          # Deploy exactly the commit that passed CI/CD, not a newer main.
+          ref: ${{ github.event.workflow_run.head_sha || github.sha }}
       - uses: actions/setup-node@v4
         with:
           node-version: '24'
@@ -29,7 +30,7 @@ jobs:
           # Public build-time values from repository variables (Settings > Secrets and variables > Actions > Variables).
           VITE_API_URL: ${{ vars.VITE_API_URL }}
           VITE_PUBLIC_WEB_URL: ${{ vars.VITE_PUBLIC_WEB_URL }}
-          RELEASE_COMMIT: ${{ github.sha }}
+          RELEASE_COMMIT: ${{ github.event.workflow_run.head_sha || github.sha }}
       - run: npx wrangler deploy --config apps/web/wrangler.jsonc
         env:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}

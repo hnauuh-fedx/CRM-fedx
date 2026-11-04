@@ -33,7 +33,7 @@ Tính năng quản lý bản phát hành và yêu cầu triển khai từ CRM. D
 
 ## Cấu hình GitHub
 
-Workflow: `.github/workflows/releases.yml`. Registry mặc định là `ghcr.io/<owner>/<repository>/api` và `/web`, tên chuyển về chữ thường. Docker host cần quyền pull các image private; không dùng CI token để cấp quyền shell/SSH.
+Workflow: `.github/workflows/ci-cd.yml` (trước đây là `releases.yml`). Từ 2026-11-04 workflow chỉ build image `ghcr.io/<owner>/<repository>/api` (tên chữ thường, tag là commit SHA) và không còn bước đăng ký release với release-controller; web chạy trên Cloudflare nên không build image `/web`. Docker host cần quyền pull các image private; không dùng CI token để cấp quyền shell/SSH.
 
 Repository variables:
 
