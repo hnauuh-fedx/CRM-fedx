@@ -173,6 +173,12 @@ jobs:
         env:
           READY_URL: ${{ vars.API_READY_URL }}
         run: |
+          # Tolerate stray spaces, newlines or quotes pasted into the variable.
+          READY_URL=$(printf '%s' "$READY_URL" | tr -d "[:space:]\"'\`")
+          if ! printf '%s' "$READY_URL" | grep -Eq '^https?://[^/]+/'; then
+            echo "::error::API_READY_URL must be a full URL such as https://<api-host>/api/ready."
+            exit 1
+          fi
           for attempt in $(seq 1 60); do
             commit=$(curl -sS -m 10 "$READY_URL" | jq -r '.commit // empty' 2>/dev/null || true)
             if [ "$commit" = "$GITHUB_SHA" ]; then
