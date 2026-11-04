@@ -1,13 +1,19 @@
-name: Build and register release
+name: CI/CD
+# verify: runs on every pull request to main and on every push to main (required check for merging).
+# publish-api-image: runs only on main after verify passes; Render runs this API image.
+# The web app is deployed by deploy-web-cloudflare.yml after this workflow succeeds on main.
 on:
+  pull_request:
+    branches: [main]
   push:
     branches: [main]
   workflow_dispatch:
 permissions:
   contents: read
 concurrency:
-  group: release-${{ github.ref }}
-  cancel-in-progress: false
+  group: ci-cd-${{ github.ref }}
+  # A newer push to the same pull request supersedes the old run; main runs always finish.
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 jobs:
   verify:
     runs-on: ubuntu-latest
@@ -67,8 +73,9 @@ jobs:
           DATABASE_URL: postgresql://test:test@localhost:5432/test
           JWT_SECRET: ci-only-secret-at-least-32-characters-long
       - run: npm run build --workspace apps/web
-  publish:
+  publish-api-image:
     needs: verify
+    if: github.event_name != 'pull_request' && github.ref == 'refs/heads/main'
     runs-on: ubuntu-latest
     permissions:
       contents: read
@@ -84,67 +91,27 @@ jobs:
       - id: names
         env:
           REPOSITORY: ${{ github.repository }}
-        run: echo "prefix=ghcr.io/${REPOSITORY,,}" >> "$GITHUB_OUTPUT"
+        run: echo "image=ghcr.io/${REPOSITORY,,}/api" >> "$GITHUB_OUTPUT"
       - id: api
         uses: docker/build-push-action@v7
         with:
           context: .
           file: deploy/Dockerfile.api
           push: true
-          tags: ${{ steps.names.outputs.prefix }}/api:${{ github.sha }}
+          tags: ${{ steps.names.outputs.image }}:${{ github.sha }}
           build-args: RELEASE_COMMIT=${{ github.sha }}
-      - id: web
-        uses: docker/build-push-action@v7
-        with:
-          context: .
-          file: deploy/Dockerfile.web
-          push: true
-          tags: ${{ steps.names.outputs.prefix }}/web:${{ github.sha }}
-          build-args: |
-            RELEASE_COMMIT=${{ github.sha }}
-            PUBLIC_WEB_URL=${{ vars.PUBLIC_WEB_URL }}
-      - name: Register immutable release
-        if: vars.RELEASE_PROVIDER != 'render-cloudflare'
+          cache-from: type=gha,scope=api
+          cache-to: type=gha,scope=api,mode=max
+      - name: Image for Render
         env:
-          CONTROL_URL: ${{ vars.RELEASE_CONTROL_URL }}
-          CONTROL_CI_TOKEN: ${{ secrets.RELEASE_CONTROL_CI_TOKEN }}
-          RELEASE_SCHEMA_GENERATION: ${{ vars.RELEASE_SCHEMA_GENERATION }}
-          API_IMAGE: ${{ steps.names.outputs.prefix }}/api@${{ steps.api.outputs.digest }}
-          WEB_IMAGE: ${{ steps.names.outputs.prefix }}/web@${{ steps.web.outputs.digest }}
-        run: node scripts/register-release.mjs
-      - uses: actions/setup-node@v4
-        if: vars.RELEASE_PROVIDER == 'render-cloudflare'
-        with:
-          node-version: '24'
-          cache: npm
-      - run: npm ci --ignore-scripts
-        if: vars.RELEASE_PROVIDER == 'render-cloudflare'
-      - name: Prepare staging frontend
-        if: vars.RELEASE_PROVIDER == 'render-cloudflare'
-        run: npm run prepare:cloud:web
-        env:
-          RELEASE_COMMIT: ${{ github.sha }}
-          CLOUD_ARTIFACT_ENVIRONMENT: staging
-          VITE_API_URL: ${{ vars.CLOUD_STAGING_API_URL }}
-          VITE_PUBLIC_WEB_URL: ${{ vars.CLOUD_STAGING_WEB_URL }}
-      - name: Prepare production frontend
-        if: vars.RELEASE_PROVIDER == 'render-cloudflare'
-        run: npm run prepare:cloud:web
-        env:
-          RELEASE_COMMIT: ${{ github.sha }}
-          CLOUD_ARTIFACT_ENVIRONMENT: production
-          VITE_API_URL: ${{ vars.CLOUD_PRODUCTION_API_URL }}
-          VITE_PUBLIC_WEB_URL: ${{ vars.CLOUD_PRODUCTION_WEB_URL }}
-      - name: Publish cloud artifacts and register (no deployment)
-        if: vars.RELEASE_PROVIDER == 'render-cloudflare'
-        run: npm run publish:cloud-artifacts --workspace apps/release-controller
-        env:
-          CONTROL_URL: ${{ vars.RELEASE_CONTROL_URL }}
-          CONTROL_CI_TOKEN: ${{ secrets.RELEASE_CONTROL_CI_TOKEN }}
-          CONTROL_ARTIFACT_ENDPOINT: ${{ vars.CLOUD_ARTIFACT_ENDPOINT }}
-          CONTROL_ARTIFACT_BUCKET: ${{ vars.CLOUD_ARTIFACT_BUCKET }}
-          CONTROL_ARTIFACT_ACCESS_KEY_ID: ${{ secrets.CLOUD_ARTIFACT_WRITE_KEY_ID }}
-          CONTROL_ARTIFACT_SECRET_ACCESS_KEY: ${{ secrets.CLOUD_ARTIFACT_WRITE_SECRET }}
-          RELEASE_SCHEMA_GENERATION: ${{ vars.RELEASE_SCHEMA_GENERATION }}
-          API_IMAGE: ${{ steps.names.outputs.prefix }}/api@${{ steps.api.outputs.digest }}
-          WEB_IMAGE: ${{ steps.names.outputs.prefix }}/web@${{ steps.web.outputs.digest }}
+          IMAGE: ${{ steps.names.outputs.image }}:${{ github.sha }}
+          DIGEST: ${{ steps.api.outputs.digest }}
+        run: |
+          {
+            echo "### API image"
+            echo "Set this image on the Render API service (Settings > Image > Source):"
+            echo '```'
+            echo "$IMAGE"
+            echo '```'
+            echo "Digest: \`$DIGEST\`"
+          } >> "$GITHUB_STEP_SUMMARY"

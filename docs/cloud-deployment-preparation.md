@@ -106,7 +106,7 @@ Lệnh này chỉ build và tạo `artifacts/cloud-preparation/web-<commit>.tar.
 
 Plugin Vite sinh `version.json` cả khi build ngoài Docker, dùng `RELEASE_COMMIT`, `CF_PAGES_COMMIT_SHA`, `GITHUB_SHA` hoặc `development`. Mẫu header cache nằm ngoài thư mục public cho tới lúc chủ động kích hoạt. Kiểm tra SPA deep link, login, refresh cookie, biểu mẫu public và script nhúng sau khi đưa lên Pages.
 
-Workflow `.github/workflows/cloud-preparation.yml` chỉ chạy bằng `workflow_dispatch`, nhận hai URL public, build/upload artifact vào GitHub Actions, không có provider token và không gọi Cloudflare/Render. Workflow Compose cũ vẫn giữ nguyên đường phát hành hiện tại.
+Workflow `cloud-preparation.yml` đã được gỡ bỏ (2026-11-04) vì không còn dùng. Web được deploy bởi `deploy-web-cloudflare.yml` sau khi workflow `ci-cd.yml` chạy thành công trên `main`; build artifact thủ công vẫn chạy được bằng `npm run prepare:cloud:web`.
 
 ## Phiên bản và chế độ chuẩn bị
 
