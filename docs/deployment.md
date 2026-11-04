@@ -1,5 +1,12 @@
 # Deployment
 
+## CI/CD (GitHub Actions, Render, Cloudflare)
+
+- Pull request vào `main`: workflow `CI/CD` chạy job `verify` (typecheck, unit test, integration test, build web). Chỉ merge khi `verify` xanh.
+- Push/merge vào `main`: `verify` → `publish-api-image` (đẩy `ghcr.io/<owner>/<repo>/api:<commit>`) → `deploy-api` (gọi Render Deploy Hook với image mới). Web được deploy lên Cloudflare bởi `deploy-web-cloudflare.yml` sau khi `CI/CD` thành công.
+- Cấu hình GitHub: secret `RENDER_DEPLOY_HOOKS` (mỗi dòng một Deploy Hook URL của service Render chạy image API); variable tùy chọn `API_READY_URL` (ví dụ `https://<api-host>/api/ready`) để workflow chờ API báo đúng commit mới. Không có secret thì bước deploy được bỏ qua.
+- Migration database **không** chạy tự động. Nếu thay đổi có migration: backup, chạy `prisma migrate deploy` lên database server **trước khi merge**, rồi mới merge. Workflow cảnh báo khi một lần push thêm migration mới.
+
 ## Inbound Webhook V2
 
 Inbound webhook production processing requires PostgreSQL and Redis. Run the API and webhook worker as separate processes from the same release:
