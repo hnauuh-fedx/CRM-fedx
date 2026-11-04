@@ -1,5 +1,5 @@
 import { prisma } from "../../database/prisma";
-import { changeStudentMembership } from "../students/student-conversion.service";
+import { changeStudentMembership, checkStudentConversionRequirements } from "../students/student-conversion.service";
 import { enrolledStudentWhere } from "../students/student-membership";
 import { Router, type RequestHandler } from "express";
 import multer from "multer";
@@ -279,12 +279,31 @@ leadsRouter.use("/:leadId", requireAuthentication, async (request, response, nex
   } catch (error) { next(error); }
 });
 
+function missingStudentFieldsMessage(missingFields: Array<{ label: string }>) {
+  return `Không thể chuyển sang học viên. Vui lòng bổ sung các trường bắt buộc: ${missingFields.map((field) => field.label).join(", ")}.`;
+}
+
+leadsRouter.get("/:leadId/student-conversion-check", requireAuthentication, requireAnyPermission(...leadListPermissions), async (request, response, next) => {
+  try {
+    const id = z.uuid().safeParse(request.params.leadId);
+    if (!id.success) { response.status(400).json({ message: "Mã hồ sơ không hợp lệ." }); return; }
+    const result = await checkStudentConversionRequirements(request.authUser!, id.data, getInstitutionProgramScope(request));
+    if (!result.ok) {
+      response.status(result.reason === "forbidden" ? 403 : 404).json({ message: result.reason === "forbidden" ? "Bạn chưa được cấp quyền chuyển đổi." : "Không tìm thấy hồ sơ trong phạm vi của bạn." }); return;
+    }
+    response.json(result.data);
+  } catch (error) { next(error); }
+});
+
 leadsRouter.post("/:leadId/membership", requireAuthentication, requireAnyPermission(...leadListPermissions), async (request, response, next) => {
   try {
     const id = z.uuid().safeParse(request.params.leadId);
     const body = z.object({ target: z.enum(["student", "candidate"]) }).strict().safeParse(request.body);
     if (!id.success || !body.success) { response.status(400).json({ message: "Yêu cầu chuyển đổi không hợp lệ." }); return; }
     const result = await changeStudentMembership(request.authUser!, id.data, body.data.target, getInstitutionProgramScope(request), request.ip);
+    if (!result.ok && "missingFields" in result && result.missingFields) {
+      response.status(422).json({ message: missingStudentFieldsMessage(result.missingFields), missingFields: result.missingFields }); return;
+    }
     if (!result.ok) {
       const status = result.reason === "forbidden" ? 403 : result.reason === "not_found" ? 404 : 409;
       response.status(status).json({ message: status === 403 ? "Bạn chưa được cấp quyền chuyển đổi." : status === 404 ? "Không tìm thấy hồ sơ trong phạm vi của bạn." : "Hồ sơ đã ở danh sách đích." }); return;

@@ -3,6 +3,18 @@ import { prisma } from "../../database/prisma";
 import type { AuthUser } from "../auth/auth.types";
 import { getLeadScopeWhere } from "../leads/lead-list.service";
 import { isEnrolledStudent } from "./student-membership";
+import { findMissingStudentConversionFields } from "./student-conversion-requirements";
+
+/** Read-only pre-check used before the conversion dialog opens; the conversion re-checks inside its transaction. */
+export async function checkStudentConversionRequirements(user: AuthUser, leadId: string, programId?: string) {
+  if (!user.permissions.includes("student.convert_from_lead")) return { ok: false as const, reason: "forbidden" as const };
+  const visible = await prisma.leads.findFirst({
+    where: { id: leadId, deleted_at: null, ...getLeadScopeWhere(user, programId), ...(programId ? { institution_program_id: programId } : {}) },
+    select: { id: true, institution_program_id: true },
+  });
+  if (!visible) return { ok: false as const, reason: "not_found" as const };
+  return { ok: true as const, data: { missingFields: await findMissingStudentConversionFields(prisma, leadId, visible.institution_program_id) } };
+}
 
 export async function changeStudentMembership(user: AuthUser, leadId: string, target: "student" | "candidate", programId?: string, ipAddress?: string) {
   const permissions = new Set(user.permissions);
@@ -20,6 +32,10 @@ export async function changeStudentMembership(user: AuthUser, leadId: string, ta
     await tx.$queryRaw`SELECT id FROM leads WHERE id = ${leadId}::uuid FOR UPDATE`;
     const existing = await tx.students.findUnique({ where: { lead_id: leadId }, select: { id: true, status: true } });
     if (isEnrolledStudent(existing) === (target === "student")) return { ok: false as const, reason: "already_in_target" };
+    if (target === "student") {
+      const missingFields = await findMissingStudentConversionFields(tx, leadId, visible.institution_program_id);
+      if (missingFields.length) return { ok: false as const, reason: "missing_required_fields" as const, missingFields };
+    }
     const previousAdmission = await tx.admission_profiles.findUnique({ where: { lead_id: leadId }, select: { admission_status_id: true } });
     if (target === "student") {
       // The explicit conversion confirms enrolment and ensures an admission profile exists.

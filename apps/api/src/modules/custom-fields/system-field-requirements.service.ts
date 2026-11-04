@@ -4,6 +4,7 @@ import { leadFormFieldCatalog } from "@admission-crm/shared/lead-form-field-cata
 import { InstitutionProgramScopeError } from "../institutions/institution-program-scope";
 
 const settingPrefix = "form_field_requirements.";
+const studentConversionSettingKey = "student_conversion_requirements.LEAD";
 
 export type SystemFieldRequirements = Record<string, boolean>;
 
@@ -25,12 +26,54 @@ function parseRequirements(value?: string | null): SystemFieldRequirements {
   }
 }
 
-export async function getSystemFieldRequirements(entityType: string) {
-  const setting = await prisma.system_settings.findUnique({
+export async function getSystemFieldRequirements(entityType: string, client: Pick<typeof prisma, "system_settings"> = prisma) {
+  const setting = await client.system_settings.findUnique({
     where: { key: settingKey(entityType) },
     select: { value: true },
   });
   return parseRequirements(setting?.value);
+}
+
+/** Lead system fields an admin marked as required before converting a lead to a student. */
+export async function getStudentConversionRequirements(client: Pick<typeof prisma, "system_settings"> = prisma) {
+  const setting = await client.system_settings.findUnique({
+    where: { key: studentConversionSettingKey },
+    select: { value: true },
+  });
+  return parseRequirements(setting?.value);
+}
+
+export async function setStudentConversionRequirement(
+  actor: AuthUser,
+  fieldKey: string,
+  isRequired: boolean,
+  ipAddress?: string,
+) {
+  const field = leadFormFieldCatalog.flatMap(group => group.fields).find(item => item.key === fieldKey && !item.readOnly);
+  if (!field) throw new InstitutionProgramScopeError(400, "Trường dữ liệu không hợp lệ.");
+  const key = studentConversionSettingKey;
+  return prisma.$transaction(async tx => {
+    await tx.$queryRaw`SELECT pg_advisory_xact_lock(hashtextextended(${key}, 0)) IS NULL AS locked`;
+    const previous = await tx.system_settings.findUnique({ where: { key }, select: { value: true } });
+    const oldRequirements = parseRequirements(previous?.value);
+    const newRequirements = { ...oldRequirements, [fieldKey]: isRequired };
+    await tx.system_settings.upsert({
+      where: { key },
+      update: { value: JSON.stringify(newRequirements), type: "json" },
+      create: { key, value: JSON.stringify(newRequirements), type: "json" },
+    });
+    await tx.audit_logs.create({
+      data: {
+        user_id: actor.id,
+        entity_type: "student_conversion_requirement",
+        action: "update",
+        old_data: { entityType: "LEAD", fieldKey, isRequired: oldRequirements[fieldKey] ?? null },
+        new_data: { entityType: "LEAD", fieldKey, isRequired },
+        ip_address: ipAddress,
+      },
+    });
+    return newRequirements;
+  });
 }
 
 export async function setSystemFieldRequirement(

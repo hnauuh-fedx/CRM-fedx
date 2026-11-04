@@ -58,6 +58,18 @@ export function updateSystemFieldRequirement(
   );
 }
 
+export function getStudentConversionRequirements(accessToken: string) {
+  return apiRequest<SystemFieldRequirements>("/custom-fields/system/LEAD/student-conversion-requirements", {}, accessToken);
+}
+
+export function updateStudentConversionRequirement(fieldKey: string, isRequired: boolean, accessToken: string) {
+  return apiRequest<SystemFieldRequirements>(
+    "/custom-fields/system/LEAD/student-conversion-requirements",
+    { method: "PATCH", body: JSON.stringify({ fieldKey, isRequired }) },
+    accessToken,
+  );
+}
+
 export function createCustomField(input: CustomFieldInput, accessToken: string) {
   return apiRequest<CustomFieldDefinition>(
     "/custom-fields",

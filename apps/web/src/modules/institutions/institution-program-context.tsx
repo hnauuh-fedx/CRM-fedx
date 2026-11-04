@@ -19,6 +19,8 @@ type InstitutionProgramContextValue = {
   error: string | null;
   retry: () => void;
   needsReselection: boolean;
+  /** This browser remembers a program for the account; it may still be revoked. */
+  hasRememberedProgram: boolean;
   hasSelectedProgram: boolean;
   selectProgram: (programId: string) => boolean;
   registerProgramChangeGuard: (guard: InstitutionProgramChangeGuard) => () => void;
@@ -73,11 +75,12 @@ export function InstitutionProgramProvider({ accessToken, userId, allowedProgram
       error: optionsQuery.isError ? "Không thể tải chương trình làm việc. Vui lòng kiểm tra kết nối và thử lại." : null,
       retry: () => { void optionsQuery.refetch(); },
       needsReselection,
+      hasRememberedProgram: Boolean(storedProgramId),
       hasSelectedProgram: programs.some((program) => program.id === selectedProgramId),
       selectProgram,
       registerProgramChangeGuard,
     }),
-    [optionsQuery.isLoading, optionsQuery.isError, optionsQuery.refetch, needsReselection, programs, registerProgramChangeGuard, selectProgram, selectedProgramId],
+    [optionsQuery.isLoading, optionsQuery.isError, optionsQuery.refetch, needsReselection, storedProgramId, programs, registerProgramChangeGuard, selectProgram, selectedProgramId],
   );
   return (
     <InstitutionProgramContext.Provider value={value}>

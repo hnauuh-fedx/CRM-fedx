@@ -14,6 +14,7 @@ const common = z.object({
   description: z.string().trim().max(2000).optional().transform((value) => value || undefined),
   fieldType: z.enum(customFieldDataTypes),
   isRequired: z.boolean().default(false),
+  isRequiredForStudent: z.boolean().default(false),
   isSearchable: z.boolean().default(false),
   isFilterable: z.boolean().default(false),
   isSensitive: z.boolean().default(false),

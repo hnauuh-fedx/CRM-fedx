@@ -10,7 +10,7 @@ import { createCustomFieldGroup, listCustomFieldGroups, setCustomFieldGroupStatu
 import { customFieldEntityTypes } from "./custom-fields.types";
 import { getInstitutionProgramScope } from "../institutions/institution-program-scope";
 import { getRuntimeCustomFieldDefinitions, getRuntimeCustomFields, saveRuntimeCustomFields, type RuntimeCustomFieldEntityType } from "../leads/sale-custom-fields.service";
-import { getSystemFieldRequirements, setSystemFieldRequirement } from "./system-field-requirements.service";
+import { getStudentConversionRequirements, getSystemFieldRequirements, setStudentConversionRequirement, setSystemFieldRequirement } from "./system-field-requirements.service";
 import { getTransitionNoteConfiguration, setTransitionNoteTemplates } from "../leads/transition-note.service";
 import { transitionNoteTargetSchema, transitionNoteTemplatesSchema } from "../leads/transition-note.schema";
 export const customFieldsRouter = Router(); customFieldsRouter.use(requireAuthentication);
@@ -36,6 +36,18 @@ customFieldsRouter.put("/system/LEAD/note-templates/:target", requireCustomField
     if (!result.ok) return res.status(result.reason === "conflict" ? 409 : 404).json({ message: result.reason === "conflict" ? "Mẫu ghi chú đã thay đổi. Đóng và mở lại để tải bản mới." : "Không tìm thấy tiến trình cần cấu hình." });
     res.json(result.data);
   } catch (error) { next(error); }
+});
+customFieldsRouter.get("/system/LEAD/student-conversion-requirements", requireCustomFieldPermission("view"), async (_req, res, next) => {
+  try { res.json(await getStudentConversionRequirements()); } catch (error) { next(error); }
+});
+customFieldsRouter.patch("/system/LEAD/student-conversion-requirements", requireCustomFieldPermission("update"), async (req, res, next) => {
+  try {
+    const body = systemFieldRequirementSchema.safeParse(req.body);
+    if (!body.success) return res.status(400).json({ message: "Cấu hình bắt buộc khi chuyển học viên không hợp lệ." });
+    res.json(await setStudentConversionRequirement(req.authUser!, body.data.fieldKey, body.data.isRequired, req.ip));
+  } catch (error) {
+    next(error);
+  }
 });
 customFieldsRouter.get("/system/:entityType/requirements", requireCustomFieldPermission("view"), async (req, res, next) => {
   try {

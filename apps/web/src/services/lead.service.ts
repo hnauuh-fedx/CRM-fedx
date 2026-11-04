@@ -215,6 +215,12 @@ export function bulkUpdateLeads(leadIds: string[], field: LeadBulkUpdateField, v
   );
 }
 
+export type StudentConversionCheck = { missingFields: Array<{ key: string; label: string }> };
+
+export function checkStudentConversion(leadId: string, accessToken: string) {
+  return apiRequest<StudentConversionCheck>(`/leads/${leadId}/student-conversion-check`, {}, accessToken);
+}
+
 export function changeStudentMembership(leadId: string, target: "student" | "candidate", accessToken: string) {
   return apiRequest<{ id: string; recordType: "student" | "candidate" }>(`/leads/${leadId}/membership`,
     { method: "POST", body: JSON.stringify({ target }) }, accessToken);

@@ -603,6 +603,7 @@ model custom_fields {
   field_label          String                @db.VarChar(255)
   field_type           String                @db.VarChar(100)
   is_required          Boolean?              @default(false)
+  is_required_for_student Boolean            @default(false)
   description          String?
   entity_type          String?               @db.VarChar(50)
   scope_type           String?               @default("GLOBAL") @db.VarChar(20)
