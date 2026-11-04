@@ -1,6 +1,8 @@
 name: CI/CD
 # verify: runs on every pull request to main and on every push to main (required check for merging).
 # publish-api-image: runs only on main after verify passes; Render runs this API image.
+# deploy-api: points every Render service in RENDER_DEPLOY_HOOKS at the new image.
+#   Database migrations stay manual: run them before merging a change that needs them.
 # The web app is deployed by deploy-web-cloudflare.yml after this workflow succeeds on main.
 on:
   pull_request:
@@ -77,6 +79,8 @@ jobs:
     needs: verify
     if: github.event_name != 'pull_request' && github.ref == 'refs/heads/main'
     runs-on: ubuntu-latest
+    outputs:
+      image: ${{ steps.names.outputs.image }}:${{ github.sha }}
     permissions:
       contents: read
       packages: write
@@ -115,3 +119,68 @@ jobs:
             echo '```'
             echo "Digest: \`$DIGEST\`"
           } >> "$GITHUB_STEP_SUMMARY"
+  deploy-api:
+    needs: publish-api-image
+    if: github.event_name != 'pull_request' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    concurrency:
+      group: deploy-api-render
+      cancel-in-progress: false
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Warn about new database migrations
+        env:
+          BEFORE: ${{ github.event.before }}
+        run: |
+          if [ -z "$BEFORE" ] || [ "$BEFORE" = "0000000000000000000000000000000000000000" ]; then exit 0; fi
+          migrations=$(git diff --name-only --diff-filter=A "$BEFORE" "$GITHUB_SHA" -- apps/api/prisma/migrations || true)
+          if [ -n "$migrations" ]; then
+            echo "::warning::This push adds database migrations. Make sure they were applied to the server database before this deploy."
+            { echo "### New database migrations"; echo '```'; echo "$migrations"; echo '```'; } >> "$GITHUB_STEP_SUMMARY"
+          fi
+      - name: Trigger Render deploy hooks
+        id: deploy
+        env:
+          # One Render deploy hook URL per line (API and any worker using the same image).
+          HOOKS: ${{ secrets.RENDER_DEPLOY_HOOKS }}
+          IMAGE: ${{ needs.publish-api-image.outputs.image }}
+        run: |
+          if [ -z "$HOOKS" ]; then
+            echo "::notice::RENDER_DEPLOY_HOOKS is not set; skipping the Render deploy."
+            echo "triggered=false" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          encoded=$(jq -rn --arg value "$IMAGE" '$value|@uri')
+          count=0
+          while IFS= read -r hook; do
+            hook=$(printf '%s' "$hook" | tr -d '[:space:]')
+            [ -z "$hook" ] && continue
+            count=$((count + 1))
+            status=$(curl -sS -o /tmp/render-response.json -w '%{http_code}' -X POST "${hook}&imgURL=${encoded}")
+            if [ "$status" -lt 200 ] || [ "$status" -ge 300 ]; then
+              echo "::error::Render deploy hook #$count failed with HTTP $status"
+              cat /tmp/render-response.json
+              exit 1
+            fi
+            echo "Render deploy hook #$count accepted."
+          done <<< "$HOOKS"
+          echo "triggered=true" >> "$GITHUB_OUTPUT"
+          { echo "### Render deploy"; echo "Triggered $count service(s) with \`$IMAGE\`."; } >> "$GITHUB_STEP_SUMMARY"
+      - name: Wait for the API to run the new commit
+        if: steps.deploy.outputs.triggered == 'true' && vars.API_READY_URL != ''
+        env:
+          READY_URL: ${{ vars.API_READY_URL }}
+        run: |
+          for attempt in $(seq 1 60); do
+            commit=$(curl -sS -m 10 "$READY_URL" | jq -r '.commit // empty' 2>/dev/null || true)
+            if [ "$commit" = "$GITHUB_SHA" ]; then
+              echo "API is live on $GITHUB_SHA."
+              exit 0
+            fi
+            echo "Attempt $attempt: API reports '${commit:-unreachable}', waiting..."
+            sleep 15
+          done
+          echo "::error::The API did not report commit $GITHUB_SHA within 15 minutes. Check the deploy log on Render."
+          exit 1
