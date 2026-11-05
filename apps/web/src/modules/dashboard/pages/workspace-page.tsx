@@ -7,6 +7,7 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { useAuth } from "@/modules/auth/auth-context";
 import { DirectorDashboardPage } from "./director-dashboard-page";
+import { AssignmentReportPanel } from "@/modules/reports/components/assignment-report-panel";
 
 export function WorkspacePage() {
   const auth = useAuth();
@@ -54,6 +55,7 @@ export function WorkspacePage() {
           )}
         </CardContent>
       </Card>
+      <AssignmentReportPanel />
     </div>
   );
 }

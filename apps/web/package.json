@@ -2,6 +2,8 @@
   "name": "@admission-crm/web",
   "private": true,
   "scripts": {
+    "test:assignment-report": "tsx --test tests/assignment-report-model.test.ts",
+    "test:assignment-report-browser": "node tests/assignment-report.browser-smoke.mjs",
     "test:private-files-browser": "node tests/private-files.browser-smoke.mjs",
     "test:display-layout-owner-browser": "node tests/display-layout-owner.browser-smoke.mjs",
     "test:releases-browser": "node tests/releases.browser-smoke.mjs",

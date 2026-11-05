@@ -43,6 +43,7 @@ import {
 } from "@/components/ui/tooltip";
 import { cn } from "@/lib/utils";
 import { useAuth } from "@/modules/auth/auth-context";
+import { AssignmentReportPanel } from "@/modules/reports/components/assignment-report-panel";
 import type {
   DirectorDashboardFilters,
   DirectorDashboardResponse,
@@ -291,6 +292,7 @@ export function DirectorDashboardPage() {
         </CardContent>
       </Card>
 
+      <AssignmentReportPanel />
       <MonthlyRevenueMatrix
         matrix={revenueQuery.data}
         filter={revenueFilter}

@@ -755,6 +755,47 @@ model lead_activities {
   @@index([lead_id, user_id, created_at], map: "idx_lead_activities_lead_user_created")
 }
 
+// Immutable reporting facts. Scalar references intentionally retain history after deletion.
+model lead_assignment_report_events {
+  id String @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  event_key String @unique @db.VarChar(400)
+  event_type String @db.VarChar(30)
+  occurred_at DateTime @default(now()) @db.Timestamptz(6)
+  assignment_id String @db.Uuid
+  cause_assignment_id String? @db.Uuid
+  lead_id String @db.Uuid
+  institution_program_id String? @db.Uuid
+  owner_id String? @db.Uuid
+  assignee_id String @db.Uuid
+  assignee_name String @db.VarChar(255)
+  department_id String? @db.Uuid
+  department_name String? @db.VarChar(255)
+  source_id String? @db.Uuid
+  source_name String? @db.VarChar(255)
+  campaign_ids String[] @default([]) @db.Uuid
+  campaign_names String[] @default([])
+  method String @default("MANUAL") @db.VarChar(20)
+  rule_id String? @db.Uuid
+  rule_name String? @db.VarChar(255)
+  node_id String? @db.VarChar(255)
+  reason String
+
+  @@index([institution_program_id, occurred_at, id], map: "idx_assignment_report_program_time")
+  @@index([institution_program_id, assignee_id, occurred_at], map: "idx_assignment_report_assignee_time")
+  @@index([institution_program_id, department_id, occurred_at], map: "idx_assignment_report_department_time")
+  @@index([institution_program_id, rule_id, occurred_at], map: "idx_assignment_report_rule_time")
+  @@index([institution_program_id, source_id, occurred_at], map: "idx_assignment_report_source_time")
+  @@index([institution_program_id, owner_id, occurred_at], map: "idx_assignment_report_owner_time")
+  @@index([assignment_id, event_type], map: "idx_assignment_report_assignment_type")
+  @@index([cause_assignment_id], map: "idx_assignment_report_cause")
+  @@index([campaign_ids], type: Gin, map: "idx_assignment_report_campaigns")
+}
+
+model lead_assignment_report_coverage {
+  id Int @id @default(1)
+  started_at DateTime @default(now()) @db.Timestamptz(6)
+}
+
 model lead_assignments {
   id                                        String       @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
   lead_id                                   String?      @db.Uuid
