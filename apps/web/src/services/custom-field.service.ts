@@ -11,15 +11,16 @@ import type {
 } from "@/modules/custom-fields/custom-field.types";
 import { apiRequest } from "./api";
 import type { LeadCustomFieldsResponse, LeadCustomFieldValue } from "@/modules/leads/lead.types";
-import type { TransitionNoteConfiguration, TransitionNoteTemplate } from "@/modules/leads/transition-note.types";
+import type { StageDetailConfiguration, StageDetailOption } from "@/modules/leads/stage-detail.types";
 
-export function getTransitionNoteConfiguration(accessToken: string, management = false) {
-  return apiRequest<TransitionNoteConfiguration[]>(management ? "/system/note-templates" : "/custom-fields/system/LEAD/note-templates", {}, accessToken);
+/** Multi-level options of "Quy trình Telesale/Trạng thái"; `management` uses the system-admin endpoint. */
+export function getStageDetailConfiguration(accessToken: string, management = false) {
+  return apiRequest<StageDetailConfiguration[]>(management ? "/system/stage-detail-options" : "/custom-fields/system/LEAD/stage-detail-options", {}, accessToken);
 }
 
-export function setTransitionNoteTemplates(target: string, templates: TransitionNoteTemplate[], accessToken: string, management = false, revision?: string) {
-  return apiRequest<TransitionNoteTemplate[]>(management ? `/system/note-templates/${target}` : `/custom-fields/system/LEAD/note-templates/${target}`, {
-    method: "PUT", body: JSON.stringify({ templates, revision }),
+export function setStageDetailOptions(target: string, options: StageDetailOption[], accessToken: string, management = false, revision?: string) {
+  return apiRequest<{ options: StageDetailOption[]; revision: string }>(management ? `/system/stage-detail-options/${target}` : `/custom-fields/system/LEAD/stage-detail-options/${target}`, {
+    method: "PUT", body: JSON.stringify({ options, revision }),
   }, accessToken);
 }
 

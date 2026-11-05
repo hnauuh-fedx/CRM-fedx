@@ -32,7 +32,7 @@ export const leadInformationSystemFields = [
 ];
 
 export const informationReadOnlyReasons: Record<string, string> = {
-  pipelineStageId: "Dùng node Cập nhật Pipeline để giữ lịch sử giai đoạn và ghi chú chuyển bước.",
+  pipelineStageId: "Dùng node Cập nhật Pipeline để giữ lịch sử giai đoạn.",
   admissionStatusId: "Dùng node Cập nhật trạng thái hồ sơ để kiểm tra luồng duyệt và nhập học.",
   institutionProgramId: "Chuyển chương trình qua chức năng quản lý hồ sơ để kiểm tra lại toàn bộ dữ liệu liên quan.",
   assigneeId: "Dùng node Phân công Sale hoặc Chia Lead tự động để ghi nhận phân công và thông báo.",

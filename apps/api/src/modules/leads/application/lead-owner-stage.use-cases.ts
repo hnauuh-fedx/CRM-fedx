@@ -18,7 +18,8 @@ import {
   canUpdateLead,
 } from "./lead-authorization";
 import { recordStageChange } from "./lead-mutation-support";
-import { recordTransitionNote, resolveTransitionNote } from "../transition-note.service";
+import { resolveStageDetail } from "../stage-detail-option.service";
+import { STAGE_DETAIL_FAIL_TARGET, type StageDetailSelection } from "../stage-detail-option.schema";
 
 export type LeadMutationTransactionEffect = (
   tx: Prisma.TransactionClient,
@@ -56,8 +57,7 @@ export async function changeVisibleLeadStage(
   institutionProgramId?: string,
   transactionEffect?: LeadMutationTransactionEffect,
   ipAddress?: string,
-  noteTemplateId?: string,
-  noteContent?: string,
+  stageDetail?: StageDetailSelection,
 ) {
   if (!canUpdateLead(actor)) {
     return { ok: false as const, reason: "permission_denied" as const };
@@ -91,8 +91,8 @@ export async function changeVisibleLeadStage(
       };
     }
 
-    const note = await resolveTransitionNote(tx, stage.id, stage.name, noteTemplateId, noteContent);
-    if (!note.ok) return note;
+    const detail = await resolveStageDetail(tx, stage.id, stageDetail);
+    if (!detail.ok) return detail;
     await tx.leads.update({
       where: { id: leadId },
       data: { pipeline_stage_id: stageId, updated_at: new Date() },
@@ -101,9 +101,8 @@ export async function changeVisibleLeadStage(
       activityContent: `Chuyển lead sang giai đoạn ${stage.name}.`,
       includeStageNameInAudit: true,
       ipAddress,
-      note: note.content,
+      note: detail.content,
     });
-    await recordTransitionNote(tx, actor, leadId, note.content, noteTemplateId, ipAddress);
     await transactionEffect?.(tx);
     return {
       ok: true as const,
@@ -118,8 +117,9 @@ export async function changeVisibleLeadStatus(
   status: LeadLifecycleStatus,
   institutionProgramId?: string,
   ipAddress?: string,
-  noteTemplateId?: string,
-  noteContent?: string,
+  stageDetail?: StageDetailSelection,
+  /** Reactivation only: the stage to resume at; defaults to the stage the lead failed from. */
+  targetStageId?: string,
 ) {
   if (!canUpdateLead(actor)) {
     return { ok: false as const, reason: "permission_denied" as const };
@@ -145,52 +145,14 @@ export async function changeVisibleLeadStatus(
           },
         };
       }
-      if (!lead.pipeline_stage_id) {
-        return { ok: false as const, reason: "stage_required" as const };
-      }
-      const stage = await tx.pipeline_stages.findUnique({
-        where: { id: lead.pipeline_stage_id },
-        select: { id: true, name: true },
-      });
-      if (!stage) {
-        return { ok: false as const, reason: "stage_not_found" as const };
-      }
-      const marker = getPipelineStageMarker(stage.name);
-      const statusLabel = marker ? `Fail | ${marker}` : "Fail";
-      const nextStatus = createFailedLeadStatus(stage.id);
-      const note = await resolveTransitionNote(tx, "FAIL", "Fail", noteTemplateId, noteContent);
-      if (!note.ok) return note;
-
-      await tx.leads.update({
-        where: { id: leadId },
-        data: {
-          status: nextStatus,
-          pipeline_stage_id: null,
-          updated_at: new Date(),
-        },
-      });
-      await recordStageChange(tx, actor, leadId, stage.id, null, {
-        activityContent: `Chuyển trạng thái lead sang ${statusLabel}.`,
-        ipAddress,
-      });
-      await recordLifecycleStatusAudit(
-        tx,
-        actor,
-        leadId,
-        ACTIVE_LEAD_STATUS,
-        nextStatus,
-        stage.id,
-        null,
-        ipAddress,
-      );
-      await recordTransitionNote(tx, actor, leadId, note.content, noteTemplateId, ipAddress);
-
+      const failed = await failLeadInTransaction(tx, actor, lead, ipAddress, stageDetail);
+      if (!failed.ok) return failed;
       return {
         ok: true as const,
         data: {
           id: leadId,
           status: "FAIL" as const,
-          statusLabel,
+          statusLabel: failed.statusLabel,
           pipelineStageId: null,
           changed: true,
         },
@@ -209,53 +171,91 @@ export async function changeVisibleLeadStatus(
         },
       };
     }
-    const restoredStage = await tx.pipeline_stages.findUnique({
-      where: { id: failedStageId },
-      select: { id: true, name: true },
-    });
-    if (!restoredStage) {
-      return { ok: false as const, reason: "stage_not_found" as const };
-    }
-    const note = await resolveTransitionNote(tx, restoredStage.id, restoredStage.name, noteTemplateId, noteContent);
-    if (!note.ok) return note;
-
-    await tx.leads.update({
-      where: { id: leadId },
-      data: {
-        status: ACTIVE_LEAD_STATUS,
-        pipeline_stage_id: restoredStage.id,
-        updated_at: new Date(),
-      },
-    });
-    await recordStageChange(tx, actor, leadId, null, restoredStage, {
-      activityContent: `Kích hoạt lại lead tại tiến trình ${getPipelineStageMarker(restoredStage.name) ?? restoredStage.name}.`,
-      includeStageNameInAudit: true,
-      ipAddress,
-      note: note.content,
-    });
-    await recordLifecycleStatusAudit(
-      tx,
-      actor,
-      leadId,
-      lead.status,
-      ACTIVE_LEAD_STATUS,
-      null,
-      restoredStage.id,
-      ipAddress,
-    );
-    await recordTransitionNote(tx, actor, leadId, note.content, noteTemplateId, ipAddress);
-
+    const reactivated = await reactivateLeadInTransaction(tx, actor, lead, ipAddress, stageDetail, targetStageId);
+    if (!reactivated.ok) return reactivated;
     return {
       ok: true as const,
       data: {
         id: leadId,
         status: "ACTIVE" as const,
         statusLabel: "Active",
-        pipelineStageId: restoredStage.id,
+        pipelineStageId: reactivated.stageId,
         changed: true,
       },
     };
   });
+}
+
+type LifecycleLead = { id: string; status: string | null; pipeline_stage_id: string | null };
+
+/** Moves an active lead to Fail, remembering its current stage. Shared by the status action and the lead form. */
+export async function failLeadInTransaction(
+  tx: Prisma.TransactionClient,
+  actor: AuthUser,
+  lead: LifecycleLead,
+  ipAddress?: string,
+  stageDetail?: StageDetailSelection,
+) {
+  if (!lead.pipeline_stage_id) {
+    return { ok: false as const, reason: "stage_required" as const };
+  }
+  const stage = await tx.pipeline_stages.findUnique({
+    where: { id: lead.pipeline_stage_id },
+    select: { id: true, name: true },
+  });
+  if (!stage) {
+    return { ok: false as const, reason: "stage_not_found" as const };
+  }
+  const detail = await resolveStageDetail(tx, STAGE_DETAIL_FAIL_TARGET, stageDetail);
+  if (!detail.ok) return detail;
+  const marker = getPipelineStageMarker(stage.name);
+  const statusLabel = marker ? `Fail | ${marker}` : "Fail";
+  const nextStatus = createFailedLeadStatus(stage.id);
+
+  await tx.leads.update({
+    where: { id: lead.id },
+    data: { status: nextStatus, pipeline_stage_id: null, updated_at: new Date() },
+  });
+  await recordStageChange(tx, actor, lead.id, stage.id, null, {
+    activityContent: `Chuyển trạng thái lead sang ${statusLabel}.`,
+    ipAddress,
+    note: detail.content,
+  });
+  await recordLifecycleStatusAudit(tx, actor, lead.id, lead.status ?? ACTIVE_LEAD_STATUS, nextStatus, stage.id, null, ipAddress);
+  return { ok: true as const, statusLabel };
+}
+
+/** Reactivates a failed lead at the chosen stage, or at the stage it failed from. */
+export async function reactivateLeadInTransaction(
+  tx: Prisma.TransactionClient,
+  actor: AuthUser,
+  lead: LifecycleLead,
+  ipAddress?: string,
+  stageDetail?: StageDetailSelection,
+  targetStageId?: string,
+) {
+  const stageId = targetStageId ?? getFailedLeadStageId(lead.status);
+  const restoredStage = stageId
+    ? await tx.pipeline_stages.findUnique({ where: { id: stageId }, select: { id: true, name: true } })
+    : null;
+  if (!restoredStage) {
+    return { ok: false as const, reason: "stage_not_found" as const };
+  }
+  const detail = await resolveStageDetail(tx, restoredStage.id, stageDetail);
+  if (!detail.ok) return detail;
+
+  await tx.leads.update({
+    where: { id: lead.id },
+    data: { status: ACTIVE_LEAD_STATUS, pipeline_stage_id: restoredStage.id, updated_at: new Date() },
+  });
+  await recordStageChange(tx, actor, lead.id, null, restoredStage, {
+    activityContent: `Kích hoạt lại lead tại tiến trình ${getPipelineStageMarker(restoredStage.name) ?? restoredStage.name}.`,
+    includeStageNameInAudit: true,
+    ipAddress,
+    note: detail.content,
+  });
+  await recordLifecycleStatusAudit(tx, actor, lead.id, lead.status, ACTIVE_LEAD_STATUS, null, restoredStage.id, ipAddress);
+  return { ok: true as const, stageId: restoredStage.id };
 }
 
 async function recordLifecycleStatusAudit(

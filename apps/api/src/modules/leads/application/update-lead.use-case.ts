@@ -18,7 +18,9 @@ import { patchCandidateInformation, saveCandidateProfile } from "../../students/
 import type { LeadInput } from "../domain/lead-input";
 import { isFailedLeadStatus } from "../domain/lead-lifecycle-status";
 import { clearResolvedUnmatchedValues } from "../lead-unmatched-values.service";
-import { recordTransitionNote, resolveTransitionNote } from "../transition-note.service";
+import { resolveStageDetail } from "../stage-detail-option.service";
+import { STAGE_DETAIL_FAIL_TARGET } from "../stage-detail-option.schema";
+import { failLeadInTransaction, reactivateLeadInTransaction } from "./lead-owner-stage.use-cases";
 import {
   saveSaleCustomFieldValues,
   type SaleCustomFieldInput,
@@ -231,23 +233,28 @@ export async function updateLead(
       };
     }
 
-    if (isFailedLeadStatus(existing.status) && input.pipelineStageId) {
-      return { ok: false as const, reason: "lead_failed" as const };
-    }
-    const hasStageSelection = !isFailedLeadStatus(existing.status) && input.pipelineStageId !== undefined;
-    const selectedStage = await getSelectedStage(tx, input.pipelineStageId);
-    if (input.pipelineStageId && !selectedStage) {
+    const existingFailed = isFailedLeadStatus(existing.status);
+    const requestedFail = input.pipelineStageId === STAGE_DETAIL_FAIL_TARGET;
+    const requestedStageId = requestedFail ? undefined : input.pipelineStageId;
+    const selectedStage = await getSelectedStage(tx, requestedStageId);
+    if (requestedStageId && !selectedStage) {
       return { ok: false as const, reason: "stage_not_found" as const };
     }
+    // "Quy trình Telesale/Trạng thái": FAIL fails an active lead; a stage on a failed lead reactivates it there.
+    // A failed lead left without a stage keeps its Fail status.
+    const lifecycleChange = requestedFail
+      ? (existingFailed ? null : "fail" as const)
+      : existingFailed && selectedStage ? "reactivate" as const : null;
+    const hasStageSelection = !existingFailed && !requestedFail && input.pipelineStageId !== undefined;
     const nextStageId = selectedStage?.id ?? null;
     const stageChanged = hasStageSelection && existing.pipeline_stage_id !== nextStageId;
-    if ((input.noteTemplateId || input.noteContent !== undefined) && (!stageChanged || !selectedStage)) {
-      return { ok: false as const, reason: "note_template_invalid" as const };
+    if (input.stageDetail && !lifecycleChange && (!stageChanged || !selectedStage)) {
+      return { ok: false as const, reason: "stage_detail_invalid" as const };
     }
-    const transitionNote = selectedStage && stageChanged
-      ? await resolveTransitionNote(tx, selectedStage.id, selectedStage.name, input.noteTemplateId, input.noteContent)
+    const stageDetail = selectedStage && stageChanged
+      ? await resolveStageDetail(tx, selectedStage.id, input.stageDetail)
       : { ok: true as const, content: undefined };
-    if (!transitionNote.ok) return transitionNote;
+    if (!stageDetail.ok) return stageDetail;
     // Omitted assignee fields keep their current values before the main/secondary rules apply.
     const assignees = normalizeLeadAssignees(
       input.assigneeId !== undefined ? input.assigneeId : existing.assigned_to,
@@ -281,6 +288,15 @@ export async function updateLead(
         !isAssigneeInScope(actor, nextSecondaryAssignee.user_departments))
     ) {
       return { ok: false as const, reason: "secondary_assignee_invalid" as const };
+    }
+
+    // Runs after every validation above; the helpers validate before writing, so a rejection leaves nothing behind.
+    if (lifecycleChange) {
+      const lifecycleLead = { id: leadId, status: existing.status, pipeline_stage_id: existing.pipeline_stage_id };
+      const lifecycleResult = lifecycleChange === "fail"
+        ? await failLeadInTransaction(tx, actor, lifecycleLead, ipAddress, input.stageDetail)
+        : await reactivateLeadInTransaction(tx, actor, lifecycleLead, ipAddress, input.stageDetail, selectedStage!.id);
+      if (!lifecycleResult.ok) return lifecycleResult;
     }
 
     await tx.leads.update({
@@ -338,9 +354,8 @@ export async function updateLead(
         leadId,
         existing.pipeline_stage_id,
         selectedStage,
-        { ipAddress, note: transitionNote.content },
+        { ipAddress, note: stageDetail.content },
       );
-      await recordTransitionNote(tx, actor, leadId, transitionNote.content, input.noteTemplateId, ipAddress);
     }
 
     if (assignmentChanged) {

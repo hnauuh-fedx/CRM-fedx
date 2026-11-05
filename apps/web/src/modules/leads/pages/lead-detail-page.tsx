@@ -60,7 +60,7 @@ import {
 import { LeadCustomFieldsCard } from "../components/lead-custom-fields-card";
 import { LeadForm } from "../components/lead-form";
 import { LeadOpenInitialization } from "../components/lead-open-initialization";
-import { useLeadWorkflowTransition } from "../components/transition-note-dialog";
+import { useLeadWorkflowTransition } from "../components/stage-detail-dialog";
 import { withUnmatchedValue } from "../components/lead-unmatched-values";
 import { toLeadFormOptions, toLeadFormValues } from "../lead-form.helpers";
 import type {

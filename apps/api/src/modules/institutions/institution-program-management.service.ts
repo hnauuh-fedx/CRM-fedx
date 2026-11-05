@@ -1,4 +1,5 @@
 import { prisma } from "../../database/prisma";
+import type { Prisma } from "../../generated/prisma/client";
 import type { AuthUser } from "../auth/auth.types";
 
 export type InstitutionProgramListQuery = {
@@ -138,6 +139,39 @@ export async function listManagedInstitutionPrograms(query: InstitutionProgramLi
   };
 }
 
+/**
+ * Program access is granted only through explicit user_program_roles rows, so a
+ * freshly created program would be invisible to everyone (including its creator)
+ * in the program switcher. Grant the creator the same role and stored access
+ * scope they hold in the working program used to create it.
+ */
+async function grantCreatorProgramAccess(tx: Prisma.TransactionClient, actor: AuthUser, programId: string) {
+  if (!actor.workingInstitutionProgramId) return null;
+  const sourceAssignment = await tx.user_program_roles.findUnique({
+    where: { user_id_institution_program_id: { user_id: actor.id, institution_program_id: actor.workingInstitutionProgramId } },
+    select: { role_id: true },
+  });
+  if (!sourceAssignment) return null;
+
+  await tx.role_institution_programs.createMany({
+    data: [{ role_id: sourceAssignment.role_id, institution_program_id: programId }],
+    skipDuplicates: true,
+  });
+  await tx.user_program_roles.create({
+    data: { user_id: actor.id, institution_program_id: programId, role_id: sourceAssignment.role_id },
+  });
+  const sourceScope = await tx.user_program_access_scopes.findUnique({
+    where: { user_id_institution_program_id: { user_id: actor.id, institution_program_id: actor.workingInstitutionProgramId } },
+    select: { scope: true },
+  });
+  if (sourceScope) {
+    await tx.user_program_access_scopes.create({
+      data: { user_id: actor.id, institution_program_id: programId, scope: sourceScope.scope },
+    });
+  }
+  return { userId: actor.id, roleId: sourceAssignment.role_id, scope: sourceScope?.scope ?? null };
+}
+
 export async function createInstitutionProgram(actor: AuthUser, input: InstitutionProgramInput, ipAddress?: string) {
   const code = normalizeCode(input.code);
   if (await prisma.institution_programs.findUnique({ where: { code }, select: { id: true } })) {
@@ -152,7 +186,8 @@ export async function createInstitutionProgram(actor: AuthUser, input: Instituti
       data: { institution_name: input.institutionName.trim(), name: input.name.trim(), code, status: input.status, updated_at: new Date() },
       select: { id: true },
     });
-    await tx.audit_logs.create({ data: { user_id: actor.id, entity_type: "institution_program", entity_id: program.id, action: "create", ip_address: ipAddress, new_data: { ...input, code } } });
+    const creatorGrant = await grantCreatorProgramAccess(tx, actor, program.id);
+    await tx.audit_logs.create({ data: { user_id: actor.id, entity_type: "institution_program", entity_id: program.id, action: "create", ip_address: ipAddress, new_data: { ...input, code, creatorGrant } } });
     return { ok: true as const, data: program };
   });
 }
@@ -191,9 +226,17 @@ export async function deleteInstitutionProgram(actor: AuthUser, id: string, ipAd
   const usageCount = Object.values(program._count).reduce((total, count) => total + count, 0);
   if (usageCount > 0) return { ok: false as const, reason: "program_in_use" as const };
 
+  const accessGrants = await prisma.user_program_roles.findMany({
+    where: { institution_program_id: id },
+    select: { user_id: true, role_id: true },
+  });
+  // Access grants and the role catalog restrict program deletion; an unused
+  // program can drop them together with the program itself.
   await prisma.$transaction([
+    prisma.user_program_roles.deleteMany({ where: { institution_program_id: id } }),
+    prisma.role_institution_programs.deleteMany({ where: { institution_program_id: id } }),
     prisma.institution_programs.delete({ where: { id } }),
-    prisma.audit_logs.create({ data: { user_id: actor.id, entity_type: "institution_program", entity_id: id, action: "delete", ip_address: ipAddress, old_data: program } }),
+    prisma.audit_logs.create({ data: { user_id: actor.id, entity_type: "institution_program", entity_id: id, action: "delete", ip_address: ipAddress, old_data: { ...program, accessGrants } } }),
   ]);
   return { ok: true as const, data: { id } };
 }

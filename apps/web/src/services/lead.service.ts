@@ -15,6 +15,7 @@ import type {
   DuplicateLeadField,
   DuplicateLeadResponse,
 } from "@/modules/leads/lead.types";
+import type { StageDetailOptions, StageDetailSelection } from "@/modules/leads/stage-detail.types";
 import { apiDownload, apiFormRequest, apiRequest } from "./api";
 import type { FilterConditionState } from "@/modules/leads/filter-fields";
 import { serializeConditions } from "@/modules/leads/filter-serialization";
@@ -126,10 +127,10 @@ export function deleteLeads(leadIds: string[], accessToken: string) {
   );
 }
 
-export function changeLeadStage(leadId: string, stageId: string, accessToken: string, noteTemplateId?: string, noteContent?: string) {
+export function changeLeadStage(leadId: string, stageId: string, accessToken: string, stageDetail?: StageDetailSelection) {
   return apiRequest<{ id: string; pipelineStageId: string }>(
     `/leads/${leadId}/stage`,
-    { method: "PATCH", body: JSON.stringify({ stageId, noteTemplateId, noteContent }) },
+    { method: "PATCH", body: JSON.stringify({ stageId, stageDetail }) },
     accessToken,
   );
 }
@@ -143,7 +144,8 @@ export function initializeLeadOnOpen(leadId: string, accessToken: string) {
   }>(`/leads/${leadId}/open`, { method: "POST" }, accessToken);
 }
 
-export function changeLeadStatus(leadId: string, status: "ACTIVE" | "FAIL", accessToken: string, noteTemplateId?: string, noteContent?: string) {
+/** `targetStageId` (ACTIVE only) reactivates a failed lead at that stage instead of the stage it failed from. */
+export function changeLeadStatus(leadId: string, status: "ACTIVE" | "FAIL", accessToken: string, stageDetail?: StageDetailSelection, targetStageId?: string) {
   return apiRequest<{
     id: string;
     status: "ACTIVE" | "FAIL";
@@ -152,14 +154,14 @@ export function changeLeadStatus(leadId: string, status: "ACTIVE" | "FAIL", acce
     changed: boolean;
   }>(
     `/leads/${leadId}/status`,
-    { method: "PATCH", body: JSON.stringify({ status, noteTemplateId, noteContent }) },
+    { method: "PATCH", body: JSON.stringify({ status, stageDetail, targetStageId }) },
     accessToken,
   );
 }
 
-export function getTransitionNoteOptions(leadId: string, target: string, accessToken: string) {
-  return apiRequest<import("@/modules/leads/transition-note.types").TransitionNoteOptions>(
-    `/leads/${leadId}/transition-note-options?target=${encodeURIComponent(target)}`, {}, accessToken,
+export function getStageDetailOptions(leadId: string, target: string, accessToken: string) {
+  return apiRequest<StageDetailOptions>(
+    `/leads/${leadId}/stage-detail-options?target=${encodeURIComponent(target)}`, {}, accessToken,
   );
 }
 

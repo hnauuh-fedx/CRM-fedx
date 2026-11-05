@@ -16,12 +16,12 @@ import { InstitutionProgramProvider } from "../src/modules/institutions/institut
 import "../src/index.css";
 import { RuntimeCustomFieldsSection } from "../src/modules/custom-fields/runtime-custom-fields-section";
 import { useAsyncTask } from "../src/hooks/use-async-task";
-import { useTransitionNotePrompt } from "../src/modules/leads/components/transition-note-dialog";
+import { useStageDetailPrompt } from "../src/modules/leads/components/stage-detail-dialog";
 
 function TransitionFixture() {
   const [calls, setCalls] = useState(0);
   const [result, setResult] = useState<object>({});
-  const prompt = useTransitionNotePrompt<string>(async (command, selection) => {
+  const prompt = useStageDetailPrompt<string>(async (command, selection) => {
     setCalls((count) => count + 1);
     if (calls === 0) throw new Error("Lưu thất bại");
     setResult({ command, selection });

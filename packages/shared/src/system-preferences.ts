@@ -59,7 +59,7 @@ export function isTechnicalSetting(key: string, type?: string | null) {
 }
 
 export function isStructuredSetting(key: string) {
-  return key === "admission_status_flow" || ["form_field_requirements.", "lead_transition_notes.", "crm.preferences."].some(prefix => key.startsWith(prefix));
+  return key === "admission_status_flow" || ["form_field_requirements.", "lead_stage_detail_options.", "crm.preferences."].some(prefix => key.startsWith(prefix));
 }
 
 /** Used by both simulation and inbound writes; identity fields cannot be erased. */

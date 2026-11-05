@@ -2,6 +2,7 @@ import { getLeadCustomFieldGroup, getLeadFieldGroup, leadFieldGroupOrder } from 
 import { leadFormFieldCatalog, leadSourceFieldGroup } from "@admission-crm/shared/lead-form-field-catalog";
 import { vietnamProvinces } from "@/lib/vietnam-provinces";
 import type { LeadCustomField, LeadCustomFieldDataType, LeadFilterOptions } from "./lead.types";
+import { FAIL_STAGE_VALUE, PIPELINE_STAGE_FIELD_LABEL } from "./stage-detail.types";
 
 /**
  * Hằng số & types cho bộ lọc nâng cao (filter builder).
@@ -87,8 +88,12 @@ export function getAvailableFields(
     { key: "temperature", label: "Mức độ quan tâm", dataType: "text" },
     { key: "gclid", label: "GCLID", dataType: "text" },
     {
-      key: "pipelineStageId", label: "Tiến trình", dataType: "enum",
-      options: (options?.stages ?? []).map((stage) => ({ value: stage.id, label: stage.name })),
+      // Fail is a value of this field too; the API maps it to the lifecycle status.
+      key: "pipelineStageId", label: PIPELINE_STAGE_FIELD_LABEL, dataType: "enum",
+      options: [
+        ...(options?.stages ?? []).map((stage) => ({ value: stage.id, label: stage.name })),
+        { value: FAIL_STAGE_VALUE, label: "Fail" },
+      ],
     },
     { key: "status", label: "Trạng thái", dataType: "enum", options: statusOptions },
     {

@@ -14,6 +14,7 @@ import { useMemo } from "react";
 import { Link } from "react-router-dom";
 import { openLeadInEditModeState } from "../lead-detail-navigation";
 import { LeadNameTrigger } from "./lead-name-trigger";
+import { PIPELINE_STAGE_FIELD_LABEL } from "../stage-detail.types";
 const dateFormatter = new Intl.DateTimeFormat("vi-VN", {
   day: "2-digit",
   month: "2-digit",
@@ -125,7 +126,7 @@ const dataColumns: Record<string, ColumnDef<LeadListItem>> = Object.fromEntries(
       },
       {
         id: "pipelineStage",
-        header: "Quy trình Telesale",
+        header: PIPELINE_STAGE_FIELD_LABEL,
         cell: ({ row }) => (
           <LeadWorkflowCell lead={row.original} />
         ),

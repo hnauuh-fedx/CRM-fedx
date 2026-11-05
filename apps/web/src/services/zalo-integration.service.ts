@@ -22,6 +22,13 @@ export function saveManualZaloConnection(input: SaveZaloConnectionInput, accessT
   }, accessToken);
 }
 
+export function reconnectZaloConnection(id: string, input: SaveZaloConnectionInput, accessToken: string) {
+  return apiRequest<ZaloConnection>(`/integrations/zalo/${id}/reconnect`, {
+    method: "POST",
+    body: JSON.stringify(input),
+  }, accessToken);
+}
+
 export function testZaloConnection(id: string, accessToken: string) {
   return apiRequest<{ ok: boolean; oaId: string; oaName: string | null }>(`/integrations/zalo/${id}/test`, { method: "POST" }, accessToken);
 }

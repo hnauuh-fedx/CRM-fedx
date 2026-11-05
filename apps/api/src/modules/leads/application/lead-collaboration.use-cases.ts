@@ -2,12 +2,16 @@ import { prisma } from "../../../database/prisma";
 import type { AuthUser } from "../../auth/auth.types";
 import type { LeadFileInput } from "../domain/lead-input";
 import { canUpdateLead } from "./lead-authorization";
-import { isFailedLeadStatus } from "../domain/lead-lifecycle-status";
-import { formatLeadNote } from "../transition-note.service";
+import { getPipelineStageMarker, isFailedLeadStatus } from "../domain/lead-lifecycle-status";
 import {
   emptyToNull,
   findVisibleLeadForMutation,
 } from "./lead-mutation-support";
+
+/** Manual notes are prefixed with the lead's current stage marker, e.g. "L2 | ...". */
+function formatLeadNote(label: string, content: string) {
+  return `${getPipelineStageMarker(label) ?? label} | ${content.trim()}`;
+}
 
 export async function addLeadNote(
   actor: AuthUser,

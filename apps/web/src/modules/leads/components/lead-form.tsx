@@ -55,7 +55,8 @@ import type {
 import { DynamicFieldRenderer } from "./dynamic-field-renderer";
 import { LeadAssigneeSelects } from "./lead-assignee";
 import { PhoneFields } from "./phone-fields";
-import { useTransitionNotePrompt } from "./transition-note-dialog";
+import { useStageDetailPrompt } from "./stage-detail-dialog";
+import { FAIL_STAGE_VALUE, PIPELINE_STAGE_FIELD_LABEL } from "../stage-detail.types";
 
 const genderOptions = [
   { value: "__empty__", label: "Chưa xác định" },
@@ -160,23 +161,15 @@ export function LeadForm({
       (left, right) => left.displayOrder - right.displayOrder,
     );
   }, [customFields]);
-  const transition = useTransitionNotePrompt<string>((stageId, selection) => {
+  // Editing a lead: the content configured for the new stage/Fail is chosen now and saved with the form.
+  const transition = useStageDetailPrompt<string>((stageId, selection) => {
     form.setValue("pipelineStageId", stageId, {
       shouldDirty: true,
       shouldValidate: true,
     });
     form.setValue(
-      "noteTemplateId",
-      stageId !== defaultValues.pipelineStageId
-        ? selection.templateId
-        : undefined,
-      { shouldDirty: true },
-    );
-    form.setValue(
-      "noteContent",
-      stageId !== defaultValues.pipelineStageId
-        ? selection.noteContent
-        : undefined,
+      "stageDetail",
+      stageId !== defaultValues.pipelineStageId ? selection : undefined,
       { shouldDirty: true },
     );
   });
@@ -195,8 +188,7 @@ export function LeadForm({
         shouldDirty: true,
         shouldValidate: true,
       });
-      form.setValue("noteTemplateId", undefined, { shouldDirty: true });
-      form.setValue("noteContent", undefined, { shouldDirty: true });
+      form.setValue("stageDetail", undefined, { shouldDirty: true });
     }
   };
 
@@ -274,7 +266,7 @@ export function LeadForm({
         >
           <LeadFormSurface layout={surfaceLayout} enabled={useDisplayLayout}
             form={form} options={options} canManageAssignment={canManageAssignment} disabled={submissionBlocked}
-            onStageChange={syncStageFields} hiddenFields={hideProgress ? ["pipelineStageId"] : undefined} transitionError={transition.error} customFieldError={customFieldsQuery.isError}
+            onStageChange={syncStageFields} hiddenFields={hideProgress ? ["pipelineStageId"] : undefined} allowFailStage={Boolean(leadId)} transitionError={transition.error} customFieldError={customFieldsQuery.isError}
             customFields={<CustomFieldInputs fields={customFields.filter((field) => field.group.isSystem)} control={form.control} isPending={isPending} />}>
           {!hideProgress && (
             <LeadProgressSection
@@ -321,6 +313,7 @@ export function LeadForm({
 
           <LeadCareSection
             canManageAssignment={canManageAssignment}
+            allowFailStage={Boolean(leadId)}
             form={form}
             options={options}
             syncStageFields={syncStageFields}
@@ -1093,6 +1086,8 @@ function LeadAdmissionSection({
 
 type LeadCareSectionProps = {
   canManageAssignment: boolean;
+  /** Editing an existing lead: Fail is offered next to the stages. */
+  allowFailStage: boolean;
   form: UseFormReturn<LeadFormInput>;
   options: Pick<
     LeadActionOptions,
@@ -1112,6 +1107,7 @@ type LeadCareSectionProps = {
 
 function LeadCareSection({
   canManageAssignment,
+  allowFailStage,
   form,
   options,
   syncStageFields,
@@ -1134,7 +1130,7 @@ function LeadCareSection({
         )}
         <Field>
           <FieldLabel htmlFor="lead-pipeline-stage">
-            Quy trình Telesale
+            {PIPELINE_STAGE_FIELD_LABEL}
           </FieldLabel>
           <Select
             value={form.watch("pipelineStageId") || "__empty__"}
@@ -1143,7 +1139,7 @@ function LeadCareSection({
             }
           >
             <SelectTrigger id="lead-pipeline-stage" className="w-full">
-              <SelectValue placeholder="Chọn quy trình telesale" />
+              <SelectValue placeholder="Chọn tiến trình hoặc trạng thái" />
             </SelectTrigger>
             <SelectContent>
               <SelectGroup>
@@ -1153,6 +1149,9 @@ function LeadCareSection({
                     {stage.name}
                   </SelectItem>
                 ))}
+                {allowFailStage && (
+                  <SelectItem value={FAIL_STAGE_VALUE}>Fail</SelectItem>
+                )}
               </SelectGroup>
             </SelectContent>
           </Select>
@@ -1291,7 +1290,7 @@ function LeadProgressSection({
     >
       {transition.isPending && (
         <p role="status" className="text-sm text-muted-foreground">
-          Đang tải ghi chú theo tiến trình…
+          Đang tải nội dung theo tiến trình…
         </p>
       )}
       {transition.error && (

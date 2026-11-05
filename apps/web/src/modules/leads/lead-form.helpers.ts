@@ -1,5 +1,6 @@
 import { emptyLeadForm } from "./lead.schema";
 import type { LeadActionOptions, LeadDetail, LeadFormInput } from "./lead.types";
+import { FAIL_STAGE_VALUE } from "./stage-detail.types";
 
 export function toLeadFormValues(lead: LeadDetail): LeadFormInput {
   return {
@@ -10,7 +11,8 @@ export function toLeadFormValues(lead: LeadDetail): LeadFormInput {
     sourceId: lead.source?.id ?? "",
     assigneeId: lead.assignee?.id ?? "",
     secondaryAssigneeId: lead.secondaryAssignee?.id ?? "",
-    pipelineStageId: lead.pipelineStage?.id ?? "",
+    // A failed lead has no stage; the field shows it as Fail.
+    pipelineStageId: lead.lifecycleStatus?.value === "FAIL" ? FAIL_STAGE_VALUE : lead.pipelineStage?.id ?? "",
     email: lead.email ?? "",
     gender: lead.gender ?? "",
     dateOfBirth: lead.dateOfBirth ?? "",

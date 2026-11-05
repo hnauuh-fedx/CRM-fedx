@@ -207,6 +207,12 @@ function systemFieldWhere(field: SystemFieldKey, condition: FilterCondition): Pr
 
   const name = column[field];
 
+  // "Quy trình Telesale/Trạng thái" also offers Fail; a failed lead keeps no pipeline_stage_id.
+  if (field === "pipelineStageId" && (operator === "EQUALS" || operator === "NOT_EQUALS") && value === "FAIL") {
+    const failed: Prisma.leadsWhereInput = { status: { startsWith: FAILED_LEAD_STATUS_PREFIX } };
+    return operator === "EQUALS" ? failed : { NOT: failed };
+  }
+
   if (field === "createdAt" || field === "dateOfBirth" || field === "pipelineStageId" || field === "sourceId" || field === "assigneeId") {
     if (operator === "HAS_VALUE") return { [name]: { not: null } };
     if (operator === "HAS_NO_VALUE") return { [name]: null };

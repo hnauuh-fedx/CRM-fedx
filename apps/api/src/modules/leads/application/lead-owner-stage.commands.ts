@@ -6,6 +6,7 @@ import {
   changeVisibleLeadStage,
 } from "./lead-owner-stage.use-cases";
 import type { LeadLifecycleStatus } from "../domain/lead-lifecycle-status";
+import type { StageDetailSelection } from "../stage-detail-option.schema";
 
 export async function changeLeadStage(
   actor: AuthUser,
@@ -13,8 +14,7 @@ export async function changeLeadStage(
   stageId: string,
   institutionProgramId?: string,
   ipAddress?: string,
-  noteTemplateId?: string,
-  noteContent?: string,
+  stageDetail?: StageDetailSelection,
 ) {
   const result = await changeVisibleLeadStage(
     actor,
@@ -23,8 +23,7 @@ export async function changeLeadStage(
     institutionProgramId,
     undefined,
     ipAddress,
-    noteTemplateId,
-    noteContent,
+    stageDetail,
   );
 
   if (result.ok && result.data.changed) {
@@ -43,8 +42,8 @@ export async function changeLeadStatus(
   status: LeadLifecycleStatus,
   institutionProgramId?: string,
   ipAddress?: string,
-  noteTemplateId?: string,
-  noteContent?: string,
+  stageDetail?: StageDetailSelection,
+  targetStageId?: string,
 ) {
   const result = await changeVisibleLeadStatus(
     actor,
@@ -52,8 +51,8 @@ export async function changeLeadStatus(
     status,
     institutionProgramId,
     ipAddress,
-    noteTemplateId,
-    noteContent,
+    stageDetail,
+    targetStageId,
   );
 
   if (result.ok && result.data.changed && result.data.status === "ACTIVE") {

@@ -17,8 +17,11 @@ export const leadFormSchema = z.object({
   assigneeId: z.string(),
   secondaryAssigneeId: z.string().optional(),
   pipelineStageId: z.string(),
-  noteTemplateId: z.uuid().optional(),
-  noteContent: z.string().trim().min(1, "Nhập nội dung ghi chú.").max(1800, "Ghi chú tối đa 1.800 ký tự.").optional(),
+  stageDetail: z.object({
+    optionId: z.uuid(),
+    childOptionId: z.uuid().optional(),
+    content: z.string().trim().min(1, "Nhập nội dung.").max(1800, "Nội dung tối đa 1.800 ký tự.").optional(),
+  }).optional(),
   email: z.string().trim().email("Email không hợp lệ.").or(z.literal("")),
   gender: optionalText(20),
   dateOfBirth: z.string(),

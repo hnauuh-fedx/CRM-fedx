@@ -821,10 +821,13 @@ export async function getLeadDetail(user: AuthUser, leadId: string, institutionP
       take: 50,
     }),
   ]);
-  // The note shown under the stage belongs to the latest entry into the current stage only.
-  const currentStageEntry = lead.pipeline_stages
+  // The detail shown under "Quy trình Telesale/Trạng thái" belongs to the latest entry into the
+  // current stage, or for a failed lead to the latest move from its stage into Fail.
+  const currentStageEntry = lead.pipeline_stages || failedStageId
     ? await prisma.lead_status_histories.findFirst({
-        where: { lead_id: leadId, to_stage_id: lead.pipeline_stages.id },
+        where: lead.pipeline_stages
+          ? { lead_id: leadId, to_stage_id: lead.pipeline_stages.id }
+          : { lead_id: leadId, from_stage_id: failedStageId, to_stage_id: null },
         select: { note: true },
         orderBy: { changed_at: "desc" },
       })

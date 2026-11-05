@@ -21,7 +21,7 @@ const stageFailureMessages = {
   lead_not_found: "Lead không còn trong phạm vi truy cập.",
   stage_not_found: "Tiến trình đã chọn không tồn tại.",
   lead_failed: "Lead đang ở trạng thái Fail. Hãy chuyển về Active trước khi đổi tiến trình.",
-  note_template_invalid: "Mẫu ghi chú chuyển tiến trình không hợp lệ.",
+  stage_detail_invalid: "Nội dung chuyển tiến trình không hợp lệ.",
   permission_denied: "Bạn không có quyền cập nhật tiến trình.",
 } as const;
 
