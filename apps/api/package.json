@@ -2,6 +2,8 @@
   "name": "@admission-crm/api",
   "private": true,
   "scripts": {
+    "test:assignment-report": "tsx --test src/modules/reports/assignment-report-query.test.ts",
+    "test:integration:assignment-report": "node scripts/test-assignment-report-isolated.cjs",
     "maintenance:private-files": "tsx src/maintenance/cleanup-private-files.ts",
     "test:integration:private-files": "node scripts/test-private-files-isolated.cjs",
     "deployment:check": "tsx src/maintenance/check-deployment-preparation.ts",

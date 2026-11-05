@@ -32,8 +32,10 @@ import {
 } from "./personal-dashboard.service";
 import { reportFilterOperators } from "./report-filter-conditions";
 import { recordDataExport } from "../notifications/data-export-notification.service";
+import { assignmentReportRouter } from "./assignment-report.router";
 
 export const reportsRouter = Router();
+reportsRouter.use("/assignments", assignmentReportRouter);
 const overviewQuerySchema = z.object({
   institutionProgramId: z.uuid().optional().or(z.literal("")).transform((value) => value || undefined),
 });
