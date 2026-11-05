@@ -3,12 +3,14 @@ import { z } from "zod";
 
 import { requireAnyPermission, requireAuthentication } from "../../../middlewares/auth.middleware";
 import {
+  disconnectedZaloConnectionMessage,
   disconnectZaloConnection,
   findVisibleZaloConnection,
   getZaloConnectionOptions,
   isZaloWebhookValidationRequest,
   listZaloConnections,
   listZaloProcessingLogs,
+  reconnectZaloConnection,
   saveManualZaloConnection,
   storeZaloWebhookMessage,
   testZaloConnection,
@@ -30,7 +32,6 @@ const manualConnectionSchema = z.object({
   refreshToken: z.string().trim().min(20),
   accessTokenExpiresInHours: z.coerce.number().positive().max(168),
   refreshTokenExpiresInDays: z.coerce.number().positive().max(365).nullable().optional(),
-  institutionProgramId: z.uuid(),
   leadSourceId: z.uuid(),
 });
 
@@ -124,6 +125,30 @@ zaloRouter.post(
 );
 
 zaloRouter.post(
+  "/:id/reconnect",
+  requireAuthentication,
+  requireAnyPermission("integration.manage"),
+  async (request, response) => {
+    const id = idSchema.safeParse(request.params.id);
+    const parsed = manualConnectionSchema.safeParse(request.body);
+    if (!id.success || !parsed.success) {
+      response.status(400).json({ message: "Thông tin kết nối lại Zalo OA không hợp lệ.", issues: parsed.error?.issues });
+      return;
+    }
+    try {
+      const result = await reconnectZaloConnection(request.authUser!, id.data, parsed.data);
+      if (!result) {
+        response.status(404).json({ message: "Không tìm thấy kết nối Zalo OA." });
+        return;
+      }
+      response.json(result);
+    } catch (error) {
+      response.status(400).json({ message: error instanceof Error ? error.message : "Không thể kết nối lại Zalo OA." });
+    }
+  },
+);
+
+zaloRouter.post(
   "/:id/test",
   requireAuthentication,
   requireAnyPermission("integration.manage"),
@@ -162,6 +187,10 @@ zaloRouter.post(
         response.status(404).json({ message: "Không tìm thấy kết nối Zalo OA." });
         return;
       }
+      if (connection.status === "disconnected") {
+        response.status(409).json({ message: disconnectedZaloConnectionMessage });
+        return;
+      }
       const queued = await enqueueZaloRefresh(parsed.data, true);
       response.status(202).json({ queued, message: queued ? "Đã đưa yêu cầu làm mới token vào hàng đợi." : "Worker Zalo đang tắt." });
     } catch (error) {
@@ -181,7 +210,12 @@ zaloRouter.delete(
         response.status(400).json({ message: "ID kết nối không hợp lệ." });
         return;
       }
-      const result = await disconnectZaloConnection(request.authUser!, parsed.data);
+      const connection = await findVisibleZaloConnection(request.authUser!, parsed.data);
+      if (connection?.status === "disconnected") {
+        response.status(409).json({ message: "Kết nối Zalo OA này đã được ngắt trước đó." });
+        return;
+      }
+      const result = connection && await disconnectZaloConnection(request.authUser!, parsed.data);
       if (!result) {
         response.status(404).json({ message: "Không tìm thấy kết nối Zalo OA." });
         return;

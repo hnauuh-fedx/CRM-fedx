@@ -94,6 +94,8 @@
     "test:integration:user-program-migration": "tsx src/integration/user-program-role-migration.integration.ts",
     "test:scope": "tsx --test src/modules/auth/access-scope.test.ts src/modules/leads/lead-scope.test.ts",
     "test:lead-filter": "tsx --test src/modules/leads/lead-filter.service.test.ts src/modules/leads/lead-list-status.test.ts",
+    "test:stage-detail": "tsx --test src/modules/leads/stage-detail-option.schema.test.ts",
+    "test:integration:stage-detail": "tsx src/integration/stage-detail-option.integration.ts",
     "test:integration:effective-scope": "tsx src/integration/effective-access-scope.integration.ts",
     "test:integration:user-program-access": "tsx src/integration/user-program-roles.integration.ts",
     "db:migrate:user-program-access": "tsx src/maintenance/migrate-user-program-roles.ts",

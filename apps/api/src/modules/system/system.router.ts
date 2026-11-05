@@ -7,8 +7,8 @@ import { preferenceRevision } from "./system-preferences.service";
 import { prisma } from "../../database/prisma";
 import { leadFormFieldCatalog } from "@admission-crm/shared/lead-form-field-catalog";
 import { getSystemFieldRequirements } from "../custom-fields/system-field-requirements.service";
-import { getTransitionNoteConfiguration, setTransitionNoteTemplates } from "../leads/transition-note.service";
-import { transitionNoteTargetSchema, transitionNoteTemplatesSchema } from "../leads/transition-note.schema";
+import { getStageDetailConfiguration, setStageDetailOptions } from "../leads/stage-detail-option.service";
+import { stageDetailOptionsSchema, stageDetailTargetSchema } from "../leads/stage-detail-option.schema";
 
 import { requireAnyPermission, requireAuthentication } from "../../middlewares/auth.middleware";
 import {
@@ -84,16 +84,16 @@ systemRouter.put("/lead-form", async (request, response, next) => {
     response.json(saved);
   } catch (error) { next(error); }
 });
-systemRouter.get("/note-templates", async (_request, response, next) => {
-  try { response.json(await getTransitionNoteConfiguration()); } catch (error) { next(error); }
+systemRouter.get("/stage-detail-options", async (_request, response, next) => {
+  try { response.json(await getStageDetailConfiguration()); } catch (error) { next(error); }
 });
-systemRouter.put("/note-templates/:target", async (request, response, next) => {
+systemRouter.put("/stage-detail-options/:target", async (request, response, next) => {
   try {
-    const target = transitionNoteTargetSchema.safeParse(request.params.target);
-    const body = z.object({ templates: transitionNoteTemplatesSchema, revision: z.string().regex(/^[a-f0-9]{64}$/) }).safeParse(request.body);
-    if (!target.success || !body.success) { response.status(400).json({ message: "Mẫu ghi chú không hợp lệ." }); return; }
-    const result = await setTransitionNoteTemplates(request.authUser!, target.data, body.data.templates, request.ip, body.data.revision);
-    if (!result.ok) { response.status(result.reason === "conflict" ? 409 : 404).json({ message: result.reason === "conflict" ? "Mẫu ghi chú đã thay đổi. Đóng và mở lại để tải bản mới." : "Không tìm thấy tiến trình." }); return; }
+    const target = stageDetailTargetSchema.safeParse(request.params.target);
+    const body = z.object({ options: stageDetailOptionsSchema, revision: z.string().regex(/^[a-f0-9]{64}$/) }).safeParse(request.body);
+    if (!target.success || !body.success) { response.status(400).json({ message: "Cấu hình trường nhiều cấp không hợp lệ." }); return; }
+    const result = await setStageDetailOptions(request.authUser!, target.data, body.data.options, request.ip, body.data.revision);
+    if (!result.ok) { response.status(result.reason === "conflict" ? 409 : 404).json({ message: result.reason === "conflict" ? "Cấu hình đã được người khác thay đổi. Đóng và mở lại để tải bản mới." : "Không tìm thấy tiến trình." }); return; }
     response.json(result.data);
   } catch (error) { next(error); }
 });

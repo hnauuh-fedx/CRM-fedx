@@ -30,7 +30,6 @@ export type ZaloConnectionListResponse = {
 
 export type ZaloConnectionOptions = {
   leadSources: Array<{ id: string; name: string; type: string | null; institutionProgramId: string | null }>;
-  institutionPrograms: Array<{ id: string; name: string; institutionName: string }>;
 };
 
 export type SaveZaloConnectionInput = {
@@ -38,7 +37,6 @@ export type SaveZaloConnectionInput = {
   refreshToken: string;
   accessTokenExpiresInHours: number;
   refreshTokenExpiresInDays: number | null;
-  institutionProgramId: string;
   leadSourceId: string;
 };
 

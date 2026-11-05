@@ -127,7 +127,7 @@ export const leadFormFieldCatalog: LeadSystemFieldGroup[] = [
     label: "Chăm sóc và phân loại",
     description: "Thông tin phục vụ telesale, marketing và phân loại lead.",
     fields: [
-      field("pipelineStageId", "Quy trình Telesale", "SELECT", "leads.pipeline_stage_id → pipeline_stages.id", { optionSource: "Danh sách giai đoạn pipeline" }),
+      field("pipelineStageId", "Quy trình Telesale/Trạng thái", "SELECT", "leads.pipeline_stage_id → pipeline_stages.id", { optionSource: "Danh sách giai đoạn pipeline + Fail" }),
       field("temperature", "Mức độ quan tâm", "TEXT", "leads.temperature"),
       field("gclid", "Gclid", "TEXT", "utm_trackings.gclid"),
       field("tags", "Tags", "MULTI_SELECT", "entity_tags + tags", { optionSource: "tags" }),

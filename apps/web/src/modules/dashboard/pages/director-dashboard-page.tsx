@@ -202,6 +202,7 @@ export function DirectorDashboardPage() {
   }
 
   const dashboard = dashboardQuery.data;
+  const kpis = getDirectorKpis(dashboard.summary);
   const activeFilterDescription = getActiveFilterDescription(
     filter,
     dashboard.filterOptions,
@@ -263,29 +264,22 @@ export function DirectorDashboardPage() {
 
           <div className="grid grid-cols-2 gap-2 sm:gap-3 xl:grid-cols-4">
             <DirectorKpiCard
-              title="Tổng data"
-              value={dashboard.summary.totalData}
-              icon={Database}
+              {...kpis.totalData}
               description="Tổng số data đã được tạo và chưa bị xóa trong phạm vi bộ lọc chung."
             />
             <DirectorKpiCard
-              title="Tổng data đúng đối tượng (lead)"
-              value={dashboard.summary.qualifiedLeads}
-              icon={UserCheck}
+              {...kpis.qualifiedLeads}
+              comparedWith={[kpis.totalData]}
               description="Số lead đang ở giai đoạn L2 hoặc cao hơn trong cùng pipeline."
             />
             <DirectorKpiCard
-              title="Tổng lead đã đăng ký"
-              value={dashboard.summary.registeredLeads}
-              percentage={dashboard.summary.registeredConversionRate}
-              icon={ClipboardCheck}
+              {...kpis.registeredLeads}
+              comparedWith={[kpis.totalData, kpis.qualifiedLeads]}
               description={`${integerFormatter.format(dashboard.summary.registeredLeads)} trên ${integerFormatter.format(dashboard.summary.qualifiedLeads)} lead từ L2 trở đi hiện đang ở L4 hoặc cao hơn.`}
             />
             <DirectorKpiCard
-              title="Tổng học viên"
-              value={dashboard.summary.totalStudents}
-              percentage={dashboard.summary.studentConversionRate}
-              icon={GraduationCap}
+              {...kpis.totalStudents}
+              comparedWith={[kpis.totalData, kpis.qualifiedLeads, kpis.registeredLeads]}
               description={`${integerFormatter.format(dashboard.summary.totalStudents)} trên ${integerFormatter.format(dashboard.summary.qualifiedLeads)} lead từ L2 trở đi hiện đang ở L5 hoặc cao hơn.`}
             />
           </div>
@@ -1420,25 +1414,69 @@ function toDateInputValue(date: Date) {
   return `${year}-${month}-${day}`;
 }
 
-type DirectorKpiCardProps = {
-  title: string;
-  value: number;
-  percentage?: number;
-  icon: ComponentType<{ className?: string; "aria-hidden"?: boolean }>;
+type KpiIcon = ComponentType<{ className?: string; "aria-hidden"?: boolean }>;
+type KpiTone = "blue" | "violet" | "emerald" | "amber";
+
+/** Card background is a light tint; the icon chip and rate tags are one step darker. */
+const kpiTones: Record<KpiTone, { card: string; accent: string }> = {
+  blue: {
+    card: "border-blue-100 bg-blue-50/70 dark:border-blue-900/60 dark:bg-blue-950/30",
+    accent: "bg-blue-100 text-blue-700 dark:bg-blue-900/60 dark:text-blue-300",
+  },
+  violet: {
+    card: "border-violet-100 bg-violet-50/70 dark:border-violet-900/60 dark:bg-violet-950/30",
+    accent: "bg-violet-100 text-violet-700 dark:bg-violet-900/60 dark:text-violet-300",
+  },
+  emerald: {
+    card: "border-emerald-100 bg-emerald-50/70 dark:border-emerald-900/60 dark:bg-emerald-950/30",
+    accent: "bg-emerald-100 text-emerald-700 dark:bg-emerald-900/60 dark:text-emerald-300",
+  },
+  amber: {
+    card: "border-amber-100 bg-amber-50/70 dark:border-amber-900/60 dark:bg-amber-950/30",
+    accent: "bg-amber-100 text-amber-700 dark:bg-amber-900/60 dark:text-amber-300",
+  },
+};
+
+type KpiMetric = { title: string; value: number; icon: KpiIcon; tone: KpiTone };
+
+/** Same rounding as the API (`percentage` in director-dashboard.service). */
+function conversionRate(value: number, base: number) {
+  return base === 0 ? 0 : Number(((value / base) * 100).toFixed(1));
+}
+
+/** The four summary cards, in order; later cards show their rate against each earlier one. */
+function getDirectorKpis(summary: {
+  totalData: number;
+  qualifiedLeads: number;
+  registeredLeads: number;
+  totalStudents: number;
+}) {
+  return {
+    totalData: { title: "Tổng data", value: summary.totalData, icon: Database, tone: "blue" },
+    qualifiedLeads: { title: "Tổng data đúng đối tượng (lead)", value: summary.qualifiedLeads, icon: UserCheck, tone: "violet" },
+    registeredLeads: { title: "Tổng lead đã đăng ký", value: summary.registeredLeads, icon: ClipboardCheck, tone: "emerald" },
+    totalStudents: { title: "Tổng học viên", value: summary.totalStudents, icon: GraduationCap, tone: "amber" },
+  } satisfies Record<string, KpiMetric>;
+}
+
+type DirectorKpiCardProps = KpiMetric & {
   description: string;
+  /** Cards this value is compared with; each tag uses the compared card's icon and colour. */
+  comparedWith?: KpiMetric[];
 };
 
 function DirectorKpiCard({
   title,
   value,
-  percentage,
   icon: Icon,
+  tone,
   description,
+  comparedWith = [],
 }: DirectorKpiCardProps) {
   return (
-    <Card className="gap-3 border-border/70 px-3 py-3 shadow-xs sm:px-4 sm:py-3.5">
+    <Card className={cn("gap-3 px-3 py-3 shadow-xs sm:px-4 sm:py-3.5", kpiTones[tone].card)}>
       <div className="flex items-start gap-2">
-        <span className="hidden size-7 shrink-0 items-center justify-center rounded-md bg-accent text-primary sm:flex">
+        <span className={cn("hidden size-7 shrink-0 items-center justify-center rounded-md sm:flex", kpiTones[tone].accent)}>
           <Icon className="size-4" aria-hidden={true} />
         </span>
         <CardTitle className="min-w-0 flex-1 text-sm sm:pt-1 leading-5 font-medium text-muted-foreground">
@@ -1461,20 +1499,45 @@ function DirectorKpiCard({
           </TooltipContent>
         </Tooltip>
       </div>
-      <div className="mt-auto flex items-baseline gap-2">
+      <div className="mt-auto flex flex-wrap items-end gap-x-2 gap-y-1.5">
         <p className="text-2xl leading-none font-semibold tracking-tight tabular-nums sm:text-[1.75rem]">
           {integerFormatter.format(value)}
         </p>
-        {percentage !== undefined && (
-          <span
-            className="rounded-md bg-primary/10 px-1.5 py-0.5 text-xs font-semibold text-primary tabular-nums"
-            aria-label={`Tỷ lệ chuyển đổi ${percentFormatter.format(percentage)} phần trăm`}
-          >
-            {percentFormatter.format(percentage)}%
-          </span>
+        {comparedWith.length > 0 && (
+          <ul className="flex flex-wrap items-center gap-1" aria-label={`Tỷ lệ chuyển đổi của ${title}`}>
+            {comparedWith.map((base) => (
+              <li key={base.title}>
+                <KpiRateTag value={value} base={base} />
+              </li>
+            ))}
+          </ul>
         )}
       </div>
     </Card>
+  );
+}
+
+function KpiRateTag({ value, base }: { value: number; base: KpiMetric }) {
+  const BaseIcon = base.icon;
+  const rate = percentFormatter.format(conversionRate(value, base.value));
+  const explanation = `${rate}% so với ${base.title} (${integerFormatter.format(value)} / ${integerFormatter.format(base.value)})`;
+  return (
+    <Tooltip>
+      <TooltipTrigger asChild>
+        <span
+          tabIndex={0}
+          aria-label={explanation}
+          className={cn(
+            "inline-flex cursor-default items-center gap-1 rounded-md px-1.5 py-0.5 text-xs font-semibold tabular-nums outline-none focus-visible:ring-2 focus-visible:ring-ring",
+            kpiTones[base.tone].accent,
+          )}
+        >
+          <BaseIcon className="size-3" aria-hidden={true} />
+          {rate}%
+        </span>
+      </TooltipTrigger>
+      <TooltipContent side="top">{explanation}</TooltipContent>
+    </Tooltip>
   );
 }
 

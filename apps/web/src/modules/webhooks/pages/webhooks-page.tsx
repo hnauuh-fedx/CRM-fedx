@@ -110,13 +110,13 @@ const defaultMappings = [
     defaultValue: null,
   },
   {
-    incomingKey: "phone",
+    incomingKey: "phones",
     crmField: "phone",
     isRequired: true,
     defaultValue: null,
   },
   {
-    incomingKey: "email",
+    incomingKey: "emails",
     crmField: "email",
     isRequired: false,
     defaultValue: null,
@@ -145,8 +145,8 @@ const emptyWebhook: WebhookInput = {
 const samplePayload = JSON.stringify(
   {
     name: "Test Customer",
-    phone: "0901234567",
-    email: "test@example.com",
+    phones: "0901234567",
+    emails: "test@example.com",
     form_name: "Form Facebook",
     utm_url: "https://landing.example.vn/dang-ky?utm_source=facebook",
   },
@@ -849,7 +849,7 @@ function toWebhookFieldOptions(fields: WebhookField[]): GroupedFieldOption[] {
     groupLabel: field.groupLabel ?? (field.group === "CUSTOM" ? "Trường tùy chỉnh" : "Trường hệ thống"),
     description: webhookFieldTypeLabels[field.type] ?? field.type,
     badge: field.group === "CUSTOM" ? "Tùy chỉnh" : undefined,
-    keywords: [field.key],
+    keywords: field.fieldKey ? [field.key, field.fieldKey] : [field.key],
     disabled: field.readOnly,
     disabledReason: field.readOnlyReason,
   }));
@@ -1068,7 +1068,8 @@ function WebhookForm({
                       onChange={(value) => {
                         field.onChange(value);
                         const selected = fields.find((item) => item.key === value);
-                        if (selected && !form.getValues(`mappings.${index}.incomingKey`)?.trim())
+                        // The incoming key follows the selected CRM field; admins can still edit it afterwards.
+                        if (selected)
                           form.setValue(`mappings.${index}.incomingKey`, getWebhookFieldCode(selected), {
                             shouldDirty: true,
                             shouldValidate: true,

@@ -13,6 +13,7 @@ import { Field, FieldLabel, FieldError } from "@/components/ui/field";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import type { LeadActionOptions, LeadFormInput } from "../lead.types";
+import { FAIL_STAGE_VALUE } from "../stage-detail.types";
 import type { HTMLInputTypeAttribute } from "react";
 
 const inputTypes: Partial<
@@ -68,6 +69,8 @@ type Props = {
   onStageChange: (value: string) => void;
   /** Fields edited elsewhere on the page (e.g. the stage on the detail page) and left out of the form. */
   hiddenFields?: string[];
+  /** Editing an existing lead: "Quy trình Telesale/Trạng thái" also offers Fail. */
+  allowFailStage?: boolean;
 };
 export function ConfiguredLeadFormFields(props: Props) {
   const keys = configuredFormKeys(
@@ -93,7 +96,7 @@ export function ConfiguredLeadFormFields(props: Props) {
   );
 }
 
-function selectOptions(key: string, options: LeadLayoutFormOptions) {
+function selectOptions(key: string, options: LeadLayoutFormOptions, allowFailStage = false) {
   switch (key) {
     case "sourceId":
       return options.sources;
@@ -102,7 +105,9 @@ function selectOptions(key: string, options: LeadLayoutFormOptions) {
     case "admissionStatusId":
       return options.admissionStatuses;
     case "pipelineStageId":
-      return options.stages;
+      return allowFailStage
+        ? [...options.stages, { id: FAIL_STAGE_VALUE, name: "Fail" }]
+        : options.stages;
     case "assigneeId":
       return options.telesales.map((user) => ({
         id: user.id,
@@ -125,6 +130,7 @@ function ConfiguredLeadField({
   options,
   disabled,
   onStageChange,
+  allowFailStage,
 }: Props & { field: LeadSystemField }) {
   const key = field.key as keyof LeadFormInput;
   if (key === "phone") return <PhoneFields form={form} label={field.label} disabled={disabled} />;
@@ -162,6 +168,7 @@ function ConfiguredLeadField({
         options={options}
         disabled={disabled}
         onStageChange={onStageChange}
+        allowFailStage={allowFailStage}
         inputProps={inputProps}
       />
       {error && (
@@ -178,8 +185,9 @@ function ConfiguredLeadControl({
   form,
   options,
   onStageChange,
+  allowFailStage,
   inputProps,
-}: Pick<Props, "form" | "options" | "disabled" | "onStageChange"> & {
+}: Pick<Props, "form" | "options" | "disabled" | "onStageChange" | "allowFailStage"> & {
   field: LeadSystemField;
   inputProps: {
     id: string;
@@ -211,6 +219,7 @@ function ConfiguredLeadControl({
         form={form}
         options={options}
         onStageChange={onStageChange}
+        allowFailStage={allowFailStage}
         inputProps={inputProps}
       />
     );
@@ -234,8 +243,9 @@ function ConfiguredLeadSelect({
   form,
   options,
   onStageChange,
+  allowFailStage,
   inputProps,
-}: Pick<Props, "form" | "options" | "onStageChange"> & {
+}: Pick<Props, "form" | "options" | "onStageChange" | "allowFailStage"> & {
   fieldKey: keyof LeadFormInput;
   inputProps: {
     id: string;
@@ -245,7 +255,7 @@ function ConfiguredLeadSelect({
   };
 }) {
   const value = String(form.watch(key) ?? "");
-  const choices = selectOptions(key, options);
+  const choices = selectOptions(key, options, allowFailStage);
   return (
     <select
       {...inputProps}

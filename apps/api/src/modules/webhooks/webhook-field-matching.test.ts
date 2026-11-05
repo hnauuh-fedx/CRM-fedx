@@ -56,6 +56,12 @@ test("webhook metadata lists every mappable Lead form field grouped by form clus
   // Nguồn is a list field, but webhooks send a name that is matched to (or added to) the list when recorded.
   assert.equal(webhookFieldMetadata.find((field) => field.key === "source")?.type, "string");
   assert.equal(webhookFieldMetadata.find((field) => field.key === "graduationYear")?.groupLabel, "Học vấn và tốt nghiệp");
+  // Suggested incoming keys follow the partner payload codes; the mapping still stores the internal key.
+  const codes = Object.fromEntries(webhookFieldMetadata.filter((field) => field.fieldKey).map((field) => [field.key, field.fieldKey]));
+  assert.deepEqual(codes, {
+    fullName: "name", phone: "phones", email: "emails", majorId: "nganh_dang_ky",
+    graduationCertificate: "bang_tot_nghiep", province: "tinh_thanh_pho", source: "source", sourceId: "nguon_hv",
+  });
 });
 
 test("matches option labels and Vietnamese text regardless of case and diacritics", async () => {

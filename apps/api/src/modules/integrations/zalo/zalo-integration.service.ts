@@ -14,6 +14,7 @@ import {
   usedProfileNameFallback,
 } from "../shared/lead-extraction.service";
 import { decryptZaloSecret, encryptZaloSecret } from "./zalo-crypto";
+import { workingProgramId, zaloConnectionScope } from "./zalo-connection-scope";
 import { getZaloOaInfo, getZaloUserProfile, refreshZaloOaToken } from "./zalo-api.service";
 
 const refreshSafetyMs = 60 * 60 * 1000;
@@ -26,29 +27,16 @@ export type SaveZaloConnectionInput = {
   refreshToken: string;
   accessTokenExpiresInHours: number;
   refreshTokenExpiresInDays?: number | null;
-  institutionProgramId: string;
   leadSourceId: string;
 };
+
+export const disconnectedZaloConnectionMessage = "Kết nối đã ngắt. Hãy kết nối lại bằng token mới.";
 
 function nextRefreshAt(accessTokenExpiresAt: Date) {
   return new Date(Math.max(Date.now() + 60_000, accessTokenExpiresAt.getTime() - refreshSafetyMs));
 }
 
-function connectionScope(user: AuthUser) {
-  const configuredAppId = env.ZALO_APP_ID?.trim();
-  const appScope = configuredAppId ? { app_id: configuredAppId } : {};
-  if (user.accessScope === "ALL" || user.permissions.includes("system.manage")) return appScope;
-  if (user.institutionProgramIds.length > 0) {
-    return {
-      ...appScope,
-      OR: [
-        { institution_program_id: { in: user.institutionProgramIds } },
-        { created_by: user.id },
-      ],
-    };
-  }
-  return { ...appScope, created_by: user.id };
-}
+const connectionScope = (user: AuthUser) => zaloConnectionScope(user, env.ZALO_APP_ID);
 
 function serializeConnection(connection: {
   id: string;
@@ -105,28 +93,15 @@ export async function listZaloConnections(user: AuthUser) {
 }
 
 export async function getZaloConnectionOptions(user: AuthUser) {
-  const programWhere = user.accessScope === "ALL" || user.permissions.includes("system.manage")
-    ? { status: "active" }
-    : { status: "active", id: { in: user.institutionProgramIds } };
-  const [leadSources, programs] = await prisma.$transaction([
-    prisma.lead_sources.findMany({
-      where: {
-        institution_program_id: { not: null },
-        ...(user.institutionProgramIds.length > 0 && user.accessScope !== "ALL"
-          ? { institution_program_id: { in: user.institutionProgramIds } }
-          : {}),
-      },
-      select: { id: true, name: true, type: true, institution_program_id: true },
-      orderBy: { name: "asc" },
-      take: 500,
-    }),
-    prisma.institution_programs.findMany({
-      where: programWhere,
-      select: { id: true, name: true, institution_name: true },
-      orderBy: { name: "asc" },
-      take: 500,
-    }),
-  ]);
+  const programId = workingProgramId(user);
+  const leadSources = programId
+    ? await prisma.lead_sources.findMany({
+        where: { institution_program_id: programId },
+        select: { id: true, name: true, type: true, institution_program_id: true },
+        orderBy: { name: "asc" },
+        take: 500,
+      })
+    : [];
   return {
     leadSources: leadSources.map((source) => ({
       id: source.id,
@@ -134,89 +109,95 @@ export async function getZaloConnectionOptions(user: AuthUser) {
       type: source.type,
       institutionProgramId: source.institution_program_id,
     })),
-    institutionPrograms: programs.map((program) => ({
-      id: program.id,
-      name: program.name,
-      institutionName: program.institution_name,
-    })),
   };
 }
 
-export async function saveManualZaloConnection(user: AuthUser, input: SaveZaloConnectionInput) {
+type ZaloTokenFields = Pick<SaveZaloConnectionInput, "accessToken" | "refreshToken" | "accessTokenExpiresInHours" | "refreshTokenExpiresInDays">;
+
+function encryptedTokenData(input: ZaloTokenFields) {
+  const now = Date.now();
+  const accessTokenExpiresAt = new Date(now + input.accessTokenExpiresInHours * 60 * 60 * 1000);
+  return {
+    access_token_encrypted: encryptZaloSecret(input.accessToken.trim()),
+    refresh_token_encrypted: encryptZaloSecret(input.refreshToken.trim()),
+    access_token_expires_at: accessTokenExpiresAt,
+    refresh_token_expires_at: input.refreshTokenExpiresInDays
+      ? new Date(now + input.refreshTokenExpiresInDays * 24 * 60 * 60 * 1000)
+      : null,
+    next_refresh_at: nextRefreshAt(accessTokenExpiresAt),
+  };
+}
+
+/** Validates server config, the working program and a lead source that belongs to it. */
+async function resolveConnectionTarget(user: AuthUser, leadSourceId: string) {
   if (!env.ZALO_TOKEN_ENCRYPTION_KEY) throw new Error("ZALO_TOKEN_ENCRYPTION_KEY chưa được cấu hình.");
   const appId = env.ZALO_APP_ID?.trim();
   if (!appId) throw new Error("ZALO_APP_ID chưa được cấu hình.");
-
   if (!/^\d+$/.test(appId)) throw new Error("ZALO_APP_ID phải là dãy số App ID của ứng dụng Zalo.");
 
-  const [oaInfo, source, program] = await Promise.all([
-    getZaloOaInfo(input.accessToken),
-    prisma.lead_sources.findUnique({ where: { id: input.leadSourceId }, select: { id: true, institution_program_id: true } }),
-    prisma.institution_programs.findFirst({
-      where: { id: input.institutionProgramId, status: "active" },
-      select: { id: true },
-    }),
+  const programId = workingProgramId(user);
+  if (!programId) throw new Error("Hãy chọn chương trình tuyển sinh đang làm việc trước khi kết nối Zalo OA.");
+  const [program, source] = await Promise.all([
+    prisma.institution_programs.findFirst({ where: { id: programId, status: "active" }, select: { id: true } }),
+    prisma.lead_sources.findUnique({ where: { id: leadSourceId }, select: { institution_program_id: true } }),
   ]);
-  if (!source) throw new Error("Nguồn lead đã chọn không tồn tại.");
-  if (!program) throw new Error("Chương trình tuyển sinh đã chọn không tồn tại hoặc đã ngừng hoạt động.");
-  if (user.accessScope !== "ALL" && !user.permissions.includes("system.manage")
-    && !user.institutionProgramIds.includes(input.institutionProgramId)) {
-    throw new Error("Bạn không có phạm vi quản lý chương trình tuyển sinh này.");
+  if (!program) throw new Error("Chương trình tuyển sinh đang làm việc không tồn tại hoặc đã ngừng hoạt động.");
+  if (!source || source.institution_program_id !== programId) {
+    throw new Error("Nguồn lead không thuộc chương trình tuyển sinh đang làm việc.");
   }
-  if (source.institution_program_id !== input.institutionProgramId) {
-    throw new Error("Nguồn lead không thuộc chương trình tuyển sinh đã chọn.");
-  }
+  return { appId, programId };
+}
 
-  const existingConnection = await prisma.zalo_connections.findUnique({
+const otherProgramMessage = "OA này đã được kết nối với chương trình tuyển sinh khác.";
+
+export async function saveManualZaloConnection(user: AuthUser, input: SaveZaloConnectionInput) {
+  const { appId, programId } = await resolveConnectionTarget(user, input.leadSourceId);
+  const oaInfo = await getZaloOaInfo(input.accessToken);
+
+  const existing = await prisma.zalo_connections.findUnique({
     where: { app_id_oa_id: { app_id: appId, oa_id: oaInfo.oaId } },
-    select: { id: true },
+    select: { id: true, institution_program_id: true },
   });
-  if (existingConnection) {
-    const visible = await prisma.zalo_connections.findFirst({
-      where: { id: existingConnection.id, ...connectionScope(user) },
-      select: { id: true },
+  // One OA feeds exactly one program: never move it (and its message history) away from another program.
+  if (existing && existing.institution_program_id !== programId) throw new Error(otherProgramMessage);
+
+  const tokenData = encryptedTokenData(input);
+  let connection;
+  if (existing) {
+    const updated = await prisma.zalo_connections.updateMany({
+      where: { id: existing.id, institution_program_id: programId },
+      data: {
+        ...tokenData,
+        oa_name: oaInfo.oaName,
+        lead_source_id: input.leadSourceId,
+        status: "active",
+        last_refresh_error: null,
+        refresh_failure_count: 0,
+        token_version: { increment: 1 },
+        updated_at: new Date(),
+      },
     });
-    if (!visible) throw new Error("Bạn không có phạm vi cập nhật kết nối Zalo OA này.");
+    if (updated.count === 0) throw new Error(otherProgramMessage);
+    connection = await prisma.zalo_connections.findUniqueOrThrow({ where: { id: existing.id } });
+  } else {
+    try {
+      connection = await prisma.zalo_connections.create({
+        data: {
+          ...tokenData,
+          oa_id: oaInfo.oaId,
+          oa_name: oaInfo.oaName,
+          app_id: appId,
+          institution_program_id: programId,
+          lead_source_id: input.leadSourceId,
+          created_by: user.id,
+        },
+      });
+    } catch (error) {
+      // A concurrent request connected the same OA first.
+      if ((error as { code?: string }).code === "P2002") throw new Error(otherProgramMessage);
+      throw error;
+    }
   }
-
-  const now = Date.now();
-  const accessTokenExpiresAt = new Date(now + input.accessTokenExpiresInHours * 60 * 60 * 1000);
-  const refreshTokenExpiresAt = input.refreshTokenExpiresInDays
-    ? new Date(now + input.refreshTokenExpiresInDays * 24 * 60 * 60 * 1000)
-    : null;
-  const encryptedAccessToken = encryptZaloSecret(input.accessToken.trim());
-  const encryptedRefreshToken = encryptZaloSecret(input.refreshToken.trim());
-  const connection = await prisma.zalo_connections.upsert({
-    where: { app_id_oa_id: { app_id: appId, oa_id: oaInfo.oaId } },
-    update: {
-      oa_name: oaInfo.oaName,
-      access_token_encrypted: encryptedAccessToken,
-      refresh_token_encrypted: encryptedRefreshToken,
-      access_token_expires_at: accessTokenExpiresAt,
-      refresh_token_expires_at: refreshTokenExpiresAt,
-      next_refresh_at: nextRefreshAt(accessTokenExpiresAt),
-      institution_program_id: input.institutionProgramId,
-      lead_source_id: input.leadSourceId,
-      status: "active",
-      last_refresh_error: null,
-      refresh_failure_count: 0,
-      token_version: { increment: 1 },
-      updated_at: new Date(),
-    },
-    create: {
-      oa_id: oaInfo.oaId,
-      oa_name: oaInfo.oaName,
-      app_id: appId,
-      access_token_encrypted: encryptedAccessToken,
-      refresh_token_encrypted: encryptedRefreshToken,
-      access_token_expires_at: accessTokenExpiresAt,
-      refresh_token_expires_at: refreshTokenExpiresAt,
-      next_refresh_at: nextRefreshAt(accessTokenExpiresAt),
-      institution_program_id: input.institutionProgramId,
-      lead_source_id: input.leadSourceId,
-      created_by: user.id,
-    },
-  });
   await prisma.audit_logs.create({
     data: {
       user_id: user.id,
@@ -234,6 +215,42 @@ export async function saveManualZaloConnection(user: AuthUser, input: SaveZaloCo
   return serializeConnection(connection);
 }
 
+export async function reconnectZaloConnection(user: AuthUser, id: string, input: SaveZaloConnectionInput) {
+  const connection = await findVisibleZaloConnection(user, id);
+  if (!connection) return null;
+  if (connection.status !== "disconnected") throw new Error("Chỉ kết nối lại được kết nối đã ngắt.");
+  const { programId } = await resolveConnectionTarget(user, input.leadSourceId);
+  const oaInfo = await getZaloOaInfo(input.accessToken);
+  if (oaInfo.oaId !== connection.oa_id) throw new Error("Token thuộc một Zalo OA khác với kết nối này.");
+
+  const updated = await prisma.zalo_connections.updateMany({
+    where: { id, institution_program_id: programId, status: "disconnected" },
+    data: {
+      ...encryptedTokenData(input),
+      oa_name: oaInfo.oaName,
+      lead_source_id: input.leadSourceId,
+      status: "active",
+      last_refresh_error: null,
+      refresh_failure_count: 0,
+      token_version: { increment: 1 },
+      updated_at: new Date(),
+    },
+  });
+  if (updated.count === 0) throw new Error("Kết nối đã thay đổi trạng thái. Vui lòng tải lại trang.");
+  const reconnected = await prisma.zalo_connections.findUniqueOrThrow({ where: { id } });
+  await prisma.audit_logs.create({
+    data: {
+      user_id: user.id,
+      entity_type: "zalo_connection",
+      entity_id: id,
+      action: "reconnect",
+      old_data: { status: connection.status, leadSourceId: connection.lead_source_id },
+      new_data: { status: reconnected.status, oaName: reconnected.oa_name, leadSourceId: reconnected.lead_source_id },
+    },
+  });
+  return serializeConnection(reconnected);
+}
+
 export async function findVisibleZaloConnection(user: AuthUser, id: string) {
   return prisma.zalo_connections.findFirst({ where: { id, ...connectionScope(user) } });
 }
@@ -241,6 +258,7 @@ export async function findVisibleZaloConnection(user: AuthUser, id: string) {
 export async function testZaloConnection(user: AuthUser, id: string) {
   const connection = await findVisibleZaloConnection(user, id);
   if (!connection) return null;
+  if (connection.status === "disconnected") throw new Error(disconnectedZaloConnectionMessage);
   const oaInfo = await getZaloOaInfo(decryptZaloSecret(connection.access_token_encrypted));
   await prisma.zalo_connections.update({
     where: { id },

@@ -29,7 +29,7 @@ window.fetch = async (input, init) => {
     return Response.json({ data: users.filter(user => user.fullName.toLocaleLowerCase("vi").includes(search)), selected: users.filter(user => selected.has(user.id)).map(user => ({ ...user, active: true })), page: 1, hasMore: false });
   }
   if (url.pathname.endsWith("/system/lead-form")) return Response.json({ requirements: { email: false }, revision: "0".repeat(64) });
-  if (url.pathname.endsWith("/system/note-templates")) return Response.json([{ target: "FAIL", label: "Fail", pipelineName: null, templates: [], revision: "0".repeat(64) }]);
+  if (url.pathname.endsWith("/system/stage-detail-options")) return Response.json([{ target: "FAIL", label: "Fail", pipelineName: null, options: [], revision: "0".repeat(64) }]);
   if (url.pathname.includes("/system/preferences/") && init?.method === "PUT") {
     if (window.conflictNext) { window.conflictNext = false; return Response.json({ message: "Cấu hình đã được người khác thay đổi. Tải lại dữ liệu trước khi lưu." }, { status: 409 }); }
     const section = url.pathname.split("/").at(-1);

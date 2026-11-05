@@ -11,7 +11,8 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { Field, FieldGroup, FieldLabel } from "@/components/ui/field";
 import { Input } from "@/components/ui/input";
 import { useAuth } from "@/modules/auth/auth-context";
-import { TransitionNoteSettings } from "@/modules/custom-fields/components/transition-note-settings";
+import { StageDetailSettings } from "@/modules/custom-fields/components/stage-detail-settings";
+import { PIPELINE_STAGE_FIELD_LABEL } from "@/modules/leads/stage-detail.types";
 import { getLeadFormConfiguration, saveLeadFormConfiguration, type LeadFormConfiguration } from "@/services/system-preferences.service";
 import { DisplayLayoutLeaveGuard } from "../display-layout/use-display-layout-leave-guard";
 
@@ -19,9 +20,9 @@ export function SystemFormEditor({ onDirtyChange }: { onDirtyChange: (dirty: boo
   const { accessToken, can } = useAuth();
   const query = useQuery({ queryKey: ["system-lead-form"], queryFn: () => getLeadFormConfiguration(accessToken!), refetchOnWindowFocus: false });
   return <div className="flex flex-col gap-6">
-    <Alert><AlertTitle>Phạm vi toàn hệ thống</AlertTitle><AlertDescription>Trường bắt buộc và mẫu ghi chú dùng chung cho tất cả chương trình. Thay đổi tại đây cũng cập nhật các màn hình cấu hình biểu mẫu hiện có.</AlertDescription></Alert>
+    <Alert><AlertTitle>Phạm vi toàn hệ thống</AlertTitle><AlertDescription>Trường bắt buộc và cấu hình trường nhiều cấp dùng chung cho tất cả chương trình. Thay đổi tại đây cũng cập nhật các màn hình cấu hình biểu mẫu hiện có.</AlertDescription></Alert>
     {query.isError ? <Alert variant="destructive"><AlertTitle>Không thể tải biểu mẫu</AlertTitle><AlertDescription><Button onClick={() => query.refetch()}>Thử lại</Button></AlertDescription></Alert> : query.data ? <LeadRequirementsForm snapshot={query.data} token={accessToken!} onDirtyChange={onDirtyChange} /> : <p role="status">Đang tải cấu hình biểu mẫu…</p>}
-    <Card><CardHeader><CardTitle>Mẫu ghi chú theo trạng thái</CardTitle><CardDescription>Thêm mẫu, sắp xếp và tích chọn mẫu đang sử dụng theo từng tiến trình.</CardDescription></CardHeader><CardContent><TransitionNoteSettings management /></CardContent></Card>
+    <Card><CardHeader><CardTitle>Cấu hình trường nhiều cấp</CardTitle><CardDescription>{PIPELINE_STAGE_FIELD_LABEL}: thêm, sắp xếp nội dung Cấp 2 và Cấp 3 cho từng tiến trình và Fail.</CardDescription></CardHeader><CardContent><StageDetailSettings management /></CardContent></Card>
     <Card><CardHeader><CardTitle>Quy trình tuyển sinh</CardTitle><CardDescription>Quản lý tiến trình và các trạng thái được phép chuyển tiếp trong màn hình nghiệp vụ tương ứng. Các màn hình tiếp tục dùng chung cấu hình hiện có.</CardDescription></CardHeader><CardContent className="flex flex-wrap gap-2">{can("pipeline.manage") && <Button asChild variant="outline"><Link to="/quan-ly/pipeline">Cấu hình Pipeline</Link></Button>}{can("admission_status.update") && <Button asChild variant="outline"><Link to="/tuyen-sinh/trang-thai-ho-so">Cấu hình luồng trạng thái hồ sơ</Link></Button>}</CardContent></Card>
   </div>;
 }

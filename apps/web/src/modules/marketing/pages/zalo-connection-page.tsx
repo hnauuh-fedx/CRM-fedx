@@ -11,11 +11,21 @@ Unplug,
 } from "lucide-react";
 import { useState } from "react";
 import { Link } from "react-router-dom";
-import { IntegrationProgramField } from "../components/integration-program-field";
 
 import { ErrorState } from "@/components/shared/error-state";
 import { PageHeader } from "@/components/shared/page-header";
 import { Alert,AlertDescription,AlertTitle } from "@/components/ui/alert";
+import {
+AlertDialog,
+AlertDialogAction,
+AlertDialogCancel,
+AlertDialogContent,
+AlertDialogDescription,
+AlertDialogFooter,
+AlertDialogHeader,
+AlertDialogTitle,
+AlertDialogTrigger,
+} from "@/components/ui/alert-dialog";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
@@ -32,7 +42,6 @@ DialogDescription,
 DialogFooter,
 DialogHeader,
 DialogTitle,
-DialogTrigger,
 } from "@/components/ui/dialog";
 import {
 Field,
@@ -50,11 +59,13 @@ SelectValue,
 } from "@/components/ui/select";
 import { Table,TableBody,TableCell,TableRow } from "@/components/ui/table";
 import { useAuth } from "@/modules/auth/auth-context";
+import { useInstitutionProgram } from "@/modules/institutions/institution-program-context";
 import {
 disconnectZaloConnection,
 getZaloConnectionOptions,
 getZaloConnections,
 getZaloProcessingLogs,
+reconnectZaloConnection,
 refreshZaloConnection,
 saveManualZaloConnection,
 testZaloConnection,
@@ -80,48 +91,48 @@ const statusLabel = (status: string) =>
     }) as Record<string, string>
   )[status] ?? status;
 
+type DialogTarget =
+  | { mode: "create" }
+  | { mode: "reconnect"; connection: ZaloConnection };
+type ConnectionAction = "test" | "refresh" | "disconnect";
+
+const connectionActions: Record<
+  ConnectionAction,
+  { run: (id: string, accessToken: string) => Promise<unknown>; notice: string }
+> = {
+  test: { run: testZaloConnection, notice: "Kết nối Zalo OA hoạt động bình thường." },
+  refresh: { run: refreshZaloConnection, notice: "Đã đưa yêu cầu làm mới token vào hàng đợi." },
+  disconnect: { run: disconnectZaloConnection, notice: "Đã ngắt kết nối Zalo OA." },
+};
+
 export function ZaloConnectionPage() {
   const auth = useAuth();
   const queryClient = useQueryClient();
+  const { programs, selectedProgramId } = useInstitutionProgram();
+  const programName = programs.find((program) => program.id === selectedProgramId)?.name;
   const canManage = auth.can("integration.manage");
-  const [dialogOpen, setDialogOpen] = useState(false);
+  const [dialogTarget, setDialogTarget] = useState<DialogTarget | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
   const connections = useQuery({
-    queryKey: ["zalo-connections"],
+    queryKey: ["zalo-connections", selectedProgramId],
     queryFn: () => getZaloConnections(auth.accessToken!),
     refetchInterval: 30_000,
   });
   const options = useQuery({
-    queryKey: ["zalo-connections", "options"],
+    queryKey: ["zalo-connections", "options", selectedProgramId],
     queryFn: () => getZaloConnectionOptions(auth.accessToken!),
   });
   const logs = useQuery({
-    queryKey: ["zalo-connections", "logs"],
+    queryKey: ["zalo-connections", "logs", selectedProgramId],
     queryFn: () => getZaloProcessingLogs(1, 20, auth.accessToken!),
     enabled: auth.can("integration.log.view") || canManage,
     refetchInterval: 15_000,
   });
   const action = useMutation({
-    mutationFn: async ({
-      type,
-      id,
-    }: {
-      type: "test" | "refresh" | "disconnect";
-      id: string;
-    }) =>
-      type === "test"
-        ? testZaloConnection(id, auth.accessToken!)
-        : type === "refresh"
-          ? refreshZaloConnection(id, auth.accessToken!)
-          : disconnectZaloConnection(id, auth.accessToken!),
+    mutationFn: async ({ type, id }: { type: ConnectionAction; id: string }) =>
+      connectionActions[type].run(id, auth.accessToken!),
     onSuccess: (_data, variables) => {
-      setNotice(
-        variables.type === "test"
-          ? "Kết nối Zalo OA hoạt động bình thường."
-          : variables.type === "refresh"
-            ? "Đã đưa yêu cầu làm mới token vào hàng đợi."
-            : "Đã ngắt kết nối Zalo OA.",
-      );
+      setNotice(connectionActions[variables.type].notice);
       queryClient.invalidateQueries({ queryKey: ["zalo-connections"] });
     },
   });
@@ -178,12 +189,23 @@ export function ZaloConnectionPage() {
                 </div>
               </div>
               {canManage && (
+                <Button
+                  disabled={!selectedProgramId}
+                  onClick={() => setDialogTarget({ mode: "create" })}
+                >
+                  Thêm kết nối
+                </Button>
+              )}
+              {canManage && dialogTarget && (
                 <ConnectionDialog
-                  open={dialogOpen}
-                  onOpenChange={setDialogOpen}
+                  key={dialogTarget.mode === "reconnect" ? dialogTarget.connection.id : "create"}
+                  target={dialogTarget}
+                  programName={programName}
+                  onClose={() => setDialogTarget(null)}
                   options={options.data}
-                  onSaved={() => {
-                    setDialogOpen(false);
+                  onSaved={(message) => {
+                    setNotice(message);
+                    setDialogTarget(null);
                     queryClient.invalidateQueries({
                       queryKey: ["zalo-connections"],
                     });
@@ -192,32 +214,16 @@ export function ZaloConnectionPage() {
               )}
             </CardHeader>
             <CardContent className="flex flex-col gap-4">
-              {connections.isLoading ? (
-                <p className="text-sm text-muted-foreground">
-                  Đang tải kết nối…
-                </p>
-              ) : connections.data?.data.length ? (
-                connections.data.data.map((connection) => (
-                  <ConnectionCard
-                    key={connection.id}
-                    connection={connection}
-                    canManage={canManage}
-                    busy={action.isPending}
-                    onAction={(type) =>
-                      action.mutate({ type, id: connection.id })
-                    }
-                  />
-                ))
-              ) : (
-                <div className="rounded-lg border border-dashed p-6 text-center">
-                  <p className="font-medium">
-                    Chưa có Zalo OA nào được kết nối
-                  </p>
-                  <p className="mt-1 text-sm text-muted-foreground">
-                    Thêm access token và refresh token để bắt đầu.
-                  </p>
-                </div>
-              )}
+              <ConnectionList
+                loading={connections.isLoading}
+                connections={connections.data?.data ?? []}
+                canManage={canManage}
+                busy={action.isPending}
+                onAction={(type, id) => action.mutate({ type, id })}
+                onReconnect={(connection) =>
+                  setDialogTarget({ mode: "reconnect", connection })
+                }
+              />
             </CardContent>
           </Card>
           {(auth.can("integration.log.view") || canManage) && (
@@ -231,6 +237,46 @@ export function ZaloConnectionPage() {
     </div>
     </PageLoadingBoundary>
   );
+}
+
+function ConnectionList({
+  loading,
+  connections,
+  canManage,
+  busy,
+  onAction,
+  onReconnect,
+}: {
+  loading: boolean;
+  connections: ZaloConnection[];
+  canManage: boolean;
+  busy: boolean;
+  onAction: (type: ConnectionAction, id: string) => void;
+  onReconnect: (connection: ZaloConnection) => void;
+}) {
+  if (loading) {
+    return <p className="text-sm text-muted-foreground">Đang tải kết nối…</p>;
+  }
+  if (connections.length === 0) {
+    return (
+      <div className="rounded-lg border border-dashed p-6 text-center">
+        <p className="font-medium">Chương trình này chưa kết nối Zalo OA nào</p>
+        <p className="mt-1 text-sm text-muted-foreground">
+          Thêm access token và refresh token để bắt đầu.
+        </p>
+      </div>
+    );
+  }
+  return connections.map((connection) => (
+    <ConnectionCard
+      key={connection.id}
+      connection={connection}
+      canManage={canManage}
+      busy={busy}
+      onAction={(type) => onAction(type, connection.id)}
+      onReconnect={() => onReconnect(connection)}
+    />
+  ));
 }
 
 type ConfigurationAlertProps = {
@@ -276,86 +322,131 @@ function ConnectionCard({
   canManage,
   busy,
   onAction,
+  onReconnect,
 }: {
   connection: ZaloConnection;
   canManage: boolean;
   busy: boolean;
-  onAction: (type: "test" | "refresh" | "disconnect") => void;
+  onAction: (type: ConnectionAction) => void;
+  onReconnect: () => void;
 }) {
+  const disconnected = connection.status === "disconnected";
+  const oaLabel = connection.oaName ?? `OA ${connection.oaId}`;
   return (
-    <div className="rounded-xl border p-4">
+    <div className={`rounded-xl border p-4 ${disconnected ? "bg-muted/40" : ""}`}>
       <div className="flex flex-col justify-between gap-4 sm:flex-row">
         <div className="flex flex-col gap-2">
           <div className="flex flex-wrap items-center gap-2">
-            <p className="font-semibold">
-              {connection.oaName ?? `OA ${connection.oaId}`}
-            </p>
+            <p className="font-semibold">{oaLabel}</p>
             <Badge
               variant={connection.status === "active" ? "default" : "secondary"}
             >
               {statusLabel(connection.status)}
             </Badge>
           </div>
-          <dl className="grid gap-x-6 gap-y-1 text-sm text-muted-foreground sm:grid-cols-2">
-            <div>
-              <dt className="inline font-medium text-foreground">OA ID: </dt>
-              <dd className="inline">{connection.oaId}</dd>
+          {disconnected ? (
+            <div className="flex flex-col gap-1 text-sm text-muted-foreground">
+              <p>
+                <span className="font-medium text-foreground">OA ID: </span>
+                {connection.oaId}
+              </p>
+              <p>
+                Đã ngắt kết nối, không nhận tin nhắn mới. Dán token mới để kết
+                nối lại.
+              </p>
             </div>
-            <div>
-              <dt className="inline font-medium text-foreground">
-                Refresh gần nhất:{" "}
-              </dt>
-              <dd className="inline">{formatDate(connection.lastRefreshAt)}</dd>
-            </div>
-            <div>
-              <dt className="inline font-medium text-foreground">
-                Access token hết hạn:{" "}
-              </dt>
-              <dd className="inline">
-                {formatDate(connection.accessTokenExpiresAt)}
-              </dd>
-            </div>
-            <div>
-              <dt className="inline font-medium text-foreground">
-                Refresh tiếp theo:{" "}
-              </dt>
-              <dd className="inline">{formatDate(connection.nextRefreshAt)}</dd>
-            </div>
-          </dl>
-          {connection.lastRefreshError && (
+          ) : (
+            <dl className="grid gap-x-6 gap-y-1 text-sm text-muted-foreground sm:grid-cols-2">
+              <div>
+                <dt className="inline font-medium text-foreground">OA ID: </dt>
+                <dd className="inline">{connection.oaId}</dd>
+              </div>
+              <div>
+                <dt className="inline font-medium text-foreground">
+                  Refresh gần nhất:{" "}
+                </dt>
+                <dd className="inline">{formatDate(connection.lastRefreshAt)}</dd>
+              </div>
+              <div>
+                <dt className="inline font-medium text-foreground">
+                  Access token hết hạn:{" "}
+                </dt>
+                <dd className="inline">
+                  {formatDate(connection.accessTokenExpiresAt)}
+                </dd>
+              </div>
+              <div>
+                <dt className="inline font-medium text-foreground">
+                  Refresh tiếp theo:{" "}
+                </dt>
+                <dd className="inline">{formatDate(connection.nextRefreshAt)}</dd>
+              </div>
+            </dl>
+          )}
+          {!disconnected && connection.lastRefreshError && (
             <p className="text-sm text-destructive">
               {connection.lastRefreshError}
             </p>
           )}
         </div>
         {canManage && (
-          <div className="flex shrink-0 flex-wrap gap-2">
-            <Button
-              variant="outline"
-              size="sm"
-              disabled={busy}
-              onClick={() => onAction("test")}
-            >
-              Kiểm tra
-            </Button>
-            <Button
-              variant="outline"
-              size="sm"
-              disabled={busy}
-              onClick={() => onAction("refresh")}
-            >
-              <RefreshCw data-icon="inline-start" />
-              Làm mới
-            </Button>
-            <Button
-              variant="ghost"
-              size="sm"
-              disabled={busy || connection.status === "disconnected"}
-              onClick={() => onAction("disconnect")}
-            >
-              <Unplug data-icon="inline-start" />
-              Ngắt
-            </Button>
+          <div className="flex shrink-0 flex-wrap items-start gap-2">
+            {disconnected ? (
+              <Button size="sm" disabled={busy} onClick={onReconnect}>
+                <RefreshCw data-icon="inline-start" />
+                Kết nối lại
+              </Button>
+            ) : (
+              <>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  disabled={busy}
+                  onClick={() => onAction("test")}
+                >
+                  Kiểm tra
+                </Button>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  disabled={busy}
+                  onClick={() => onAction("refresh")}
+                >
+                  <RefreshCw data-icon="inline-start" />
+                  Làm mới
+                </Button>
+                <AlertDialog>
+                  <AlertDialogTrigger asChild>
+                    <Button variant="ghost" size="sm" disabled={busy}>
+                      <Unplug data-icon="inline-start" />
+                      Ngắt
+                    </Button>
+                  </AlertDialogTrigger>
+                  <AlertDialogContent>
+                    <AlertDialogHeader>
+                      <AlertDialogTitle>
+                        Ngắt kết nối “{oaLabel}”?
+                      </AlertDialogTitle>
+                      <AlertDialogDescription>
+                        Sau khi ngắt, hệ thống sẽ không nhận tin nhắn mới và
+                        không tạo lead từ OA này. Tin nhắn gửi đến trong thời
+                        gian ngắt sẽ không được xử lý bù. Muốn kết nối lại, bạn
+                        cần dán access token và refresh token mới.
+                      </AlertDialogDescription>
+                    </AlertDialogHeader>
+                    <AlertDialogFooter>
+                      <AlertDialogCancel>Hủy</AlertDialogCancel>
+                      <AlertDialogAction
+                        className="bg-destructive text-white hover:bg-destructive/90"
+                        onClick={() => onAction("disconnect")}
+                      >
+                        Ngắt kết nối
+                      </AlertDialogAction>
+                    </AlertDialogFooter>
+                  </AlertDialogContent>
+                </AlertDialog>
+              </>
+            )}
           </div>
         )}
       </div>
@@ -364,42 +455,56 @@ function ConnectionCard({
 }
 
 type ConnectionDialogProps = {
-  open: boolean;
-  onOpenChange: (open: boolean) => void;
+  target: DialogTarget;
+  programName?: string;
+  onClose: () => void;
   options?: Awaited<ReturnType<typeof getZaloConnectionOptions>>;
-  onSaved: () => void;
+  onSaved: (message: string) => void;
 };
 
 function ConnectionDialog({
-  open,
-  onOpenChange,
+  target,
+  programName,
+  onClose,
   options,
   onSaved,
 }: ConnectionDialogProps) {
   const auth = useAuth();
+  const reconnecting = target.mode === "reconnect" ? target.connection : null;
   const [form, setForm] = useState<SaveZaloConnectionInput>({
     accessToken: "",
     refreshToken: "",
     accessTokenExpiresInHours: 24,
     refreshTokenExpiresInDays: 90,
-    institutionProgramId: "",
-    leadSourceId: "",
+    leadSourceId: reconnecting?.leadSourceId ?? "",
   });
   const save = useMutation({
-    mutationFn: () => saveManualZaloConnection(form, auth.accessToken!),
-    onSuccess: onSaved,
+    mutationFn: () =>
+      reconnecting
+        ? reconnectZaloConnection(reconnecting.id, form, auth.accessToken!)
+        : saveManualZaloConnection(form, auth.accessToken!),
+    onSuccess: () =>
+      onSaved(reconnecting ? "Đã kết nối lại Zalo OA." : "Đã lưu kết nối Zalo OA."),
   });
+  const leadSources = options?.leadSources ?? [];
   return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogTrigger asChild>
-        <Button>Thêm kết nối</Button>
-      </DialogTrigger>
+    <Dialog
+      open
+      onOpenChange={(open) => {
+        if (!open) onClose();
+      }}
+    >
       <DialogContent className="max-h-[90vh] overflow-y-auto">
         <DialogHeader>
-          <DialogTitle>Kết nối Zalo OA</DialogTitle>
+          <DialogTitle>
+            {reconnecting
+              ? `Kết nối lại ${reconnecting.oaName ?? `OA ${reconnecting.oaId}`}`
+              : "Kết nối Zalo OA"}
+          </DialogTitle>
           <DialogDescription>
-            App ID lấy từ cấu hình máy chủ. Token được mã hóa và không hiển thị
-            lại sau khi lưu.
+            {reconnecting
+              ? "Dán token mới của đúng OA này. Token được mã hóa và không hiển thị lại sau khi lưu."
+              : "App ID lấy từ cấu hình máy chủ. Token được mã hóa và không hiển thị lại sau khi lưu."}
           </DialogDescription>
         </DialogHeader>
         <form
@@ -409,6 +514,15 @@ function ConnectionDialog({
           }}
         >
           <FieldGroup>
+            <div className="rounded-lg border bg-muted/40 px-3 py-2 text-sm">
+              <p>
+                <span className="text-muted-foreground">Chương trình tuyển sinh: </span>
+                <span className="font-medium">{programName ?? "Chưa chọn"}</span>
+              </p>
+              <p className="mt-1 text-muted-foreground">
+                Lead nhận từ OA sẽ được đưa vào chương trình đang làm việc này.
+              </p>
+            </div>
             <Field>
               <FieldLabel htmlFor="zalo-access-token">
                 OA Access Token
@@ -481,19 +595,25 @@ function ConnectionDialog({
               </Field>
             </div>
             <Field>
-              <FieldLabel>Nguồn lead</FieldLabel>
+              <FieldLabel htmlFor="zalo-lead-source">Nguồn lead</FieldLabel>
               <Select
                 value={form.leadSourceId}
                 onValueChange={(value) =>
                   setForm({ ...form, leadSourceId: value })
                 }
               >
-                <SelectTrigger className="w-full">
-                  <SelectValue placeholder="Chọn nguồn lead" />
+                <SelectTrigger id="zalo-lead-source" className="w-full">
+                  <SelectValue
+                    placeholder={
+                      leadSources.length
+                        ? "Chọn nguồn lead"
+                        : "Chương trình này chưa có nguồn lead"
+                    }
+                  />
                 </SelectTrigger>
                 <SelectContent>
                   <SelectGroup>
-                    {options?.leadSources.map((source) => (
+                    {leadSources.map((source) => (
                       <SelectItem key={source.id} value={source.id}>
                         {source.name}
                       </SelectItem>
@@ -502,14 +622,6 @@ function ConnectionDialog({
                 </SelectContent>
               </Select>
             </Field>
-            <IntegrationProgramField
-              value={form.institutionProgramId}
-              onValueChange={(value) =>
-                setForm({ ...form, institutionProgramId: value })
-              }
-              programs={options?.institutionPrograms}
-              description="Lead nhận từ OA sẽ được đưa vào chương trình này."
-            />
             {save.error && (
               <p role="alert" className="text-sm text-destructive">
                 {save.error.message}
@@ -519,17 +631,13 @@ function ConnectionDialog({
               <Button
                 type="button"
                 variant="outline"
-                onClick={() => onOpenChange(false)}
+                onClick={onClose}
               >
                 Hủy
               </Button>
               <Button
                 type="submit"
-                disabled={
-                  save.isPending ||
-                  !form.leadSourceId ||
-                  !form.institutionProgramId
-                }
+                disabled={save.isPending || !form.leadSourceId}
               >
                 {save.isPending ? "Đang kiểm tra…" : "Kiểm tra và lưu"}
               </Button>

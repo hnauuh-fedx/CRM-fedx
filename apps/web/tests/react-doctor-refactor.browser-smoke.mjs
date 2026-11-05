@@ -239,12 +239,12 @@ try {
         return json(response, options);
       if (path === "/api/leads/custom-fields")
         return json(response, { fields: [] });
-      if (path === "/api/leads/lead-1/transition-note-options") {
+      if (path === "/api/leads/lead-1/stage-detail-options") {
         assert.equal(url.searchParams.get("target"), "stage-2");
         return json(response, {
           target: "stage-2",
           label: "Giai đoạn mới",
-          templates: [{ id: "note-1", content: "Ghi chú mẫu" }],
+          options: [{ id: "detail-1", label: "Nội dung mẫu", children: [] }],
         });
       }
       if (
@@ -663,17 +663,18 @@ try {
     0,
   );
   await click("#fixture-transition");
-  await button("Chuyển không ghi chú", dialog);
+  await button("Chuyển không chọn nội dung", dialog);
   await wait(
     "document.querySelector('[role=dialog]')?.textContent.includes('Lưu thất bại')",
   );
-  await button("Chuyển không ghi chú", dialog);
+  await button("Chuyển không chọn nội dung", dialog);
   await wait("!document.querySelector('[role=dialog]')");
   assert.deepEqual(
     await evaluate(
       "JSON.parse(document.querySelector('#fixture-transition-result').textContent)",
     ),
-    { calls: 2, result: { command: "command-1", selection: {} } },
+    // Skipping the content sends no selection (undefined is dropped by JSON).
+    { calls: 2, result: { command: "command-1" } },
   );
   console.log(
     "PASS transition prompt cancel, failed confirmation preserved and successful retry with original command",

@@ -58,7 +58,8 @@ import { LeadOpenInitialization } from "../components/lead-open-initialization";
 import { BulkUpdateLeadsDialog } from "../components/bulk-update-leads-dialog";
 import { RerunLeadRuleDialog } from "../components/rerun-lead-rule-dialog";
 import { serializeConditions } from "../filter-serialization";
-import { useLeadWorkflowTransition } from "../components/transition-note-dialog";
+import { useLeadWorkflowTransition } from "../components/stage-detail-dialog";
+import { PIPELINE_STAGE_FIELD_LABEL } from "../stage-detail.types";
 import type {
   LeadActionOptions,
   LeadDetail,
@@ -450,9 +451,9 @@ export function LeadsListPage({
       {exportMutation.isError && <p role="alert" className="text-sm text-destructive">{exportMutation.error.message}</p>}
       <Card className="gap-3 border-border/70 py-4 shadow-xs">
         <CardHeader className="gap-0.5 px-4">
-          <CardTitle className="text-base">Tiến trình</CardTitle>
+          <CardTitle className="text-base">{PIPELINE_STAGE_FIELD_LABEL}</CardTitle>
           <CardDescription className="text-xs">
-            Chọn một bước để lọc danh sách lead đang ở tiến trình đó.
+            Chọn một tiến trình hoặc Fail để lọc danh sách lead.
           </CardDescription>
         </CardHeader>
         <CardContent className="px-4">

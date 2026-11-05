@@ -5,6 +5,7 @@ import { prisma } from "../../../database/prisma";
 import type { Prisma } from "../../../generated/prisma/client";
 import type { LeadInput } from "../domain/lead-input";
 import { getLeadScopeWhere } from "../lead-list.service";
+import { appendStageDetailToActivity } from "../stage-detail-option.schema";
 
 export async function findVisibleLeadForMutation(
   actor: AuthUser,
@@ -227,6 +228,7 @@ export async function recordStageChange(
     activityContent?: string;
     includeStageNameInAudit?: boolean;
     ipAddress?: string;
+    /** Stage detail chosen for this transition; kept on the history row and appended to the activity sentence. */
     note?: string;
   } = {},
 ) {
@@ -246,11 +248,13 @@ export async function recordStageChange(
       lead_id: leadId,
       user_id: user.id,
       type: "pipeline_stage_changed",
-      content:
+      content: appendStageDetailToActivity(
         options.activityContent ??
-        (toStage
-          ? `Chuyển lead sang tiến trình ${toStage.name}.`
-          : "Bỏ chọn tiến trình của lead."),
+          (toStage
+            ? `Chuyển lead sang tiến trình ${toStage.name}.`
+            : "Bỏ chọn tiến trình của lead."),
+        options.note,
+      ),
       metadata: { fromStageId, toStageId },
     },
   });

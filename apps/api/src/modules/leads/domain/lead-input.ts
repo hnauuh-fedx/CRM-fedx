@@ -6,9 +6,10 @@ export type LeadInput = {
   originId?: string;
   assigneeId?: string | null;
   secondaryAssigneeId?: string | null;
+  /** A pipeline stage id, "" to clear, or "FAIL" (update only) to move the lead to Fail. */
   pipelineStageId?: string;
-  noteTemplateId?: string;
-  noteContent?: string;
+  /** Configured multi-level content chosen for the stage/status the lead moves to. */
+  stageDetail?: { optionId: string; childOptionId?: string; content?: string };
   email?: string;
   gender?: string;
   dateOfBirth?: string;

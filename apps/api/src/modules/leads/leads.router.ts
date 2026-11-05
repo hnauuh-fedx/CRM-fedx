@@ -40,8 +40,8 @@ import { importLeadsFromWorkbook, InvalidLeadImportFileError } from "./lead-impo
 import { getLeadCustomFieldDefinitions, getLeadCustomFields, patchLeadCustomFields } from "./lead-custom-fields.service";
 import { canCheckSensitiveDuplicates, listDuplicateGroupMembers, listDuplicateLeads } from "./lead-duplicates.service";
 import { getSystemFieldRequirements } from "../custom-fields/system-field-requirements.service";
-import { getVisibleTransitionNoteOptions } from "./transition-note.service";
-import { transitionNoteTargetSchema } from "./transition-note.schema";
+import { getVisibleStageDetailOptions } from "./stage-detail-option.service";
+import { STAGE_DETAIL_FAIL_TARGET, stageDetailSelectionSchema, stageDetailTargetSchema } from "./stage-detail-option.schema";
 import { initializeLeadOnOpen } from "./application/open-lead.use-case";
 import { bulkUpdateLeads, getBulkUpdateFieldOptions } from "./application/bulk-update-leads.use-case";
 
@@ -95,9 +95,9 @@ const leadBodySchema = z.object({
     .transform((value) => value === "" ? null : value),
   secondaryAssigneeId: z.union([z.uuid(), z.literal(""), z.null()]).optional()
     .transform((value) => value === "" ? null : value),
-  pipelineStageId: z.uuid().optional().or(z.literal("")),
-  noteTemplateId: z.uuid().optional(),
-  noteContent: z.string().trim().min(1).max(1800).optional(),
+  // "FAIL" is only accepted when updating: it moves the lead to the Fail status.
+  pipelineStageId: z.union([z.uuid(), z.literal(STAGE_DETAIL_FAIL_TARGET), z.literal("")]).optional(),
+  stageDetail: stageDetailSelectionSchema.optional(),
   email: z.email().max(255).optional().or(z.literal("")).transform((value) => value || undefined),
   gender: optionalText(20),
   dateOfBirth: optionalDate,
@@ -173,6 +173,9 @@ const leadBodySchema = z.object({
 const createLeadBodySchema = leadBodySchema.extend({ customFieldValues: z.record(z.uuid(), z.unknown().nullable()).refine(values => Object.keys(values).length <= 100).default({}) }).refine((input) => Boolean(input.institutionProgramId), {
   path: ["institutionProgramId"],
   message: "Vui lòng chọn chương trình tuyển sinh.",
+}).refine((input) => input.pipelineStageId !== STAGE_DETAIL_FAIL_TARGET && !input.stageDetail, {
+  path: ["pipelineStageId"],
+  message: "Lead mới cần chọn tiến trình; không thể tạo lead ở trạng thái Fail.",
 });
 const defaultLeadFieldRequirements: Record<string, boolean> = {
   fullName: true,
@@ -188,8 +191,14 @@ async function hasAllRequiredLeadFields(input: Record<string, unknown>) {
     return Array.isArray(value) ? value.length > 0 : value !== undefined && value !== null && value !== "";
   });
 }
-const stageBodySchema = z.object({ stageId: z.uuid(), noteTemplateId: z.uuid().optional(), noteContent: z.string().trim().min(1).max(1800).optional() });
-const lifecycleStatusBodySchema = z.object({ status: z.enum(["ACTIVE", "FAIL"]), noteTemplateId: z.uuid().optional(), noteContent: z.string().trim().min(1).max(1800).optional() });
+const stageBodySchema = z.object({ stageId: z.uuid(), stageDetail: stageDetailSelectionSchema.optional() });
+const lifecycleStatusBodySchema = z.object({
+  status: z.enum(["ACTIVE", "FAIL"]),
+  stageDetail: stageDetailSelectionSchema.optional(),
+  // ACTIVE only: resume at this stage instead of the stage the lead failed from.
+  targetStageId: z.uuid().optional(),
+}).refine((input) => input.status === "ACTIVE" || !input.targetStageId, { path: ["targetStageId"] });
+const stageDetailInvalidMessage = "Nội dung đã chọn không còn trong cấu hình của tiến trình hoặc trạng thái đích. Hãy chọn lại hoặc bỏ qua.";
 const noteBodySchema = z.object({ content: z.string().trim().min(1).max(4000) });
 const fileBodySchema = z.object({
   fileName: z.string().trim().min(1).max(255),
@@ -696,8 +705,12 @@ leadsRouter.patch(
           response.status(403).json({ message: "Bạn không có quyền thay đổi Sale phụ trách." });
           return;
         }
-        if (result.reason === "note_template_invalid") {
-          response.status(400).json({ message: "Mẫu ghi chú không còn hoạt động hoặc không thuộc tiến trình đích. Hãy chọn lại hoặc bỏ qua ghi chú." });
+        if (result.reason === "stage_detail_invalid") {
+          response.status(400).json({ message: stageDetailInvalidMessage });
+          return;
+        }
+        if (result.reason === "stage_required") {
+          response.status(409).json({ message: "Lead cần có tiến trình trước khi chuyển sang Fail." });
           return;
         }
         response.status(result.reason === "phone_already_exists" ? 409 : 400).json({
@@ -761,16 +774,15 @@ leadsRouter.patch(
         parsedBody.data.stageId,
         getInstitutionProgramScope(request),
         request.ip,
-        parsedBody.data.noteTemplateId,
-        parsedBody.data.noteContent,
+        parsedBody.data.stageDetail,
       );
       if (!result.ok) {
         if (result.reason === "lead_failed") {
           response.status(409).json({ message: "Lead đang ở trạng thái Fail. Hãy chuyển về Active trước khi đổi tiến trình." });
           return;
         }
-        if (result.reason === "note_template_invalid") {
-          response.status(400).json({ message: "Mẫu ghi chú không còn hoạt động hoặc không thuộc tiến trình đích. Hãy chọn lại hoặc bỏ qua ghi chú." });
+        if (result.reason === "stage_detail_invalid") {
+          response.status(400).json({ message: stageDetailInvalidMessage });
           return;
         }
         response.status(404).json({ message: result.reason === "lead_not_found"
@@ -803,8 +815,8 @@ leadsRouter.patch(
         parsedBody.data.status,
         getInstitutionProgramScope(request),
         request.ip,
-        parsedBody.data.noteTemplateId,
-        parsedBody.data.noteContent,
+        parsedBody.data.stageDetail,
+        parsedBody.data.targetStageId,
       );
       if (!result.ok) {
         const messages = {
@@ -812,13 +824,13 @@ leadsRouter.patch(
           stage_required: "Lead cần có tiến trình trước khi chuyển sang Fail.",
           stage_not_found: "Không thể tìm thấy tiến trình cần lưu hoặc khôi phục.",
           permission_denied: "Bạn không có quyền cập nhật trạng thái lead.",
-          note_template_invalid: "Mẫu ghi chú không còn hoạt động hoặc không thuộc trạng thái đích. Hãy chọn lại hoặc bỏ qua ghi chú.",
+          stage_detail_invalid: stageDetailInvalidMessage,
         } as const;
         const statusCode = result.reason === "permission_denied"
           ? 403
           : result.reason === "lead_not_found"
             ? 404
-            : result.reason === "note_template_invalid" ? 400 : 409;
+            : result.reason === "stage_detail_invalid" ? 400 : 409;
         response.status(statusCode).json({ message: messages[result.reason] });
         return;
       }
@@ -951,12 +963,12 @@ leadsRouter.post(
   },
 );
 
-leadsRouter.get("/:id/transition-note-options", requireAuthentication, requireAnyPermission(...leadUpdatePermissions), async (request, response, next) => {
+leadsRouter.get("/:id/stage-detail-options", requireAuthentication, requireAnyPermission(...leadUpdatePermissions), async (request, response, next) => {
   try {
     const id = leadIdSchema.safeParse(request.params.id);
-    const target = transitionNoteTargetSchema.safeParse(request.query.target);
+    const target = stageDetailTargetSchema.safeParse(request.query.target);
     if (!id.success || !target.success) return response.status(400).json({ message: "Tiến trình hoặc trạng thái đích không hợp lệ." });
-    const result = await getVisibleTransitionNoteOptions(request.authUser!, id.data, target.data, getInstitutionProgramScope(request));
+    const result = await getVisibleStageDetailOptions(request.authUser!, id.data, target.data, getInstitutionProgramScope(request));
     if (!result.ok) return response.status(404).json({ message: result.reason === "lead_not_found" ? "Không tìm thấy lead trong phạm vi truy cập." : "Không tìm thấy tiến trình đích." });
     response.json(result.data);
   } catch (error) { next(error); }

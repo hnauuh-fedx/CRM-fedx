@@ -292,9 +292,9 @@ export type LeadFormInput = {
   sourceId: string;
   assigneeId: string;
   secondaryAssigneeId?: string;
+  /** A stage id, "" for no stage, or "FAIL" (edit only) for the Fail status. */
   pipelineStageId: string;
-  noteTemplateId?: string;
-  noteContent?: string;
+  stageDetail?: import("./stage-detail.types").StageDetailSelection;
   email: string;
   gender: string;
   dateOfBirth: string;

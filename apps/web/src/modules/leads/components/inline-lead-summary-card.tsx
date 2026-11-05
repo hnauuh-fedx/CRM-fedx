@@ -28,6 +28,7 @@ import { toLeadFormOptions, toLeadFormValues } from "../lead-form.helpers";
 import { LeadAssigneeLines, LeadAssigneeSelects } from "./lead-assignee";
 import { CopyPhoneButton, LeadPhoneLines, nonStandardPhoneClass } from "./lead-phone";
 import type { LeadActionOptions, LeadDetail, LeadFormInput } from "../lead.types";
+import { FAIL_STAGE_VALUE, PIPELINE_STAGE_FIELD_LABEL } from "../stage-detail.types";
 import { getUnmatchedValue, UnmatchedValue } from "./lead-unmatched-values";
 
 type EditableField =
@@ -148,7 +149,7 @@ export function InlineLeadSummaryCard({
   lead: LeadDetail;
   options?: LeadActionOptions;
   canUpdate: boolean;
-  /** Stage changes go through the workflow transition so the note prompt and progress bar stay in sync. */
+  /** Stage/Fail changes go through the workflow transition so the content prompt and progress bar stay in sync. */
   stageControl?: InlineLeadStageControl;
 }) {
   const auth = useAuth();
@@ -250,15 +251,17 @@ export function InlineLeadSummaryCard({
     );
   };
   const secondaryPhones = draft.secondaryPhones ?? [];
-  const canChangeStage =
-    canUpdate && Boolean(stageControl) && lead.lifecycleStatus.value === "ACTIVE";
+  // Fail is one of the values; choosing a stage on a failed lead reactivates it there.
+  const canChangeStage = canUpdate && Boolean(stageControl);
+  const isFailed = lead.lifecycleStatus.value === "FAIL";
+  const currentStageValue = isFailed ? FAIL_STAGE_VALUE : lead.pipelineStage?.id;
   const changeStage = (stageId: string) => {
     setEditingFields((current) => {
       const next = new Set(current);
       next.delete("pipelineStageId");
       return next;
     });
-    if (stageId !== lead.pipelineStage?.id) stageControl?.onChange(stageId);
+    if (stageId !== currentStageValue) stageControl?.onChange(stageId);
   };
 
   return (
@@ -372,35 +375,42 @@ export function InlineLeadSummaryCard({
 
           <div className="flex flex-col gap-2">
             {canChangeStage && isEditing("pipelineStageId") ? (
-              <InlineField id="inline-lead-pipeline-stage" label="Quy trình Telesale">
+              <InlineField id="inline-lead-pipeline-stage" label={PIPELINE_STAGE_FIELD_LABEL}>
                 <Select
-                  value={lead.pipelineStage?.id}
+                  value={currentStageValue}
                   onValueChange={changeStage}
                   disabled={stageControl?.isPending}
                 >
                   <SelectTrigger id="inline-lead-pipeline-stage" className="w-full" autoFocus={lastOpenedField === "pipelineStageId"}>
-                    <SelectValue placeholder="Chọn quy trình telesale" />
+                    <SelectValue placeholder="Chọn tiến trình hoặc trạng thái" />
                   </SelectTrigger>
                   <SelectContent>
                     <SelectGroup>
                       {stageControl?.stages.map((stage) => (
                         <SelectItem key={stage.id} value={stage.id}>{stage.name}</SelectItem>
                       ))}
+                      <SelectItem value={FAIL_STAGE_VALUE}>Fail</SelectItem>
                     </SelectGroup>
                   </SelectContent>
                 </Select>
               </InlineField>
             ) : (
               <ReadonlyValue
-                label="Quy trình Telesale"
-                value={stageControl?.isPending ? "Đang cập nhật…" : lead.pipelineStage?.name ?? "Chưa cập nhật"}
+                label={PIPELINE_STAGE_FIELD_LABEL}
+                value={
+                  stageControl?.isPending
+                    ? "Đang cập nhật…"
+                    : isFailed
+                      ? lead.lifecycleStatus.label
+                      : lead.pipelineStage?.name ?? "Chưa cập nhật"
+                }
                 editable={canChangeStage && !stageControl?.isPending}
                 onEdit={() => startEditingField("pipelineStageId")}
               />
             )}
             {lead.pipelineStageNote && (
               <p className="rounded-md border bg-muted/40 px-3 py-2 text-sm whitespace-pre-line">
-                <span className="sr-only">Ghi chú tiến trình: </span>
+                <span className="sr-only">Nội dung chuyển trạng thái: </span>
                 {lead.pipelineStageNote}
               </p>
             )}

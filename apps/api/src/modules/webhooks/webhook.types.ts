@@ -34,6 +34,8 @@ export type WebhookSystemFieldMetadata = {
   group: "STANDARD";
   groupKey: string;
   groupLabel: string;
+  /** Field code shown to admins and suggested as the incoming key; the mapping still stores `key`. */
+  fieldKey?: string;
   /** Listed for completeness but filled by the system, never by a mapping. */
   readOnly?: boolean;
   readOnlyReason?: string;
@@ -49,6 +51,21 @@ const requiredLeadFields = new Set(["fullName", "phone", "source"]);
 /** Shown in the mapping list so every source field appears, but always derived by the system. */
 const systemDerivedFields: Record<string, string> = {
   originId: "Hệ thống tự xác định từ URL nhóm nguồn hoặc nhóm nguồn cố định của webhook.",
+};
+
+/**
+ * Field codes that match the payload keys partners send; only the incoming-key
+ * suggestion changes, so saved mappings keep using the internal field key.
+ */
+export const webhookSystemFieldCodes: Record<string, string> = {
+  fullName: "name",
+  phone: "phones",
+  email: "emails",
+  majorId: "nganh_dang_ky",
+  graduationCertificate: "bang_tot_nghiep",
+  province: "tinh_thanh_pho",
+  source: "source",
+  sourceId: "nguon_hv",
 };
 
 function toWebhookFieldType(field: LeadSystemField): WebhookFieldType {
@@ -76,6 +93,7 @@ export const webhookFieldMetadata: WebhookSystemFieldMetadata[] =
         // Source fields (Nguồn học viên, Nhóm nguồn, Nguồn...) share the "Nguồn khách hàng" cluster everywhere.
         groupKey: getLeadFieldGroup(field.key)?.id ?? group.id,
         groupLabel: getLeadFieldGroup(field.key)?.label ?? group.label,
+        ...(webhookSystemFieldCodes[field.key] ? { fieldKey: webhookSystemFieldCodes[field.key] } : {}),
         ...(systemDerivedFields[field.key] ? { readOnly: true, readOnlyReason: systemDerivedFields[field.key] } : {}),
       })),
   );

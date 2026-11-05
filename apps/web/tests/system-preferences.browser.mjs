@@ -82,7 +82,7 @@ try {
   await wait("document.body.textContent.includes('Kết quả tìm kiếm')");
   await tab("Tiếp nhận dữ liệu");
   await wait("document.querySelector('#preference-inboundDuplicate')");
-  await tab("Biểu mẫu & ghi chú");
+  await tab("Biểu mẫu & trường nhiều cấp");
   await wait("document.querySelector('#required-field-search')");
   await fill("#required-field-search", "Số điện thoại");
   assert.ok(await evaluate("document.querySelector('#required-phone').disabled"));

@@ -233,7 +233,7 @@ export function personalPresentationIssues(
 export const leadDisplayFields: DisplayField[] = [
   { key: "fullName", label: "Họ và tên", locked: true },
   { key: "phone", label: "Số điện thoại" },
-  { key: "pipelineStage", label: "Quy trình Telesale" },
+  { key: "pipelineStage", label: "Quy trình Telesale/Trạng thái" },
   { key: "source", label: "Nguồn học viên" },
   { key: "assignee", label: "Nhân viên sale" },
   { key: "majorName", label: "Ngành đăng ký" },

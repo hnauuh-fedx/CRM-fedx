@@ -84,7 +84,7 @@ import {
   updateStudentConversionRequirement,
   updateSystemFieldRequirement,
 } from "@/services/custom-field.service";
-import { TransitionNoteSettings } from "../components/transition-note-settings";
+import { StageDetailSettings } from "../components/stage-detail-settings";
 import {
   customFieldDataTypes,
   type CustomFieldDataType,
@@ -253,6 +253,7 @@ export function CustomFieldsManagementPage({
   const [fieldSourceFilter, setFieldSourceFilter] =
     useState<FieldSourceFilter>(allFilterValue);
   const [successMessage, setSuccessMessage] = useState("");
+  const notifyTimer = useRef<number | undefined>(undefined);
 
   const canCreate = auth.can(
     customFieldPermission(config.entityType, "create"),
@@ -291,8 +292,8 @@ export function CustomFieldsManagementPage({
       getSystemFieldRequirements(config.entityType, auth.accessToken!),
     enabled: Boolean(
       auth.accessToken &&
-        config.systemFieldGroups?.length &&
-        canConfigureSystemRequirements,
+      config.systemFieldGroups?.length &&
+      canConfigureSystemRequirements,
     ),
   });
 
@@ -332,7 +333,9 @@ export function CustomFieldsManagementPage({
 
   function notify(message: string) {
     setSuccessMessage(message);
-    window.setTimeout(() => setSuccessMessage(""), 4_000);
+    // Restart the timer so a quick second toggle is not hidden by the first timeout.
+    window.clearTimeout(notifyTimer.current);
+    notifyTimer.current = window.setTimeout(() => setSuccessMessage(""), 4_000);
   }
 
   async function refreshFields() {
@@ -436,88 +439,92 @@ export function CustomFieldsManagementPage({
   return (
     <PageLoadingBoundary variant="settings" queries={[query, groupQuery]}>
       <div className="flex flex-col gap-6">
-      <PageHeader
-        eyebrow={config.eyebrow}
-        title={config.title}
-        description={config.description}
-        scopeLabel={config.subjectLabel}
-        actions={
-          config.formSelector || canCreate ? (
-            <div className="flex flex-wrap items-center gap-2">
-              {config.formSelector}
-              {canCreate && (
-                <Button
-                  type="button"
-                  disabled={groupQuery.isLoading || groupQuery.isError}
-                  onClick={() => setDialog({ type: "create" })}
-                >
-                  <Plus data-icon="inline-start" />
-                  Thêm trường
-                </Button>
-              )}
-            </div>
-          ) : undefined
-        }
-      />
+        <PageHeader
+          eyebrow={config.eyebrow}
+          title={config.title}
+          description={config.description}
+          scopeLabel={config.subjectLabel}
+          actions={
+            config.formSelector || canCreate ? (
+              <div className="flex flex-wrap items-center gap-2">
+                {config.formSelector}
+                {canCreate && (
+                  <Button
+                    type="button"
+                    disabled={groupQuery.isLoading || groupQuery.isError}
+                    onClick={() => setDialog({ type: "create" })}
+                  >
+                    <Plus data-icon="inline-start" />
+                    Thêm trường
+                  </Button>
+                )}
+              </div>
+            ) : undefined
+          }
+        />
 
-      {successMessage && (
-        <Alert
-          className="fixed right-4 bottom-4 z-50 w-[min(24rem,calc(100%-2rem))] shadow-lg"
-          role="status"
-        >
-          <AlertTitle>Thành công</AlertTitle>
-          <AlertDescription>{successMessage}</AlertDescription>
-        </Alert>
-      )}
+        {successMessage && (
+          <Alert
+            className="fixed right-4 bottom-4 z-50 w-[min(24rem,calc(100%-2rem))] border-2 border-emerald-500 shadow-lg dark:border-emerald-400"
+            role="status"
+            aria-live="polite"
+          >
+            <AlertTitle className="text-emerald-700 dark:text-emerald-400">
+              Thành công
+            </AlertTitle>
+            <AlertDescription>{successMessage}</AlertDescription>
+          </Alert>
+        )}
 
-      <CustomFieldFilters
-        search={search}
-        setSearch={setSearch}
-        fieldSourceFilter={fieldSourceFilter}
-        setFieldSourceFilter={setFieldSourceFilter}
-      />
+        <CustomFieldFilters
+          search={search}
+          setSearch={setSearch}
+          fieldSourceFilter={fieldSourceFilter}
+          setFieldSourceFilter={setFieldSourceFilter}
+        />
 
-      <CustomFieldStructure
-        config={config}
-        visibleSystemFieldCount={visibleSystemFieldCount}
-        visibleCustomFields={visibleCustomFields}
-        query={query}
-        groupQuery={groupQuery}
-        visibleGroups={visibleGroups}
-        canConfigureSystemRequirements={canConfigureSystemRequirements}
-        systemRequirementsQuery={systemRequirementsQuery}
-        canUpdate={canUpdate}
-        systemRequirementMutation={systemRequirementMutation}
-        canEditSensitive={canEditSensitive}
-        setDialog={setDialog}
-        canArchive={canArchive}
-        statusMutation={statusMutation}
-      />
+        <CustomFieldStructure
+          config={config}
+          visibleSystemFieldCount={visibleSystemFieldCount}
+          visibleCustomFields={visibleCustomFields}
+          query={query}
+          groupQuery={groupQuery}
+          visibleGroups={visibleGroups}
+          canConfigureSystemRequirements={canConfigureSystemRequirements}
+          systemRequirementsQuery={systemRequirementsQuery}
+          canUpdate={canUpdate}
+          systemRequirementMutation={systemRequirementMutation}
+          canEditSensitive={canEditSensitive}
+          setDialog={setDialog}
+          canArchive={canArchive}
+          statusMutation={statusMutation}
+          notify={notify}
+        />
 
-      <CustomFieldEditorDialog
-        dialog={dialog}
-        setDialog={setDialog}
-        editingField={editingField}
-        config={config}
-        groupQuery={groupQuery}
-        programs={programs}
-        selectedProgramId={selectedProgramId}
-        createMutation={createMutation}
-        updateMutation={updateMutation}
-        createGroupMutation={createGroupMutation}
-        formError={formError}
-        canManageOptions={canManageOptions}
-        canEditSensitive={canEditSensitive}
-        canManageGroups={canManageGroups}
-      />
+        <CustomFieldEditorDialog
+          dialog={dialog}
+          setDialog={setDialog}
+          editingField={editingField}
+          config={config}
+          groupQuery={groupQuery}
+          programs={programs}
+          selectedProgramId={selectedProgramId}
+          createMutation={createMutation}
+          updateMutation={updateMutation}
+          createGroupMutation={createGroupMutation}
+          formError={formError}
+          canManageOptions={canManageOptions}
+          canEditSensitive={canEditSensitive}
+          canManageGroups={canManageGroups}
+        />
 
-      <ArchiveCustomFieldDialog
-        dialog={dialog}
-        setDialog={setDialog}
-        archivingField={archivingField}
-        statusMutation={statusMutation}
-      />
-    </div>
+        <ArchiveCustomFieldDialog
+          dialog={dialog}
+          setDialog={setDialog}
+          archivingField={archivingField}
+          statusMutation={statusMutation}
+        />
+      </div>
     </PageLoadingBoundary>
   );
 }
@@ -584,8 +591,8 @@ function CustomFieldForm({
   const metadataOnlyType = fieldType === "FILE";
   const typeLockedForOptions = Boolean(
     initialField &&
-      isOptionFieldType(initialField.fieldType) &&
-      !canManageOptions,
+    isOptionFieldType(initialField.fieldType) &&
+    !canManageOptions,
   );
 
   function submit(event: FormEvent<HTMLFormElement>) {
@@ -1533,18 +1540,15 @@ function DefinedCustomFieldRow({
   return (
     <TableRow key={field.id}>
       <TableCell>
-        <div className="flex min-w-52 flex-col items-start gap-1">
-          <span className="font-medium">{field.fieldLabel}</span>
-          <Badge variant="outline">Tùy chỉnh</Badge>
-          {field.description && (
-            <span className="max-w-md text-xs text-muted-foreground">
-              {field.description}
-            </span>
-          )}
-        </div>
+        <FieldIdentity
+          label={field.fieldLabel}
+          source="custom"
+          isActive={field.isActive}
+          description={field.description}
+        />
       </TableCell>
       <TableCell>
-        <div className="flex flex-col gap-1">
+        <div className="flex flex-col gap-0.5">
           <span>{dataTypeLabels[field.fieldType]}</span>
           {isOptionFieldType(field.fieldType) && (
             <span className="text-xs text-muted-foreground">
@@ -1555,15 +1559,12 @@ function DefinedCustomFieldRow({
         </div>
       </TableCell>
       <TableCell>
-        <code className="text-xs text-muted-foreground">{field.fieldKey}</code>
+        <code className="text-xs break-all text-muted-foreground">
+          {field.fieldKey}
+        </code>
       </TableCell>
       <TableCell>
         <DefinedFieldBadges field={field} />
-      </TableCell>
-      <TableCell>
-        <Badge variant={field.isActive ? "default" : "secondary"}>
-          {field.isActive ? "Đang dùng" : "Tạm ngừng"}
-        </Badge>
       </TableCell>
       <TableCell>
         <DefinedFieldActions
@@ -1594,6 +1595,7 @@ type SystemCustomFieldRowProps = {
     unknown
   >;
   config: CustomFieldsManagementConfig;
+  notify: (message: string) => void;
 };
 
 function SystemCustomFieldRow({
@@ -1603,18 +1605,18 @@ function SystemCustomFieldRow({
   canUpdate,
   systemRequirementMutation,
   config,
+  notify,
 }: SystemCustomFieldRowProps) {
   return (
     <TableRow key={`system-${item.key}`}>
       <TableCell>
-        <div className="flex min-w-52 flex-col items-start gap-1">
-          <span className="font-medium">{item.label}</span>
-          <Badge variant="secondary">Hệ thống</Badge>
-        </div>
+        <FieldIdentity label={item.label} source="system" isActive />
       </TableCell>
       <TableCell>{dataTypeLabels[item.dataType]}</TableCell>
       <TableCell>
-        <code className="text-xs text-muted-foreground">{item.key}</code>
+        <code className="text-xs break-all text-muted-foreground">
+          {item.key}
+        </code>
       </TableCell>
       <TableCell>
         {canConfigureSystemRequirements && !item.readOnly ? (
@@ -1623,33 +1625,33 @@ function SystemCustomFieldRow({
             item={item}
             canUpdate={canUpdate}
             systemRequirementMutation={systemRequirementMutation}
+            notify={notify}
           />
         ) : (
           <SystemFieldInformation item={item} />
         )}
-      </TableCell>
-      <TableCell>
-        <Badge>Đang dùng</Badge>
+        {/* Multi-level options (Cấp 2/3) of "Quy trình Telesale/Trạng thái". */}
+        {config.entityType === "LEAD" && item.key === "pipelineStageId" && (
+          <div className="mt-2">
+            <StageDetailSettings />
+          </div>
+        )}
       </TableCell>
       <TableCell>
         <div className="flex justify-end">
-          {config.entityType === "LEAD" && item.key === "note" ? (
-            <TransitionNoteSettings />
-          ) : (
-            <Tooltip>
-              <TooltipTrigger asChild>
-                <span
-                  className="inline-flex size-8 items-center justify-center text-muted-foreground"
-                  aria-label="Trường hệ thống được khóa"
-                >
-                  <LockKeyhole className="size-4" aria-hidden="true" />
-                </span>
-              </TooltipTrigger>
-              <TooltipContent>
-                Trường hệ thống được khai báo trong form và cơ sở dữ liệu.
-              </TooltipContent>
-            </Tooltip>
-          )}
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <span
+                className="inline-flex size-8 items-center justify-center text-muted-foreground"
+                aria-label="Trường hệ thống được khóa"
+              >
+                <LockKeyhole className="size-4" aria-hidden="true" />
+              </span>
+            </TooltipTrigger>
+            <TooltipContent>
+              Trường hệ thống được khai báo trong form và cơ sở dữ liệu.
+            </TooltipContent>
+          </Tooltip>
         </div>
       </TableCell>
     </TableRow>
@@ -1700,6 +1702,7 @@ type CustomFieldStructureProps = {
     { id: string; status: CustomFieldStatusAction },
     unknown
   >;
+  notify: (message: string) => void;
 };
 
 function CustomFieldStructure({
@@ -1717,6 +1720,7 @@ function CustomFieldStructure({
   setDialog,
   canArchive,
   statusMutation,
+  notify,
 }: CustomFieldStructureProps) {
   return (
     <Card>
@@ -1766,10 +1770,10 @@ function CustomFieldStructure({
           <div>
             {visibleGroups.map((group) => (
               <section key={group.id} className="border-t first:border-t-0">
-                <div className="flex flex-wrap items-start justify-between gap-3 bg-muted/40 px-6 py-4">
-                  <div>
+                <div className="flex flex-wrap items-start justify-between gap-2 bg-muted/40 px-4 py-3">
+                  <div className="min-w-0">
                     <h3 className="text-sm font-semibold">{group.label}</h3>
-                    <p className="mt-1 text-xs text-muted-foreground">
+                    <p className="mt-0.5 text-xs text-muted-foreground">
                       {group.description}
                     </p>
                   </div>
@@ -1783,14 +1787,21 @@ function CustomFieldStructure({
                   </div>
                 </div>
                 <div className="overflow-x-auto">
-                  <Table className="min-w-[1180px]">
+                  {/* Fixed layout + wrapping cells keep the table inside the content area when the sidebar is open; it only scrolls on narrow screens. */}
+                  <Table className="min-w-180 table-fixed [&_td]:whitespace-normal">
+                    <colgroup>
+                      <col className="w-[26%]" />
+                      <col className="w-28" />
+                      <col className="w-[16%]" />
+                      <col />
+                      <col className="w-32" />
+                    </colgroup>
                     <StaticTableHeader
                       columns={[
                         { label: "Trường dữ liệu" },
                         { label: "Kiểu" },
                         { label: "Mã trường" },
                         { label: "Cấu hình" },
-                        { label: "Trạng thái" },
                         { label: "Thao tác", className: "text-right" },
                       ]}
                     />
@@ -1806,6 +1817,7 @@ function CustomFieldStructure({
                           canUpdate={canUpdate}
                           systemRequirementMutation={systemRequirementMutation}
                           config={config}
+                          notify={notify}
                         />
                       ))}
                       {group.customFields.map((field) => {
@@ -1889,9 +1901,50 @@ function ArchiveCustomFieldDialog({
   );
 }
 
+/** Field name, then its source (Hệ thống/Tùy chỉnh) and status on one line of small tags. */
+function FieldIdentity({
+  label,
+  source,
+  isActive,
+  description,
+}: {
+  label: string;
+  source: "system" | "custom";
+  isActive: boolean;
+  description?: string | null;
+}) {
+  return (
+    <div className="flex flex-col gap-1">
+      <span className="font-medium wrap-break-word">{label}</span>
+      <div className="flex flex-wrap items-center gap-1">
+        <Badge variant={source === "system" ? "secondary" : "outline"}>
+          {source === "system" ? "Hệ thống" : "Tùy chỉnh"}
+        </Badge>
+        <Badge
+          variant="outline"
+          className={
+            isActive
+              ? "border-emerald-200 bg-emerald-50 text-emerald-700 dark:border-emerald-900 dark:bg-emerald-950 dark:text-emerald-300"
+              : "text-muted-foreground"
+          }
+        >
+          <span
+            aria-hidden="true"
+            className={`size-1.5 rounded-full ${isActive ? "bg-emerald-500" : "bg-muted-foreground"}`}
+          />
+          {isActive ? "Đang dùng" : "Tạm ngừng"}
+        </Badge>
+      </div>
+      {description && (
+        <span className="text-xs text-muted-foreground">{description}</span>
+      )}
+    </div>
+  );
+}
+
 function DefinedFieldBadges({ field }: { field: CustomFieldDefinition }) {
   return (
-    <div className="flex min-w-40 flex-wrap gap-1">
+    <div className="flex flex-wrap gap-1">
       {field.isRequired && <Badge variant="outline">Bắt buộc</Badge>}
       {field.entityType === "LEAD" && field.isRequiredForStudent && (
         <Badge variant="outline">Bắt buộc khi chuyển học viên</Badge>
@@ -1941,7 +1994,7 @@ function DefinedFieldActions({
   statusMutation,
 }: DefinedFieldActionsProps) {
   return (
-    <div className="flex justify-end gap-2">
+    <div className="flex justify-end gap-1">
       {canUpdate && (!field.isSensitive || canEditSensitive) && (
         <IconAction
           label="Chỉnh sửa trường"
@@ -1990,6 +2043,7 @@ type SystemFieldRequirementControlProps = {
     { fieldKey: string; isRequired: boolean },
     unknown
   >;
+  notify: (message: string) => void;
 };
 
 function SystemFieldRequirementControl({
@@ -1997,52 +2051,58 @@ function SystemFieldRequirementControl({
   item,
   canUpdate,
   systemRequirementMutation,
+  notify,
 }: SystemFieldRequirementControlProps) {
   const isRequired =
     systemRequirementsQuery.data?.[item.key] ?? item.isRequired ?? false;
   return (
-    <div className="flex min-w-48 flex-col items-start gap-2">
-      <label className="flex min-h-8 items-center gap-2 text-sm">
-        <Checkbox
-          checked={isRequired}
-          disabled={
-            item.requiredLocked ||
-            !canUpdate ||
-            systemRequirementMutation.isPending ||
-            systemRequirementsQuery.isLoading
-          }
-          onCheckedChange={(checked) =>
-            systemRequirementMutation.mutate({
-              fieldKey: item.key,
-              isRequired: Boolean(checked),
-            })
-          }
-          aria-label={`Đặt trường ${item.label} là bắt buộc`}
+    <div className="flex flex-col items-start gap-1">
+      <div className="flex flex-wrap items-center gap-x-4 gap-y-1">
+        <label className="flex min-h-7 items-center gap-2 text-sm">
+          <Checkbox
+            checked={isRequired}
+            disabled={
+              item.requiredLocked ||
+              !canUpdate ||
+              systemRequirementMutation.isPending ||
+              systemRequirementsQuery.isLoading
+            }
+            onCheckedChange={(checked) =>
+              systemRequirementMutation.mutate({
+                fieldKey: item.key,
+                isRequired: Boolean(checked),
+              })
+            }
+            aria-label={`Đặt trường ${item.label} là bắt buộc`}
+          />
+          Bắt buộc nhập
+        </label>
+        <StudentConversionRequirementControl
+          item={item}
+          canUpdate={canUpdate}
+          isRequired={isRequired}
+          requirementsLoading={systemRequirementsQuery.isLoading}
+          notify={notify}
         />
-        Bắt buộc nhập
-      </label>
-      <StudentConversionRequirementControl
-        item={item}
-        canUpdate={canUpdate}
-        isRequired={isRequired}
-        requirementsLoading={systemRequirementsQuery.isLoading}
-      />
+      </div>
       {item.requiredLocked && (
         <span className="text-xs text-muted-foreground">
           Trường định danh cốt lõi luôn bắt buộc.
         </span>
       )}
-      <div className="flex flex-wrap gap-1">
-        {item.isSensitive && <Badge variant="destructive">Nhạy cảm</Badge>}
-        {item.optionSource && (
-          <Badge variant="outline">Nguồn: {item.optionSource}</Badge>
-        )}
-        {item.note && (
-          <span className="w-full text-xs text-muted-foreground">
-            {item.note}
-          </span>
-        )}
-      </div>
+      {(item.isSensitive || item.optionSource || item.note) && (
+        <div className="flex flex-wrap gap-1">
+          {item.isSensitive && <Badge variant="destructive">Nhạy cảm</Badge>}
+          {item.optionSource && (
+            <Badge variant="outline">Nguồn: {item.optionSource}</Badge>
+          )}
+          {item.note && (
+            <span className="w-full text-xs text-muted-foreground">
+              {item.note}
+            </span>
+          )}
+        </div>
+      )}
     </div>
   );
 }
@@ -2053,11 +2113,13 @@ function StudentConversionRequirementControl({
   canUpdate,
   isRequired,
   requirementsLoading,
+  notify,
 }: {
   item: import("../form-field-catalog.types").SystemFormField;
   canUpdate: boolean;
   isRequired: boolean;
   requirementsLoading: boolean;
+  notify: (message: string) => void;
 }) {
   const auth = useAuth();
   const queryClient = useQueryClient();
@@ -2069,12 +2131,14 @@ function StudentConversionRequirementControl({
   const mutation = useMutation({
     mutationFn: (checked: boolean) =>
       updateStudentConversionRequirement(item.key, checked, auth.accessToken!),
-    onSuccess: (data) =>
-      queryClient.setQueryData(["student-conversion-requirements"], data),
+    onSuccess: (data) => {
+      queryClient.setQueryData(["student-conversion-requirements"], data);
+      notify("Đã cập nhật quy tắc bắt buộc khi chuyển học viên.");
+    },
   });
   return (
     <div className="flex flex-col items-start gap-1">
-      <label className="flex min-h-8 items-center gap-2 text-sm">
+      <label className="flex min-h-7 items-center gap-2 text-sm">
         <Checkbox
           checked={isRequired || (query.data?.[item.key] ?? false)}
           disabled={
@@ -2106,7 +2170,7 @@ function SystemFieldInformation({
   item: import("../form-field-catalog.types").SystemFormField;
 }) {
   return (
-    <div className="flex min-w-48 flex-wrap gap-1">
+    <div className="flex flex-wrap gap-1">
       {item.readOnly && <Badge variant="outline">Chỉ xem</Badge>}
       {item.isRequired && <Badge variant="outline">Bắt buộc</Badge>}
       {item.isSensitive && <Badge variant="destructive">Nhạy cảm</Badge>}

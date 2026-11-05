@@ -43,5 +43,5 @@ test("technical settings are separated from editable business settings", () => {
   assert.ok(isTechnicalSetting("migration.example"));
   assert.ok(isTechnicalSetting("mail.password", "secret"));
   assert.ok(isStructuredSetting("form_field_requirements.LEAD"));
-  assert.ok(isStructuredSetting("lead_transition_notes.FAIL"));
+  assert.ok(isStructuredSetting("lead_stage_detail_options.FAIL"));
 });
