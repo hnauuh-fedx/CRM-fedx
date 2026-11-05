@@ -38,7 +38,8 @@ test("dropdown fields list their values; sensitive and hidden fields are exclude
     customField({ id: "field-4", name: "Tỉnh", dataType: "PROVINCE" }),
   ], options, false);
   const byKey = new Map(fields.map((field) => [field.key, field]));
-  assert.deepEqual(byKey.get("pipelineStageId")?.options, [{ value: "stage-1", label: "Liên hệ (L1)" }]);
+  // Fail is offered after the pipeline stages; the API maps it to the lifecycle status.
+  assert.deepEqual(byKey.get("pipelineStageId")?.options, [{ value: "stage-1", label: "Liên hệ (L1)" }, { value: "FAIL", label: "Fail" }]);
   assert.deepEqual(byKey.get("sourceId")?.options, [{ value: "source-1", label: "Facebook" }]);
   assert.deepEqual(byKey.get("assigneeId")?.options, [{ value: "user-1", label: "Nguyễn Văn A" }]);
   assert.deepEqual(byKey.get("cf:field-2")?.options, [{ value: "full", label: "Chính quy" }]);
