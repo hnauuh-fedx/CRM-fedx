@@ -5,7 +5,7 @@ import {
   layoutScreenLabels,
   type EffectiveLayout,
   type DisplayLayout,
-  type ListLayoutScreen,
+  type LayoutScreen,
 } from "@admission-crm/shared/display-layout";
 import { useAuth } from "@/modules/auth/auth-context";
 import { useInstitutionProgram } from "@/modules/institutions/institution-program-context";
@@ -40,7 +40,7 @@ import {
 } from "@/components/ui/alert-dialog";
 
 type Context = {
-  screen: ListLayoutScreen;
+  screen: LayoutScreen;
   onClose: () => void;
   onSelect: (id: string) => void;
 };
@@ -48,7 +48,7 @@ export function ListDisplayLayoutDialog({
   screen,
   layout,
 }: {
-  screen: ListLayoutScreen;
+  screen: LayoutScreen;
   layout?: EffectiveLayout;
 }) {
   const auth = useAuth();
@@ -91,7 +91,7 @@ function ListLayoutWorkspace({
   initialId,
   onClose,
 }: {
-  screen: ListLayoutScreen;
+  screen: LayoutScreen;
   initialId?: string | null;
   onClose: () => void;
 }) {
@@ -182,6 +182,7 @@ function PopupLayoutEditor({
     initial,
     screen,
     onPublished: () => {
+      void client.invalidateQueries({ queryKey: ["lead-surface-layout", selectedProgramId, auth.user?.id, screen] });
       void client.invalidateQueries({
         queryKey: [
           "lead-display-layout",
@@ -253,7 +254,7 @@ function LayoutPopupFrame({
   busy = false,
   children,
 }: {
-  screen: ListLayoutScreen;
+  screen: LayoutScreen;
   onClose: () => void;
   busy?: boolean;
   children: ReactNode;
@@ -305,7 +306,7 @@ function PopupTemplatePicker({
   onSelect,
   disabled = false,
 }: {
-  screen: ListLayoutScreen;
+  screen: LayoutScreen;
   selected: string | null;
   onSelect: (id: string) => void;
   disabled?: boolean;

@@ -31,6 +31,7 @@ import { DisplayTargetPicker } from "./display-target-picker";
 import { DisplayLayoutLeaveGuard } from "./use-display-layout-leave-guard";
 import {
   layoutScreenLabels,
+  layoutPublicationIssue,
   isListLayoutScreen,
   type LayoutScreen,
   lockedPersonalization,
@@ -128,6 +129,12 @@ export function DisplayLayoutEditorContent({ model }: { model: EditorModel }) {
           </CardDescription>
         </CardHeader>
         <CardContent>
+          {layoutPublicationIssue(screen, draft.targets) && (
+            <Alert variant="destructive" className="mb-4">
+              <AlertTitle>Chưa chọn đối tượng áp dụng</AlertTitle>
+              <AlertDescription>{layoutPublicationIssue(screen, draft.targets)}</AlertDescription>
+            </Alert>
+          )}
           <DisplayTargetPicker
             targets={draft.targets}
             departmentId={
@@ -271,7 +278,10 @@ function DisplayLayoutMetadata({ model }: { model: EditorModel }) {
               disabled={busy}
               onChange={(value) => {
                 setState((current) => ({ ...current, departmentId: value }));
-                edit("targets", []);
+                edit("targets", model.screen === "LEAD_POPUP"
+                  ? value ? [{ type: "DEPARTMENT", id: value }]
+                    : auth.user?.accessScope === "ALL" ? [{ type: "DEFAULT", id: "default" }] : []
+                  : []);
               }}
             />
           )}

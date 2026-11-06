@@ -11,6 +11,7 @@ import {
   chooseLayoutTarget,
   isListLayoutScreen,
   getDisplayFields,
+  layoutPublicationIssue,
   normalizeVisibleFields,
   normalizePresentation,
   lockedPersonalization,
@@ -462,6 +463,10 @@ async function impact(
     })),
   };
 }
+function assertPublicationAudience(item: Template) {
+  const issue = layoutPublicationIssue(item.screen as LayoutScreen, (item.draft as unknown as LayoutDraft).targets);
+  if (issue) throw new DisplayLayoutError(400, issue);
+}
 export async function previewLayout(
   actor: AuthUser,
   programId: string,
@@ -473,6 +478,7 @@ export async function previewLayout(
       const item = await findTemplate(db, id, programId, actor);
       if (item.revision !== revision)
         throw new DisplayLayoutError(409, "Mẫu đã thay đổi. Vui lòng tải lại.");
+      assertPublicationAudience(item);
       await validateTargets(
         db,
         item.draft as unknown as LayoutDraft,
@@ -536,6 +542,7 @@ export async function publishLayout(
         "Phân bổ mẫu vừa thay đổi. Vui lòng xem lại phạm vi ảnh hưởng.",
       );
     const item = await findTemplate(db, id, programId, actor);
+    assertPublicationAudience(item);
     const draft = layoutDraftSchemaForScreen(item.screen as LayoutScreen).parse(
       item.draft,
     );

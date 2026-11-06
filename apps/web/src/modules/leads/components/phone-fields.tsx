@@ -34,15 +34,15 @@ function PhoneInput({ value, className, ...props }: ComponentProps<typeof Input>
   );
 }
 
-export function PhoneFields({ form, label, disabled = false }: { form: UseFormReturn<LeadFormInput>; label: string; disabled?: boolean }) {
+export function PhoneFields({ form, label, disabled = false, id = "lead-phone" }: { form: UseFormReturn<LeadFormInput>; label: string; disabled?: boolean; id?: string }) {
   const phone = form.watch("phone") ?? "";
   const secondaryPhones = form.watch("secondaryPhones") ?? [];
   const errors = form.formState.errors;
   return (
-    <Field data-invalid={Boolean(errors.phone)}>
-      <FieldLabel htmlFor="lead-phone">{label}</FieldLabel>
+    <Field data-layout-field="phone" data-invalid={Boolean(errors.phone)}>
+      <FieldLabel htmlFor={id}>{label.replace(/\s*\*$/, "")}<span className="text-destructive" aria-label="Bắt buộc"> *</span></FieldLabel>
       <div className="flex items-center gap-1">
-        <PhoneInput value={phone} disabled={disabled} id="lead-phone" type="tel" inputMode="numeric" autoComplete="tel" placeholder="Nhập đúng 10 chữ số" aria-invalid={Boolean(errors.phone)} {...form.register("phone")} />
+        <PhoneInput value={phone} disabled={disabled} id={id} type="tel" inputMode="numeric" autoComplete="tel" placeholder="Nhập đúng 10 chữ số" aria-invalid={Boolean(errors.phone)} {...form.register("phone")} />
       </div>
       <FieldError errors={[errors.phone]} />
       {secondaryPhones.map((secondaryPhone, index) => (

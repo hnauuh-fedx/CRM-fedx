@@ -4,6 +4,8 @@ import { useLeadListColumns } from "../components/lead-list-columns";
 import { useLeadDisplayLayout, getLeadListLayoutScreen } from "../use-lead-display-layout";
 import { LeadDisplayLayoutStatus, EditLeadDisplayLayoutButton } from "../components/lead-display-layout-status";
 import { PageLoadingBoundary } from "@/components/shared/page-loading-state";
+import { ListDisplayLayoutDialog } from "../components/list-display-layout-dialog";
+import { useLeadSurfaceLayout } from "../components/use-lead-surface-layout";
 import { LeadDetailLayout } from "../components/lead-detail-layout";
 import { LeadListTable } from "../components/lead-list-table";
 import { defaultDisplayColumnWidth, minDisplayColumnWidth, maxDisplayColumnWidth } from "@admission-crm/shared/display-layout";
@@ -1303,7 +1305,8 @@ function LeadResultsCard({
   );
 }
 
-function EditLeadHeader({ lead }: { lead?: LeadDetail }) {
+export function EditLeadHeader({ lead }: { lead?: LeadDetail }) {
+  const layout = useLeadSurfaceLayout("LEAD_POPUP", Boolean(lead), lead?.institutionProgramId ?? undefined);
   return (
     <DialogHeader className="shrink-0 border-b px-6 py-5 pr-14 lg:[zoom:0.9]">
       <div className="flex flex-col justify-between gap-4 sm:flex-row sm:items-start">
@@ -1316,12 +1319,15 @@ function EditLeadHeader({ lead }: { lead?: LeadDetail }) {
           </DialogDescription>
         </div>
         {lead && (
-          <Button asChild type="button" size="sm" variant="outline">
-            <Link to={`/sale/leads/${lead.id}`} state={openLeadInEditModeState}>
-              <ExternalLink aria-hidden="true" />
+          <div className="flex flex-wrap items-center gap-2" data-testid="lead-popup-header-actions">
+            <ListDisplayLayoutDialog screen="LEAD_POPUP" layout={layout.data} />
+            <Button asChild type="button" size="sm" variant="outline">
+              <Link to={`/sale/leads/${lead.id}`} state={openLeadInEditModeState}>
+                <ExternalLink aria-hidden="true" />
               Mở trang chi tiết
-            </Link>
-          </Button>
+              </Link>
+            </Button>
+          </div>
         )}
       </div>
     </DialogHeader>
@@ -1375,8 +1381,9 @@ function EditLeadContent({
       )}
       <div className="grid items-start gap-4 xl:grid-cols-[minmax(320px,0.82fr)_minmax(0,1.48fr)]">
         <aside className="flex min-w-0 flex-col gap-4">
-          <LeadDetailLayout lead={lead} enabled canUpdate={canUpdate} options={options}>
+          <LeadDetailLayout lead={lead} enabled screen="LEAD_POPUP" showLayoutControl={false} canUpdate={canUpdate} options={options}>
           <InlineLeadSummaryCard
+            layoutScreen="LEAD_POPUP"
             lead={lead}
             options={options}
             canUpdate={canUpdate}

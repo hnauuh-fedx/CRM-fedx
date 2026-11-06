@@ -9,6 +9,8 @@ import {
 } from "@admission-crm/shared/display-layout";
 import {
   assertLayoutManager,
+  layoutScreenSchema,
+  layoutDraftSchemaForScreen,
   layoutDraftSchema,
 } from "./display-layout.validation";
 import type { AuthUser } from "../auth/auth.types";
@@ -181,4 +183,12 @@ test("quyền và phạm vi phải cùng hợp lệ", () => {
   assert.throws(() =>
     assertLayoutManager({ ...manager, accessScope: "READ_ONLY" }, "a"),
   );
+});
+
+
+test("popup layout has its own screen and enforces required form fields", () => {
+  assert.equal(layoutScreenSchema.parse("LEAD_POPUP"), "LEAD_POPUP");
+  const schema = layoutDraftSchemaForScreen("LEAD_POPUP");
+  assert.ok(schema.safeParse({ name: "Popup", visibleFields: ["fullName", "phone", "sourceId", "institutionProgramId", "note"], targets: [] }).success);
+  assert.equal(schema.safeParse({ name: "Popup", visibleFields: ["fullName"], targets: [] }).success, false);
 });

@@ -26,6 +26,7 @@ import type {
 } from "../lead.types";
 import { LeadForm } from "./lead-form";
 import { LeadUnmatchedValuesNotice, withUnmatchedValue } from "./lead-unmatched-values";
+import { ListDisplayLayoutDialog } from "./list-display-layout-dialog";
 import { useLeadSurfaceLayout } from "./use-lead-surface-layout";
 
 type Props = {
@@ -35,6 +36,8 @@ type Props = {
   onEdit?: () => void;
   canUpdate?: boolean;
   options?: LeadActionOptions;
+  screen?: "LEAD_DETAIL" | "LEAD_POPUP";
+  showLayoutControl?: boolean;
 };
 export function LeadDetailLayout(props: Props) {
   return (
@@ -52,13 +55,23 @@ function ConfiguredLeadDetail({
   onEdit,
   canUpdate,
   options,
+  screen = "LEAD_DETAIL",
+  showLayoutControl = true,
 }: Props) {
   const layout = useLeadSurfaceLayout(
-    "LEAD_DETAIL",
+    screen,
     enabled,
     lead.institutionProgramId ?? undefined,
   );
   const [editing, setEditing] = useState(false);
+  const content = enabled ? (
+    <div className="flex flex-col gap-3">
+      <div className="flex flex-wrap justify-end gap-2">
+        {showLayoutControl && <ListDisplayLayoutDialog screen={screen} layout={layout.data} />}
+      </div>
+      {children}
+    </div>
+  ) : children;
   if (!enabled) return children;
   if (layout.isLoading) return <Skeleton className="h-72 w-full" />;
   if (layout.isError)
@@ -67,21 +80,23 @@ function ConfiguredLeadDetail({
         <p role="status" className="text-sm text-muted-foreground">
           Chưa tải được mẫu hiển thị. Đang dùng giao diện mặc định.
         </p>
-        {children}
+        {content}
       </>
     );
-  if (!layout.data?.baseTemplateId) return children;
+  if (!layout.data?.baseTemplateId) return content;
   if (editing)
     return (
       <ConfiguredInlineLeadEditor
         lead={lead}
         options={options}
         onCancel={() => setEditing(false)}
+        layoutScreen={screen === "LEAD_POPUP" ? "LEAD_POPUP" : "LEAD_FORM"}
       />
     );
   return (
     <Card>
       <CardHeader>
+        {showLayoutControl && <ListDisplayLayoutDialog screen={screen} layout={layout.data} />}
         <CardTitle>Thông tin ứng viên</CardTitle>
         <CardDescription>{layout.data.name}</CardDescription>
         {canUpdate && (
@@ -95,7 +110,7 @@ function ConfiguredLeadDetail({
         )}
       </CardHeader>
       <CardContent>
-        <LeadDetailFields lead={lead} visible={layout.data.visibleFields} />
+        <LeadDetailFields lead={lead} visible={layout.data.visibleFields} requirements={options?.systemFieldRequirements} />
       </CardContent>
     </Card>
   );
@@ -110,9 +125,11 @@ const dates = new Set(
 function LeadDetailFields({
   lead,
   visible,
+  requirements,
 }: {
   lead: LeadDetail;
   visible: string[];
+  requirements?: Record<string, boolean>;
 }) {
   const fields = getDisplayFields("LEAD_DETAIL");
   const labels = new Map(fields.map((field) => [field.key, field.label]));
@@ -144,7 +161,7 @@ function LeadDetailFields({
     >
       {normalizeVisibleFields(visible, fields).map((key) => (
         <div key={key} className="min-w-0" data-layout-field={key}>
-          <dt className="text-sm text-muted-foreground">{labels.get(key)}</dt>
+          <dt className="text-sm text-muted-foreground">{labels.get(key)}{(requirements?.[key] || leadFormFieldCatalog.flatMap((group) => group.fields).some((field) => field.key === key && field.requiredLocked)) && <span className="text-destructive" aria-label="Bắt buộc"> *</span>}</dt>
           <dd className="mt-1 whitespace-pre-wrap break-words text-sm font-medium">
             {key === "phone" ? <LeadPhoneLines lead={lead} /> : key === "assigneeId" ? <LeadAssigneeLines lead={lead} /> : withUnmatchedValue(lead, key, value(key))}
           </dd>
@@ -154,14 +171,16 @@ function LeadDetailFields({
   );
 }
 
-function ConfiguredInlineLeadEditor({
+export function ConfiguredInlineLeadEditor({
   lead,
   options,
   onCancel,
+  layoutScreen = "LEAD_FORM",
 }: {
   lead: LeadDetail;
   options?: LeadActionOptions;
   onCancel: () => void;
+  layoutScreen?: "LEAD_FORM" | "LEAD_POPUP";
 }) {
   const auth = useAuth();
   const defaultValues = useMemo(() => toLeadFormValues(lead), [lead]);
@@ -196,8 +215,11 @@ function ConfiguredInlineLeadEditor({
             {mutation.error.message}
           </p>
         )}
+        {layoutScreen !== "LEAD_POPUP" && <ListDisplayLayoutDialog screen={layoutScreen} />}
         <LeadForm
           useDisplayLayout
+          layoutScreen={layoutScreen}
+          hideProgress
           leadId={lead.id}
           defaultValues={defaultValues}
           options={formOptions}
