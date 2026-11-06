@@ -98,6 +98,7 @@ export type LeadFormProps = {
   onSubmit: (values: LeadFormInput) => void;
   dialogLayout?: boolean;
   useDisplayLayout?: boolean;
+  layoutScreen?: "LEAD_FORM" | "LEAD_POPUP";
   /** Leave out the stage picker when the page already provides one (lead detail page). */
   hideProgress?: boolean;
 };
@@ -111,6 +112,7 @@ export function LeadForm({
   onSubmit,
   dialogLayout = false,
   useDisplayLayout = false,
+  layoutScreen = "LEAD_FORM",
   hideProgress = false,
 }: LeadFormProps) {
   const auth = useAuth();
@@ -125,7 +127,7 @@ export function LeadForm({
     },
   });
   const programId = form.watch("institutionProgramId");
-  const surfaceLayout = useLeadSurfaceLayout("LEAD_FORM", useDisplayLayout, programId);
+  const surfaceLayout = useLeadSurfaceLayout(layoutScreen, useDisplayLayout, programId);
   const layoutLoading = useDisplayLayout && surfaceLayout.isLoading;
   const customFieldsQuery = useLeadFormCustomFields(
     leadId,
@@ -222,11 +224,13 @@ export function LeadForm({
       const fieldStillInvalid =
         !parsed.success &&
         parsed.error.issues.some((issue) => issue.path[0] === name);
-      if (!fieldStillInvalid) form.clearErrors(name as keyof LeadFormInput);
+      const missingRequired = options.systemFieldRequirements[name] &&
+        isEmptyRequiredValue(form.getValues(name as keyof LeadFormInput));
+      if (!fieldStillInvalid && !missingRequired) form.clearErrors(name as keyof LeadFormInput);
     });
 
     return () => subscription.unsubscribe();
-  }, [form]);
+  }, [form, options.systemFieldRequirements]);
   useEffect(() => {
     for (const field of customFields) {
       const path = `customFieldValues.${field.id}` as const;
@@ -448,7 +452,7 @@ function isEmptyRequiredValue(value: unknown) {
   return (
     value === undefined ||
     value === null ||
-    value === "" ||
+    (typeof value === "string" && value.trim() === "") ||
     (Array.isArray(value) && value.length === 0)
   );
 }

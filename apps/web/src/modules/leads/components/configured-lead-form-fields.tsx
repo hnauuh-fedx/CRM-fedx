@@ -133,7 +133,7 @@ function ConfiguredLeadField({
   allowFailStage,
 }: Props & { field: LeadSystemField }) {
   const key = field.key as keyof LeadFormInput;
-  if (key === "phone") return <PhoneFields form={form} label={field.label} disabled={disabled} />;
+  if (key === "phone") return <PhoneFields id="configured-lead-phone" form={form} label={field.label} disabled={disabled} />;
   if (key === "assigneeId") return <LeadAssigneeSelects disabled={disabled} idPrefix="configured-lead-assignee"
     primaryId={form.watch("assigneeId")} secondaryId={form.watch("secondaryAssigneeId") ?? ""}
     options={options.telesales} onChange={({primaryId, secondaryId}) => {
@@ -150,6 +150,7 @@ function ConfiguredLeadField({
     id,
     disabled,
     "aria-invalid": Boolean(error),
+    "aria-required": Boolean(required),
     "aria-describedby": error ? `${id}-error` : undefined,
   };
   return (
@@ -160,7 +161,7 @@ function ConfiguredLeadField({
     >
       <FieldLabel htmlFor={id}>
         {field.label}
-        {required ? " *" : ""}
+        {required && <span className="text-destructive" aria-label="Bắt buộc"> *</span>}
       </FieldLabel>
       <ConfiguredLeadControl
         field={field}
@@ -260,7 +261,7 @@ function ConfiguredLeadSelect({
     <select
       {...inputProps}
       value={value}
-      className="h-9 w-full min-w-0 rounded-md border bg-background px-3 text-sm disabled:opacity-50"
+      className="h-9 w-full min-w-0 rounded-md border bg-background px-3 text-sm disabled:opacity-50 aria-invalid:border-destructive aria-invalid:ring-destructive/20"
       onChange={(event) => {
         if (key === "pipelineStageId") onStageChange(event.target.value);
         else

@@ -1,4 +1,5 @@
 import { useMutation, useQueryClient } from "@tanstack/react-query";
+import { ConfiguredInlineLeadEditor } from "./lead-detail-layout";
 import { Pencil } from "lucide-react";
 import { useEffect, useMemo, useState, type KeyboardEvent, type ReactNode } from "react";
 
@@ -145,12 +146,14 @@ export function InlineLeadSummaryCard({
   options,
   canUpdate,
   stageControl,
+  layoutScreen = "LEAD_FORM",
 }: {
   lead: LeadDetail;
   options?: LeadActionOptions;
   canUpdate: boolean;
   /** Stage/Fail changes go through the workflow transition so the content prompt and progress bar stay in sync. */
   stageControl?: InlineLeadStageControl;
+  layoutScreen?: "LEAD_FORM" | "LEAD_POPUP";
 }) {
   const auth = useAuth();
   const queryClient = useQueryClient();
@@ -245,7 +248,7 @@ export function InlineLeadSummaryCard({
     // An unmatched webhook value is shown with "*" until the user saves a valid value.
     const unmatched = getUnmatchedValue(lead, field);
     return (
-      <ReadonlyValue label={label} value={unmatched ? `${unmatched.rawValue}*` : value} editable={canUpdate} onEdit={() => startEditingField(field)}>
+      <ReadonlyValue label={`${label}${editOptions.systemFieldRequirements[field] || ["fullName", "phone", "sourceId"].includes(field) ? " *" : ""}`} value={unmatched ? `${unmatched.rawValue}*` : value} editable={canUpdate} onEdit={() => startEditingField(field)}>
         {unmatched ? <UnmatchedValue value={unmatched.rawValue} /> : children}
       </ReadonlyValue>
     );
@@ -263,6 +266,8 @@ export function InlineLeadSummaryCard({
     });
     if (stageId !== currentStageValue) stageControl?.onChange(stageId);
   };
+
+  if (isEditingAll) return <ConfiguredInlineLeadEditor layoutScreen={layoutScreen} lead={lead} options={options} onCancel={cancelEditing} />;
 
   return (
     <Card className="@container border-border/70 shadow-xs">

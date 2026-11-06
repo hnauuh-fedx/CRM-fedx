@@ -6,6 +6,8 @@ import type {
 } from "@admission-crm/shared/display-layout";
 import {
   createLayout,
+  previewLayout,
+  publishLayout,
   effectiveLayout,
   listLayouts,
   saveLayout,
@@ -57,7 +59,28 @@ export async function checkLayoutScreens(
     beforeList,
     "Publishing other surfaces must preserve list and personal layout.",
   );
-  for (const item of [detail, form]) {
+  const unassignedPopup = await createLayout(actor, programId, null, {
+    name: "[TEST] Unassigned popup",
+    visibleFields: ["fullName", "phone", "sourceId", "institutionProgramId"],
+    targets: [],
+  }, undefined, "LEAD_POPUP");
+  await assert.rejects(
+    () => previewLayout(actor, programId, unassignedPopup.id, unassignedPopup.revision),
+    /đối tượng áp dụng/,
+    "Applying a popup without targets must not report success while leaving the popup unchanged.",
+  );
+  const currentImpact = await previewLayout(actor, programId, form.id, form.revision);
+  await assert.rejects(
+    () => publishLayout(actor, programId, unassignedPopup.id, unassignedPopup.revision, currentImpact.assignmentRevision),
+    /đối tượng áp dụng/,
+    "Direct publication must also reject an unassigned popup.",
+  );
+  const popup = await publish(await createLayout(actor, programId, null, {
+    name: "[TEST] Popup",
+    visibleFields: ["fullName", "phone", "sourceId", "institutionProgramId", "note"],
+    targets: [{ type: "DEFAULT", id: "default" }],
+  }, undefined, "LEAD_POPUP"));
+  for (const item of [detail, form, popup]) {
     const screen = item.screen as LayoutScreen;
     const effective = await effectiveLayout(sale, programId, undefined, screen);
     assert.equal(effective.baseTemplateId, item.id);
@@ -113,6 +136,7 @@ export async function checkLayoutScreens(
       .baseTemplateId,
     form.id,
   );
+  await assert.rejects(() => effectiveLayout(createOnly, programId, undefined, "LEAD_POPUP"), /quyền/);
   await assert.rejects(
     () => effectiveLayout(createOnly, programId, undefined, "LEAD_DETAIL"),
     /quyền/,

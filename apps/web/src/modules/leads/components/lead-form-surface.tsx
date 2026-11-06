@@ -1,5 +1,6 @@
 import type { ReactNode } from "react";
 import type { UseQueryResult } from "@tanstack/react-query";
+import { getDisplayFields } from "@admission-crm/shared/display-layout";
 import type { EffectiveLayout } from "@admission-crm/shared/display-layout";
 import { ConfiguredLeadFormFields } from "./configured-lead-form-fields";
 import type { ComponentProps } from "react";
@@ -35,15 +36,14 @@ export function LeadFormSurface({
         {children}
       </>
     );
-  if (!layout.data?.baseTemplateId) return children;
   return (
     <>
       <p className="text-sm text-muted-foreground" role="status">
-        {layout.data.name}. Trường bắt buộc và trường có lỗi luôn được hiển thị.
+        {layout.data?.name ?? "Biểu mẫu mặc định"}. Trường bắt buộc và trường có lỗi luôn được hiển thị.
       </p>
       <ConfiguredLeadFormFields
         {...props}
-        visible={layout.data.visibleFields}
+        visible={layout.data?.visibleFields ?? getDisplayFields("LEAD_FORM").map((field) => field.key)}
       />
       {transitionError && (
         <p role="alert" className="text-sm text-destructive">

@@ -1,8 +1,11 @@
+import { createMemoryRouter, RouterProvider } from "react-router-dom";
+import { Dialog, DialogContent } from "../src/components/ui/dialog";
+import { EditLeadHeader } from "../src/modules/leads/pages/leads-list-page";
 import { createRoot } from "react-dom/client";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { AuthProvider, useAuth } from "../src/modules/auth/auth-context";
-import { InstitutionProgramProvider } from "../src/modules/institutions/institution-program-context";
+import { InstitutionProgramProvider, useInstitutionProgram } from "../src/modules/institutions/institution-program-context";
 import { LeadForm } from "../src/modules/leads/components/lead-form";
 import { LeadDetailLayout } from "../src/modules/leads/components/lead-detail-layout";
 import { emptyLeadForm } from "../src/modules/leads/lead.schema";
@@ -43,6 +46,7 @@ const options = {
 const detail = {
   ...defaults,
   id: "lead-1",
+  lifecycleStatus: { value: "ACTIVE", label: "Đang xử lý", failedStageId: null },
   source: options.sources[0],
   assignee: null,
   pipelineStage: null,
@@ -51,14 +55,29 @@ const detail = {
   admissionStatusName: null,
 } as unknown as LeadDetail;
 function Surfaces() {
+  const { selectedProgramId, programs, selectProgram } = useInstitutionProgram();
+  useEffect(() => {
+    if (!selectedProgramId && programs.length) selectProgram(programId);
+  }, [selectedProgramId, programs, selectProgram]);
   const [submitted, setSubmitted] = useState<LeadFormInput | null>(null);
   const [mode, setMode] = useState("edit");
+  if (mode === "popup") return (
+    <Dialog open>
+      <DialogContent className="flex max-h-[95dvh] flex-col overflow-y-auto sm:max-w-5xl">
+        <EditLeadHeader lead={detail} />
+        <LeadDetailLayout lead={detail} enabled screen="LEAD_POPUP" showLayoutControl={false} canUpdate options={options}>
+          <p>Popup</p>
+        </LeadDetailLayout>
+      </DialogContent>
+    </Dialog>
+  );
   return (
     <main className="mx-auto flex max-w-5xl flex-col gap-6 p-4">
+      <button id="popup-mode" onClick={() => setMode("popup")}>Popup</button>
       <button id="create-mode" onClick={() => setMode("create")}>
         Thử tạo lead
       </button>
-      <LeadDetailLayout lead={detail} enabled>
+      <LeadDetailLayout lead={detail} enabled canUpdate options={options}>
         <p>Chi tiết mặc định</p>
       </LeadDetailLayout>
       <LeadForm
@@ -91,8 +110,6 @@ createRoot(document.getElementById("root")!).render(
   <QueryClientProvider
     client={new QueryClient({ defaultOptions: { queries: { retry: false } } })}
   >
-    <AuthProvider>
-      <Workspace />
-    </AuthProvider>
+    <RouterProvider router={createMemoryRouter([{ path: "*", element: <AuthProvider><Workspace /></AuthProvider> }])} />
   </QueryClientProvider>,
 );

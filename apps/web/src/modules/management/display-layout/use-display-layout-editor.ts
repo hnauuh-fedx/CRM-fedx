@@ -3,6 +3,7 @@ import { useForm, type FieldPathValue } from "react-hook-form";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   getDisplayFields,
+  layoutPublicationIssue,
   type LayoutScreen,
   layoutIssues,
   presentationIssues,
@@ -40,15 +41,16 @@ export function useDisplayLayoutEditor({
   const auth = useAuth();
   const { selectedProgramId } = useInstitutionProgram();
   const client = useQueryClient();
+  const initialValues = initialEditorValues(initial, screen, auth.user);
   const [state, setState] = useState({
     item: initial,
-    departmentId: initial?.managementDepartmentId ?? "",
+    departmentId: initialValues.departmentId,
     preview: false,
     versionPage: 1,
     message: "",
   });
   const form = useForm<LayoutDraft>({
-    defaultValues: initial?.draft ?? defaultDraft(screen),
+    defaultValues: initialValues.draft,
   });
   const draft = form.watch();
   const detail = useQuery({
@@ -95,7 +97,11 @@ export function useDisplayLayoutEditor({
       accept(item, "Đã lưu nháp. Giao diện đang sử dụng chưa thay đổi."),
   });
   const preview = useMutation({
-    mutationFn: () => previewDisplayLayout(auth.accessToken!, state.item!),
+    mutationFn: () => {
+      const issue = layoutPublicationIssue(screen, state.item!.draft.targets);
+      if (issue) throw new Error(issue);
+      return previewDisplayLayout(auth.accessToken!, state.item!);
+    },
     onSuccess: () => setState((current) => ({ ...current, preview: true })),
   });
   const publish = useMutation({
@@ -109,7 +115,7 @@ export function useDisplayLayoutEditor({
       accept(
         item,
         onPublished
-          ? "Đã áp dụng. Bảng đang xem cập nhật theo mẫu hiệu lực."
+          ? "Đã áp dụng. Giao diện đang xem cập nhật theo mẫu hiệu lực."
           : "Đã áp dụng. Nhân viên nhận giao diện mới khi mở lại hoặc tải lại màn hình tương ứng.",
       );
       setState((current) => ({ ...current, preview: false }));
@@ -142,7 +148,10 @@ export function useDisplayLayoutEditor({
     restore.isPending ||
     preview.isPending ||
     reload.isPending;
-  const dirty = form.formState.isDirty;
+  const dirty = form.formState.isDirty || Boolean(
+    screen === "LEAD_POPUP" && state.item &&
+    JSON.stringify(draft.targets) !== JSON.stringify(state.item.draft.targets),
+  );
   const error =
     save.error ??
     preview.error ??
@@ -206,4 +215,21 @@ export function useDisplayLayoutEditor({
     unknown,
     edit,
   };
+}
+
+
+function initialEditorValues(
+  initial: DisplayLayout | null,
+  screen: LayoutScreen,
+  user: { accessScope: string; departmentIds: string[] } | null,
+) {
+  const departmentId = initial ? initial.managementDepartmentId ?? ""
+    : screen === "LEAD_POPUP" && user?.accessScope === "DEPARTMENT" && user.departmentIds.length === 1
+      ? user.departmentIds[0] : "";
+  const draft = initial?.draft ?? defaultDraft(screen);
+  if (screen !== "LEAD_POPUP" || draft.targets.length) return { departmentId, draft };
+  const targets: LayoutDraft["targets"] = departmentId
+    ? [{ type: "DEPARTMENT", id: departmentId }]
+    : user?.accessScope === "ALL" ? [{ type: "DEFAULT", id: "default" }] : [];
+  return { departmentId, draft: { ...draft, targets } };
 }

@@ -7,12 +7,14 @@ export const layoutScreens = [
   ...listLayoutScreens,
   "LEAD_DETAIL",
   "LEAD_FORM",
+  "LEAD_POPUP",
 ] as const;
 export type LayoutScreen = (typeof layoutScreens)[number];
 export const layoutScreenLabels: Record<LayoutScreen, string> = {
   LEAD_LIST: "Danh sách lead",
   CUSTOMER_LIST: "Danh sách khách hàng",
   LEAD_DETAIL: "Chi tiết lead",
+  LEAD_POPUP: "Popup lead",
   LEAD_FORM: "Tạo và sửa lead",
 };
 export function isListLayoutScreen(
@@ -30,7 +32,7 @@ export function getDisplayFields(screen: LayoutScreen): DisplayField[] {
         label: field.label,
         locked:
           field.key === "fullName" ||
-          (screen === "LEAD_FORM" &&
+          ((screen === "LEAD_FORM" || screen === "LEAD_POPUP") &&
             (Boolean(field.requiredLocked) ||
               field.key === "institutionProgramId")),
       })),
@@ -368,4 +370,12 @@ export function chooseLayoutTarget(
     if (department) return department;
   }
   return targets.find((target) => target.type === "DEFAULT");
+}
+
+
+/** Drafts may be unassigned; applying a popup must have an audience. */
+export function layoutPublicationIssue(screen: LayoutScreen, targets: LayoutTarget[]): string | null {
+  return screen === "LEAD_POPUP" && targets.length === 0
+    ? "Vui lòng chọn đối tượng áp dụng cho popup: mẫu chung, phòng ban hoặc nhân viên."
+    : null;
 }
